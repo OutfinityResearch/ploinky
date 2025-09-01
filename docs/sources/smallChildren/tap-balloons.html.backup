@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Pop the Balloons</title>
+  <style>
+    :root { --bg:#10131a; --fg:#fff; --accent:#ff72b6; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wrap { position:relative; height:100%; overflow:hidden; }
+    header { position:absolute; top:0; left:0; right:0; display:flex; gap:8px; align-items:center; justify-content:space-between; padding:12px 16px; background:linear-gradient(180deg, rgba(0,0,0,.5), rgba(0,0,0,0)); z-index:2; }
+    .btn { background:#1f2430; color:#fff; border:none; padding:10px 12px; border-radius:12px; font-weight:600; box-shadow:0 6px 14px rgba(0,0,0,.25); }
+    .score { font-weight:700; letter-spacing:.5px; }
+    canvas { position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+    .toast { position:absolute; left:50%; transform:translateX(-50%); bottom:20px; background:#1a202c; color:#fff; padding:10px 14px; border-radius:999px; font-size:14px; opacity:.9; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="score">Score: <span id="score">0</span></div>
+      <button class="btn" id="restart">Restart</button>
+    </header>
+    <canvas id="game"></canvas>
+    <div class="toast">Tap balloons before they fly off-screen!</div>
+  </div>
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let W, H, balloons, score, running, lastTime;
+    const colors = [
+      {name:'RED', val:'#ff4d4f'}, {name:'CRIMSON', val:'#dc143c'}, {name:'ORANGE', val:'#f97316'}, {name:'AMBER', val:'#ffbf00'}, {name:'YELLOW', val:'#ffd93d'},
+      {name:'LIME', val:'#84cc16'}, {name:'GREEN', val:'#2ecc71'}, {name:'TEAL', val:'#14b8a6'}, {name:'CYAN', val:'#06b6d4'}, {name:'BLUE', val:'#3498db'},
+      {name:'NAVY', val:'#001f3f'}, {name:'INDIGO', val:'#6366f1'}, {name:'VIOLET', val:'#8b5cf6'}, {name:'PURPLE', val:'#9b59b6'}, {name:'PINK', val:'#ec4899'},
+      {name:'MAGENTA', val:'#ff00ff'}, {name:'BROWN', val:'#8b5a2b'}, {name:'MAROON', val:'#800000'}, {name:'OLIVE', val:'#3d9970'}, {name:'MINT', val:'#98ff98'},
+      {name:'TURQUOISE', val:'#40e0d0'}, {name:'GOLD', val:'#ffd700'}, {name:'SILVER', val:'#c0c0c0'}, {name:'BEIGE', val:'#f5f5dc'}, {name:'CORAL', val:'#ff7f50'}
+    ];
+    function speak(text){ try{ if(!('speechSynthesis' in window)) return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(String(text)); u.lang='en-US'; speechSynthesis.speak(u);}catch(_){}}
+    function resize(){ W = canvas.width = canvas.clientWidth; H = canvas.height = canvas.clientHeight; }
+    window.addEventListener('resize', resize, { passive:true }); resize();
+    function rand(a,b){ return Math.random()*(b-a)+a; }
+    function spawnBalloon(){
+      const r = rand(24, 46);
+      const color = colors[Math.floor(rand(0, colors.length))];
+      return { x: rand(r, W-r), y: H + r, r, vy: -rand(12, 36)/100, color };
+    }
+    function init(){
+      balloons = Array.from({length:8}, spawnBalloon);
+      score = 0; running = true; lastTime = performance.now();
+      document.getElementById('score').textContent = score;
+      loop(lastTime);
+    }
+    function loop(t){ if(!running) return; const dt = Math.min(32, t-lastTime); lastTime = t; update(dt, t); draw(); requestAnimationFrame(loop); }
+    function update(dt, t){
+      for(const b of balloons){ b.y += b.vy*dt; b.x += Math.sin((t/1300)+(b.y*0.01))*0.25; }
+      for(let i=0;i<balloons.length;i++){
+        if(balloons[i].y + balloons[i].r < 0){ balloons[i] = spawnBalloon(); score = Math.max(0, score-1); document.getElementById('score').textContent = score; }
+      }
+    }
+    function draw(){
+      ctx.clearRect(0,0,W,H);
+      for(const b of balloons){
+        // string
+        ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(b.x, b.y + b.r*0.2); ctx.lineTo(b.x, b.y + b.r + 22); ctx.stroke();
+        // balloon body
+        const grad = ctx.createRadialGradient(b.x - b.r*0.3, b.y - b.r*0.3, b.r*0.1, b.x, b.y, b.r);
+        grad.addColorStop(0, '#fff'); grad.addColorStop(0.1, '#fff8'); grad.addColorStop(0.11, b.color.val); grad.addColorStop(1, b.color.val);
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.ellipse(b.x, b.y, b.r*0.85, b.r, 0, 0, Math.PI*2); ctx.fill();
+        // knot
+        ctx.fillStyle = b.color.val; ctx.beginPath(); ctx.moveTo(b.x-6, b.y + b.r*0.2); ctx.lineTo(b.x+6, b.y + b.r*0.2); ctx.lineTo(b.x, b.y + b.r*0.35); ctx.closePath(); ctx.fill();
+      }
+    }
+    function handleTap(x,y){ for(let i=0;i<balloons.length;i++){ const b = balloons[i]; const dx=x-b.x, dy=y-b.y; if(dx*dx+dy*dy <= (b.r*0.9)*(b.r*0.9)){ popAt(i); return; } } }
+    function popAt(i){
+      const b = balloons[i];
+      score++; document.getElementById('score').textContent = score; speak('Pop');
+      // tiny particles
+      const parts = 12; for(let p=0;p<parts;p++){ const a = (Math.PI*2*p)/parts; const vx = Math.cos(a)*rand(40,140); const vy = Math.sin(a)*rand(40,140);
+        animateParticle(b.x, b.y, vx, vy, b.color.val);
+      }
+      speak(b.color.name);
+      balloons[i] = spawnBalloon();
+    }
+    function animateParticle(x,y,vx,vy,color){
+      const start = performance.now(); const dur = 400 + Math.random()*200;
+      (function step(t){ const k = (t-start)/dur; if(k>=1) return; ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.fillStyle=color; ctx.beginPath(); ctx.arc(x+vx*k*0.02, y+vy*k*0.02, 3*(1-k), 0, Math.PI*2); ctx.fill(); ctx.restore(); requestAnimationFrame(step); })(start);
+    }
+    canvas.addEventListener('pointerdown', e=>{ const rect = canvas.getBoundingClientRect(); handleTap(e.clientX-rect.left, e.clientY-rect.top); });
+    document.getElementById('restart').addEventListener('click', init);
+    init();
+  </script>
+</body>
+</html>

@@ -1,50 +1,490 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Fixable Game</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-        }
-        canvas {
-            width: 800px;
-            height: 600px;
-            background: #000;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Swipe Dodge & Collect</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <style>
+    :root {
+      --ui-pad: 12px;
+      --accent: #00e59b;
+      --danger: #ff3b30;
+      --coin: #ffd400;
+      --bg1: #0a0f13;
+      --bg2: #131a22;
+      --text: #ffffff;
+      --shadow: rgba(0,0,0,0.35);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      background: radial-gradient(1200px 800px at 30% 20%, var(--bg2), var(--bg1));
+      margin: 0;
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    canvas#game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none; /* enable swipe controls */
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      background: transparent;
+    }
+    #ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+    }
+    #score {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + var(--ui-pad));
+      left: calc(env(safe-area-inset-left, 0px) + var(--ui-pad));
+      font-weight: 700;
+      font-size: 16px;
+      line-height: 1;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 6px 20px var(--shadow);
+    }
+    #message {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-weight: 600;
+      max-width: min(92vw, 520px);
+      line-height: 1.35;
+      padding: 14px 18px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 30px var(--shadow);
+      transition: opacity 300ms ease;
+      pointer-events: none;
+    }
+    #message.hidden { opacity: 0; }
+    #hint {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + var(--ui-pad));
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0.85;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(6px);
+      font-size: 14px;
+      pointer-events: none;
+    }
+    .accent { color: var(--accent); }
+  </style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        // Game variables
-        let score = 0;
-        let playerX = 400;
-        let playerY = 300;
-        
-        function gameLoop() {
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw player
-            ctx.fillStyle = '#00ff00';
-            ctx.fillRect(playerX - 10, playerY - 10, 20, 20);
-            
-            // Draw score
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '20px Arial';
-            ctx.fillText('Score: ' + score, 10, 30);
-            
-            requestAnimationFrame(gameLoop);
+  <canvas id="game" aria-label="Swipe Dodge & Collect game"></canvas>
+  <div id="ui" aria-hidden="true">
+    <div id="score">Score: 0</div>
+    <div id="message">Swipe to move. Collect the <span class="accent">gold orbs</span>. Avoid the red enemies!<br><br>Desktop: Arrow keys / WASD</div>
+    <div id="hint">Tip: Swipe in a direction to keep moving that way</div>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+      const scoreEl = document.getElementById('score');
+      const messageEl = document.getElementById('message');
+      const hintEl = document.getElementById('hint');
+
+      let dpr = 1;
+      let worldW = 0, worldH = 0;
+
+      function resizeCanvas() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = Math.max(1, window.innerWidth);
+        const h = Math.max(1, window.innerHeight);
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+        worldW = w;
+        worldH = h;
+      }
+
+      window.addEventListener('resize', resizeCanvas, { passive: true });
+      resizeCanvas();
+
+      // Utility
+      const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+      const randRange = (min, max) => Math.random() * (max - min) + min;
+      const dist2 = (x1, y1, x2, y2) => {
+        const dx = x2 - x1, dy = y2 - y1;
+        return dx*dx + dy*dy;
+      };
+      const normalize = (x, y) => {
+        const m = Math.hypot(x, y) || 0;
+        return m === 0 ? { x: 0, y: 0 } : { x: x / m, y: y / m };
+      };
+
+      // Game state
+      const player = {
+        x: worldW * 0.5,
+        y: worldH * 0.5,
+        size: 26,
+        speed: 260, // px/s
+        dirX: 0,
+        dirY: 0,
+        color: '#00e59b'
+      };
+
+      const collectible = {
+        x: 0,
+        y: 0,
+        r: 12,
+        color: '#ffd400'
+      };
+
+      let enemies = [];
+      let maxEnemiesBase = 2;
+      let score = 0;
+      let gameOver = false;
+      let started = false;
+
+      function resetGame() {
+        score = 0;
+        updateScore();
+        gameOver = false;
+        started = false;
+        player.x = worldW * 0.5;
+        player.y = worldH * 0.5;
+        player.dirX = 0;
+        player.dirY = 0;
+        enemies = [];
+        spawnEnemies(maxEnemiesBase);
+        placeCollectible();
+        showMessage('Swipe to move. Collect the <span class="accent">gold orbs</span>. Avoid the red enemies!<br><br>Desktop: Arrow keys / WASD', true);
+        hintEl.style.opacity = '0.85';
+      }
+
+      function updateScore() {
+        scoreEl.textContent = 'Score: ' + score;
+      }
+
+      function showMessage(html, autoHide = false) {
+        messageEl.innerHTML = html;
+        messageEl.classList.remove('hidden');
+        if (autoHide) {
+          clearTimeout(showMessage._t);
+          showMessage._t = setTimeout(() => {
+            messageEl.classList.add('hidden');
+          }, 2800);
         }
-        
-        // Start game
-        gameLoop();
-    </script>
+      }
+
+      function hideMessage() {
+        messageEl.classList.add('hidden');
+      }
+
+      function placeCollectible() {
+        const margin = 40;
+        let tries = 0;
+        do {
+          collectible.x = randRange(margin, worldW - margin);
+          collectible.y = randRange(margin, worldH - margin);
+          tries++;
+        } while (tries < 50 && Math.hypot(collectible.x - player.x, collectible.y - player.y) < 120);
+      }
+
+      function spawnEnemy() {
+        const r = randRange(12, 18);
+        // Spawn away from center area to give player room
+        let x, y, attempts = 0;
+        do {
+          x = randRange(r, worldW - r);
+          y = randRange(r, worldH - r);
+          attempts++;
+        } while (attempts < 100 && Math.hypot(x - player.x, y - player.y) < 180);
+
+        const angle = randRange(0, Math.PI * 2);
+        const spd = randRange(90, 170);
+        enemies.push({
+          x, y, r,
+          vx: Math.cos(angle) * spd,
+          vy: Math.sin(angle) * spd,
+          color: '#ff3b30'
+        });
+      }
+
+      function spawnEnemies(count) {
+        for (let i = 0; i < count; i++) spawnEnemy();
+      }
+
+      // Input: Keyboard
+      const keys = new Set();
+      const keyDirs = {
+        ArrowUp: {x:0,y:-1}, ArrowDown: {x:0,y:1}, ArrowLeft: {x:-1,y:0}, ArrowRight: {x:1,y:0},
+        w:{x:0,y:-1}, a:{x:-1,y:0}, s:{x:0,y:1}, d:{x:1,y:0}, W:{x:0,y:-1}, A:{x:-1,y:0}, S:{x:0,y:1}, D:{x:1,y:0}
+      };
+
+      function updateKeyboardDir() {
+        let dx = 0, dy = 0;
+        keys.forEach(k => {
+          if (keyDirs[k]) { dx += keyDirs[k].x; dy += keyDirs[k].y; }
+        });
+        const n = normalize(dx, dy);
+        setDirection(n.x, n.y);
+      }
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && gameOver) {
+          resetGame();
+          return;
+        }
+        if (e.key === ' ' && !gameOver) {
+          // Stop movement quickly
+          setDirection(0, 0);
+        }
+        if (keyDirs[e.key]) {
+          e.preventDefault();
+          keys.add(e.key);
+          updateKeyboardDir();
+          started = true;
+          hideMessage();
+          hintEl.style.opacity = '0';
+        }
+      }, { passive: false });
+
+      window.addEventListener('keyup', (e) => {
+        if (keyDirs[e.key]) {
+          keys.delete(e.key);
+          updateKeyboardDir();
+        }
+      });
+
+      // Input: Pointer click/tap to head towards point
+      canvas.addEventListener('pointerdown', (e) => {
+        if (gameOver) {
+          resetGame();
+          return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+        const dir = normalize(px - player.x, py - player.y);
+        if (dir.x !== 0 || dir.y !== 0) {
+          setDirection(dir.x, dir.y);
+          started = true;
+          hideMessage();
+          hintEl.style.opacity = '0';
+        }
+      });
+
+      // Input: Touch swipe controls
+      let touchStartX = 0, touchStartY = 0, touchStartTime = 0, isTouching = false;
+
+      canvas.addEventListener('touchstart', (e) => {
+        if (gameOver) {
+          e.preventDefault();
+          resetGame();
+          return;
+        }
+        const t = e.changedTouches[0];
+        const rect = canvas.getBoundingClientRect();
+        touchStartX = t.clientX - rect.left;
+        touchStartY = t.clientY - rect.top;
+        touchStartTime = performance.now();
+        isTouching = true;
+        e.preventDefault();
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', (e) => {
+        // Optional: live joystick-like control
+        const t = e.changedTouches[0];
+        const rect = canvas.getBoundingClientRect();
+        const cx = t.clientX - rect.left;
+        const cy = t.clientY - rect.top;
+        const dx = cx - touchStartX;
+        const dy = cy - touchStartY;
+        const mag = Math.hypot(dx, dy);
+        if (mag > 18) {
+          const dir = normalize(dx, dy);
+          setDirection(dir.x, dir.y);
+          started = true;
+          hideMessage();
+          hintEl.style.opacity = '0';
+        }
+        e.preventDefault();
+      }, { passive: false });
+
+      canvas.addEventListener('touchend', (e) => {
+        isTouching = false;
+        const t = e.changedTouches[0];
+        const rect = canvas.getBoundingClientRect();
+        const endX = t.clientX - rect.left;
+        const endY = t.clientY - rect.top;
+        const dx = endX - touchStartX;
+        const dy = endY - touchStartY;
+        const dt = performance.now() - touchStartTime;
+        const minDist = 20; // px
+        if (Math.hypot(dx, dy) >= minDist && dt <= 700) {
+          const dir = normalize(dx, dy);
+          setDirection(dir.x, dir.y);
+          started = true;
+          hideMessage();
+          hintEl.style.opacity = '0';
+        }
+        e.preventDefault();
+      }, { passive: false });
+
+      function setDirection(dx, dy) {
+        const n = normalize(dx, dy);
+        player.dirX = n.x;
+        player.dirY = n.y;
+      }
+
+      // Game Loop
+      let lastTime = performance.now();
+
+      function update(dt) {
+        if (!started || gameOver) return;
+
+        // Move player
+        player.x += player.dirX * player.speed * dt;
+        player.y += player.dirY * player.speed * dt;
+
+        const half = player.size / 2;
+        player.x = clamp(player.x, half, worldW - half);
+        player.y = clamp(player.y, half, worldH - half);
+
+        // Move enemies and bounce
+        for (let i = 0; i < enemies.length; i++) {
+          const en = enemies[i];
+          en.x += en.vx * dt;
+          en.y += en.vy * dt;
+
+          if (en.x < en.r) { en.x = en.r; en.vx *= -1; }
+          if (en.x > worldW - en.r) { en.x = worldW - en.r; en.vx *= -1; }
+          if (en.y < en.r) { en.y = en.r; en.vy *= -1; }
+          if (en.y > worldH - en.r) { en.y = worldH - en.r; en.vy *= -1; }
+        }
+
+        // Collectible collision (approx player as circle)
+        const playerR = Math.max(12, (player.size * 0.6));
+        if (Math.hypot(player.x - collectible.x, player.y - collectible.y) < (playerR + collectible.r)) {
+          score++;
+          updateScore();
+          placeCollectible();
+          // Increase difficulty gradually
+          if (score % 3 === 0 && enemies.length < 12) {
+            spawnEnemy();
+          }
+        }
+
+        // Enemy collision
+        for (let i = 0; i < enemies.length; i++) {
+          const en = enemies[i];
+          const rSum = playerR + en.r;
+          if (dist2(player.x, player.y, en.x, en.y) <= rSum * rSum) {
+            gameOver = true;
+            showMessage(`Game Over!<br>Final Score: <span class="accent">${score}</span><br><br>Swipe or press Enter to restart`);
+            hintEl.style.opacity = '0';
+            setDirection(0, 0);
+            break;
+          }
+        }
+      }
+
+      function drawBackgroundGrid() {
+        // subtle grid for visual depth
+        ctx.save();
+        ctx.globalAlpha = 0.2;
+        ctx.strokeStyle = '#1a2530';
+        const step = 40;
+        ctx.beginPath();
+        for (let x = (Math.floor(0 / step) * step); x < worldW; x += step) {
+          ctx.moveTo(x + 0.5, 0);
+          ctx.lineTo(x + 0.5, worldH);
+        }
+        for (let y = (Math.floor(0 / step) * step); y < worldH; y += step) {
+          ctx.moveTo(0, y + 0.5);
+          ctx.lineTo(worldW, y + 0.5);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawPlayer() {
+        const half = player.size / 2;
+        ctx.save();
+        ctx.fillStyle = player.color;
+        ctx.shadowColor = 'rgba(0,229,155,0.35)';
+        ctx.shadowBlur = 12;
+        ctx.fillRect(Math.round(player.x - half), Math.round(player.y - half), Math.round(player.size), Math.round(player.size));
+        ctx.restore();
+      }
+
+      function drawCollectible() {
+        ctx.save();
+        ctx.fillStyle = collectible.color;
+        ctx.shadowColor = 'rgba(255,212,0,0.4)';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(collectible.x, collectible.y, collectible.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function drawEnemies() {
+        ctx.save();
+        for (let i = 0; i < enemies.length; i++) {
+          const en = enemies[i];
+          ctx.fillStyle = '#ff3b30';
+          ctx.shadowColor = 'rgba(255,59,48,0.35)';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(en.x, en.y, en.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, worldW, worldH);
+        drawBackgroundGrid();
+        drawCollectible();
+        drawEnemies();
+        drawPlayer();
+      }
+
+      function gameLoop(t) {
+        const dt = Math.min(0.033, (t - lastTime) / 1000);
+        lastTime = t;
+        update(dt);
+        render();
+        requestAnimationFrame(gameLoop);
+      }
+
+      document.addEventListener('visibilitychange', () => {
+        lastTime = performance.now(); // avoid time jump when returning
+      });
+
+      // Initialize and start
+      resetGame();
+      requestAnimationFrame(gameLoop);
+
+      // Ensure collectible reposition on orientation change
+      window.addEventListener('resize', () => {
+        placeCollectible();
+      }, { passive: true });
+    })();
+  </script>
 </body>
 </html>

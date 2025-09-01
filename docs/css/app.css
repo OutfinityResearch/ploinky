@@ -157,6 +157,5 @@ body {
     .mobile-container {
         max-width: 80vw; /* Use a larger portion of the viewport width */
         max-height: 90vh; /* Adjust height as well */
-        aspect-ratio: 10 / 16; /* A more tablet-like aspect ratio */
     }
 }

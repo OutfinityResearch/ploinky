@@ -54,11 +54,11 @@ async function testGame(gamePath) {
   return issues;
 }
 
-async function fixGame(gamePath) {
+async function fixGame(gamePath, customPrompt = null) {
   const gameName = path.basename(gamePath);
   const gameDir = path.dirname(gamePath);
   const gameBaseName = path.basename(gamePath, '.html');
-  const fixedGamePath = path.join(gameDir, `${gameBaseName}_fixed.html`);
+  const backupPath = path.join(gameDir, `${gameBaseName}.html.backup`);
   
   console.log('========================================');
   console.log(`Fixing: ${gameName}`);
@@ -72,9 +72,9 @@ async function fixGame(gamePath) {
     process.exit(1);
   }
   
-  // Create a copy to work with
-  console.log(`Creating working copy: ${path.basename(fixedGamePath)}`);
-  await fs.copyFile(gamePath, fixedGamePath);
+  // Create backup of original
+  console.log(`Creating backup: ${path.basename(backupPath)}`);
+  await fs.copyFile(gamePath, backupPath);
   
   let attempt = 0;
   let lastIssues = [];
@@ -84,9 +84,9 @@ async function fixGame(gamePath) {
     console.log(`\n📝 Attempt ${attempt}/${CONFIG.maxAttempts}`);
     console.log('-'.repeat(40));
     
-    // Test the fixed game
-    console.log('Testing fixed game...');
-    const issues = await testGame(fixedGamePath);
+    // Test the game
+    console.log('Testing game...');
+    const issues = await testGame(gamePath);
     
     if (issues.length === 0) {
       console.log('\n✅ SUCCESS! Game is now working correctly!');
@@ -114,9 +114,10 @@ async function fixGame(gamePath) {
     
     // Try to fix the issues
     console.log('\n🔧 Attempting to fix issues...');
+    console.log('   Calling code fixer...');
     
     try {
-      const fixApplied = await codeFixer.fix(fixedGamePath, issues);
+      const fixApplied = await codeFixer.fix(gamePath, issues, customPrompt);
       
       if (fixApplied) {
         console.log(`✅ Fixes applied successfully`);
@@ -142,16 +143,18 @@ async function fixGame(gamePath) {
   
   // Final test
   console.log('\n📊 Final test...');
-  const finalIssues = await testGame(fixedGamePath);
+  const finalIssues = await testGame(gamePath);
   
   if (finalIssues.length === 0) {
     console.log('\n✅ SUCCESS! Game is now working correctly!');
-    console.log(`✅ Fixed version saved as: ${path.basename(fixedGamePath)}`);
+    console.log(`✅ Original file updated: ${path.basename(gamePath)}`);
+    console.log(`📁 Backup saved as: ${path.basename(backupPath)}`);
     return {
       success: true,
       attempts: attempt,
       finalIssues: [],
-      fixedFile: fixedGamePath
+      fixedFile: gamePath,
+      backupFile: backupPath
     };
   } else {
     console.log(`\n❌ FAILED: Still ${finalIssues.length} issues remaining:`);
@@ -159,9 +162,13 @@ async function fixGame(gamePath) {
       console.log(`  - ${issue.type}: ${issue.message}`);
     });
     
-    // If we couldn't fix it, delete the broken fixed file
-    console.log(`\n🗑️  Removing unsuccessful fix attempt: ${path.basename(fixedGamePath)}`);
-    await fs.unlink(fixedGamePath);
+    // If we couldn't fix it, restore from backup
+    console.log(`\n🔄 Restoring original from backup...`);
+    await fs.copyFile(backupPath, gamePath);
+    console.log(`✅ Original file restored`);
+    
+    // Remove backup since we restored
+    await fs.unlink(backupPath);
     
     return {
       success: false,
@@ -175,6 +182,7 @@ async function fixGame(gamePath) {
 async function main() {
   // Get game path from command line
   const gamePath = process.argv[2];
+  const customPrompt = "The game must be playable with touch controls on mobile and tablet. Please add the necessary touch event listeners to control the game with swipes.";
   
   if (!gamePath) {
     console.log('Usage: node fixGame.js <path-to-game.html>');
@@ -185,7 +193,7 @@ async function main() {
   const resolvedPath = path.resolve(gamePath);
   
   try {
-    const result = await fixGame(resolvedPath);
+    const result = await fixGame(resolvedPath, customPrompt);
     
     console.log('\n========================================');
     console.log('FIX COMPLETE');

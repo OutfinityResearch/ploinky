@@ -1,0 +1,18 @@
+{
+  "success": false,
+  "attempts": 3,
+  "finalIssues": [
+    {
+      "type": "viewport_issue",
+      "subtype": "fixed_width_elements",
+      "message": "Found 3 fixed-width elements that may cause issues on mobile",
+      "details": {
+        "hasViewportMeta": true,
+        "viewportContent": "width=device-width, initial-scale=1.0, viewport-fit=cover",
+        "isMobileFriendly": true,
+        "fixedElementsCount": 3
+      }
+    }
+  ],
+  "fixedFile": null
+}

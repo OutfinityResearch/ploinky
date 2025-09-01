@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Reaction Timer</title>
+  <style>
+    :root { --bg:#0b0f17; --fg:#e5e7eb; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+    html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wrap{ height:100%; display:flex; align-items:center; justify-content:center; }
+    .panel{ text-align:center; padding:24px; border-radius:16px; width:min(520px, 92vw); }
+    .big{ font-size:48px; font-weight:800; letter-spacing:1px; }
+    .msg{ font-size:18px; opacity:.9; margin-bottom:16px; }
+    .btn{ background:#1f2937; color:#fff; border:none; padding:14px 16px; border-radius:12px; font-weight:700; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="msg" id="msg">Listen for the shape, then tap it fast.</div>
+      <div class="big" id="time">0 ms</div>
+      <div style="height:16px"></div>
+      <button id="start" class="btn" style="display:none">START</button>
+      <canvas id="stage" width="360" height="240" style="margin-top:16px;border:1px solid #1f2937;border-radius:8px;background:#0b1220"></canvas>
+    </div>
+  </div>
+  <script>
+    function speak(t){ try{ if(!('speechSynthesis' in window))return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.speak(u);}catch(_){}}
+    let pending=false, startAt=0, timeout=null, targetShape=null;
+    const timeEl=document.getElementById('time');
+    const msg=document.getElementById('msg');
+    const startBtn=document.getElementById('start');
+    const canvas=document.getElementById('stage'); const x=canvas.getContext('2d');
+    const shapes=['circle','square','triangle'];
+    function positions(){ const y=canvas.height/2; return [{x:90,y},{x:180,y},{x:270,y}]; }
+    function drawShapes(){ x.clearRect(0,0,canvas.width,canvas.height); positions().forEach((p,i)=>{ x.save(); x.translate(p.x,p.y); x.fillStyle='#0f1b34'; x.strokeStyle='#60a5fa'; x.lineWidth=4; if(shapes[i]==='circle'){ x.beginPath(); x.arc(0,0,28,0,Math.PI*2); x.stroke(); } else if(shapes[i]==='square'){ x.strokeRect(-28,-28,56,56); } else { x.beginPath(); x.moveTo(0,-32); x.lineTo(28,28); x.lineTo(-28,28); x.closePath(); x.stroke(); } x.restore(); }); }
+    function shapeAt(mx,my){ const pos=positions(); for(let i=0;i<pos.length;i++){ const p=pos[i]; const dx=mx-p.x, dy=my-p.y; if(Math.hypot(dx,dy)<=32) return shapes[i]; } return null; }
+    function start(){ timeEl.textContent='0 ms'; msg.textContent='Listen for the target shape...'; startBtn.disabled=true; pending=true; drawShapes(); targetShape=null;
+      clearTimeout(timeout); const delay=800+Math.random()*2000; timeout=setTimeout(()=>{ targetShape=shapes[(Math.random()*shapes.length)|0]; speak('Tap the ' + targetShape); startAt=performance.now(); }, delay);
+    }
+    function tap(e){ if(!pending) return; const rect=canvas.getBoundingClientRect(); const mx=(e.clientX-rect.left)*canvas.width/rect.width; const my=(e.clientY-rect.top)*canvas.height/rect.height; if(startAt===0){ msg.textContent='Too early! Try again.'; speak('Too early'); startBtn.disabled=false; pending=false; clearTimeout(timeout); return; }
+      const s = shapeAt(mx,my); if(!s){ return; }
+      const t = Math.round(performance.now()-startAt); const ok = s===targetShape; timeEl.textContent=`${t} ms`;
+      if(ok){ msg.textContent = (t<300? 'Great! ':'Nice! ') + `${t} ms`; speak(`Good. ${t} milliseconds`); } else { msg.textContent = 'Wrong shape! Try again.'; speak('Wrong shape'); }
+      startBtn.disabled=false; pending=false; startAt=0;
+    }
+    startBtn.addEventListener('click', start); canvas.addEventListener('pointerdown', tap);
+    // auto-start
+    setTimeout(start, 400);
+  </script>
+</body>
+</html>

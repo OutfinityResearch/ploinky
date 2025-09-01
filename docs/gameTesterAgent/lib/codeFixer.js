@@ -3,7 +3,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { getAIHelper } = require('./aiHelper');
 
-async function fix(gamePath, issues) {
+async function fix(gamePath, issues, customPrompt = null) {
   console.log(`Analyzing ${issues.length} issues for: ${gamePath}`);
   
   if (issues.length === 0) {
@@ -19,17 +19,27 @@ async function fix(gamePath, issues) {
     const aiHelper = getAIHelper();
     if (aiHelper.enabled) {
       console.log('🤖 Using AI to fix the code...');
-      const aiFixedCode = await aiHelper.fixCode(code, issues);
+      console.log(`📄 File being fixed: ${path.basename(gamePath)}`);
+      console.log(`📋 Issues found:`);
+      issues.forEach((issue, i) => {
+        console.log(`   ${i+1}. ${issue.type}: ${issue.message.substring(0, 100)}${issue.message.length > 100 ? '...' : ''}`);
+      });
+      
+      console.log('⏳ Sending to AI for fixing...');
+      const aiFixedCode = await aiHelper.fixCode(code, issues, customPrompt);
       
       if (aiFixedCode) {
+        console.log('📦 AI returned fixed code, preparing to save...');
+        
         // Backup original file
         const backupPath = gamePath + '.backup';
         await fs.writeFile(backupPath, code);
-        console.log(`Backup saved to: ${backupPath}`);
+        console.log(`💾 Backup saved to: ${backupPath}`);
         
         // Write AI-fixed code
         await fs.writeFile(gamePath, aiFixedCode);
         console.log('✅ AI-fixed code written to file.');
+        console.log(`📊 Fixed file size: ${aiFixedCode.length} characters`);
         return true;
       } else {
         console.log('AI fixing failed, falling back to rule-based fixes...');

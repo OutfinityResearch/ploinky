@@ -1,0 +1,32 @@
+{
+  "success": false,
+  "attempts": 2,
+  "finalIssues": [
+    {
+      "type": "scroll_issue",
+      "subtype": "vertical_scroll",
+      "message": "Excessive vertical scrolling detected",
+      "details": {
+        "hasVerticalScroll": true,
+        "hasHorizontalScroll": false,
+        "bodyHeight": 886,
+        "viewportHeight": 720,
+        "viewportWidth": 1280,
+        "canvasFits": true,
+        "canvasInfo": null
+      }
+    },
+    {
+      "type": "viewport_issue",
+      "subtype": "fixed_width_elements",
+      "message": "Found 10 fixed-width elements that may cause issues on mobile",
+      "details": {
+        "hasViewportMeta": true,
+        "viewportContent": "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover",
+        "isMobileFriendly": true,
+        "fixedElementsCount": 10
+      }
+    }
+  ],
+  "fixedFile": null
+}

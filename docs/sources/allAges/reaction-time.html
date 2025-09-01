@@ -2,52 +2,678 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <title>Reaction Timer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Shape Dash - Reaction</title>
   <style>
-    :root { --bg:#0b0f17; --fg:#e5e7eb; }
-    *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
-    html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .wrap{ height:100%; display:flex; align-items:center; justify-content:center; }
-    .panel{ text-align:center; padding:24px; border-radius:16px; width:min(520px, 92vw); }
-    .big{ font-size:48px; font-weight:800; letter-spacing:1px; }
-    .msg{ font-size:18px; opacity:.9; margin-bottom:16px; }
-    .btn{ background:#1f2937; color:#fff; border:none; padding:14px 16px; border-radius:12px; font-weight:700; }
+    :root{
+      --bg1:#0b0f17;
+      --bg2:#0f1630;
+      --grad1:#0ea5e9;
+      --grad2:#8b5cf6;
+      --grad3:#22d3ee;
+      --text:#e5e7eb;
+      --muted:#94a3b8;
+      --panel:#0b1220cc;
+      --btn:#1f2937;
+      --btn2:#0ea5e9;
+      --ok:#10b981;
+      --bad:#ef4444;
+      --warn:#f59e0b;
+      --ring:#60a5fa;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      color:var(--text);
+      background: radial-gradient(1200px 800px at 20% 10%, #10224a 0%, transparent 60%),
+                  radial-gradient(1000px 700px at 80% 90%, #1b0d38 0%, transparent 55%),
+                  linear-gradient(120deg, var(--bg1), var(--bg2));
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      overflow:hidden;
+    }
+    .grad-anim{
+      position:fixed; inset:-20vmax;
+      background: conic-gradient(from 90deg at 50% 50%, rgba(14,165,233,.16), rgba(139,92,246,.12), rgba(34,211,238,.14), rgba(14,165,233,.16));
+      filter: blur(80px) saturate(120%);
+      animation: spin 30s linear infinite;
+      pointer-events:none;
+    }
+    @keyframes spin { to{ transform:rotate(360deg); } }
+
+    .app{
+      display:flex; flex-direction:column; align-items:center; justify-content:stretch;
+      min-height:100svh; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)+6px) max(12px, env(safe-area-inset-left));
+      gap:12px;
+    }
+
+    .topbar{
+      width:100%; max-width: min(920px, 96vw);
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:8px 12px; border-radius:16px;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:.3px;
+    }
+    .badge{
+      width:28px; height:28px; border-radius:9px;
+      background: radial-gradient(circle at 30% 30%, var(--grad3), transparent 55%), linear-gradient(135deg, var(--grad1), var(--grad2));
+      box-shadow: 0 6px 16px rgba(14,165,233,.35), inset 0 0 18px rgba(255,255,255,.12);
+    }
+    .stats{ display:flex; align-items:center; gap:16px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+    .stat b{ color:var(--text); font-size:14px; margin-left:6px; }
+
+    .stage-card{
+      width:100%; max-width:min(920px, 96vw);
+      display:flex; flex-direction:column; align-items:center; gap:16px;
+      padding:14px 14px 16px; border-radius:20px;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    .hud{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      width:100%;
+    }
+    .hud-left{ display:flex; align-items:center; gap:10px; }
+    .dot{
+      width:10px; height:10px; border-radius:50%;
+      background: var(--warn);
+      box-shadow: 0 0 10px var(--warn);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    .dot.ready{ background:var(--ring); box-shadow:0 0 10px var(--ring);}
+    .dot.go{ background:var(--ok); box-shadow:0 0 10px var(--ok);}
+    @keyframes pulse{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.35);} }
+
+    .msg{
+      font-size:14px; color:var(--muted);
+    }
+    .time{
+      margin-left:auto; font-weight:800; font-size: clamp(18px, 4.4vw, 28px);
+      letter-spacing:.4px;
+      color:var(--text);
+    }
+
+    .canvas-wrap{
+      position:relative; width:100%;
+      aspect-ratio: 16 / 9;
+      max-height: 64svh;
+      min-height: 260px;
+      border-radius:16px;
+      overflow:hidden;
+      outline:1px solid rgba(255,255,255,.08);
+      background: radial-gradient(800px 600px at 30% 10%, rgba(96,165,250,.12), transparent 60%), #070b14;
+    }
+    canvas{
+      width:100%; height:100%;
+      display:block;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+
+    .controls{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      width:100%;
+      flex-wrap:wrap;
+    }
+    .left-controls, .right-controls{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .btn{
+      -webkit-appearance:none; appearance:none;
+      border:none; color:#fff; font-weight:800; letter-spacing:.3px;
+      padding:14px 18px; border-radius:14px; background:linear-gradient(135deg, #2563eb, #0ea5e9);
+      box-shadow: 0 8px 24px rgba(37,99,235,.35), inset 0 -6px 16px rgba(0,0,0,.25);
+      transition: transform .08s ease, box-shadow .2s ease, filter .2s ease;
+    }
+    .btn:active{ transform: translateY(1px) scale(.99); filter: brightness(.96); }
+    .btn[disabled]{ opacity:.6; filter:saturate(.3); cursor:not-allowed; }
+    .chip{
+      display:inline-flex; align-items:center; gap:8px; padding:10px 12px;
+      border-radius:12px; border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.05);
+      color:var(--text); font-weight:700; font-size:13px;
+      transition: background .2s;
+      user-select:none;
+    }
+    .chip input{ appearance:none; width:20px; height:12px; background:#0b1220; border:1px solid rgba(255,255,255,.2); border-radius:999px; position:relative; outline:none; }
+    .chip input::after{
+      content:""; position:absolute; top:50%; left:1px; transform:translate(0,-50%);
+      width:10px; height:10px; border-radius:50%; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.4);
+      transition: transform .18s ease, background .18s ease;
+    }
+    .chip input:checked{ background: linear-gradient(135deg, #22c55e, #10b981); border-color: transparent; }
+    .chip input:checked::after{ transform:translate(8px, -50%); background:#f0fdf4; }
+    .chip .ico{ width:16px; height:16px; opacity:.9; }
+
+    .footer{
+      margin-top:auto; opacity:.7; font-size:12px;
+    }
+    .kbd{ font: inherit; font-weight:800; background:#0b1220; border:1px solid rgba(255,255,255,.1); border-bottom-color:rgba(0,0,0,.5); padding:2px 6px; border-radius:6px; }
+
+    @media (min-width: 820px){
+      .stats{ font-size:14px; }
+      .stat b{ font-size:15px; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="panel">
-      <div class="msg" id="msg">Listen for the shape, then tap it fast.</div>
-      <div class="big" id="time">0 ms</div>
-      <div style="height:16px"></div>
-      <button id="start" class="btn" style="display:none">START</button>
-      <canvas id="stage" width="360" height="240" style="margin-top:16px;border:1px solid #1f2937;border-radius:8px;background:#0b1220"></canvas>
-    </div>
+  <div class="grad-anim" aria-hidden="true"></div>
+  <div class="app" id="app">
+    <header class="topbar" role="banner" aria-label="Game header">
+      <div class="brand" aria-label="Title">
+        <div class="badge" aria-hidden="true"></div>
+        <div>Shape Dash</div>
+      </div>
+      <div class="stats" aria-live="polite" aria-atomic="true">
+        <div class="stat">Best<b id="best">—</b></div>
+        <div class="stat">Average<b id="avg">—</b></div>
+        <div class="stat">Rounds<b id="rounds">0</b></div>
+        <div class="stat">Streak<b id="streak">0</b></div>
+      </div>
+    </header>
+
+    <section class="stage-card" role="main" aria-label="Game area">
+      <div class="hud">
+        <div class="hud-left">
+          <div class="dot" id="statusDot" title="status"></div>
+          <div class="msg" id="msg">Tap Start, listen for the shape, then tap it fast.</div>
+        </div>
+        <div class="time" id="time">0 ms</div>
+      </div>
+
+      <div class="canvas-wrap" id="stageWrap">
+        <canvas id="stage" width="800" height="450" aria-label="Game canvas"></canvas>
+      </div>
+
+      <div class="controls">
+        <div class="left-controls">
+          <button class="btn" id="startBtn" aria-label="Start round">Start</button>
+          <span class="chip" title="Enable/Disable sound effects">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 3.23v17.54c0 .64-.76.96-1.2.51L8.5 17H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3.5l4.3-4.28c.44-.45 1.2-.13 1.2.51z"/></svg>
+            SFX
+            <input type="checkbox" id="sfxToggle" checked aria-label="Toggle sound effects">
+          </span>
+          <span class="chip" title="Enable/Disable voice prompts">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3m5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 14 0z"/></svg>
+            Voice
+            <input type="checkbox" id="voiceToggle" checked aria-label="Toggle voice prompts">
+          </span>
+          <span class="chip" id="autoToggleWrap" title="Auto-start next round">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 3v2h8a3 3 0 0 1 0 6H7v3l-4-4l4-4v3h7a1 1 0 0 0 0-2H6V3m12 18v-2h-8a3 3 0 0 1 0-6h7v-3l4 4l-4 4v-3h-7a1 1 0 0 0 0 2h8v2z"/></svg>
+            Auto
+            <input type="checkbox" id="autoToggle" checked aria-label="Toggle auto next">
+          </span>
+        </div>
+        <div class="right-controls">
+          <span class="chip" title="Reset stats">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 6V3L8 7l4 4V8a4 4 0 1 1-4 4H6a6 6 0 1 0 6-6Z"/></svg>
+            <button class="btn" id="resetBtn" style="background:linear-gradient(135deg,#ef4444,#f43f5e); padding:8px 12px; font-size:12px;">Reset</button>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      Tip: You can also tap anywhere on a shape. Voice uses your device TTS.
+    </footer>
   </div>
+
   <script>
-    function speak(t){ try{ if(!('speechSynthesis' in window))return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.speak(u);}catch(_){}}
-    let pending=false, startAt=0, timeout=null, targetShape=null;
-    const timeEl=document.getElementById('time');
-    const msg=document.getElementById('msg');
-    const startBtn=document.getElementById('start');
-    const canvas=document.getElementById('stage'); const x=canvas.getContext('2d');
-    const shapes=['circle','square','triangle'];
-    function positions(){ const y=canvas.height/2; return [{x:90,y},{x:180,y},{x:270,y}]; }
-    function drawShapes(){ x.clearRect(0,0,canvas.width,canvas.height); positions().forEach((p,i)=>{ x.save(); x.translate(p.x,p.y); x.fillStyle='#0f1b34'; x.strokeStyle='#60a5fa'; x.lineWidth=4; if(shapes[i]==='circle'){ x.beginPath(); x.arc(0,0,28,0,Math.PI*2); x.stroke(); } else if(shapes[i]==='square'){ x.strokeRect(-28,-28,56,56); } else { x.beginPath(); x.moveTo(0,-32); x.lineTo(28,28); x.lineTo(-28,28); x.closePath(); x.stroke(); } x.restore(); }); }
-    function shapeAt(mx,my){ const pos=positions(); for(let i=0;i<pos.length;i++){ const p=pos[i]; const dx=mx-p.x, dy=my-p.y; if(Math.hypot(dx,dy)<=32) return shapes[i]; } return null; }
-    function start(){ timeEl.textContent='0 ms'; msg.textContent='Listen for the target shape...'; startBtn.disabled=true; pending=true; drawShapes(); targetShape=null;
-      clearTimeout(timeout); const delay=800+Math.random()*2000; timeout=setTimeout(()=>{ targetShape=shapes[(Math.random()*shapes.length)|0]; speak('Tap the ' + targetShape); startAt=performance.now(); }, delay);
-    }
-    function tap(e){ if(!pending) return; const rect=canvas.getBoundingClientRect(); const mx=(e.clientX-rect.left)*canvas.width/rect.width; const my=(e.clientY-rect.top)*canvas.height/rect.height; if(startAt===0){ msg.textContent='Too early! Try again.'; speak('Too early'); startBtn.disabled=false; pending=false; clearTimeout(timeout); return; }
-      const s = shapeAt(mx,my); if(!s){ return; }
-      const t = Math.round(performance.now()-startAt); const ok = s===targetShape; timeEl.textContent=`${t} ms`;
-      if(ok){ msg.textContent = (t<300? 'Great! ':'Nice! ') + `${t} ms`; speak(`Good. ${t} milliseconds`); } else { msg.textContent = 'Wrong shape! Try again.'; speak('Wrong shape'); }
-      startBtn.disabled=false; pending=false; startAt=0;
-    }
-    startBtn.addEventListener('click', start); canvas.addEventListener('pointerdown', tap);
-    // auto-start
-    setTimeout(start, 400);
+    (function(){
+      "use strict";
+
+      const timeEl = document.getElementById('time');
+      const msgEl = document.getElementById('msg');
+      const startBtn = document.getElementById('startBtn');
+      const sfxToggle = document.getElementById('sfxToggle');
+      const voiceToggle = document.getElementById('voiceToggle');
+      const autoToggle = document.getElementById('autoToggle');
+      const statusDot = document.getElementById('statusDot');
+      const bestEl = document.getElementById('best');
+      const avgEl = document.getElementById('avg');
+      const roundsEl = document.getElementById('rounds');
+      const streakEl = document.getElementById('streak');
+      const resetBtn = document.getElementById('resetBtn');
+
+      const canvas = document.getElementById('stage');
+      const wrap = document.getElementById('stageWrap');
+      const ctx = canvas.getContext('2d');
+
+      let dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+      let W = 800, H = 450;
+
+      // Audio
+      let audioCtx = null;
+      function ensureAudio(){
+        if(!audioCtx){
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if(Ctx) audioCtx = new Ctx();
+        }
+        if(audioCtx && audioCtx.state === 'suspended'){
+          audioCtx.resume().catch(()=>{});
+        }
+        return !!audioCtx;
+      }
+      function tone(freq=440, dur=0.12, type='sine', vol=0.22){
+        if(!sfxToggle.checked) return;
+        if(!ensureAudio()) return;
+        const t = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        const attack = 0.01, release = Math.max(0.04, dur*0.35);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(vol, t+attack);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t+dur+release);
+        osc.start(t);
+        osc.stop(t+dur+release+0.02);
+      }
+      const SFX = {
+        start(){ tone(600, 0.10, 'triangle', .18); setTimeout(()=>tone(900, 0.08, 'triangle', .16), 100); },
+        cue(){ tone(820, 0.09, 'square', .16); },
+        ok(){ tone(660, 0.08, 'sine', .22); setTimeout(()=>tone(990, 0.09, 'sine', .18), 90); },
+        bad(){ tone(200, 0.16, 'sawtooth', .18); setTimeout(()=>tone(140, 0.18, 'sawtooth', .16), 140); },
+        tap(){ tone(1200, 0.04, 'square', .12); }
+      };
+
+      // Speech
+      function speak(t){
+        if(!voiceToggle.checked) return;
+        try{
+          if(!('speechSynthesis' in window)) return;
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(String(t));
+          u.lang = 'en-US';
+          u.rate = 1.05;
+          u.pitch = 1.0;
+          window.speechSynthesis.speak(u);
+        }catch(_){}
+      }
+
+      // Game state
+      const shapes = ['circle','square','triangle'];
+      let positions = [];
+      let radius = 48;
+
+      let pending = false;
+      let startAt = 0;
+      let targetShape = null;
+      let timeoutId = null;
+      let hoverIndex = -1;
+
+      let ripples = [];
+
+      const statsKey = 'shape-dash-stats-v1';
+      let stats = loadStats();
+      updateStatsUI();
+
+      function loadStats(){
+        try{
+          const raw = localStorage.getItem(statsKey);
+          if(raw) return JSON.parse(raw);
+        }catch(_){}
+        return { played:0, best:null, sum:0, okCount:0, streak:0, bestStreak:0 };
+      }
+      function saveStats(){
+        try{ localStorage.setItem(statsKey, JSON.stringify(stats)); }catch(_){}
+      }
+      function updateStatsUI(){
+        bestEl.textContent = stats.best != null ? `${stats.best} ms` : '—';
+        const avg = stats.okCount > 0 ? Math.round(stats.sum / stats.okCount) : null;
+        avgEl.textContent = avg != null ? `${avg} ms` : '—';
+        roundsEl.textContent = String(stats.played);
+        streakEl.textContent = String(stats.streak);
+      }
+
+      // Layout & drawing
+      function resize(){
+        dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+
+        const pad = 0;
+        const w = wrap.clientWidth - pad*2;
+        const h = wrap.clientHeight - pad*2;
+
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        W = w; H = h;
+
+        layoutPositions();
+      }
+
+      function layoutPositions(){
+        const cx = W/2, cy = H/2;
+        radius = Math.max(28, Math.min( Math.min(W,H) * 0.12, 82 ));
+        const gap = Math.max(radius*1.2, Math.min(160, W*0.12));
+        positions = [
+          { x: cx - gap, y: cy, r: radius, type:'circle' },
+          { x: cx,       y: cy, r: radius, type:'square' },
+          { x: cx + gap, y: cy, r: radius, type:'triangle' },
+        ];
+      }
+
+      function draw(now){
+        ctx.clearRect(0,0,W,H);
+
+        // Subtle background grid
+        drawGrid();
+
+        // Ripples
+        for(let i=ripples.length-1; i>=0; i--){
+          const rp = ripples[i];
+          const age = now - rp.t0;
+          const life = 520;
+          if(age > life){ ripples.splice(i,1); continue; }
+          const k = age / life;
+          const size = rp.ok ? 1.8 : 1.5;
+          ctx.save();
+          ctx.translate(rp.x, rp.y);
+          ctx.beginPath();
+          ctx.arc(0,0, radius * (0.6 + k * size), 0, Math.PI*2);
+          ctx.strokeStyle = rp.ok ? `rgba(16,185,129, ${0.35*(1-k)})` : `rgba(239,68,68, ${0.35*(1-k)})`;
+          ctx.lineWidth = 3 + 8*(1-k);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Shapes
+        for(let i=0;i<positions.length;i++){
+          const p = positions[i];
+          const wob = 1 + 0.03*Math.sin((now/240)+(i*1.4));
+          const isHover = i===hoverIndex;
+          const pulse = isHover ? 1.08 : wob;
+
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.scale(pulse, pulse);
+
+          const stroke = ctx.createLinearGradient(-p.r,-p.r,p.r,p.r);
+          stroke.addColorStop(0, '#60a5fa');
+          stroke.addColorStop(1, '#22d3ee');
+          ctx.lineWidth = 5;
+          ctx.strokeStyle = stroke;
+          ctx.fillStyle = 'rgba(15, 27, 52, .55)';
+          ctx.shadowColor = 'rgba(34,211,238,.35)';
+          ctx.shadowBlur = 18;
+          ctx.shadowOffsetY = 2;
+
+          if(p.type==='circle'){
+            ctx.beginPath();
+            ctx.arc(0,0,p.r,0,Math.PI*2);
+            ctx.fill();
+            ctx.stroke();
+          } else if(p.type==='square'){
+            const s = p.r*2;
+            roundRect(ctx, -p.r, -p.r, s, s, Math.max(8, p.r*0.25));
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(0, -p.r*1.05);
+            ctx.lineTo(p.r*1.05, p.r*1.05);
+            ctx.lineTo(-p.r*1.05, p.r*1.05);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+
+          // Target glow when active
+          if(targetShape && p.type === targetShape && startAt>0){
+            ctx.beginPath();
+            ctx.shadowColor = 'rgba(96,165,250,.65)';
+            ctx.shadowBlur = 28 + 10*Math.sin(now/120);
+            ctx.globalAlpha = .9;
+            if(p.type==='circle'){
+              ctx.arc(0,0,p.r*1.12,0,Math.PI*2);
+            }else if(p.type==='square'){
+              roundRect(ctx, -p.r*1.12, -p.r*1.12, p.r*2.24, p.r*2.24, Math.max(10, p.r*0.28));
+            }else{
+              ctx.moveTo(0, -p.r*1.18);
+              ctx.lineTo(p.r*1.18, p.r*1.18);
+              ctx.lineTo(-p.r*1.18, p.r*1.18);
+              ctx.closePath();
+            }
+            ctx.strokeStyle = 'rgba(96,165,250,.8)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
+
+          ctx.restore();
+
+          // Labels (accessibility hint)
+          ctx.save();
+          ctx.fillStyle = 'rgba(229,231,235,.5)';
+          ctx.font = `${Math.max(12, Math.floor(p.r*0.45))}px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+          ctx.textAlign='center';
+          ctx.fillText(p.type.toUpperCase(), p.x, p.y + p.r + Math.max(16, p.r*0.4));
+          ctx.restore();
+        }
+
+        requestAnimationFrame(draw);
+      }
+
+      function drawGrid(){
+        const step = Math.max(16, Math.floor(Math.min(W,H)/18));
+        ctx.save();
+        ctx.lineWidth = 1;
+        for(let x=0; x<W; x+=step){
+          ctx.strokeStyle = 'rgba(148,163,184,.06)';
+          ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+        }
+        for(let y=0; y<H; y+=step){
+          ctx.strokeStyle = 'rgba(148,163,184,.05)';
+          ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function roundRect(c,x,y,w,h,r){
+        const rr = Math.min(r, w/2, h/2);
+        c.beginPath();
+        c.moveTo(x+rr,y);
+        c.arcTo(x+w,y,x+w,y+h,rr);
+        c.arcTo(x+w,y+h,x,y+h,rr);
+        c.arcTo(x,y+h,x,y,rr);
+        c.arcTo(x,y,x+w,y,rr);
+        c.closePath();
+      }
+
+      // Hit testing
+      function shapeAt(mx, my){
+        for(let i=0;i<positions.length;i++){
+          const p = positions[i];
+          const dx = mx - p.x, dy = my - p.y;
+          if(p.type === 'circle'){
+            if(Math.hypot(dx,dy) <= p.r) return p.type;
+          } else if(p.type === 'square'){
+            if(Math.abs(dx) <= p.r && Math.abs(dy) <= p.r) return p.type;
+          } else {
+            const A = {x:0, y:-p.r}, B = {x:p.r, y:p.r}, C = {x:-p.r, y:p.r};
+            const P = {x:dx, y:dy};
+            const b1 = sign(P,A,B) < 0;
+            const b2 = sign(P,B,C) < 0;
+            const b3 = sign(P,C,A) < 0;
+            if((b1 === b2) && (b2 === b3)) return p.type;
+          }
+        }
+        return null;
+      }
+      function sign(p1,p2,p3){ return (p1.x - p3.x)*(p2.y - p3.y) - (p2.x - p3.x)*(p1.y - p3.y); }
+
+      // Pointer handling
+      let lastPointer = {x:0,y:0};
+      canvas.addEventListener('pointerdown', (e)=>{
+        ensureAudio();
+        canvas.setPointerCapture(e.pointerId);
+        handleTap(e);
+      }, {passive:true});
+      canvas.addEventListener('pointermove', (e)=>{
+        const pos = posFromEvent(e);
+        lastPointer = pos;
+        hoverIndex = indexAt(pos.x, pos.y);
+      }, {passive:true});
+      canvas.addEventListener('pointerleave', ()=>{
+        hoverIndex = -1;
+      });
+
+      function posFromEvent(e){
+        const rect = canvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left);
+        const my = (e.clientY - rect.top);
+        return { x: mx, y: my };
+      }
+      function indexAt(mx,my){
+        for(let i=0;i<positions.length;i++){
+          const p = positions[i];
+          const dx = mx - p.x, dy = my - p.y;
+          if(Math.hypot(dx,dy) <= p.r*1.1) return i;
+        }
+        return -1;
+      }
+
+      function handleTap(e){
+        SFX.tap();
+        const pos = posFromEvent(e);
+        if(!pending){
+          // Ignore taps when not in a round
+          ripple(pos.x, pos.y, false);
+          return;
+        }
+        if(startAt === 0){
+          // Too early
+          pending = false;
+          clearTimeout(timeoutId);
+          timeoutId = null;
+          msgEl.textContent = 'Too early! Wait for the cue.';
+          statusDot.className = 'dot';
+          speak('Too early');
+          SFX.bad();
+          timeEl.textContent = '0 ms';
+          startBtn.disabled = false;
+          startBtn.textContent = 'Try Again';
+          ripple(pos.x, pos.y, false);
+          return;
+        }
+        const s = shapeAt(pos.x, pos.y);
+        if(!s){ return; }
+
+        const elapsed = Math.round(performance.now() - startAt);
+        const ok = (s === targetShape);
+        timeEl.textContent = `${elapsed} ms`;
+
+        if(ok){
+          stats.played++;
+          stats.okCount++;
+          stats.sum += elapsed;
+          stats.best = (stats.best == null) ? elapsed : Math.min(stats.best, elapsed);
+          stats.streak++;
+          stats.bestStreak = Math.max(stats.bestStreak || 0, stats.streak);
+          msgEl.textContent = (elapsed<300? 'Great! ':'Nice! ') + `${elapsed} ms — Tap Start for next.`;
+          statusDot.className = 'dot go';
+          speak(`Good. ${elapsed} milliseconds`);
+          SFX.ok();
+          ripple(pos.x, pos.y, true);
+        }else{
+          stats.played++;
+          stats.streak = 0;
+          msgEl.textContent = 'Wrong shape! Tap Start to try again.';
+          statusDot.className = 'dot';
+          speak('Wrong shape');
+          SFX.bad();
+          ripple(pos.x, pos.y, false);
+        }
+        updateStatsUI(); saveStats();
+        pending = false; startAt = 0; targetShape = null;
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start';
+        if(autoToggle.checked){
+          // Auto next round after short pause
+          setTimeout(()=>{ startRound(); }, ok ? 900 : 1200);
+        }
+      }
+
+      function ripple(x,y, ok){
+        ripples.push({x,y,ok,t0:performance.now()});
+      }
+
+      function startRound(){
+        clearTimeout(timeoutId); timeoutId=null;
+        timeEl.textContent = '0 ms';
+        msgEl.textContent = 'Listen for the target shape...';
+        statusDot.className = 'dot ready';
+        targetShape = null;
+        startAt = 0;
+        pending = true;
+        startBtn.disabled = true;
+        SFX.start();
+
+        const delay = 800 + Math.random()*2000;
+        timeoutId = setTimeout(()=>{
+          targetShape = shapes[(Math.random()*shapes.length)|0];
+          SFX.cue();
+          speak('Tap the ' + targetShape);
+          startAt = performance.now();
+          statusDot.className = 'dot go';
+        }, delay);
+      }
+
+      // Controls
+      startBtn.addEventListener('click', ()=>{
+        ensureAudio();
+        startRound();
+      });
+      sfxToggle.addEventListener('change', ()=>{
+        if(!sfxToggle.checked){
+          tone(0,0); // noop
+        }else{
+          SFX.start();
+        }
+      });
+      voiceToggle.addEventListener('change', ()=>{
+        try{
+          if(!voiceToggle.checked && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+        }catch(_){}
+      });
+      resetBtn.addEventListener('click', ()=>{
+        stats = { played:0, best:null, sum:0, okCount:0, streak:0, bestStreak:0 };
+        saveStats(); updateStatsUI();
+        msgEl.textContent = 'Stats reset. Tap Start to play!';
+        timeEl.textContent = '0 ms';
+        statusDot.className = 'dot';
+      });
+
+      // Start
+      resize();
+      window.addEventListener('resize', resize, {passive:true});
+      requestAnimationFrame(draw);
+
+      // Auto start after a short moment if user interacts; otherwise wait for button
+      setTimeout(()=>{
+        // Show a subtle prompt
+        msgEl.textContent = 'Tap Start, listen for the shape, then tap it fast.';
+      }, 300);
+
+      // Accessibility: keyboard Enter to start when focused on button
+      startBtn.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); startBtn.click(); } });
+
+      // Prevent context menu on long press (mobile)
+      window.addEventListener('contextmenu', (e)=>{ e.preventDefault(); });
+
+    })();
   </script>
 </body>
 </html>

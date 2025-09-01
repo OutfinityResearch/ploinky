@@ -298,7 +298,7 @@ story-card.prev-card .favorite-btn, story-card.next-card .favorite-btn { visibil
     align-items: center;
 }
 .story-card.no-carousel .favorite-btn { visibility: visible; opacity: 1; }
-.story-card.selection-mode .sources-actions { display: none !important; }
+.story-card.selection-mode .sources-actions { justify-content: center; }
 /* ascunde elementele flotante pe cardul de selecție */
 .story-card.selection-mode .progress-bars,
 .story-card.selection-mode .resume-progress,
@@ -848,3 +848,9 @@ story-card.prev-card .favorite-btn, story-card.next-card .favorite-btn { visibil
 .story-card.selection-mode .sources-actions .clear-all-btn { display: none !important; }
 .story-card.selection-mode .sources-actions { justify-content: center; }
 .story-card.selection-mode .manage-sources-btn { margin-left: auto; margin-right: auto; }
+@media (min-width: 768px) {
+    .game-modal {
+        width: min(800px, 90vw); /* Increase width for tablets */
+        height: min(90vh, 80vw * 1.6); /* Adjust height to maintain aspect ratio */
+    }
+}

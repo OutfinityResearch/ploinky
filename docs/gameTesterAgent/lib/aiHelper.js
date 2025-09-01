@@ -21,32 +21,24 @@ class AIHelper {
       apiKey: apiKey
     });
     
-    // Use GPT-5 (latest model released August 2025)
-    // Available models: gpt-5, gpt-5-mini, gpt-5-nano
+    // Use GPT-4o as the default model (latest available)
     this.model = process.env.OPENAI_MODEL || 'gpt-5';
     
     // Allow model selection through environment
-    if (process.env.USE_GPT5_MINI === 'true') {
-      this.model = 'gpt-5-mini'; // Faster, cheaper option
-    } else if (process.env.USE_GPT5_NANO === 'true') {
-      this.model = 'gpt-5-nano'; // Fastest, most economical
+    if (process.env.USE_GPT4_TURBO === 'true') {
+      this.model = 'gpt-4-turbo-preview';
     } else if (process.env.MODEL) {
       this.model = process.env.MODEL; // Custom model selection
     }
     
-    this.maxTokens = parseInt(process.env.MAX_TOKENS) || 16000; // Generous limit for full game code
-    this.temperature = parseFloat(process.env.TEMPERATURE) || 1.0; // Default value required by model
     this.enabled = true;
     
     console.log(`✅ AI Helper initialized!`);
-    console.log(`   Model: ${this.model} (GPT-5 - Latest OpenAI model)`);
+    console.log(`   Model: ${this.model}`);
     console.log(`   API Key: ${apiKey.substring(0, 7)}...${apiKey.substring(apiKey.length - 4)}`);
-    
-    // GPT-5 capabilities
-    console.log(`   Features: Advanced reasoning, 80% less hallucination, superior coding`);
   }
   
-  async fixCode(code, issues) {
+  async fixCode(code, issues, customPrompt = null) {
     if (!this.enabled) {
       console.log('AI Helper not available (no API key)');
       return null;
@@ -54,11 +46,23 @@ class AIHelper {
     
     try {
       // Prepare the prompt
-      const prompt = this.createFixPrompt(code, issues);
+      console.log('📝 Preparing prompt for AI...');
+      const prompt = this.createFixPrompt(code, issues, customPrompt);
+      if (!prompt) {
+        console.error('❌ Failed to create prompt.');
+        return null;
+      }
+      console.log(`📊 Prompt size: ${prompt.length} characters`);
+      console.log(`📊 Original code size: ${code.length} characters`);
+      console.log(`📊 Number of issues to fix: ${issues.length}`);
       
-      console.log('🤖 Asking AI to fix the code...');
+      console.log('🤖 Calling OpenAI API...');
+      console.log(`   Model: ${this.model}`);
+      
+      const startTime = Date.now();
       
       // Call OpenAI API
+      console.log('⏳ Waiting for OpenAI response...');
       const response = await this.openai.chat.completions.create({
         model: this.model,
         messages: [
@@ -74,19 +78,22 @@ The code should be production-ready and properly formatted.`
             content: prompt
           }
         ],
-        // Note: temperature parameter removed - model only supports default value
-        max_completion_tokens: this.maxTokens
       });
       
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`⏱️  OpenAI responded in ${elapsed} seconds`);
+      
       const fixedCode = response.choices[0].message.content;
+      console.log(`📊 Response size: ${fixedCode.length} characters`);
       
       // Validate that we got HTML code back
       if (!fixedCode.includes('<!') && !fixedCode.includes('<html')) {
-        console.error('AI response does not appear to be HTML code');
+        console.error('❌ AI response does not appear to be HTML code');
+        console.log('First 200 chars of response:', fixedCode.substring(0, 200));
         return null;
       }
       
-      console.log('✅ AI generated fixed code');
+      console.log('✅ AI generated valid HTML code');
       return fixedCode;
       
     } catch (error) {
@@ -102,8 +109,8 @@ The code should be production-ready and properly formatted.`
     }
   }
   
-  createFixPrompt(code, issues) {
-    // Group issues by type for better organization
+  createFixPrompt(code, issues, customPrompt = null) {
+    console.log('Creating prompt...');
     const issuesByType = {};
     issues.forEach(issue => {
       const type = issue.type;
@@ -114,6 +121,7 @@ The code should be production-ready and properly formatted.`
     });
     
     let issueDescription = 'Issues found in the game:\n\n';
+    console.log('Initial issueDescription:', issueDescription);
     
     Object.entries(issuesByType).forEach(([type, typeIssues]) => {
       issueDescription += `${type.toUpperCase()}:\n`;
@@ -129,154 +137,27 @@ The code should be production-ready and properly formatted.`
       });
       issueDescription += '\n';
     });
+    console.log('Final issueDescription:', issueDescription);
     
-    return `Fix the following HTML5 game code based on the issues detected and transform it into a modern, mobile-first game.
+    let finalPrompt = `Fix the following HTML5 game code based on the issues detected and transform it into a modern, mobile-first game.\n\n${issueDescription}\n\n`;
 
-${issueDescription}
+    if (customPrompt) {
+      finalPrompt += `IMPORTANT: The user has provided the following instructions, which should be prioritized:\n${customPrompt}\n\n`;
+    }
 
-CRITICAL REQUIREMENTS - THE GAME MUST:
-
-1. **MOBILE-FIRST DESIGN** (Primary platform is mobile/tablet):
-   - Add comprehensive viewport meta tag with viewport-fit=cover for edge-to-edge display
-   - Implement safe area insets for notched devices (env(safe-area-inset-*))
-   - Use responsive units (vw, vh, rem, %) instead of fixed pixels
-   - Ensure all UI elements are large enough for touch (minimum 44x44px touch targets)
-   - Prevent pinch-zoom and unwanted scrolling/bouncing
-   - Test layout works in both portrait and landscape orientations
-
-2. **DUAL INPUT SUPPORT** (Touch AND Mouse):
-   - Add BOTH touch events (touchstart, touchmove, touchend) AND mouse events (click, mousedown, mousemove, mouseup)
-   - Use pointer events where appropriate for unified handling
-   - Add touch-action: manipulation to interactive elements
-   - Prevent ghost clicks and double-tap zoom on mobile
-   - Ensure swipe gestures work alongside click/tap actions
-
-3. **BEAUTIFUL, COLORFUL UI** (Modern and Elegant):
-   - Use vibrant gradient backgrounds (avoid plain solid colors)
-   - Implement smooth animations and transitions
-   - Add subtle shadows and depth to UI elements
-   - Use modern CSS features (gradients, transforms, filters)
-   - Choose a beautiful, high-contrast color palette
-   - Add visual feedback for all interactions (hover, active, focus states)
-   - Use system fonts with proper fallbacks for consistency
-
-4. **RESPONSIVE CANVAS/GAME AREA**:
-   - Canvas must auto-resize to fit viewport
-   - Use CSS max-width: 100% and height: auto
-   - Implement proper scaling for different screen sizes
-   - Maintain aspect ratio on all devices
-   - Handle window resize events dynamically
-
-5. **PERFORMANCE & ACCESSIBILITY**:
-   - Fix all JavaScript errors and typos
-   - Use requestAnimationFrame for smooth animations
-   - Add proper ARIA labels and roles
-   - Ensure keyboard navigation where applicable
-   - Use CSS containment for better performance
-   - Optimize images and assets
-
-6. **MODERN BEST PRACTICES**:
-   - Use CSS custom properties (CSS variables) for theming
-   - Implement proper error boundaries
-   - Add loading states and smooth transitions
-   - Use semantic HTML5 elements
-   - Include proper meta tags for mobile web apps
-   - Add manifest.json properties if applicable
-
-7. **USER EXPERIENCE ENHANCEMENTS**:
-   - Add haptic feedback for mobile (if supported)
-   - Include sound on/off toggle (with visual feedback)
-   - Show score/progress with modern UI components
-   - Add smooth page transitions and micro-interactions
-   - Implement pull-to-refresh prevention
-   - Handle offline states gracefully
+    finalPrompt += `MOST IMPORTANT: THE GAME MUST BE FULLY PLAYABLE AND FUNCTIONAL!
+- Fix all JavaScript errors
+- Make the game responsive and mobile-friendly
+- Add touch controls for mobile devices
 
 Original code:
-\`\`\`html
 ${code}
-\`\`\`
 
-Return the complete fixed HTML code with ALL requirements implemented. Make the game visually stunning, fully responsive, and optimized for mobile devices while maintaining desktop compatibility:`;
-  }
-  
-  async suggestImprovements(code) {
-    if (!this.enabled) {
-      return null;
-    }
+Return ONLY the complete fixed HTML code with all issues resolved.`;
+
     
-    try {
-      console.log('🤖 Asking AI for improvement suggestions...');
-      
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert game developer. Analyze the code and suggest improvements.'
-          },
-          {
-            role: 'user',
-            content: `Analyze this HTML5 game and suggest improvements for:
-- Performance optimization
-- Mobile compatibility
-- Accessibility
-- Code quality
-- User experience
-
-Code:
-\`\`\`html
-${code.substring(0, 3000)}... [truncated]
-\`\`\`
-
-Provide a structured list of suggestions:`
-          }
-        ],
-        // temperature removed - not supported by model
-        max_completion_tokens: 8000 // Enough for analyzing complex games
-      });
-      
-      return response.choices[0].message.content;
-      
-    } catch (error) {
-      console.error('Error getting AI suggestions:', error.message);
-      return null;
-    }
-  }
-  
-  async explainIssue(issue) {
-    if (!this.enabled) {
-      return null;
-    }
-    
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful programming assistant. Explain technical issues in simple terms.'
-          },
-          {
-            role: 'user',
-            content: `Explain this issue in simple terms and how to fix it:
-Type: ${issue.type}
-Subtype: ${issue.subtype || 'N/A'}
-Message: ${issue.message}
-Details: ${JSON.stringify(issue.details || {}, null, 2)}
-
-Provide a brief explanation and solution:`
-          }
-        ],
-        // temperature removed - not supported by model
-        max_completion_tokens: 4000 // Enough for detailed recommendations
-      });
-      
-      return response.choices[0].message.content;
-      
-    } catch (error) {
-      console.error('Error explaining issue:', error.message);
-      return null;
-    }
+    console.log('Generated prompt:', finalPrompt);
+    return finalPrompt;
   }
 }
 
