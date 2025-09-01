@@ -1,0 +1,79 @@
+<!-- Inspired by: https://www.codewithrandom.com/2024/02/25/html-game-code/ -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Scramble Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+        }
+        #scrambled-word {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+        #guess-input {
+            font-size: 1em;
+            padding: 10px;
+            margin-right: 10px;
+        }
+        #submit-btn {
+            font-size: 1em;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Word Scramble</h1>
+        <div id="scrambled-word"></div>
+        <input type="text" id="guess-input" placeholder="Your guess">
+        <button id="submit-btn">Submit</button>
+        <p>Score: <span id="score">0</span></p>
+    </div>
+    <script>
+        const words = ['apple', 'banana', 'orange', 'grape', 'strawberry'];
+        let currentWord = '';
+        let scrambledWord = '';
+        let score = 0;
+
+        const scrambledWordText = document.getElementById('scrambled-word');
+        const guessInput = document.getElementById('guess-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const scoreText = document.getElementById('score');
+
+        function scrambleWord(word) {
+            return word.split('').sort(() => Math.random() - 0.5).join('');
+        }
+
+        function newWord() {
+            currentWord = words[Math.floor(Math.random() * words.length)];
+            scrambledWord = scrambleWord(currentWord);
+            scrambledWordText.textContent = scrambledWord;
+            guessInput.value = '';
+        }
+
+        submitBtn.addEventListener('click', () => {
+            if (guessInput.value.toLowerCase() === currentWord) {
+                score++;
+                scoreText.textContent = score;
+                newWord();
+            } else {
+                alert('Wrong guess! Try again.');
+            }
+        });
+
+        newWord();
+    </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.backup
+test-results/
+screenshots/
+*.log
+debug_screenshot.png
+test_error.html
+*_fix_report.json

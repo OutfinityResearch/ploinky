@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Maze Runner</title>
+  <style>
+    :root{--bg:#0b0f17;--fg:#e5e7eb;--wall:#1f2937;--path:#0f172a;--dot:#38bdf8;--goal:#22c55e}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+    .hud{position:fixed;top:10px;left:12px;right:12px;display:flex;justify-content:space-between;z-index:2}
+    .pill{background:#0f172a;border:1px solid #1f2937;border-radius:999px;padding:6px 10px;font-weight:700}
+    canvas{width:100%;height:100%;display:block}
+  </style>
+</head>
+<body>
+  <div class="hud"><div class="pill">Level: <span id="lv">1</span></div><div class="pill">Time: <span id="tm">0.0</span>s</div></div>
+  <canvas id="c"></canvas>
+  <script>
+    const c=document.getElementById('c'),x=c.getContext('2d');let W,H;function R(){W=c.width=c.clientWidth;H=c.height=c.clientHeight}addEventListener('resize',R,{passive:true});R();
+    // simple sfx
+    const AC = (window.AudioContext||window.webkitAudioContext); let ac=null; function beep(freq,dur){ try{ ac=ac||new AC(); const o=ac.createOscillator(); const g=ac.createGain(); o.frequency.value=freq; o.connect(g); g.connect(ac.destination); o.start(); g.gain.setValueAtTime(0.15, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+dur); o.stop(ac.currentTime+dur);}catch(_){} }
+    let level=1,startTime=0,running=false;const tmEl=document.getElementById('tm'),lvEl=document.getElementById('lv');
+    let maze=null,dot=null,cell=0,rows=0,cols=0,start=null,goal=null;
+    function buildMaze(n){ // simple fixed mazes per level
+      const presets={
+        1:[
+          '########',
+          '#S.....#',
+          '###.###.',
+          '#.....#.',
+          '#.###.#.',
+          '#...#...'
+        ],
+        2:[
+          '###########',
+          '#S......#.#',
+          '#.#####.#.#',
+          '#...#...#.#',
+          '###.#.###.#',
+          '#...#.....#',
+          '#.#######.#',
+          '#.......#G#',
+          '###########'
+        ],
+        3:[
+          '################',
+          '#S.....#......#',
+          '#.###.#.####.#.#',
+          '#...#.#....#.#.#',
+          '###.#.####.#.#.#',
+          '#...#......#.#.#',
+          '#.########.#.#.#',
+          '#..........#..G#',
+          '################'
+        ]
+      };
+      const grid=presets[n]||presets[3]; rows=grid.length; cols=grid[0].length; cell=Math.min(Math.floor(W/cols),Math.floor(H/rows));
+      maze=grid.map(row=>row.split(''));
+      start=findChar('S'); goal=findChar('G')||{r:rows-1,c:cols-2};
+      dot={x:(start.c+0.5)*cell,y:(start.r+0.5)*cell,r:Math.max(6,Math.floor(cell*0.25))};
+    }
+    function findChar(ch){ for(let r=0;r<rows;r++){ for(let c0=0;c0<cols;c0++){ if(maze[r][c0]===ch) return {r,c:c0}; } } return null; }
+    function draw(){ x.clearRect(0,0,W,H); const oy=Math.floor((H-rows*cell)/2);
+      for(let r=0;r<rows;r++){ for(let c0=0;c0<cols;c0++){ const ch=maze[r][c0]; const px=c0*cell, py=oy+r*cell; if(ch==='#'){ x.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--wall')||'#1f2937'; x.fillRect(px,py,cell,cell); } else { x.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--path')||'#0f172a'; x.fillRect(px,py,cell,cell); } } }
+      // goal
+      x.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--goal')||'#22c55e'; x.fillRect(goal.c*cell, oy+goal.r*cell, cell, cell);
+      // start
+      x.fillStyle='#334155'; x.fillRect(start.c*cell,oy+start.r*cell,cell,cell);
+      // dot
+      x.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--dot')||'#38bdf8'; x.beginPath(); x.arc(dot.x,oy+dot.y,dot.r,0,Math.PI*2); x.fill();
+    }
+    function collide(nx,ny){ // check walls
+      const r=Math.floor(ny/cell), c0=Math.floor(nx/cell); if(r<0||c0<0||r>=rows||c0>=cols) return true; return maze[r][c0]==='#'; }
+    function explode(){ x.save(); x.globalCompositeOperation='lighter'; for(let a=0;a<20;a++){ const ang=(Math.PI*2*a)/20; const rx=Math.cos(ang)*2, ry=Math.sin(ang)*2; x.fillStyle='#f87171'; x.beginPath(); x.arc(dot.x+rx*dot.r, dot.y+ry*dot.r, 3,0,Math.PI*2); x.fill(); } x.restore(); }
+    function reset(){ buildMaze(level); draw(); startTime=performance.now(); running=true; }
+    c.addEventListener('pointerdown',e=>{ if(!running){ reset(); lvEl.textContent=level; } });
+    c.addEventListener('pointermove',e=>{ if(!running) return; const rect=c.getBoundingClientRect(); const nx=(e.clientX-rect.left)*c.width/rect.width; const ny=(e.clientY-rect.top)*c.height/rect.height; if(collide(nx,ny)){ explode(); beep(220,0.1); running=false; setTimeout(()=>reset(),600); return;} dot.x=nx; dot.y=ny; if(Math.floor(ny/cell)===goal.r && Math.floor(nx/cell)===goal.c){ // reached goal
+        const t=((performance.now()-startTime)/1000).toFixed(1); tmEl.textContent=t; beep(880,0.15); running=false; level=Math.min(3,level+1); setTimeout(()=>{ lvEl.textContent=level; reset(); },800);
+      } draw(); });
+    reset();
+    function loop(){ if(running){ const t=((performance.now()-startTime)/1000).toFixed(1); tmEl.textContent=t; } requestAnimationFrame(loop);} loop();
+  </script>
+</body>
+</html>

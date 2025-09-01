@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Math Sprint</title>
+  <style>
+    :root { --bg:#0b1020; --fg:#eef2ff; --accent:#22d3ee; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+    html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wrap{ min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:16px; }
+    h1{ margin:0; font-size:22px; }
+    .card{ width:min(520px, 92vw); background:#0f172a; border:1px solid #1f2a44; border-radius:16px; padding:16px; box-shadow:0 12px 30px rgba(0,0,0,.35); }
+    .row{ display:flex; gap:12px; align-items:center; justify-content:center; }
+    .big{ font-size:44px; font-weight:800; letter-spacing:1px; }
+    .opts{ display:grid; grid-template-columns:repeat(2, min(180px, 40vw)); gap:12px; justify-content:center; }
+    .btn{ background:#12223a; color:#fff; border:none; border-radius:14px; padding:14px; font-weight:700; font-size:18px; }
+    .meta{ display:flex; gap:16px; justify-content:center; opacity:.85; }
+    .good{ color:#22d3ee; }
+    .bad{ color:#ef4444; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Math Sprint</h1>
+    <div class="card">
+      <div class="row"><div id="expr" class="big">2 + 2 = ?</div></div>
+      <div class="opts" id="opts"></div>
+      <div class="meta"><div>Correct: <span id="ok">0</span></div><div>Wrong: <span id="bad">0</span></div><div>Time: <span id="time">30</span>s</div></div>
+      <div class="row"><button class="btn" id="restart">Restart</button></div>
+    </div>
+  </div>
+  <script>
+    let ok=0, bad=0, t=30, timer=null, a,b,op,ans;
+    const expr=document.getElementById('expr');
+    const opts=document.getElementById('opts');
+    function randint(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+    function newExpr(){
+      op = ['+','-','×'][randint(0,2)];
+      if(op==='+'){ a=randint(1,20); b=randint(1,20); ans=a+b; }
+      if(op==='-'){ a=randint(6,30); b=randint(1,Math.min(a-1,20)); ans=a-b; }
+      if(op==='×'){ a=randint(2,10); b=randint(2,10); ans=a*b; }
+      expr.textContent = `${a} ${op} ${b} = ?`;
+      const correct = ans; const set = new Set([correct]); const options=[correct];
+      while(options.length<4){ const v = correct + randint(-10,10); if(v>=0 && !set.has(v)){ set.add(v); options.push(v); } }
+      options.sort(()=>Math.random()-0.5);
+      opts.innerHTML='';
+      options.forEach(v=>{ const btn=document.createElement('button'); btn.className='btn'; btn.textContent=v; btn.onclick=()=>pick(v); opts.appendChild(btn); });
+    }
+    function pick(v){ if(v===ans){ ok++; } else { bad++; } document.getElementById('ok').textContent=ok; document.getElementById('bad').textContent=bad; newExpr(); }
+    function tick(){ t--; document.getElementById('time').textContent=t; if(t<=0){ clearInterval(timer); Array.from(opts.children).forEach(b=>b.disabled=true); expr.textContent = `Gata! Scor: ${ok} ✅ | Greșite: ${bad} ❌`; }
+    }
+    function start(){ ok=0; bad=0; t=30; document.getElementById('ok').textContent=ok; document.getElementById('bad').textContent=bad; document.getElementById('time').textContent=t; newExpr(); clearInterval(timer); timer=setInterval(tick,1000); }
+    document.getElementById('restart').onclick=start; start();
+  </script>
+</body>
+</html>

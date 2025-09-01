@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Dress Match</title>
+  <style>
+    :root { --bg:#0a1224; --fg:#f8fafc; --panel:#0f172a; --stroke:#1f2a44; }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+    .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:10px}
+    .man{width:min(340px,92vw);height:min(460px,120vw);background:var(--panel);border:1px solid var(--stroke);border-radius:16px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+    .tool{padding:6px 10px;border-radius:10px;border:1px solid var(--stroke);background:#141c32;color:#e5e7eb;cursor:pointer}
+    .tool.active{outline:2px solid #22d3ee}
+    .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+    .swatch{width:26px;height:26px;border-radius:6px;border:2px solid rgba(255,255,255,.2);cursor:pointer}
+    .btn{border:1px solid var(--stroke);background:#1b2540;color:#fff;border-radius:12px;padding:8px 12px}
+    .msg{min-width:200px;text-align:center;font-weight:800;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="man"><canvas id="avatar" width="340" height="460"></canvas></div>
+    <div class="toolbar" id="tools"></div>
+    <div class="row" id="palette"></div>
+    <div class="row"><button class="btn" id="check">Check Match</button><span class="msg" id="msg"></span></div>
+  </div>
+  <script>
+    function speak(t){ try{ if(!('speechSynthesis' in window))return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.speak(u);}catch(_){}}
+    const COLORS=['#111827','#374151','#6b7280','#a78bfa','#ef4444','#f59e0b','#22c55e','#60a5fa','#ec4899','#fde047','#10b981','#93c5fd','#c084fc','#fb7185'];
+    const PARTS=['HAIR','TOP','BOTTOM','SHOES','BAG','NECKLACE'];
+    const NICE=[ ['#a78bfa','#60a5fa'], ['#ec4899','#fde047'], ['#22c55e','#93c5fd'], ['#ef4444','#f59e0b'] ];
+    const tools=document.getElementById('tools'); const pal=document.getElementById('palette'); const msg=document.getElementById('msg');
+    let active='TOP';
+    let style={HAIR:'#111827',TOP:'#a78bfa',BOTTOM:'#6b7280',SHOES:'#111827',BAG:'#374151',NECKLACE:'#fde047'};
+    const cv=document.getElementById('avatar'); const ctx=cv.getContext('2d');
+    function drawAvatar(){ ctx.clearRect(0,0,cv.width,cv.height);
+      // hair
+      ctx.fillStyle=style.HAIR; ctx.beginPath(); ctx.ellipse(170,130,62,72,0,0,Math.PI*2); ctx.fill();
+      // head + neck
+      ctx.fillStyle='#f6d7b0'; ctx.beginPath(); ctx.arc(170,140,30,0,Math.PI*2); ctx.fill(); ctx.fillRect(162,170,16,16);
+      // necklace
+      ctx.strokeStyle=style.NECKLACE; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(170,186,16,Math.PI,0); ctx.stroke();
+      // torso (top)
+      ctx.fillStyle=style.TOP; ctx.beginPath(); ctx.moveTo(128,210); ctx.lineTo(212,210); ctx.lineTo(198,270); ctx.lineTo(142,270); ctx.closePath(); ctx.fill();
+      // bottom (skirt)
+      ctx.fillStyle=style.BOTTOM; ctx.beginPath(); ctx.moveTo(142,270); ctx.lineTo(198,270); ctx.lineTo(220,340); ctx.lineTo(120,340); ctx.closePath(); ctx.fill();
+      // legs
+      ctx.fillStyle='#f6d7b0'; ctx.fillRect(146,340,18,44); ctx.fillRect(176,340,18,44);
+      // shoes
+      ctx.fillStyle=style.SHOES; ctx.fillRect(138,384,28,10); ctx.fillRect(174,384,28,10);
+      // bag
+      ctx.fillStyle=style.BAG; ctx.fillRect(214,240,26,22); ctx.strokeStyle=style.BAG; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(227,240,12,Math.PI,0); ctx.stroke();
+    }
+    function renderTools(){ tools.innerHTML=''; PARTS.forEach(p=>{ const b=document.createElement('button'); b.className='tool'+(p===active?' active':''); b.textContent=p; b.onclick=()=>{ active=p; renderTools(); speak(p); }; tools.appendChild(b); }) }
+    function renderPalette(){ pal.innerHTML=''; COLORS.forEach(c=>{ const d=document.createElement('div'); d.className='swatch'; d.style.background=c; d.onclick=()=>{ style[active]=c; drawAvatar(); }; pal.appendChild(d); }) }
+    function closeHex(a,b){ const A=[parseInt(a.substr(1,2),16),parseInt(a.substr(3,2),16),parseInt(a.substr(5,2),16)]; const B=[parseInt(b.substr(1,2),16),parseInt(b.substr(3,2),16),parseInt(b.substr(5,2),16)]; return Math.abs(A[0]-B[0])+Math.abs(A[1]-B[1])+Math.abs(A[2]-B[2])<60; }
+    function check(){ const t=style.TOP,b=style.BOTTOM; let ok=false; for(const pair of NICE){ if( (closeHex(t,pair[0])&&closeHex(b,pair[1])) || (closeHex(t,pair[1])&&closeHex(b,pair[0])) ){ ok=true; break; } } if(ok){ msg.textContent='Lovely match! ✨'; speak('Lovely match'); } else { msg.textContent='Hmm… try another combo 😅'; speak('Try another combo'); } }
+    document.getElementById('check').onclick=check; renderTools(); renderPalette(); drawAvatar();
+  </script>
+</body>
+</html>
+

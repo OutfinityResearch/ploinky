@@ -1,0 +1,104 @@
+<!-- Inspired by: https://www.codewithrandom.com/2024/02/25/html-game-code/ -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Archery Game</title>
+    <style>
+        body {
+            background: #f0f0f0;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let score = 0;
+        const arrow = {
+            x: 50,
+            y: canvas.height / 2,
+            size: 50,
+            speed: 10,
+            isMoving: false
+        };
+
+        const target = {
+            x: canvas.width - 100,
+            y: Math.random() * (canvas.height - 100),
+            size: 50,
+            speed: 2
+        };
+
+        function drawArrow() {
+            ctx.fillStyle = 'brown';
+            ctx.fillRect(arrow.x, arrow.y, arrow.size, 10);
+        }
+
+        function drawTarget() {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(target.x, target.y, target.size, target.size);
+        }
+
+        function update() {
+            if (arrow.isMoving) {
+                arrow.x += arrow.speed;
+            }
+
+            target.y += target.speed;
+            if (target.y < 0 || target.y > canvas.height - target.size) {
+                target.speed = -target.speed;
+            }
+
+            if (arrow.x > canvas.width) {
+                arrow.isMoving = false;
+                arrow.x = 50;
+            }
+
+            if (arrow.x < target.x + target.size &&
+                arrow.x + arrow.size > target.x &&
+                arrow.y < target.y + target.size &&
+                arrow.y + 10 > target.y) {
+                score++;
+                arrow.isMoving = false;
+                arrow.x = 50;
+                target.y = Math.random() * (canvas.height - 100);
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawArrow();
+            drawTarget();
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.fillText('Score: ' + score, 10, 20);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === ' ') {
+                arrow.isMoving = true;
+            }
+        });
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>

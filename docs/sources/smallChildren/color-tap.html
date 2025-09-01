@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Match the Colors</title>
+  <style>
+    :root { --bg:#0e1220; --fg:#e6e6ea; --good:#00d68f; --bad:#ff5a5f; }
+    *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wrap { min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:16px; }
+    h1 { margin:0; font-size:22px; letter-spacing:.4px; }
+    .prompt { font-size:18px; opacity:.95; }
+    .row { display:flex; gap:16px; }
+    .dot { width:92px; height:92px; border-radius:50%; box-shadow:0 6px 20px rgba(0,0,0,.35), inset 0 10px 26px rgba(255,255,255,.15); border:2px solid rgba(255,255,255,.06); }
+    .bar { height:8px; width:220px; background:#1a2138; border-radius:8px; overflow:hidden; }
+    .fill { height:100%; width:0%; background:linear-gradient(90deg, #6a5acd, #00d68f); transition:width .2s ease; }
+    .status { height:28px; min-width:140px; text-align:center; font-weight:700; letter-spacing:.4px; }
+    .btn { background:#1f2430; color:#fff; border:none; padding:10px 12px; border-radius:12px; font-weight:600; }
+    .overlay { position: fixed; left: 0; right: 0; bottom: 0; height: 120px; display:none; align-items:center; justify-content:center; background: rgba(0,0,0,.35); z-index: 10; }
+    .overlay .num { font-size: 48px; font-weight: 900; color: #fff; text-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Match the Colors</h1>
+    <div class="prompt">Tap the circle matching: <span id="word" style="font-weight:700"></span></div>
+    <div class="row" id="options"></div>
+    <div class="bar"><div class="fill" id="fill"></div></div>
+    <div class="status" id="status"></div>
+    
+  </div>
+  <div class="overlay" id="overlay"><div class="num" id="num">3</div></div>
+  <script>
+    // Basic TTS helpers
+    function speak(text){
+      try {
+        if (!('speechSynthesis' in window)) return;
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(String(text));
+        u.lang = 'en-US';
+        u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+        window.speechSynthesis.speak(u);
+      } catch(_){}
+    }
+    const COLORS = [
+      {name:'RED', val:'#ff4d4f'},
+      {name:'ORANGE', val:'#f97316'},
+      {name:'YELLOW', val:'#ffd93d'},
+      {name:'LIME', val:'#84cc16'},
+      {name:'GREEN', val:'#2ecc71'},
+      {name:'TEAL', val:'#14b8a6'},
+      {name:'CYAN', val:'#06b6d4'},
+      {name:'BLUE', val:'#3498db'},
+      {name:'INDIGO', val:'#6366f1'},
+      {name:'VIOLET', val:'#8b5cf6'},
+      {name:'PURPLE', val:'#9b59b6'},
+      {name:'PINK', val:'#ec4899'},
+      {name:'MAGENTA', val:'#ff00ff'},
+      {name:'BROWN', val:'#8b5a2b'},
+      {name:'MAROON', val:'#800000'},
+      {name:'NAVY', val:'#001f3f'},
+      {name:'OLIVE', val:'#3d9970'},
+      {name:'TURQUOISE', val:'#40e0d0'},
+      {name:'GOLD', val:'#ffd700'},
+      {name:'SILVER', val:'#c0c0c0'},
+      {name:'BEIGE', val:'#f5f5dc'},
+      {name:'CORAL', val:'#ff7f50'},
+      {name:'SALMON', val:'#fa8072'},
+      {name:'KHAKI', val:'#f0e68c'},
+      {name:'AQUA', val:'#00ffff'},
+      {name:'FUCHSIA', val:'#ff00ff'},
+      {name:'MINT', val:'#98ff98'},
+      {name:'LAVENDER', val:'#e6e6fa'}
+    ];
+    let target, score, total;
+    const options = document.getElementById('options');
+    const word = document.getElementById('word');
+    const statusEl = document.getElementById('status');
+    const fill = document.getElementById('fill');
+    const overlay = document.getElementById('overlay');
+    const num = document.getElementById('num');
+    function randInt(n){ return Math.floor(Math.random()*n); }
+    function pick(){ return COLORS[randInt(COLORS.length)]; }
+    function setStatus(ok){ statusEl.textContent = ok? 'CORRECT!':'TRY AGAIN'; statusEl.style.color = ok? 'var(--good)':'var(--bad)'; }
+    function next(){
+      options.innerHTML='';
+      const correct = pick();
+      target = correct;
+      word.textContent = correct.name;
+      speak('Tap the color ' + correct.name);
+      const used = new Set([correct.name]);
+      const picks = [correct];
+      while(picks.length<3){ const c = pick(); if(!used.has(c.name)){ used.add(c.name); picks.push(c); } }
+      picks.sort(()=>Math.random()-0.5);
+      picks.forEach(c=>{
+        const d = document.createElement('div'); d.className='dot'; d.style.background = c.val; d.addEventListener('click', ()=>onTap(c)); options.appendChild(d);
+      });
+    }
+    function onTap(c){ total++; if(c.name===target.name){ score++; fill.style.width = `${Math.round((score/Math.max(1,total))*100)}%`;
+        startCountdownThen(next);
+      } else { setStatus(false); speak('Try again'); }
+    }
+    function startCountdownThen(cb){
+      setStatus(true); speak('Correct');
+      overlay.style.display='flex'; let k=3; num.textContent=k;
+      const tick=()=>{ k--; if(k<=0){ overlay.style.display='none'; setStatus(''); cb(); return;} num.textContent=k; setTimeout(tick, 1000); };
+      setTimeout(tick, 1000);
+    }
+    function init(){ score=0; total=0; fill.style.width='0%'; setStatus(''); next(); }
+    init();
+  </script>
+</body>
+</html>

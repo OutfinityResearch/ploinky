@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Goal Kick</title>
+  <style>
+    :root { --bg:#06101a; --fg:#fff; }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+    canvas{width:100%;height:100%;display:block}
+    .hud{position:fixed;top:10px;left:12px;right:12px;display:flex;justify-content:space-between}
+    .pill{background:#0b1b2a;border:1px solid #12314d;border-radius:999px;padding:6px 10px;font-weight:700}
+    .overlay{position:fixed;left:0;right:0;bottom:0;height:100px;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35)}
+    .num{font-size:42px;font-weight:900}
+  </style>
+</head>
+<body>
+  <div class="hud"><div class="pill">Goals: <span id="g">0</span></div><div class="pill" id="msg">Tap to shoot</div></div>
+  <div class="overlay" id="ov"><div class="num" id="num">3</div></div>
+  <canvas id="c"></canvas>
+  <script>
+    const c=document.getElementById('c'),x=c.getContext('2d');let W,H;function R(){W=c.width=c.clientWidth;H=c.height=c.clientHeight}addEventListener('resize',R,{passive:true});R();
+    function speak(t){ try{ if(!('speechSynthesis' in window))return; const u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.cancel(); speechSynthesis.speak(u);}catch(_){}}
+    let goals=0; const gEl=document.getElementById('g'), mEl=document.getElementById('msg'), ov=document.getElementById('ov'), num=document.getElementById('num');
+    let ball, target, shot=false, start=false;
+    function reset(){
+      const rx = W*(0.1 + Math.random()*0.3); // random left area
+      const ry = H*(0.65 + Math.random()*0.25); // near bottom
+      ball={x:rx, y:ry, vx:0, vy:0};
+      target={y:H*0.5, h:Math.max(60, H*0.15), dir: (Math.random()<0.5?-1:1)*2.0};
+      shot=false; start=true; mEl.textContent='Tap to shoot';
+    }
+    function loop(){ update(); draw(); requestAnimationFrame(loop); }
+    function update(){ if(!start) return; target.y += target.dir; if(target.y< H*0.2 || target.y> H*0.8) target.dir*=-1; if(shot){ ball.x += ball.vx; ball.y += ball.vy; } }
+    function draw(){ x.clearRect(0,0,W,H); // field
+      x.fillStyle='#0c2a1f'; x.fillRect(W*0.65,0,W*0.35,H); // goal area
+      // goal posts
+      x.fillStyle='#fff'; x.fillRect(W*0.95, H*0.25, 4, H*0.5);
+      // moving target band
+      x.fillStyle='#22c55e'; x.globalAlpha=0.5; x.fillRect(W*0.94, target.y - target.h/2, 10, target.h); x.globalAlpha=1;
+      // ball
+      x.fillStyle='#f1f5f9'; x.beginPath(); x.arc(ball.x,ball.y,10,0,Math.PI*2); x.fill();
+      // check collision when shot
+      if(shot){
+        if(ball.x>W*0.94 && ball.x<W*0.96){
+          if(ball.y>target.y-target.h/2 && ball.y<target.y+target.h/2){ scored(); }
+          else if(ball.x>W*0.98 || ball.y<0 || ball.y>H){ missed(); }
+        }
+        if(ball.x>W+10 || ball.y<-10 || ball.y>H+10){ missed(); }
+      }
+      }
+    }
+    function fire(tx,ty){ if(!start || shot) return; const dx=tx-ball.x, dy=ty-ball.y; const k=1/Math.max(60, Math.hypot(dx,dy)); ball.vx=dx*k*8; ball.vy=dy*k*8; shot=true; mEl.textContent='Shooting...'; }
+    function scored(){ mEl.textContent='Goal!'; speak('Goal'); goals++; gEl.textContent=goals; restartCountdown(); }
+    function missed(){ mEl.textContent='Miss!'; speak('Miss'); restartCountdown(); }
+    function restartCountdown(){ start=false; shot=false; let k=3; num.textContent=k; ov.style.display='flex'; (function tick(){ k--; if(k<=0){ ov.style.display='none'; reset(); return;} num.textContent=k; setTimeout(tick,1000); })(); }
+    c.addEventListener('pointerdown',e=>{ const r=c.getBoundingClientRect(); const tx=(e.clientX-r.left)*c.width/r.width; const ty=(e.clientY-r.top)*c.height/r.height; fire(tx,ty); });
+    reset(); loop();
+  </script>
+</body>
+</html>

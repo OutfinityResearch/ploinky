@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Memory Match</title>
+  <style>
+    :root { --bg:#0e1324; --fg:#e8ecf8; --card:#101a33; --accent:#60a5fa; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+    html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .wrap{ min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:16px; }
+    h1{ margin:0; font-size:22px; }
+    .grid{ display:grid; grid-template-columns:repeat(4, min(72px, 20vw)); gap:12px; }
+    .tile{ width:min(72px, 20vw); height:min(88px, 24vw); perspective: 600px; }
+    .card{ position:relative; width:100%; height:100%; transform-style:preserve-3d; transition: transform .3s ease; border-radius:12px; }
+    .face{ position:absolute; inset:0; backface-visibility:hidden; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:28px; }
+    .front{ background:linear-gradient(160deg, #16213e, #0f172a); border:1px solid #1f2a44; }
+    .back{ background:#152238; border:1px solid #1f2a44; transform: rotateY(180deg); }
+    .flipped{ transform: rotateY(180deg); }
+    .row{ display:flex; gap:12px; align-items:center; }
+    .btn{ background:#1f2430; color:#fff; border:none; padding:10px 12px; border-radius:12px; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Memory Match</h1>
+    <div class="row">Pairs found: <strong id="found">0</strong>/8 <button id="restart" class="btn">Restart</button></div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <script>
+    const EMOJIS = ['🐶','🐱','🦊','🐻','🐼','🐵','🦄','🐸'];
+    let tiles=[], first=null, second=null, lock=false, found=0;
+    const grid=document.getElementById('grid');
+    function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+    function init(){ found=0; document.getElementById('found').textContent=found; grid.innerHTML=''; first=second=null; lock=false;
+      const set = shuffle([...EMOJIS, ...EMOJIS]);
+      tiles = set.map(sym=>({ sym, matched:false }));
+      tiles.forEach((t, idx)=>{
+        const tile=document.createElement('div'); tile.className='tile';
+        const card=document.createElement('div'); card.className='card'; card.dataset.index=idx;
+        const front=document.createElement('div'); front.className='face front'; front.textContent='?';
+        const back=document.createElement('div'); back.className='face back'; back.textContent=t.sym;
+        card.appendChild(front); card.appendChild(back); tile.appendChild(card); grid.appendChild(tile);
+        tile.addEventListener('click', ()=>flip(card));
+      });
+    }
+    function flip(card){ if(lock) return; const idx=+card.dataset.index; const t=tiles[idx]; if(t.matched) return; if(card.classList.contains('flipped')) return;
+      card.classList.add('flipped');
+      if(!first){ first={ idx, sym:t.sym, el:card }; return; }
+      second={ idx, sym:t.sym, el:card };
+      check();
+    }
+    function check(){ lock=true; if(first.sym===second.sym){ tiles[first.idx].matched=tiles[second.idx].matched=true; found++; document.getElementById('found').textContent=found; resetPick(); if(found===8){ setTimeout(()=>alert('Great job! You found all pairs!'), 250); } }
+      else { setTimeout(()=>{ first.el.classList.remove('flipped'); second.el.classList.remove('flipped'); resetPick(); }, 650); }
+    }
+    function resetPick(){ first=second=null; lock=false; }
+    document.getElementById('restart').onclick=init; init();
+  </script>
+</body>
+</html>

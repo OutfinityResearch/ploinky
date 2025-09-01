@@ -1,0 +1,50 @@
+[
+  {
+    "id": "microgame:girls:dress-color",
+    "type": "microgame",
+    "title": "Dress Match",
+    "source": "/sources/girls/dress-color.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #girls",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Choose colors for dress and shoes, then tap Check Match. Learn simple color pairing with friendly feedback.",
+    "reactions": [
+      "Instant feedback: tap a swatch to recolor.",
+      "Playful, no-stress customization.",
+      "Works offline and fits short breaks."
+    ]
+  },
+  {
+    "id": "microgame:girls:matching-card-game",
+    "type": "microgame",
+    "title": "Matching Card Game",
+    "source": "/sources/girls/matching-card-game.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #girls",
+    "author": "CodeWithRandom",
+    "category": "Game",
+    "essence": "Flip the cards and find all the matching pairs. A classic memory game.",
+    "reactions": [
+      "Improves memory and concentration.",
+      "Simple and intuitive gameplay.",
+      "Fun for all ages."
+    ]
+  },
+  {
+    "id": "microgame:girls:flower-tap",
+    "type": "microgame",
+    "title": "Flower Tap",
+    "source": "/sources/girls/flower-tap.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #girls",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Tap the flowers as they bloom to collect points. Beautiful and relaxing gameplay.",
+    "reactions": [
+      "Colorful flower graphics.",
+      "Simple tap controls.",
+      "Relaxing and fun."
+    ]
+  }
+]

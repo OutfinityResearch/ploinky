@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Flappy Dot</title>
+  <style>
+    :root { --bg:#0c1220; --fg:#e5e7eb; --pipe:#1e293b; --accent:#38bdf8; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+    html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    canvas{ width:100%; height:100%; display:block; }
+    .hud{ position:fixed; top:0; left:0; right:0; display:flex; justify-content:space-between; padding:12px 16px; background:linear-gradient(180deg, rgba(0,0,0,.45), transparent); z-index:2; }
+    .btn{ background:#0f172a; color:#fff; border:none; padding:10px 12px; border-radius:12px; font-weight:700; }
+    .score{ font-weight:800; letter-spacing:.5px; }
+  </style>
+</head>
+<body>
+  <div class="hud"><div class="score">Score: <span id="score">0</span></div><button class="btn" id="restart">Restart</button></div>
+  <canvas id="c"></canvas>
+  <script>
+    const c=document.getElementById('c'), x=c.getContext('2d'); let W,H;
+    function resize(){ W=c.width=c.clientWidth; H=c.height=c.clientHeight; } window.addEventListener('resize', resize, {passive:true}); resize();
+    let dot, pipes, score, alive, lastTime;
+    function reset(){ dot={x:W*0.3, y:H*0.5, vy:0}; pipes=[]; score=0; alive=true; spawnPipe(); lastTime=performance.now(); document.getElementById('score').textContent=score; loop(lastTime); }
+    function spawnPipe(){ const gap=Math.max(120, Math.min(220, H*0.35)); const top= Math.random()*(H-gap-60)+30; const speed = Math.max(2.2, Math.min(4.4, W/260)); pipes.push({x:W+40, top, bottom: top+gap, speed}); }
+    function loop(t){ if(!alive) return; const dt=Math.min(33, t-lastTime)/16.666; lastTime=t; update(dt); draw(); requestAnimationFrame(loop); }
+    function update(dt){ dot.vy += 0.38*dt; dot.y += dot.vy*4.2*dt; for(const p of pipes){ p.x -= p.speed*4*dt; }
+      if(pipes.length && pipes[0].x < -60) { pipes.shift(); spawnPipe(); }
+      // collision
+      if(dot.y<0 || dot.y>H){ gameOver(); return; }
+      for(const p of pipes){ if(dot.x>p.x-16 && dot.x<p.x+60){ if(dot.y < p.top || dot.y > p.bottom){ gameOver(); return; } } if(!p.passed && p.x+60<dot.x){ p.passed=true; score++; document.getElementById('score').textContent=score; } }
+    }
+    function draw(){ x.clearRect(0,0,W,H); // pipes
+      for(const p of pipes){ x.fillStyle='#0b1324'; x.fillRect(p.x-2,0,64,p.top); x.fillRect(p.x-2,p.bottom,64,H-p.bottom); x.fillStyle='#1e293b'; x.fillRect(p.x,0,60,p.top); x.fillRect(p.x,p.bottom,60,H-p.bottom); }
+      // dot
+      const r = Math.max(8, Math.min(14, Math.round(W/32/2)));
+      const grad=x.createRadialGradient(dot.x-4, dot.y-6, 2, dot.x, dot.y, r);
+      grad.addColorStop(0,'#fff'); grad.addColorStop(0.1,'#fff8'); grad.addColorStop(0.11,'#6dd3ff'); grad.addColorStop(1,'#38bdf8');
+      x.fillStyle=grad; x.beginPath(); x.arc(dot.x, dot.y, r, 0, Math.PI*2); x.fill();
+    }
+    function flap(){ if(!alive){ reset(); return; } dot.vy = -3.2; }
+    function gameOver(){ alive=false; x.fillStyle='rgba(0,0,0,.5)'; x.fillRect(0,0,W,H); x.fillStyle='#fff'; x.textAlign='center'; x.font='700 28px system-ui, sans-serif'; x.fillText('Game Over', W/2, H/2-10); x.font='16px system-ui, sans-serif'; x.fillText('Tap anywhere to restart', W/2, H/2+20); }
+    c.addEventListener('pointerdown', flap); document.getElementById('restart').onclick=reset; reset();
+  </script>
+</body>
+</html>

@@ -1,0 +1,152 @@
+.news-feed-wrapper {
+    /* Fit inside app-content area (which already accounts for header height) */
+    height: 100%;
+    width: 100%;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+.news-feed-container {
+    height: 100%;
+    width: 100%;
+    position: relative;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Hide scrollbar but keep functionality */
+.news-feed-container::-webkit-scrollbar {
+    display: none;
+}
+
+.news-feed-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.news-feed-container story-card {
+    display: block;
+    width: 92%;
+    max-width: 520px; /* Max width for consistency */
+    aspect-ratio: auto; /* let content define height */
+    margin: 10px auto; /* tighter spacing for multi-card view */
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+    transform-origin: center center;
+    pointer-events: auto; /* allow native interactions/scroll everywhere */
+    opacity: 0.85; /* slightly transparent inactive cards */
+    position: relative;
+    z-index: 1;
+    background: var(--surface); /* ensure all cards have solid background */
+    border: 1px solid rgba(0, 0, 0, 0.1); /* subtle border for all cards */
+}
+
+/* Selection card should size to content, not fixed aspect */
+.news-feed-container story-card.selection-card {
+    aspect-ratio: auto !important;
+    min-height: auto; /* let content determine height */
+    margin-bottom: 40px; /* enough separation, but not exaggerated */
+    /* Use default shadow/border from generic card styles */
+    background: var(--surface);
+    z-index: 2;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+}
+
+/* Do not apply the 30% offset correction to the first post */
+.news-feed-container story-card.first-post {
+    /* No special snap behavior */
+}
+
+/* While selection card is active, hide following cards to avoid peeking headers */
+/* Removed hidden rule; selection card height ensures next card doesn't peek */
+
+/* Keep card size stable across active/inactive states to avoid flicker */
+
+.news-feed-container .bottom-spacer { height: 32px; }
+
+.news-feed-container .top-spacer { height: 0; }
+
+.story-card-placeholder {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #666;
+    text-align: center;
+    padding: 20px;
+}
+
+.story-card-placeholder h2 {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+/* Desktop layout */
+@media (min-width: 769px) {
+    .news-feed-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+    }
+    
+    .news-feed-container {
+        max-width: 600px;
+        margin: 0 auto;
+        box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+        border-radius: 10px;
+    }
+    
+    .news-feed-container story-card {
+        max-width: 600px;
+    }
+}
+
+/* Theme-aware card elevation */
+:root[data-theme="light"] .news-feed-container story-card {
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+:root[data-theme="dark"] .news-feed-container story-card {
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+
+/* Active/centered card regains interactivity and full emphasis */
+.news-feed-container story-card.active-card {
+    pointer-events: auto;
+    opacity: 1;
+    z-index: 50;
+    transform: scale(1); /* no scaling to avoid layout issues */
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4); /* stronger shadow for active card */
+}
+
+/* Loading state */
+.news-feed-container.loading::after {
+    content: '';
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    z-index: 1000;
+}
+
+@keyframes spin {
+    to { transform: translateX(-50%) rotate(360deg); }
+}
+/* Keep content visible on previous cards - no hiding */
+.news-feed-container story-card.selection-card { pointer-events: auto; }

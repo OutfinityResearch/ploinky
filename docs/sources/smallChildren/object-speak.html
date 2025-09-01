@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Name the Object</title>
+  <style>
+    :root{--bg:#0a1224;--fg:#f1f5f9;--accent:#60a5fa;--pill:#0f1b34}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+    canvas{width:100%;height:100%;display:block;touch-action:none}
+    .hud{position:fixed;top:10px;left:12px;right:12px;display:flex;justify-content:center;z-index:2}
+    .pill{background:var(--pill);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:8px 12px;font-weight:800;letter-spacing:.3px}
+    .pill .outline{color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.6), 0 0 0.01px #fff}
+  </style>
+</head>
+<body>
+  <div class="hud"><div class="pill"><span class="outline">Tap a token to hear its name</span></div></div>
+  <canvas id="c"></canvas>
+  <script>
+    var c=document.getElementById('c'),x=c.getContext('2d');var W,H;function R(){W=c.width=c.clientWidth;H=c.height=c.clientHeight}addEventListener('resize',R,{passive:true});R();
+    function speak(t){ try{ if(!('speechSynthesis' in window))return; speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.speak(u);}catch(_){}}
+    var BASE=['APPLE','STAR','CAR','HOUSE','TREE','SUN','BALL','BOAT','PLANE','CAT','DOG','BIRD','CHAIR','TABLE','BOOK','PENCIL','SHOE','HAT','BAG','CLOCK','PHONE','LAMP','FLOWER','CAKE','CUP','FISH','HORSE','SHEEP','TRAIN','BUS','BIKE','TRUCK','KEY','RING','BRUSH','BOTTLE','SPOON','FORK','PLATE','COOKIE','BREAD','CHEESE','MILK','JUICE','WATER','ORANGE','BANANA','GRAPE','PEAR'];
+    var NAMES=[]; for(var i=0;i<6;i++){ for(var j=0;j<BASE.length;j++){ NAMES.push(BASE[j]+(i?(' '+(i+1)):'')); } }
+    var idx=0, items=[], heard=0;
+    function nextFive(){ var out=[]; for(var k=0;k<5;k++){ out.push(NAMES[(idx++)%NAMES.length]); } return out; }
+    function drawToken(name,cx,cy){ x.save(); x.shadowColor='rgba(0,0,0,.6)'; x.shadowBlur=12; x.fillStyle='#10203a'; x.beginPath(); x.arc(cx,cy,34,0,Math.PI*2); x.fill(); x.shadowBlur=0; x.strokeStyle='rgba(96,165,250,.9)'; x.lineWidth=2; x.stroke(); x.fillStyle='#f8fafc'; x.font='800 11px system-ui'; x.textAlign='center'; x.textBaseline='middle'; x.fillText(name,cx,cy); x.restore(); }
+    function layout(){ items=[]; heard=0; var cols=5, gapX=W/(cols+1), cy=H*0.54; var names=nextFive(); for(var c0=1;c0<=cols;c0++){ var cx=Math.floor(gapX*c0); items.push({name:names[c0-1], cx:cx, cy:cy}); } draw(); }
+    function draw(){ x.clearRect(0,0,W,H); for(var i=0;i<items.length;i++){ var it=items[i]; drawToken(it.name,it.cx,it.cy); } }
+    function hit(mx,my){ for(var i=0;i<items.length;i++){ var it=items[i]; if(Math.hypot(mx-it.cx,my-it.cy)<38) return i; } return -1; }
+    c.addEventListener('pointerdown',function(e){ var r=c.getBoundingClientRect(); var mx=(e.clientX-r.left)*c.width/r.width; var my=(e.clientY-r.top)*c.height/r.height; var i=hit(mx,my); if(i>=0){ var it=items[i]; speak(it.name); items.splice(i,1); heard++; draw(); if(heard>=5){ setTimeout(layout,600); } } });
+    layout();
+  </script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+[
+  {
+    "id": "microgame:boys:rocket-dodge",
+    "type": "microgame",
+    "title": "Rocket Dodge",
+    "source": "/sources/boys/rocket-dodge.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #boys",
+    "author": "Ploynky",
+    "category": "MicroGame",
+    "essence": "Tap to thrust and avoid obstacles. Score a point for each gate passed.",
+    "reactions": [
+      "Simple controls: one-tap flight.",
+      "Quick restarts for short sessions.",
+      "Chill difficulty curve for all ages."
+    ]
+  },
+  {
+    "id": "microgame:boys:car-racing",
+    "type": "microgame",
+    "title": "Car Racing",
+    "source": "/sources/boys/car-racing.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #boys",
+    "author": "CodeWithRandom",
+    "category": "Game",
+    "essence": "Dodge the obstacles and see how long you can survive. The longer you last, the higher your score.",
+    "reactions": [
+      "Simple left and right controls.",
+      "Fast-paced and challenging.",
+      "Endless runner style gameplay."
+    ]
+  },
+  {
+    "id": "microgame:boys:archery-game",
+    "type": "microgame",
+    "title": "Archery Game",
+    "source": "/sources/boys/archery-game.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #boys",
+    "author": "CodeWithRandom",
+    "category": "Game",
+    "essence": "Hit the moving target with your arrow. Time your shots to score points.",
+    "reactions": [
+      "Simple spacebar control.",
+      "Tests your timing and precision.",
+      "Fun and challenging."
+    ]
+  },
+  {
+    "id": "microgame:boys:goal-kick",
+    "type": "microgame",
+    "title": "Goal Kick",
+    "source": "/sources/boys/goal-kick.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #boys",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Score goals by kicking the soccer ball into the net. Aim carefully and beat the goalkeeper!",
+    "reactions": [
+      "Simple tap-to-kick controls.",
+      "Test your aiming skills.",
+      "Fun soccer action."
+    ]
+  }
+]

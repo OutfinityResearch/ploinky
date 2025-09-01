@@ -1,0 +1,14 @@
+[
+  {
+    "id": "game:learnItalian:colors",
+    "type": "microgame",
+    "title": "Italian Colors",
+    "source": "/sources/learnItalian/italian-colors.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #learnItalian",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Hear a color in Italian, pick its English meaning. TTS prompts; auto-advance on correct.",
+    "reactions": ["TTS Italian prompts.", "Small multiple-choice.", "Gentle pacing."]
+  }
+]

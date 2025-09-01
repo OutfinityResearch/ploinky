@@ -1,0 +1,146 @@
+[
+  {
+    "id": "game:schoolChildren:addition-sprint",
+    "type": "microgame",
+    "title": "Addition Sprint",
+    "source": "/sources/schoolChildren/addition-sprint.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Tap the correct answer for small addition problems. After a correct answer, a short countdown starts the next one automatically.",
+    "reactions": [
+      "One operation only for focus.",
+      "TTS reads each problem aloud.",
+      "No penalty for mistakes — try until correct."
+    ]
+  },
+  {
+    "id": "game:schoolChildren:subtraction-sprint",
+    "type": "microgame",
+    "title": "Subtraction Sprint",
+    "source": "/sources/schoolChildren/subtraction-sprint.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Practice small non-negative subtractions. TTS announces problems; after a correct answer a countdown moves on.",
+    "reactions": [
+      "Encourages trying until correct.",
+      "No timers or scores needed.",
+      "Great for quick math warmups."
+    ]
+  },
+  {
+    "id": "game:schoolChildren:multiplication-sprint",
+    "type": "microgame",
+    "title": "Multiplication Sprint",
+    "source": "/sources/schoolChildren/multiplication-sprint.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Times tables practice (2–9). Listen to the problem and tap the answer. Auto-advance after a short countdown.",
+    "reactions": [
+      "Focused practice for multiplication.",
+      "TTS guidance included.",
+      "Gentle difficulty and quick rounds."
+    ]
+  },
+  {
+    "id": "game:schoolChildren:division-sprint",
+    "type": "microgame",
+    "title": "Division Sprint",
+    "source": "/sources/schoolChildren/division-sprint.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Integer divisions from small times-table pairs. TTS reads each problem; auto-advance after correct answers.",
+    "reactions": [
+      "Pairs with multiplication practice.",
+      "Try until correct flow.",
+      "Kid-friendly and mobile-first."
+    ]
+  },
+  {
+    "id": "microgame:schoolChildren:memory-match",
+    "type": "microgame",
+    "title": "Memory Match",
+    "source": "/sources/schoolChildren/memory-match.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Flip two cards at a time to find matching pairs. A compact 4×4 board keeps rounds short; simple animations let focus stay on visual memory.",
+    "reactions": [
+      "Light strategy: Track positions and test systematically to complete the board.",
+      "Friendly design: Big, high-contrast cards that work well on phone screens.",
+      "Replayable: Emoji set shuffles every restart for fresh configurations."
+    ]
+  },
+  {
+    "id": "game:schoolChildren:tic-tac-toe-advanced",
+    "type": "microgame",
+    "title": "Tic‑Tac‑Toe Advanced",
+    "source": "/sources/schoolChildren/tic-tac-toe-advanced.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Play against a strong AI. Try to force a draw or win if the AI slips.",
+    "reactions": [
+      "Unbeatable 3×3 AI.",
+      "Great for strategy thinking.",
+      "Quick rounds with instant reset."
+    ]
+  },
+  {
+    "id": "microgame:schoolChildren:word-scramble-game",
+    "type": "microgame",
+    "title": "Word Scramble Game",
+    "source": "/sources/schoolChildren/word-scramble-game.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "CodeWithRandom",
+    "category": "Game",
+    "essence": "Unscramble the letters to form a word. A fun way to improve vocabulary and spelling.",
+    "reactions": [
+      "Educational and fun.",
+      "Simple and challenging.",
+      "Great for all ages."
+    ]
+  },
+  {
+    "id": "microgame:schoolChildren:guess-the-word-game",
+    "type": "microgame",
+    "title": "Guess the Word Game",
+    "source": "/sources/schoolChildren/guess-the-word-game.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "CodeWithRandom",
+    "category": "Game",
+    "essence": "Guess the word one letter at a time. A classic hangman-style word game.",
+    "reactions": [
+      "Improves spelling and vocabulary.",
+      "Challenging and fun.",
+      "A classic brain teaser."
+    ]
+  },
+  {
+    "id": "microgame:schoolChildren:math-quiz",
+    "type": "microgame",
+    "title": "Math Quiz",
+    "source": "/sources/schoolChildren/math-quiz.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #schoolChildren",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Mixed math operations quiz. Test your skills with addition, subtraction, multiplication, and division.",
+    "reactions": [
+      "All four basic operations.",
+      "Score tracking and timer.",
+      "Perfect for math practice."
+    ]
+  }
+]

@@ -1,0 +1,129 @@
+<!-- Inspired by: https://www.codewithrandom.com/2024/02/25/html-game-code/ -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+        }
+        #sudoku-board {
+            display: grid;
+            grid-template-columns: repeat(9, 40px);
+            gap: 2px;
+            margin-top: 20px;
+        }
+        .cell {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #ccc;
+            text-align: center;
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sudoku</h1>
+        <div id="sudoku-board"></div>
+        <button id="solve-btn">Solve</button>
+    </div>
+    <script>
+        const board = [
+            [5, 3, 0, 0, 7, 0, 0, 0, 0],
+            [6, 0, 0, 1, 9, 5, 0, 0, 0],
+            [0, 9, 8, 0, 0, 0, 0, 6, 0],
+            [8, 0, 0, 0, 6, 0, 0, 0, 3],
+            [4, 0, 0, 8, 0, 3, 0, 0, 1],
+            [7, 0, 0, 0, 2, 0, 0, 0, 6],
+            [0, 6, 0, 0, 0, 0, 2, 8, 0],
+            [0, 0, 0, 4, 1, 9, 0, 0, 5],
+            [0, 0, 0, 0, 8, 0, 0, 7, 9]
+        ];
+
+        const boardDisplay = document.getElementById('sudoku-board');
+
+        function drawBoard() {
+            boardDisplay.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('cell');
+                    if (board[i][j] !== 0) {
+                        cell.textContent = board[i][j];
+                    }
+                    boardDisplay.appendChild(cell);
+                }
+            }
+        }
+
+        function solve() {
+            // Simple backtracking solver
+            function isValid(row, col, num) {
+                for (let i = 0; i < 9; i++) {
+                    if (board[row][i] === num || board[i][col] === num) {
+                        return false;
+                    }
+                }
+                const startRow = Math.floor(row / 3) * 3;
+                const startCol = Math.floor(col / 3) * 3;
+                for (let i = 0; i < 3; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        if (board[startRow + i][startCol + j] === num) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+            function findEmpty() {
+                for (let i = 0; i < 9; i++) {
+                    for (let j = 0; j < 9; j++) {
+                        if (board[i][j] === 0) {
+                            return [i, j];
+                        }
+                    }
+                }
+                return null;
+            }
+
+            function solveSudoku() {
+                const empty = findEmpty();
+                if (!empty) {
+                    return true;
+                }
+                const [row, col] = empty;
+                for (let num = 1; num <= 9; num++) {
+                    if (isValid(row, col, num)) {
+                        board[row][col] = num;
+                        if (solveSudoku()) {
+                            return true;
+                        }
+                        board[row][col] = 0;
+                    }
+                }
+                return false;
+            }
+
+            solveSudoku();
+            drawBoard();
+        }
+
+        document.getElementById('solve-btn').addEventListener('click', solve);
+
+        drawBoard();
+    </script>
+</body>
+</html>

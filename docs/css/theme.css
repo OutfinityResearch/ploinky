@@ -1,0 +1,55 @@
+:root[data-theme="dark"] {
+  --bg: #1a1a1a;
+  --surface: #2c2c2c;
+  --text: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --border: rgba(255, 255, 255, 0.1);
+  --glass: rgba(44, 44, 44, 0.8);
+  --primary: #388bfd;
+  --secondary: #529dff;
+  --accent: #388bfd;
+  --accent-2: #50fa7b;
+}
+
+:root[data-theme="light"] {
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --text: #333333;
+  --text-secondary: #666666;
+  --border: rgba(0, 0, 0, 0.1);
+  --glass: rgba(255, 255, 255, 0.8);
+  --primary: #0a66c2;
+  --secondary: #004182;
+  --accent: #0a66c2;
+  --accent-2: #00ebc7;
+}
+
+/* Default variables (match dark to avoid blue flash before theme applies) */
+:root {
+  --bg: #1a1a1a;
+  --surface: #2c2c2c;
+  --text: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --border: rgba(255, 255, 255, 0.1);
+  --glass: rgba(44, 44, 44, 0.8);
+  --primary: #388bfd;
+  --secondary: #529dff;
+  --accent: #388bfd;
+  --accent-2: #50fa7b;
+  --content-scale: 1;
+  --font-game: "Trebuchet MS", "Segoe UI", system-ui, -apple-system, "Inter", sans-serif;
+}
+
+/* Playful UI mode: brighter primary and playful font */
+:root.playful {
+  --primary: #ff7ad1;
+  --secondary: #ff9edf;
+  --accent: #ff7ad1;
+  --font-game: "Comic Sans MS", "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+}
+
+/* Global application surfaces */
+html, body { background: var(--bg); color: var(--text); }
+.mobile-container { background: var(--surface); }
+.app-header { background: var(--glass); border-bottom: 1px solid var(--border); }
+.hamburger-menu-button { border-color: var(--border); }

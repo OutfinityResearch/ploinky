@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Alien Defense</title>
+  <style>
+    :root { --bg:#0b0f17; --fg:#e5e7eb; }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+    canvas{width:100%;height:100%;display:block}
+    .hud{position:fixed;top:10px;left:12px;right:12px;display:flex;justify-content:space-between}
+    .pill{background:#111827;border:1px solid #1f2937;border-radius:999px;padding:6px 10px;font-weight:700}
+  </style>
+</head>
+<body>
+  <div class="hud"><div class="pill">Score: <span id="s">0</span></div></div>
+  <canvas id="c"></canvas>
+  <script>
+    const c=document.getElementById('c'),x=c.getContext('2d');let W,H;function R(){W=c.width=c.clientWidth;H=c.height=c.clientHeight}addEventListener('resize',R,{passive:true});R();
+    let ship={x:W*0.5,y:H-30},aliens=[],bullets=[],alive=true,score=0,last=0;
+    function spawn(){
+      const count = (Math.random()<0.4)?2:1; // sometimes spawn two
+      for(let k=0;k<count;k++){
+        const y = H*0.25 + (Math.random()*H*0.5|0); // lower band
+        const x0=W+30+(k*24);
+        const vx=2+Math.random()*2; aliens.push({x:x0,y, vx});
+      }
+    }
+    function loop(t){const dt=Math.min(33,t-last);last=t;if(alive){update(dt);draw();}requestAnimationFrame(loop)}
+    function update(dt){ if(!aliens.length || aliens[aliens.length-1].x < W-120) spawn(); aliens.forEach(a=>a.x-=a.vx); aliens=aliens.filter(a=>a.x>-30);
+      bullets.forEach(b=>b.y-=6); bullets=bullets.filter(b=>b.y>-10);
+      for(let i=aliens.length-1;i>=0;i--){ for(let j=bullets.length-1;j>=0;j--){ const a=aliens[i], b=bullets[j]; if(Math.abs(a.x-b.x)<12 && Math.abs(a.y-b.y)<12){ aliens.splice(i,1); bullets.splice(j,1); score++; document.getElementById('s').textContent=score; break; } } }
+    }
+    function draw(){ x.clearRect(0,0,W,H); x.fillStyle='#38bdf8'; x.beginPath(); x.moveTo(ship.x,ship.y-10); x.lineTo(ship.x-10,ship.y+10); x.lineTo(ship.x+10,ship.y+10); x.closePath(); x.fill();
+      x.fillStyle='#84cc16'; aliens.forEach(a=>{ x.fillRect(a.x-8,a.y-8,16,16); });
+      x.fillStyle='#f43f5e'; bullets.forEach(b=>{ x.fillRect(b.x-2,b.y-6,4,8); }); }
+    c.addEventListener('pointermove',e=>{ const r=c.getBoundingClientRect(); ship.x=(e.clientX-r.left)*c.width/r.width; });
+    c.addEventListener('pointerdown',e=>{ bullets.push({x:ship.x,y:ship.y-12}); });
+    requestAnimationFrame(loop)
+  </script>
+</body>
+</html>

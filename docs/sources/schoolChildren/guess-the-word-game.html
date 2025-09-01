@@ -1,0 +1,102 @@
+<!-- Inspired by: https://www.codewithrandom.com/2024/02/25/html-game-code/ -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess the Word Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+        }
+        #word-display {
+            font-size: 2em;
+            margin-bottom: 20px;
+            letter-spacing: 5px;
+        }
+        #guess-input {
+            font-size: 1em;
+            padding: 10px;
+            margin-right: 10px;
+        }
+        #guess-btn {
+            font-size: 1em;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Guess the Word</h1>
+        <div id="word-display"></div>
+        <input type="text" id="guess-input" maxlength="1" placeholder="Enter a letter">
+        <button id="guess-btn">Guess</button>
+        <p>Guesses left: <span id="guesses-left">6</span></p>
+    </div>
+    <script>
+        const words = ['apple', 'banana', 'orange', 'grape', 'strawberry'];
+        let currentWord = '';
+        let guessedLetters = [];
+        let guessesLeft = 6;
+
+        const wordDisplay = document.getElementById('word-display');
+        const guessInput = document.getElementById('guess-input');
+        const guessBtn = document.getElementById('guess-btn');
+        const guessesLeftText = document.getElementById('guesses-left');
+
+        function newWord() {
+            currentWord = words[Math.floor(Math.random() * words.length)];
+            guessedLetters = [];
+            guessesLeft = 6;
+            updateWordDisplay();
+            updateGuessesLeft();
+        }
+
+        function updateWordDisplay() {
+            wordDisplay.textContent = currentWord
+                .split('')
+                .map(letter => (guessedLetters.includes(letter) ? letter : '_'))
+                .join(' ');
+        }
+
+        function updateGuessesLeft() {
+            guessesLeftText.textContent = guessesLeft;
+        }
+
+        guessBtn.addEventListener('click', () => {
+            const guess = guessInput.value.toLowerCase();
+            if (guess && !guessedLetters.includes(guess)) {
+                guessedLetters.push(guess);
+                if (!currentWord.includes(guess)) {
+                    guessesLeft--;
+                }
+                updateWordDisplay();
+                updateGuessesLeft();
+                checkGameStatus();
+            }
+            guessInput.value = '';
+        });
+
+        function checkGameStatus() {
+            if (guessesLeft === 0) {
+                alert(`You lose! The word was ${currentWord}`);
+                newWord();
+            } else if (currentWord.split('').every(letter => guessedLetters.includes(letter))) {
+                alert('You win!');
+                newWord();
+            }
+        }
+
+        newWord();
+    </script>
+</body>
+</html>

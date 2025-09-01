@@ -1,0 +1,12 @@
+.add-ext-modal { padding: 16px; min-width: 300px; max-width: 420px; }
+.add-ext-modal h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.add-ext-modal .field { display: flex; flex-direction: column; margin-bottom: 10px; }
+.add-ext-modal label { font-weight: 600; margin-bottom: 6px; }
+.add-ext-modal input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }
+.add-ext-modal .error { color: #e25555; font-size: 0.85rem; min-height: 1.1em; padding-top: 4px; }
+.add-ext-modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.add-ext-modal .actions #test-url { margin-right: auto; }
+.add-ext-modal .testing { opacity: 0.7; pointer-events: none; }
+.add-ext-modal .success { color: #16a34a; }
+.add-ext-modal button { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--glass); color: var(--text); cursor: pointer; }
+.add-ext-modal button.primary { background: var(--primary); color: var(--surface); border-color: var(--primary); }
