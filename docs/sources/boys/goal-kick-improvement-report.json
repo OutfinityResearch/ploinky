@@ -1,0 +1,68 @@
+{
+  "success": true,
+  "finalIssues": [
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.00 for div-21",
+      "details": {
+        "element": "div-21",
+        "background": "rgba(255, 255, 255, 0.12)",
+        "foreground": "rgb(255, 255, 255)",
+        "contrastRatio": 1,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.11 for div-31",
+      "details": {
+        "element": "div-31",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(234, 244, 255)",
+        "contrastRatio": 1.112125648252486,
+        "text": "12 minutes"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.11 for div-32",
+      "details": {
+        "element": "div-32",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(234, 244, 255)",
+        "contrastRatio": 1.112125648252486,
+        "text": "15 minutes"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.11 for div-37",
+      "details": {
+        "element": "div-37",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(234, 244, 255)",
+        "contrastRatio": 1.112125648252486,
+        "text": "Pro"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.11 for div-38",
+      "details": {
+        "element": "div-38",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(234, 244, 255)",
+        "contrastRatio": 1.112125648252486,
+        "text": "Legend"
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": "/home/salboaie/work/ploinky/docs/sources/boys/goal-kick.html",
+  "backupFile": "/home/salboaie/work/ploinky/docs/sources/boys/goal-kick.html.backup"
+}

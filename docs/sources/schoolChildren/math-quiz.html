@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#b5fffc" />
   <title>Math Sprint 🌈</title>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
@@ -10,7 +11,7 @@
     :root{
       --bg1:#FFDEE9; --bg2:#B5FFFC; --bg3:#FEC4FF; --bg4:#B2F7EF;
       --card:#ffffffcc; --card-strong:#ffffff;
-      --text:#2a2a2a; --muted:#475569;
+      --text:#1f2937; --muted:#475569;
       --good:#22c55e; --bad:#ef4444; --accent:#fb923c; --accent2:#60a5fa;
       --shadow:0 14px 30px rgba(0,0,0,.15);
       --radius:22px;
@@ -27,7 +28,7 @@
       display:flex;
       align-items:center;
       justify-content:center;
-      padding: clamp(10px, 3vw, 24px);
+      padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
       touch-action: manipulation;
       user-select: none;
     }
@@ -36,22 +37,45 @@
       50%{ background-position: 100% 50%; }
       100%{ background-position: 0% 50%; }
     }
-    .wrap{ width:min(720px, 96vw); display:flex; flex-direction:column; align-items:center; gap: clamp(12px, 2.5vw, 24px); }
+    @media (prefers-reduced-motion: reduce){
+      body{ animation: none; }
+    }
+    .wrap{ width:min(760px, 96vw); display:flex; flex-direction:column; align-items:center; gap: clamp(12px, 2.5vw, 24px); }
     .title{
       margin:0;
       font-size: clamp(26px, 7vw, 48px);
       text-align:center;
-      color:#1f2937;
+      color:#0b1324;
       text-shadow: 0 2px 0 rgba(255,255,255,.6);
       display:flex; align-items:center; justify-content:center; gap:.4em;
     }
     .title .sparkle{ display:inline-block; animation: pop 1.6s ease-in-out infinite; }
     @keyframes pop{ 0%,100%{ transform: translateY(0) scale(1);} 50%{ transform: translateY(-4px) scale(1.08);} }
+    @media (prefers-reduced-motion: reduce){
+      .title .sparkle{ animation:none; }
+    }
+
+    .toolbar{
+      width:100%;
+      display:flex; align-items:center; justify-content:space-between;
+      gap: 10px;
+    }
+    .ghost-btn{
+      border:none; background: rgba(255,255,255,.8);
+      padding: 10px 14px; border-radius: 999px;
+      font-weight: 800; color:#0b1324;
+      display:inline-flex; align-items:center; gap:.5em;
+      box-shadow: 0 6px 18px rgba(0,0,0,.08);
+      cursor: pointer;
+    }
+    .ghost-btn:active{ transform: translateY(1px); }
+    .ghost-btn[aria-pressed="false"] .off{ display:none; }
+    .ghost-btn[aria-pressed="true"] .on{ display:none; }
 
     .card{
       width:100%;
       background: var(--card);
-      backdrop-filter: blur(6px);
+      backdrop-filter: blur(8px) saturate(120%);
       border: 3px solid rgba(255,255,255,.7);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
@@ -61,7 +85,39 @@
       gap: clamp(14px, 2.5vw, 24px);
       position:relative;
       overflow:hidden;
+      isolation:isolate;
     }
+
+    /* Decorative floating orbs inside the card for subtle motion */
+    .card::before, .card::after{
+      content:"";
+      position:absolute;
+      width: 180px; height: 180px;
+      border-radius: 50%;
+      filter: blur(30px);
+      opacity:.35;
+      z-index:-1;
+      animation: floaty 16s ease-in-out infinite;
+      pointer-events:none;
+    }
+    .card::before{
+      top:-40px; left:-40px;
+      background: radial-gradient(circle at 30% 30%, #a5b4fc, transparent 60%);
+      animation-delay: 0s;
+    }
+    .card::after{
+      bottom:-60px; right:-40px;
+      background: radial-gradient(circle at 70% 70%, #f0abfc, transparent 60%);
+      animation-delay: 3s;
+    }
+    @keyframes floaty{
+      0%, 100%{ transform: translateY(0) translateX(0) scale(1); }
+      50%{ transform: translateY(12px) translateX(8px) scale(1.05); }
+    }
+    @media (prefers-reduced-motion: reduce){
+      .card::before, .card::after{ animation:none; }
+    }
+
     .expr{
       font-weight:800;
       font-size: clamp(36px, 12vw, 76px);
@@ -70,6 +126,7 @@
       color:#111827;
       line-height:1.05;
       display:flex; align-items:center; justify-content:center; gap:.35em; flex-wrap:wrap;
+      text-shadow: 0 2px 0 rgba(255,255,255,.7);
     }
     .expr .qmark{ color:var(--accent); filter: drop-shadow(0 2px 0 rgba(255,255,255,.7)); }
     .expr.correct{ animation: bounce 600ms ease; color: #065f46; }
@@ -116,25 +173,44 @@
       transition: transform .06s ease, box-shadow .2s ease, filter .15s ease;
       min-height: 64px;
       touch-action: manipulation;
+      overflow: hidden;
     }
     .btn:active{ transform: translateY(2px) scale(.98); box-shadow: 0 5px 0 rgba(0,0,0,.06), 0 8px 18px rgba(0,0,0,.10); }
     .btn .emoji{ font-size: 1.1em; }
     .btn[disabled]{ opacity:.6; filter: grayscale(.2); cursor:not-allowed; }
 
+    /* Ripple effect */
+    .ripple {
+      position:absolute; border-radius:50%;
+      transform: scale(0); pointer-events:none; opacity:.45;
+      background: currentColor;
+      mix-blend-mode: multiply;
+      animation: ripple .5s ease-out forwards;
+    }
+    @keyframes ripple {
+      to { transform: scale(4); opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce){
+      .ripple{ display:none; }
+    }
+
     .choice{
       background: var(--grad, linear-gradient(135deg, #fde68a, #fca5a5));
       color:#0b1324;
       border: 3px solid rgba(255,255,255,.9);
+      box-shadow: inset 0 -4px 12px rgba(255,255,255,.35);
     }
     .choice.correct{
       background: linear-gradient(135deg, #bbf7d0, #86efac);
       border-color: #16a34a;
       animation: pulse 600ms ease;
+      box-shadow: 0 0 0 4px rgba(34,197,94,.2), inset 0 -4px 12px rgba(255,255,255,.45);
     }
     .choice.wrong{
       background: linear-gradient(135deg, #fecaca, #fca5a5);
       border-color: #ef4444;
       animation: wobble 420ms ease;
+      box-shadow: 0 0 0 4px rgba(239,68,68,.2), inset 0 -4px 12px rgba(255,255,255,.45);
     }
 
     @keyframes pulse{
@@ -165,6 +241,7 @@
     .stat.time{ color:#1e3a8a; }
 
     .bar{
+      flex:1 1 100%;
       width:100%;
       height: 18px;
       border-radius: 999px;
@@ -203,13 +280,13 @@
       text-align:center;
       padding: 24px;
       flex-direction:column; gap:18px;
+      backdrop-filter: blur(2px);
     }
     .end.show{ display:flex; }
     .end h2{ margin:0; font-size: clamp(26px, 8vw, 42px); color:#065f46; }
     .end p{ margin:0; font-size: clamp(18px, 5vw, 22px); color:#0b1324; }
     .end .big-score{ font-size: clamp(22px, 7vw, 34px); font-weight:800; }
 
-    /* Confetti */
     #confetti{
       pointer-events:none;
       position: fixed; inset: 0;
@@ -229,8 +306,7 @@
       100%{ transform: translate(var(--tx, 80px), var(--ty, -120px)) rotate(var(--rot, 180deg)); opacity: 0; }
     }
 
-    /* Focus styles */
-    .btn:focus-visible, .restart:focus-visible{
+    .btn:focus-visible, .restart:focus-visible, .ghost-btn:focus-visible{
       outline: 4px solid #fbbf24;
       outline-offset: 2px;
     }
@@ -250,6 +326,13 @@
   <div class="wrap">
     <h1 class="title"><span class="sparkle">✨</span> Math Sprint <span class="sparkle">🚀</span></h1>
 
+    <div class="toolbar" role="toolbar" aria-label="Game controls">
+      <div style="flex:1"></div>
+      <button class="ghost-btn" id="soundToggle" type="button" aria-pressed="true" aria-label="Toggle sound">
+        <span class="on">🔊</span><span class="off">🔈</span> Sound
+      </button>
+    </div>
+
     <div class="card" id="card">
       <div class="expr" id="expr" aria-live="polite" aria-atomic="true">3 + 2 = <span class="qmark">❓</span></div>
 
@@ -266,7 +349,7 @@
         <button class="restart" id="restart" type="button">🔄 Play Again</button>
       </div>
 
-      <div class="end" id="end">
+      <div class="end" id="end" aria-modal="true" role="dialog" aria-labelledby="endTitle" aria-describedby="summary">
         <h2 id="endTitle">Time’s up! ⏰</h2>
         <p class="big-score" id="summary">Score: 0 ✅ | 0 ❌</p>
         <button class="restart" id="playAgain" type="button">🎉 Play Again</button>
@@ -294,6 +377,76 @@
       const cardEl = document.getElementById('card');
       const confettiLayer = document.getElementById('confetti');
       const liveEl = document.getElementById('live');
+      const soundToggle = document.getElementById('soundToggle');
+
+      // Sound FX using Web Audio
+      class SoundFX {
+        constructor(){
+          this._ctx = null;
+          this.enabled = true;
+          this._unlocked = false;
+        }
+        get ctx(){
+          if(!this._ctx){
+            this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+          return this._ctx;
+        }
+        unlock(){
+          if(this._unlocked) return;
+          try{
+            const ctx = this.ctx;
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.connect(g); g.connect(ctx.destination);
+            g.gain.setValueAtTime(0, ctx.currentTime);
+            o.start(); o.stop(ctx.currentTime + 0.01);
+            ctx.resume();
+            this._unlocked = true;
+          }catch{}
+        }
+        playTone(type, freq, dur, vol=0.08){
+          if(!this.enabled) return;
+          const ctx = this.ctx;
+          const t = ctx.currentTime;
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = type;
+          o.frequency.setValueAtTime(freq, t);
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(vol, t + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(0.05, dur));
+          o.connect(g); g.connect(ctx.destination);
+          o.start(t);
+          o.stop(t + dur + 0.05);
+        }
+        correct(){
+          this.playTone('sine', 660, 0.12, 0.08);
+          setTimeout(()=>this.playTone('sine', 880, 0.12, 0.08), 90);
+          setTimeout(()=>this.playTone('sine', 990, 0.14, 0.08), 180);
+        }
+        wrong(){
+          if(!this.enabled) return;
+          const ctx = this.ctx; const t = ctx.currentTime;
+          const o = ctx.createOscillator(); const g = ctx.createGain();
+          o.type='square';
+          o.frequency.setValueAtTime(240, t);
+          o.frequency.exponentialRampToValueAtTime(110, t+0.28);
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.08, t+0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t+0.32);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(t); o.stop(t+0.35);
+        }
+        click(){ this.playTone('triangle', 420, 0.06, 0.05); }
+        tick(){ this.playTone('square', 900, 0.04, 0.045); }
+        end(){
+          this.playTone('sine', 523, 0.12, 0.07);
+          setTimeout(()=>this.playTone('sine', 659, 0.12, 0.07), 120);
+          setTimeout(()=>this.playTone('sine', 784, 0.16, 0.08), 240);
+        }
+      }
+      const sfx = new SoundFX();
 
       // Game State
       const DURATION = 30;
@@ -320,7 +473,6 @@
 
       function newQuestion(){
         state.active = true;
-        // pick operator
         state.op = choice(Ops);
         if(state.op === '+'){ state.a = randint(1, 20); state.b = randint(1, 20); state.ans = state.a + state.b; }
         else if(state.op === '-'){
@@ -361,30 +513,26 @@
           [options[i], options[j]] = [options[j], options[i]];
         }
 
-        // render options
+        // render options (no per-button listeners; use delegation)
         optsEl.innerHTML = '';
         options.forEach(v=>{
           const btn = document.createElement('button');
           btn.className = 'btn choice';
-          btn.setAttribute('type', 'button');
+          btn.type = 'button';
           btn.setAttribute('aria-label', `Answer ${v}`);
           btn.dataset.value = v;
           btn.style.setProperty('--grad', randomGrad());
           btn.innerHTML = `<span class="emoji">👆</span> <strong>${v}</strong>`;
-          btn.addEventListener('pointerup', onPick, { passive:true });
-          btn.addEventListener('click', onPick, { passive:true });
           optsEl.appendChild(btn);
         });
       }
 
-      function onPick(e){
+      function handlePick(target){
         if(!state.active) return;
-        const target = e.currentTarget;
         const value = Number(target.dataset.value);
         const correct = value === state.ans;
-        // lock
         state.active = false;
-        // reveal feedback
+
         if(correct){
           state.ok++;
           okEl.textContent = state.ok;
@@ -392,19 +540,19 @@
           exprEl.classList.add('correct');
           popConfettiFrom(target);
           vibrate(30);
+          sfx.correct();
         }else{
           state.bad++;
           badEl.textContent = state.bad;
           target.classList.add('wrong');
           exprEl.classList.add('wrong');
-          // highlight the correct one
           const buttons = Array.from(optsEl.children);
           const goodBtn = buttons.find(b => Number(b.dataset.value) === state.ans);
           if(goodBtn){ goodBtn.classList.add('correct'); }
           shake(cardEl);
           vibrate([120,50,120]);
+          sfx.wrong();
         }
-        // short delay then next
         setTimeout(newQuestion, 650);
       }
 
@@ -424,6 +572,7 @@
         timeEl.textContent = state.t;
         const pct = (state.t / DURATION) * 100;
         fillEl.style.width = pct + '%';
+        if(state.t > 0 && state.t <= 5){ sfx.tick(); }
         if(state.t <= 0){
           stopTimer();
           endGame();
@@ -437,15 +586,13 @@
       function stopTimer(){ if(state.timer){ clearInterval(state.timer); state.timer = null; } }
 
       function endGame(){
-        // disable choices
         Array.from(optsEl.children).forEach(b => b.disabled = true);
         const message = state.ok >= state.bad ? 'Amazing job! 🌟' : 'You can do it! 💪';
         endTitleEl.textContent = `Time’s up! ⏰ ${message}`;
         summaryEl.textContent = `Score: ${state.ok} ✅ | ${state.bad} ❌`;
         endScreen.classList.add('show');
-
-        // big confetti celebration
         setTimeout(()=>popConfettiCenter(120), 50);
+        sfx.end();
       }
 
       function resetGame(){
@@ -460,6 +607,7 @@
         Array.from(optsEl.children).forEach(b => b.disabled = false);
         newQuestion();
         startTimer();
+        sfx.click();
       }
 
       // Confetti helpers
@@ -493,9 +641,34 @@
           piece.style.setProperty('--rot', rot);
           piece.style.setProperty('--dur', dur + 'ms');
           confettiLayer.appendChild(piece);
-          piece.addEventListener('animationend', ()=> piece.remove());
+          piece.addEventListener('animationend', ()=> piece.remove(), { once:true });
         }
       }
+
+      // Event delegation for option clicks + ripple + touch-friendly
+      function createRipple(x, y, container){
+        const rect = container.getBoundingClientRect();
+        const span = document.createElement('span');
+        span.className = 'ripple';
+        const size = Math.max(rect.width, rect.height) * 0.6;
+        span.style.width = span.style.height = size + 'px';
+        span.style.left = (x - rect.left - size/2) + 'px';
+        span.style.top = (y - rect.top - size/2) + 'px';
+        container.appendChild(span);
+        span.addEventListener('animationend', ()=> span.remove(), { once:true });
+      }
+
+      optsEl.addEventListener('pointerdown', (e)=>{
+        const btn = e.target.closest('button.choice');
+        if(!btn || btn.disabled) return;
+        createRipple(e.clientX, e.clientY, btn);
+      }, { passive:true });
+
+      optsEl.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button.choice');
+        if(!btn || btn.disabled) return;
+        handlePick(btn);
+      });
 
       // Controls
       restartBtn.addEventListener('click', resetGame);
@@ -505,6 +678,22 @@
       window.addEventListener('keydown', (e)=>{
         if(e.key === 'Enter' && endScreen.classList.contains('show')){ resetGame(); }
       });
+
+      // Sound toggle
+      soundToggle.addEventListener('click', ()=>{
+        sfx.enabled = !sfx.enabled;
+        soundToggle.setAttribute('aria-pressed', String(sfx.enabled));
+        sfx.click();
+      });
+
+      // Unlock audio on first interaction
+      function unlockOnFirstInteraction(){
+        sfx.unlock();
+        document.removeEventListener('pointerdown', unlockOnFirstInteraction);
+        document.removeEventListener('keydown', unlockOnFirstInteraction);
+      }
+      document.addEventListener('pointerdown', unlockOnFirstInteraction, { passive:true });
+      document.addEventListener('keydown', unlockOnFirstInteraction);
 
       // Init
       resetGame();

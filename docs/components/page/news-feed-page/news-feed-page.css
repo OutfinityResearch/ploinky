@@ -29,9 +29,9 @@
 .news-feed-container story-card {
     display: block;
     width: 92%;
-    max-width: 520px; /* Max width for consistency */
+    max-width: 520px; /* default cap on phones */
     aspect-ratio: auto; /* let content define height */
-    margin: 10px auto; /* tighter spacing for multi-card view */
+    margin: 10px auto; /* center on phones */
     border-radius: 12px;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
     transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
@@ -90,8 +90,8 @@
     50% { opacity: 1; }
 }
 
-/* Desktop layout */
-@media (min-width: 769px) {
+/* Tablet/Desktop layout */
+@media (min-width: 768px) {
     .news-feed-wrapper {
         display: flex;
         align-items: center;
@@ -100,14 +100,20 @@
     }
     
     .news-feed-container {
-        max-width: 600px;
-        margin: 0 auto;
-        box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
-        border-radius: 10px;
+        max-width: 100%; /* allow full width inside mobile-container */
+        margin: 0;       /* flush to container */
+        box-shadow: none; /* avoid outer shadow wrapper */
+        border-radius: 0;
     }
     
     .news-feed-container story-card {
-        max-width: 600px;
+        /* Align with header controls: 12px from left/right (hamburger/refresh) */
+        width: calc(100% - 24px);
+        max-width: none;          /* no cap on desktop/tablet */
+        margin-left: 12px;
+        margin-right: 12px;
+        margin-top: 12px;
+        margin-bottom: 12px;
     }
 }
 

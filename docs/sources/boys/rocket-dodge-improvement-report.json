@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "finalIssues": [
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.15 for span-11",
+      "details": {
+        "element": "span-11",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(230, 240, 255)",
+        "contrastRatio": 1.1492595904604859,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.15 for div-17",
+      "details": {
+        "element": "div-17",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(230, 240, 255)",
+        "contrastRatio": 1.1492595904604859,
+        "text": ""
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": "/home/salboaie/work/ploinky/docs/sources/boys/rocket-dodge.html",
+  "backupFile": "/home/salboaie/work/ploinky/docs/sources/boys/rocket-dodge.html.backup"
+}

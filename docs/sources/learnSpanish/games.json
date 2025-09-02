@@ -1,0 +1,152 @@
+[
+  {
+    "id": "microgame:learnSpanish:alfabeto-espanol",
+    "type": "microgame",
+    "title": "Alfabeto Espanol",
+    "source": "/sources/learnSpanish/alfabeto-espanol.html",
+    "generatedAt": "2025-09-02T10:53:47.542Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Learn the Spanish alphabet with interactive letter cards. Features pronunciation and visual memory exercises",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:aprende-colores",
+    "type": "microgame",
+    "title": "Aprende Colores",
+    "source": "/sources/learnSpanish/aprende-colores.html",
+    "generatedAt": "2025-09-02T10:30:32.867Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "A simple tapping game to learn basic colors in Spanish",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:aprende-comida",
+    "type": "microgame",
+    "title": "Aprende Comida",
+    "source": "/sources/learnSpanish/aprende-comida.html",
+    "generatedAt": "2025-09-02T10:53:47.542Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Master Spanish food vocabulary through interactive gameplay. Learn common food items with visual cards and pronunciation",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:contar-con-objetos",
+    "type": "microgame",
+    "title": "Contar con Objetos",
+    "source": "/sources/learnSpanish/contar-con-objetos.html",
+    "generatedAt": "2025-09-02T10:30:32.867Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "An interactive counting game that uses visual objects to teach numbers in Spanish",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:formas-y-colores",
+    "type": "microgame",
+    "title": "Formas y Colores",
+    "source": "/sources/learnSpanish/formas-y-colores.html",
+    "generatedAt": "2025-09-02T10:30:32.867Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Learn shapes and colors in Spanish by tapping the correct combination",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:mi-familia",
+    "type": "microgame",
+    "title": "Mi Familia",
+    "source": "/sources/learnSpanish/mi-familia.html",
+    "generatedAt": "2025-09-02T10:53:47.542Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Learn Spanish family member names with interactive family tree. Practice family vocabulary with visual relationships",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:nombra-el-objeto",
+    "type": "microgame",
+    "title": "Nombra El Objeto",
+    "source": "/sources/learnSpanish/nombra-el-objeto.html",
+    "generatedAt": "2025-09-02T11:05:24.668Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Identify and learn Spanish object names through visual recognition. Interactive object vocabulary building game",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:partes-del-cuerpo",
+    "type": "microgame",
+    "title": "Partes Del Cuerpo",
+    "source": "/sources/learnSpanish/partes-del-cuerpo.html",
+    "generatedAt": "2025-09-02T10:53:47.542Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Learn Spanish body parts with interactive anatomy diagrams. Master body vocabulary with visual identification exercises",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:que-tiempo-hace",
+    "type": "microgame",
+    "title": "Qué Tiempo Hace",
+    "source": "/sources/learnSpanish/que-tiempo-hace.html",
+    "generatedAt": "2025-09-02T10:30:32.867Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Discover weather terms in Spanish with the help of interactive icons",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnSpanish:sonidos-de-animales",
+    "type": "microgame",
+    "title": "Sonidos de Animales",
+    "source": "/sources/learnSpanish/sonidos-de-animales.html",
+    "generatedAt": "2025-09-02T10:30:32.867Z",
+    "feedName": "Ploynky #learnSpanish",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Press on the animals to hear their sound and name in Spanish",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  }
+]

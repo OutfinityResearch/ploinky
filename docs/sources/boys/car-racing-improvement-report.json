@@ -1,0 +1,151 @@
+{
+  "success": true,
+  "finalIssues": [
+    {
+      "type": "scroll_issue",
+      "subtype": "canvas_overflow",
+      "message": "Game canvas exceeds viewport size",
+      "details": {
+        "width": 440,
+        "height": 770,
+        "top": -25,
+        "left": 420
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.37 for div-26",
+      "details": {
+        "element": "div-26",
+        "background": "rgba(0, 229, 255, 0.12)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.3733702423208323,
+        "text": "SHIELD"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.12 for div-28",
+      "details": {
+        "element": "div-28",
+        "background": "rgba(255, 255, 255, 0.08)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.1200673664795138,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.37 for div-30",
+      "details": {
+        "element": "div-30",
+        "background": "rgba(0, 229, 255, 0.12)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.3733702423208323,
+        "text": "MAGNET"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.12 for div-32",
+      "details": {
+        "element": "div-32",
+        "background": "rgba(255, 255, 255, 0.08)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.1200673664795138,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.37 for div-34",
+      "details": {
+        "element": "div-34",
+        "background": "rgba(0, 229, 255, 0.12)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.3733702423208323,
+        "text": "RAIN"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.12 for div-37",
+      "details": {
+        "element": "div-37",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.1200673664795138,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.12 for div-39",
+      "details": {
+        "element": "div-39",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.1200673664795138,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.12 for div-51",
+      "details": {
+        "element": "div-51",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.1200673664795138,
+        "text": "Move\nArrow keys / A-D\nSwipe or touch LEFT/RIGHT"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.12 for div-52",
+      "details": {
+        "element": "div-52",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.1200673664795138,
+        "text": "Nitro\nHold Shift/Space\nor Nitro button"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.12 for div-53",
+      "details": {
+        "element": "div-53",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.1200673664795138,
+        "text": "Extras\nShield, Magnet, Fuel"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.12 for div-54",
+      "details": {
+        "element": "div-54",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(230, 244, 255)",
+        "contrastRatio": 1.1200673664795138,
+        "text": "Tips\nDraft close behind cars\nNear-miss for Combo"
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": "/home/salboaie/work/ploinky/docs/sources/boys/car-racing.html",
+  "backupFile": "/home/salboaie/work/ploinky/docs/sources/boys/car-racing.html.backup"
+}

@@ -3,52 +3,61 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <title>Arc & Țintă+ (Enhanced)</title>
+  <meta name="theme-color" content="#0a1024">
+  <title>Arc & Țintă+ (Neon)</title>
   <style>
     :root{
-      --bg1:#0a0f1e; --bg2:#141b32;
-      --card:#0e1630; --glass:rgba(255,255,255,.08);
-      --accent:#5aa0ff; --accent2:#7c4dff;
+      --bg1:#070b18; --bg2:#0a1024;
+      --card:#0b1430; --glass:rgba(255,255,255,.08);
+      --accent:#2dd4ff; --accent2:#22ff88;
       --ok:#29d39a; --warn:#ffcc00; --bad:#ff5964;
-      --text:#eef3ff; --muted:#b6c3ff;
+      --text:#eaf1ff; --muted:#a3b7ff;
       --shadow:0 10px 30px rgba(0,0,0,.35);
     }
-    html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 70% 50%, #122045, var(--bg2) 60%), linear-gradient(180deg,var(--bg1),var(--bg2));
-      color:var(--text);font-family:system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Arial;overscroll-behavior:none}
+    html,body{height:100%;margin:0;overflow:hidden;background:radial-gradient(1200px 800px at 70% 50%, #0d1a3a, var(--bg2) 60%), linear-gradient(180deg,var(--bg1),var(--bg2));
+      color:var(--text);font-family:system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Arial;overscroll-behavior:none;-webkit-tap-highlight-color: transparent}
     *{box-sizing:border-box}
     canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-user-select:none;user-select:none}
     .hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;right:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;pointer-events:none;z-index:5}
     .hud-left,.hud-right{display:flex;gap:8px;align-items:center}
-    .pill{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:6px 12px;font-weight:700;font-size:14px;backdrop-filter:blur(6px);box-shadow:var(--shadow);pointer-events:auto}
-    .pill[data-accent]{border-color:rgba(90,160,255,.35)}
-    .pill small{opacity:.75;font-weight:600}
-    .btn{appearance:none;border:1px solid var(--glass);background:rgba(255,255,255,.06);color:var(--text);border-radius:999px;padding:8px 14px;font-weight:800;letter-spacing:.5px;cursor:pointer;backdrop-filter:blur(8px);box-shadow:var(--shadow);pointer-events:auto;transition:transform .08s ease, background .15s ease, border-color .15s ease}
+    .pill{background:rgba(13,26,58,.55);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:6px 12px;font-weight:800;font-size:14px;backdrop-filter:blur(6px);box-shadow:var(--shadow);pointer-events:auto;letter-spacing:.2px}
+    .pill[data-accent]{border-color:rgba(45,212,255,.35)}
+    .pill small{opacity:.8;font-weight:700}
+    .btn{appearance:none;border:1px solid var(--glass);background:rgba(255,255,255,.06);color:var(--text);border-radius:999px;padding:8px 14px;font-weight:900;letter-spacing:.5px;cursor:pointer;backdrop-filter:blur(8px);box-shadow:var(--shadow);pointer-events:auto;transition:transform .08s ease, background .15s ease, border-color .15s ease}
     .btn:active{transform:scale(.97)}
     .btn[aria-pressed="true"]{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.25)}
-    .hint{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:0;right:0;text-align:center;font-size:13px;opacity:.85;padding:0 12px;z-index:4}
+    .hint{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:0;right:0;text-align:center;font-size:13px;opacity:.85;padding:0 12px;z-index:4;text-shadow:0 1px 0 rgba(0,0,0,.35)}
     .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;z-index:10}
     .overlay.show{display:flex}
-    .panel{width:min(560px, 94vw);background:rgba(15,20,40,.7);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:18px 16px 16px;backdrop-filter:blur(10px);box-shadow:var(--shadow);text-align:center}
-    .panel h1{margin:6px 0 4px;font-size:28px;letter-spacing:.5px}
-    .panel h2{margin:6px 0 0;font-size:22px}
+    .panel{width:min(620px, 94vw);background:rgba(11,20,48,.75);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:18px 16px 16px;backdrop-filter:blur(10px);box-shadow:var(--shadow);text-align:center}
+    .panel h1{margin:6px 0 4px;font-size:30px;letter-spacing:.5px;color:#dff5ff}
+    .panel h2{margin:6px 0 0;font-size:24px}
     .panel p{margin:6px 0 10px;color:var(--muted)}
     .panel .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
     .panel .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0}
     .kbd{display:inline-block;border:1px solid rgba(255,255,255,.15);border-bottom-width:3px;border-radius:8px;padding:4px 8px;margin:2px;background:rgba(255,255,255,.06);font-weight:800}
-    .list{margin:8px auto 0;max-width:44ch;text-align:left;font-size:14px;color:#ccd6ff}
+    .list{margin:8px auto 0;max-width:50ch;text-align:left;font-size:14px;color:#c9d6ff}
     .list li{margin:6px 0}
-    .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:rgba(90,160,255,.15);border:1px solid rgba(90,160,255,.35);font-weight:700;color:#dbe7ff}
+    .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:rgba(45,212,255,.15);border:1px solid rgba(45,212,255,.35);font-weight:800;color:#d7f9ff}
     @media (min-width:600px){
       .pill{font-size:15px}
       .hint{font-size:14px}
-      .panel h1{font-size:32px}
+      .panel h1{font-size:34px}
     }
     .blink{animation:blink 1.2s infinite}
     @keyframes blink{0%,50%{opacity:1}60%{opacity:.3}100%{opacity:1}}
     .float{animation:float 3.2s ease-in-out infinite}
     @keyframes float{0%,100%{transform:translateY(-2px)}50%{transform:translateY(2px)}}
-    .glow{box-shadow:0 0 0 0 rgba(90,160,255,.5);animation:glow 2.2s ease-out infinite}
-    @keyframes glow{from{box-shadow:0 0 0 0 rgba(90,160,255,.45)}to{box-shadow:0 0 0 16px rgba(90,160,255,0)}}
+    .glow{box-shadow:0 0 0 0 rgba(45,212,255,.5);animation:glow 2.2s ease-out infinite}
+    @keyframes glow{from{box-shadow:0 0 0 0 rgba(45,212,255,.45)}to{box-shadow:0 0 0 16px rgba(45,212,255,0)}}
+    /* Neon grid overlay for cool vibe */
+    .gridfx{position:fixed;inset:0;pointer-events:none;z-index:1;background:
+      radial-gradient(1200px 800px at 70% 50%, transparent 0%, rgba(0,0,0,.2) 60%),
+      linear-gradient(transparent, rgba(0,0,0,.35)),
+      repeating-linear-gradient(0deg, rgba(35,122,255,.06) 0px, rgba(35,122,255,.06) 1px, transparent 1px, transparent 14px),
+      repeating-linear-gradient(90deg, rgba(35,122,255,.06) 0px, rgba(35,122,255,.06) 1px, transparent 1px, transparent 14px)
+    }
+    .hidden{display:none}
   </style>
 </head>
 <body>
@@ -58,9 +67,11 @@
       <div class="pill">Best: <span id="best">0</span></div>
       <div class="pill" id="livesPill"><span id="lives">❤❤❤</span></div>
       <div class="pill">Lv <span id="level">1</span></div>
+      <div class="pill hidden" id="comboPill">Combo x<span id="comboVal">1</span></div>
     </div>
     <div class="hud-right">
       <button class="btn glow" id="btnPause" aria-label="Pauză (P)">Pauză</button>
+      <button class="btn" id="btnHUDMute" aria-pressed="false" aria-label="Sunet">🔈</button>
     </div>
   </div>
 
@@ -70,19 +81,21 @@
 
   <div class="overlay show" id="ovStart" aria-modal="true" role="dialog">
     <div class="panel">
-      <h1>Arc & Țintă+</h1>
-      <p>Lovește ținta, strânge puncte și supraviețuiește cât mai mult.</p>
+      <h1>Arc & Țintă+ Neon</h1>
+      <p>Lovește ținta, activează power‑up‑uri și fă combo-uri. Gândit pentru sesiuni de 10–15 minute.</p>
       <div class="row">
+        <span class="badge">Neon Blue</span>
         <span class="badge">Responsiv</span>
         <span class="badge">Touch + Tastatură</span>
         <span class="badge">Power‑up‑uri</span>
-        <span class="badge">Scor & Best</span>
+        <span class="badge">Combo</span>
       </div>
       <ul class="list">
-        <li>Ține apăsat sau glisează spre stânga pentru a întinde, eliberează pentru a trage.</li>
-        <li>Săgeată sus/jos pentru a ținti fin. Space/Enter pentru a întinde/elibera.</li>
-        <li>Lovește power‑up‑urile plutitoare: Încetinire, Țintă Mare, x2 Scor.</li>
-        <li>Greutatea crește treptat. Ai 3 vieți. Baftă!</li>
+        <li>Ține apăsat/glisează spre stânga pentru a întinde, eliberează pentru a trage. Vezi traiectoria ghid.</li>
+        <li>Săgeată sus/jos pentru țintire fină. Space/Enter pentru a întinde/elibera.</li>
+        <li>Power‑up‑uri: Încetinire, Țintă Mare, x2 Scor, +Viață (rar).</li>
+        <li>Combo: lovește la rând pentru multiplicator crescut. Miss resetează combo.</li>
+        <li>Greutatea crește treptat. Ai până la 5 vieți. Baftă!</li>
       </ul>
       <div class="grid">
         <button id="btnStart" class="btn" style="font-size:18px">Joacă</button>
@@ -114,6 +127,7 @@
     </div>
   </div>
 
+  <div class="gridfx" aria-hidden="true"></div>
   <canvas id="cv"></canvas>
 
   <script>
@@ -126,9 +140,12 @@
     const elBest = document.getElementById('best');
     const elLives = document.getElementById('lives');
     const elLevel = document.getElementById('level');
+    const elComboPill = document.getElementById('comboPill');
+    const elComboVal = document.getElementById('comboVal');
     const pills = {
       score: document.getElementById('scorePill'),
-      lives: document.getElementById('livesPill')
+      lives: document.getElementById('livesPill'),
+      combo: elComboPill
     };
     const hintEl = document.getElementById('hint');
 
@@ -143,6 +160,7 @@
     const btnRetry = document.getElementById('btnRetry');
     const btnMenu = document.getElementById('btnMenu');
     const btnMute = document.getElementById('btnMute');
+    const btnHUDMute = document.getElementById('btnHUDMute');
     const finalScore = document.getElementById('finalScore');
     const finalBest = document.getElementById('finalBest');
 
@@ -150,7 +168,7 @@
     let DPR = 1, W = 1, H = 1;
 
     // Storage
-    const LS_KEY = 'arc_target_best_v2';
+    const LS_KEY = 'arc_target_best_v3';
     function getBest(){ const v = +localStorage.getItem(LS_KEY); return Number.isFinite(v) ? v : 0; }
     function setBest(v){ localStorage.setItem(LS_KEY, String(v)); }
 
@@ -175,6 +193,7 @@
         case 'bull': freq = 980; dur=.16; typeOsc='sawtooth'; break;
         case 'miss': freq = 180; dur=.18; typeOsc='sine'; break;
         case 'pu': freq = 620; dur=.14; typeOsc='triangle'; break;
+        case 'life': freq = 340; dur=.2; typeOsc='square'; break;
         case 'ui': freq = 420; dur=.07; typeOsc='square'; break;
         case 'pause': freq = 300; dur=.08; typeOsc='sine'; break;
       }
@@ -192,13 +211,15 @@
       state: 'menu', // menu|playing|paused|over
       time: 0,
       level: 1,
-      difficulty: 0, // grows slowly
+      difficulty: 0,
       score: 0,
       best: getBest(),
       lives: 3,
       maxLives: 5,
       timeScale: 1,
-      multiplier: 1,
+      multiplier: 1, // power-up multiplier
+      combo: 0,
+      comboMul: 1,
       effects: {
         slow: 0,
         bigTarget: 0,
@@ -209,9 +230,10 @@
     // Entities
     const bow = { x: 56, y: 0, pull: 0, pulling: false };
     const arrow = { x: 0, y: 0, vx: 0, vy: 0, flying: false, trail: [] };
-    const target = { x: 0, y: 0, r: 34, baseR: 34, vy: 1.2, phase: 0, swayAmp: 8 };
+    const target = { x: 0, y: 0, r: 36, baseR: 36, vy: 1.0, phase: 0, swayAmp: 8 };
     const powerUps = []; // {x,y,r,type,vy,vx,ttl}
     const particles = []; // {x,y,vx,vy,life,clr,s,grav,fade}
+    const texts = []; // {x,y,vx,vy,life,text,color}
 
     // Gesture state
     const gesture = { active:false, startX:0, startY:0, currX:0, currY:0, dx:0, dy:0, isTouch:false };
@@ -233,18 +255,21 @@
       Game.level = 1;
       Game.difficulty = 0;
       Game.score = 0;
-      Game.lives = 3;
+      Game.lives = 4;
       Game.multiplier = 1;
+      Game.combo = 0;
+      Game.comboMul = 1;
       Game.effects.slow = 0;
       Game.effects.bigTarget = 0;
       Game.effects.double = 0;
-      target.baseR = Math.max(30, Math.min(W, H) * 0.04 + 20);
+      target.baseR = Math.max(34, Math.min(W, H) * 0.05 + 24); // generous start for mobile
       target.r = target.baseR;
-      target.vy = 1.2;
+      target.vy = 1.0;
       target.phase = 0;
       target.swayAmp = 8;
       powerUps.length = 0;
       particles.length = 0;
+      texts.length = 0;
       bow.pull = 0;
       bow.pulling = false;
       bow.y = H/2;
@@ -254,6 +279,7 @@
       updateHUD();
       flashPill(pills.lives);
       flashPill(pills.score);
+      hideCombo();
     }
 
     function updateHUD(){
@@ -263,7 +289,14 @@
       const hearts = '❤'.repeat(Game.lives) + '·'.repeat(Math.max(0, Game.maxLives - Game.lives));
       elLives.textContent = hearts;
       elLevel.textContent = Game.level;
+      if (Game.comboMul > 1){
+        elComboVal.textContent = Game.comboMul.toFixed(1).replace(/\.0$/,'');
+        elComboPill.classList.remove('hidden');
+      } else {
+        hideCombo();
+      }
     }
+    function hideCombo(){ elComboPill.classList.add('hidden'); }
 
     function flashPill(el){
       el.style.transition = 'none';
@@ -281,8 +314,9 @@
       DPR = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
       W = Math.max(1, Math.floor(r.width));
       H = Math.max(1, Math.floor(r.height));
-      if (cv.width !== Math.floor(W * DPR)) cv.width = Math.floor(W * DPR);
-      if (cv.height !== Math.floor(H * DPR)) cv.height = Math.floor(H * DPR);
+      const needW = Math.floor(W * DPR), needH = Math.floor(H * DPR);
+      if (cv.width !== needW) cv.width = needW;
+      if (cv.height !== needH) cv.height = needH;
       cx.setTransform(DPR,0,0,DPR,0,0);
       bow.y = H/2;
       target.x = Math.max(160, W - 110);
@@ -342,11 +376,11 @@
       gesture.dy = gesture.currY - gesture.startY;
 
       if (gesture.isTouch) {
-        bow.pull = Math.max(0, Math.min(96, gesture.dx));
+        bow.pull = Math.max(0, Math.min(110, gesture.dx));
         bow.y += (pos.y - bow.y) * 0.35;
         bow.y = Math.max(32, Math.min(H - 32, bow.y));
       } else {
-        bow.pull = Math.min(96, bow.pull + 2.4);
+        bow.pull = Math.min(110, bow.pull + 2.6);
       }
       raw.preventDefault();
     }
@@ -357,10 +391,10 @@
 
       let power, vy;
       if (gesture.isTouch && (gesture.dx > 5 || Math.hypot(gesture.dx, gesture.dy) > 12)) {
-        power = Math.min(32, 8 + Math.max(0, gesture.dx) * 0.12);
+        power = Math.min(34, 8 + Math.max(0, gesture.dx) * 0.12);
         vy = Math.max(-20, Math.min(20, gesture.dy * 0.04));
       } else {
-        power = Math.min(32, 6 + bow.pull * 0.14);
+        power = Math.min(34, 6 + bow.pull * 0.14);
         vy = (target.y - bow.y) * 0.015;
       }
       shoot(power, vy);
@@ -391,6 +425,9 @@
     cv.addEventListener('touchend', endPull, { passive: false });
     cv.addEventListener('touchcancel', endPull, { passive: false });
 
+    // Prevent long-press context menu
+    window.addEventListener('contextmenu', e => { e.preventDefault(); });
+
     // Keyboard controls
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -418,27 +455,35 @@
       if ((e.key === ' ' || e.key === 'Enter') && bow.pulling){
         keys.Space = false;
         bow.pulling = false;
-        const power = Math.min(32, 6 + bow.pull * 0.14);
+        const power = Math.min(34, 6 + bow.pull * 0.14);
         const vy = (target.y - bow.y) * 0.015;
         shoot(power, vy);
       }
     });
 
     // UI buttons
-    btnStart.addEventListener('click', () => {
-      ensureAudio(); sfx('ui'); hideAllOverlays(); startGame();
-    });
+    function toggleMute(button){
+      ensureAudio();
+      muted = !muted;
+      const label = muted ? '🔇' : '🔈';
+      btnMute.setAttribute('aria-pressed', String(muted));
+      btnMute.textContent = (muted ? '🔇 Mut' : '🔈 Sunet');
+      btnHUDMute.setAttribute('aria-pressed', String(muted));
+      btnHUDMute.textContent = label;
+      sfx('ui');
+    }
+    btnStart.addEventListener('click', () => { ensureAudio(); sfx('ui'); hideAllOverlays(); startGame(); });
     btnPause.addEventListener('click', () => { togglePause(); });
     btnResume.addEventListener('click', () => { sfx('ui'); resumeGame(); });
     btnRetryFromPause.addEventListener('click', () => { sfx('ui'); hideAllOverlays(); startGame(); });
     btnRetry.addEventListener('click', () => { sfx('ui'); hideAllOverlays(); startGame(); });
     btnMenu.addEventListener('click', () => { sfx('ui'); showOverlay(ovStart); Game.state='menu'; });
-    btnMute.addEventListener('click', () => {
-      ensureAudio();
-      muted = !muted;
-      btnMute.setAttribute('aria-pressed', String(muted));
-      btnMute.textContent = muted ? '🔇 Mut' : '🔈 Sunet';
-      sfx('ui');
+    btnMute.addEventListener('click', () => toggleMute(btnMute));
+    btnHUDMute.addEventListener('click', () => toggleMute(btnHUDMute));
+
+    // Auto-pause on tab hide
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && Game.state === 'playing') pauseGame();
     });
 
     function hideAllOverlays(){
@@ -488,9 +533,16 @@
     }
 
     // Power-ups
-    const PU_TYPES = ['slow', 'big', 'double']; // slow time, big target, double score
+    const PU_TYPES = ['slow', 'big', 'double', 'life']; // + life (rare)
+    function pickPU(){
+      const r = Math.random();
+      if (r < 0.45) return 'slow';
+      if (r < 0.75) return 'big';
+      if (r < 0.95) return 'double';
+      return 'life';
+    }
     function spawnPowerUp(x=undefined, y=undefined){
-      const t = PU_TYPES[Math.floor(Math.random()*PU_TYPES.length)];
+      const t = pickPU();
       const px = x ?? (W*0.4 + Math.random()*W*0.4);
       const py = y ?? (H*0.2 + Math.random()*H*0.6);
       const r = 14;
@@ -504,14 +556,22 @@
         case 'slow': Game.effects.slow = 7; break;
         case 'big': Game.effects.bigTarget = 7; break;
         case 'double': Game.effects.double = 10; Game.multiplier = 2; break;
+        case 'life':
+          if (Game.lives < Game.maxLives){
+            Game.lives++;
+            flashPill(pills.lives);
+            updateHUD();
+          }
+          sfx('life', .22);
+          break;
       }
-      sfx('pu', .22);
+      if (type !== 'life') sfx('pu', .22);
       if (navigator.vibrate) navigator.vibrate([10,40,10]);
       // Visual feedback
       for(let i=0;i<24;i++){
         const a = Math.random()*Math.PI*2;
         const sp = 0.8 + Math.random()*2.2;
-        const c = type==='slow' ? '#7ecbff' : type==='big' ? '#ffd166' : '#a8ff8a';
+        const c = type==='slow' ? '#7ecbff' : type==='big' ? '#ffd166' : type==='double' ? '#a8ff8a' : '#8cf7ff';
         particles.push({x:target.x,y:target.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.6,clr:c,s:2.2,grav:0,fade:1});
       }
     }
@@ -531,6 +591,9 @@
         const sp = 1 + Math.random()*2;
         particles.push({x:x+10,y, vx: Math.cos(a)*sp+2, vy: Math.sin(a)*sp, life:.3+Math.random()*0.2, clr:'#ffd3a6', s:1.2, grav:0.02, fade:1});
       }
+    }
+    function addFloatingText(x,y,text,color='#dff5ff'){
+      texts.push({x,y,vx:0,vy:-0.4,life:1.0,text,color});
     }
 
     function circleHit(ax,ay,bx,by,br){ const dx=ax-bx, dy=ay-by; return (dx*dx + dy*dy) <= br*br; }
@@ -553,12 +616,12 @@
     function update(dt){
       // Pull growth on keyboard hold
       if (Game.state === 'playing' && bow.pulling && !gesture.isTouch && !arrow.flying){
-        bow.pull = Math.min(96, bow.pull + 120 * dt);
+        bow.pull = Math.min(110, bow.pull + 140 * dt);
       }
 
       // Move bow with keys
       if (Game.state === 'playing'){
-        const sp = 220 * dt;
+        const sp = 260 * dt;
         if (keys.ArrowUp) bow.y = Math.max(32, bow.y - sp);
         if (keys.ArrowDown) bow.y = Math.min(H - 32, bow.y + sp);
       }
@@ -571,42 +634,40 @@
         if (Game.effects.double === 0) Game.multiplier = 1;
       }
 
-      // Difficulty progression (slow and steady up to long sessions)
+      // Difficulty progression tuned for 10–15 min sessions
       if (Game.state === 'playing'){
         Game.time += dt;
-        const difRate = 0.015; // per second
+        const difRate = 0.010; // slower ramp
         Game.difficulty += difRate * dt;
-        // Level every 10 score or time milestones
-        const levelByScore = Math.floor(Game.score / 12) + 1;
-        const levelByTime = Math.floor(Game.time / 45) + 1;
+        // Level up by score and time
+        const levelByScore = Math.floor(Game.score / 15) + 1;
+        const levelByTime = Math.floor(Game.time / 55) + 1;
         const newLevel = Math.max(levelByScore, levelByTime);
         if (newLevel !== Game.level){
           Game.level = newLevel;
           flashPill(pills.score);
-          // chance to spawn powerup each level up
-          if (Math.random() < 0.8) spawnPowerUp();
+          if (Math.random() < 0.85) spawnPowerUp();
         }
       }
 
       // Target motion
-      const baseVy = (1.1 + Game.difficulty*0.5) * (H/720);
+      const baseVy = (1.0 + Game.difficulty*0.55) * (H/760);
       if (target.vy === 0) target.vy = baseVy;
-      const swayAmp = 6 + Game.level * 1.2;
+      const swayAmp = 6 + Game.level * 1.1;
       target.phase += dt * (0.8 + Game.difficulty);
       const sway = Math.sin(target.phase) * swayAmp;
       target.y += (Game.state === 'playing' ? 1 : 0.4) * (target.vy + Math.sin(target.phase*0.6) * 0.2);
       if (target.y < 80 || target.y > H - 80) target.vy *= -1;
-      // Slight horizontal sway for flavor
       const txBase = Math.max(160, W - 110);
-      target.x = txBase + sway * 0.8;
+      target.x = txBase + sway * 0.9;
 
       // Target size adjusts with difficulty + effect
-      target.baseR = Math.max(20, 36 - Game.level * 1.2);
+      target.baseR = Math.max(22, 48 - Game.level * 1.0);
       const desiredR = target.baseR + (Game.effects.bigTarget>0 ? 12 : 0);
       target.r += (desiredR - target.r) * 0.15;
 
       // Arrow physics
-      const gravity = 18 * dt * (1 + Game.difficulty*0.12) * (Game.effects.slow>0 ? 0.6 : 1);
+      const gravity = 18 * dt * (1 + Game.difficulty*0.08) * (Game.effects.slow>0 ? 0.6 : 1);
       if (arrow.flying){
         // trail
         arrow.trail.push({x:arrow.x, y:arrow.y, life:0.4});
@@ -631,16 +692,23 @@
         if (d < target.r){
           const ring = d / target.r; // 0 center .. 1 edge
           let pts = ring < 0.2 ? 5 : (ring < 0.4 ? 3 : (ring < 0.7 ? 2 : 1));
-          pts *= Game.multiplier;
+          // combo handling
+          Game.combo++;
+          Game.comboMul = Math.min(4, 1 + Math.floor(Game.combo/5)); // x2 at 5, x3 at 10, x4 at 15+
+          pts = Math.floor(pts * Game.multiplier * Game.comboMul);
           Game.score += pts;
           Game.best = Math.max(Game.best, Game.score);
           elScore.textContent = Game.score;
           elBest.textContent = Game.best;
+          updateHUD();
           // visual/audio feedback
           const col = ring < 0.33 ? '#ffcc00' : '#7ecbff';
           addHitParticles(arrow.x, arrow.y, col, 26);
-          if (ring < 0.2){ sfx('bull', .18); if (Math.random() < 0.6) spawnPowerUp(arrow.x+20, arrow.y); }
-          else sfx('hit', .16);
+          addFloatingText(arrow.x+6, arrow.y-10, '+'+pts, Game.multiplier>1?'#a8ff8a':(Game.comboMul>1?'#22ff88':'#dff5ff'));
+          if (ring < 0.2){
+            sfx('bull', .18);
+            if (Math.random() < 0.6) spawnPowerUp(arrow.x+20, arrow.y);
+          } else sfx('hit', .16);
           if (navigator.vibrate) navigator.vibrate(ring < 0.33 ? [12, 20, 12] : 12);
           // Difficulty nudges
           Game.difficulty += 0.02;
@@ -648,6 +716,7 @@
           target.vy = (target.y < H*0.5 ? Math.abs(target.vy) : -Math.abs(target.vy));
           resetArrow();
           flashPill(pills.score);
+          flashPill(pills.combo);
         }
 
         // Miss: arrow out of screen
@@ -655,8 +724,10 @@
           resetArrow();
           if (Game.state === 'playing'){
             Game.lives--;
+            Game.combo = 0; Game.comboMul = 1; hideCombo();
             sfx('miss', .12);
             addHitParticles(target.x-40, target.y, '#ff7b88', 14);
+            addFloatingText(bow.x+20, bow.y-10, 'Miss', '#ff7b88');
             updateHUD();
             if (navigator.vibrate) navigator.vibrate([15,60,15]);
             if (Game.lives <= 0){
@@ -667,7 +738,7 @@
           }
         }
       } else {
-        // Auto-follow to keep reachable when idle; reduced when user is interacting
+        // Auto-follow to keep reachable when idle
         if (!bow.pulling && Game.state === 'playing'){
           bow.y += (target.y - bow.y) * 0.05;
         }
@@ -695,31 +766,72 @@
         if (p.life <= 0) particles.splice(i,1);
       }
 
+      // Floating texts update
+      for (let i=texts.length-1;i>=0;i--){
+        const t = texts[i];
+        t.x += t.vx;
+        t.y += t.vy;
+        t.life -= dt;
+        if (t.life <= 0) texts.splice(i,1);
+      }
+
       // Occasional random pu while playing
-      if (Game.state === 'playing' && Math.random() < 0.002 * (1 + Game.level*0.1)){
+      if (Game.state === 'playing' && Math.random() < 0.0022 * (1 + Game.level*0.08)){
         spawnPowerUp();
       }
     }
 
+    // Aim guide (predictive path)
+    function drawAimGuide(){
+      if (!bow.pulling || arrow.flying || Game.state!=='playing') return;
+      // approximate launch based on current pull/gesture, matching endPull logic
+      let power, vy;
+      if (gesture.isTouch){
+        power = Math.min(34, 8 + Math.max(0, gesture.dx) * 0.12);
+        vy = Math.max(-20, Math.min(20, gesture.dy * 0.04));
+      } else {
+        power = Math.min(34, 6 + bow.pull * 0.14);
+        vy = (target.y - bow.y) * 0.015;
+      }
+      let px = bow.x, py = bow.y, vx = power, vyy = vy;
+      const g = (18 * 0.016) * (Game.effects.slow>0 ? 0.6 : 1) * 0.06; // align with update approx
+      cx.save();
+      cx.setLineDash([4,6]);
+      cx.lineWidth = 2;
+      cx.strokeStyle = 'rgba(45,212,255,.7)';
+      cx.beginPath();
+      cx.moveTo(px, py);
+      for (let i=0;i<36;i++){
+        px += vx;
+        py += vyy;
+        vyy += g;
+        if (i%2===0) cx.lineTo(px, py);
+        if (px > W || py < 0 || py > H) break;
+      }
+      cx.stroke();
+      cx.restore();
+    }
+
     function draw(){
       // Clear background
-      cx.fillStyle = '#0a0f1e';
+      cx.fillStyle = '#070b18';
       cx.fillRect(0,0,W,H);
 
-      // vignette
-      const grad = cx.createRadialGradient(W*0.6, H*0.5, Math.min(W,H)*0.2, W*0.6, H*0.5, Math.max(W,H)*0.9);
-      grad.addColorStop(0, 'rgba(255,255,255,0.02)');
+      // animated neon vignette
+      const t = performance.now()*0.001;
+      const grad = cx.createRadialGradient(W*0.62, H*0.5 + Math.sin(t*0.5)*10, Math.min(W,H)*0.18, W*0.6, H*0.5, Math.max(W,H)*0.95);
+      grad.addColorStop(0, 'rgba(45,212,255,0.05)');
       grad.addColorStop(1, 'rgba(0,0,0,0.45)');
       cx.fillStyle = grad;
       cx.fillRect(0,0,W,H);
 
-      // subtle parallax stars / rings
+      // subtle rings
       cx.save();
-      cx.globalAlpha = 0.10;
-      cx.fillStyle = '#ffffff';
-      for(let i=0;i<8;i++){
-        const rr=60+i*40;
-        cx.beginPath(); cx.arc(W-120,H*0.5,rr,0,Math.PI*2); cx.fill();
+      cx.globalAlpha = 0.08;
+      cx.strokeStyle = '#2dd4ff';
+      for(let i=0;i<6;i++){
+        const rr=80+i*52;
+        cx.beginPath(); cx.arc(W-120,H*0.5,rr,0,Math.PI*2); cx.stroke();
       }
       cx.restore();
 
@@ -728,7 +840,10 @@
         cx.save();
         cx.translate(pu.x, pu.y);
         const glow = cx.createRadialGradient(0,0,2,0,0,16);
-        const c1 = pu.type==='slow' ? '#7ecbff' : pu.type==='big' ? '#ffd166' : '#8cff9a';
+        let c1 = '#7ecbff';
+        if (pu.type==='big') c1 = '#ffd166';
+        else if (pu.type==='double') c1 = '#8cff9a';
+        else if (pu.type==='life') c1 = '#2dd4ff';
         glow.addColorStop(0, c1 + 'cc');
         glow.addColorStop(1, c1 + '00');
         cx.fillStyle = glow;
@@ -737,15 +852,17 @@
         cx.beginPath(); cx.arc(0,0,14,0,Math.PI*2); cx.fill();
         cx.strokeStyle = c1; cx.lineWidth = 2; cx.beginPath(); cx.arc(0,0,14,0,Math.PI*2); cx.stroke();
         cx.fillStyle = c1;
-        cx.font = 'bold 13px system-ui,Segoe UI,Roboto';
+        cx.font = '900 13px system-ui,Segoe UI,Roboto';
         cx.textAlign = 'center'; cx.textBaseline = 'middle';
-        cx.fillText(pu.type==='slow'?'S':(pu.type==='big'?'B':'x2'), 0, 1);
+        const label = pu.type==='slow'?'S':(pu.type==='big'?'B':pu.type==='double'?'x2':'+');
+        cx.fillText(label, 0, 1);
         cx.restore();
       }
 
       // Target rings
       const rings = [
-        ['#ff5964', target.r],
+        ['#1e2a5c', target.r+4],
+        ['#2dd4ff', target.r],
         ['#ffffff', target.r*0.72],
         ['#ffcc00', target.r*0.42],
         ['#ffffff', target.r*0.22]
@@ -767,11 +884,14 @@
       rings.forEach(([col,rad])=>{ cx.fillStyle=col; cx.beginPath(); cx.arc(target.x,target.y,rad,0,Math.PI*2); cx.fill(); });
 
       // Bow (arc)
-      cx.strokeStyle=Game.effects.double>0?'#7aff8f':'#5aa0ff';
+      cx.strokeStyle=Game.effects.double>0?'#7aff8f':'#2dd4ff';
       cx.lineWidth=6;
       cx.beginPath(); cx.arc(bow.x, bow.y, 32, -Math.PI/2, Math.PI/2); cx.stroke();
       // String
       cx.strokeStyle='rgba(255,255,255,.85)'; cx.lineWidth=2; cx.beginPath(); cx.moveTo(bow.x, bow.y-32); cx.lineTo(bow.x + (bow.pull*0.8), bow.y); cx.lineTo(bow.x, bow.y+32); cx.stroke();
+
+      // Aim guide
+      drawAimGuide();
 
       // Arrow trail
       for(const t of arrow.trail){
@@ -799,7 +919,17 @@
       }
       cx.globalAlpha = 1;
 
-      // UI effect timers bars near top-left of canvas (visual durations)
+      // Floating texts
+      for (const t of texts){
+        cx.globalAlpha = Math.max(0, t.life);
+        cx.fillStyle = t.color;
+        cx.font = '900 14px system-ui,Segoe UI,Roboto';
+        cx.textAlign = 'left'; cx.textBaseline = 'middle';
+        cx.fillText(t.text, t.x, t.y);
+      }
+      cx.globalAlpha = 1;
+
+      // UI effect timers bars
       const bars = [];
       if (Game.effects.slow>0) bars.push({name:'Slow', v:Game.effects.slow/7, col:'#7ecbff'});
       if (Game.effects.bigTarget>0) bars.push({name:'Big', v:Game.effects.bigTarget/7, col:'#ffd166'});

@@ -531,7 +531,7 @@
       }
       
       // Remove off-screen pipes and spawn new ones
-      if (pipes.length && pipes[0].x < -pipe.width) {
+      if (pipes.length && pipes[0].x < -pipes[0].width) {
         pipes.shift();
         spawnPipe();
       }

@@ -230,20 +230,31 @@
 
         <div class="info-section">
             <h2>Adding Game Metadata</h2>
-            <p>You can include metadata for your game using HTML comments at the beginning of your code. This information will appear on the game's slide configuration:</p>
+            <p>Include a metadata block as an HTML comment at the very top of your file. Keep it plain text, one key per line.</p>
             <div class="code-example">
-<span class="code-comment">&lt;!-- 
-  title: My Amazing Game
-  author: Your Name
-  category: Educational
-  feedName: Ploinky #learning
-  essence: A fun way to learn colors and shapes
+<span class="code-comment">&lt;!--
+title: My Amazing Game
+author: Your Name
+category: Learning
+feedName: Ploinky #learning
+essence: One short sentence describing the goal of the game.
+reactions:
+  - A concise perspective about what the learner experiences (12–25 words).
+  - A second, distinct perspective with a concrete detail; avoid clichés and emojis.
+  - A third perspective focusing on skills practiced or outcomes observed.
 --&gt;</span>
 &lt;!DOCTYPE html&gt;
 &lt;html&gt;
-  &lt;!-- Your game code here --&gt;
+  &lt;!-- Game code starts here --&gt;
 &lt;/html&gt;
             </div>
+            <p style="margin-top:10px; font-weight:600">Guidance for <code>reactions</code> (RO)</p>
+            <ul>
+                <li><strong>Scop:</strong> 3–5 propoziții scurte afișate ca „slide-uri” după cardul principal.</li>
+                <li><strong>Conținut:</strong> 12–25 cuvinte, specific, fără platitudini, fără emoji, fără linkuri.</li>
+                <li><strong>Diversitate:</strong> fiecare propoziție trebuie să adauge o idee nouă (experiență, abilitate, rezultat).</li>
+                <li><strong>Stil:</strong> propoziții independente, la persoana a treia; limbaj clar, educațional.</li>
+            </ul>
         </div>
 
         <div class="warning">
@@ -268,6 +279,7 @@
 
             <div class="form-group">
                 <label for="gameCode">Game HTML Code *</label>
+                <div style="color:#666;font-size:0.95em;margin:4px 0 8px;">Add the metadata comment block at the top, following the example above.</div>
                 <textarea id="gameCode" name="gameCode" required placeholder="Paste your complete HTML game code here..."></textarea>
             </div>
 

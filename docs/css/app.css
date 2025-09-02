@@ -155,7 +155,8 @@ body {
 /* For tablets and larger screens */
 @media (min-width: 768px) {
     .mobile-container {
-        max-width: 80vw; /* Use a larger portion of the viewport width */
-        max-height: 90vh; /* Adjust height as well */
+        /* Allow wider layout on tablet/desktop while keeping a comfortable cap */
+        max-width: min(1100px, 92vw);
+        max-height: 92vh;
     }
 }

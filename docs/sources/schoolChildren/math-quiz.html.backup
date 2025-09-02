@@ -2,56 +2,513 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <title>Math Sprint</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Math Sprint 🌈</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --bg:#0b1020; --fg:#eef2ff; --accent:#22d3ee; }
+    :root{
+      --bg1:#FFDEE9; --bg2:#B5FFFC; --bg3:#FEC4FF; --bg4:#B2F7EF;
+      --card:#ffffffcc; --card-strong:#ffffff;
+      --text:#2a2a2a; --muted:#475569;
+      --good:#22c55e; --bad:#ef4444; --accent:#fb923c; --accent2:#60a5fa;
+      --shadow:0 14px 30px rgba(0,0,0,.15);
+      --radius:22px;
+      --tap:20px;
+    }
     *{ box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
-    html,body{ height:100%; margin:0; background:var(--bg); color:var(--fg); font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    .wrap{ min-height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:16px; }
-    h1{ margin:0; font-size:22px; }
-    .card{ width:min(520px, 92vw); background:#0f172a; border:1px solid #1f2a44; border-radius:16px; padding:16px; box-shadow:0 12px 30px rgba(0,0,0,.35); }
-    .row{ display:flex; gap:12px; align-items:center; justify-content:center; }
-    .big{ font-size:44px; font-weight:800; letter-spacing:1px; }
-    .opts{ display:grid; grid-template-columns:repeat(2, min(180px, 40vw)); gap:12px; justify-content:center; }
-    .btn{ background:#12223a; color:#fff; border:none; border-radius:14px; padding:14px; font-weight:700; font-size:18px; }
-    .meta{ display:flex; gap:16px; justify-content:center; opacity:.85; }
-    .good{ color:#22d3ee; }
-    .bad{ color:#ef4444; }
+    html,body{ height:100%; margin:0; }
+    body{
+      font-family: "Baloo 2", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color:var(--text);
+      background: linear-gradient(120deg, var(--bg1), var(--bg2), var(--bg3), var(--bg4));
+      background-size: 400% 400%;
+      animation: bgShift 18s ease infinite;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: clamp(10px, 3vw, 24px);
+      touch-action: manipulation;
+      user-select: none;
+    }
+    @keyframes bgShift{
+      0%{ background-position: 0% 50%; }
+      50%{ background-position: 100% 50%; }
+      100%{ background-position: 0% 50%; }
+    }
+    .wrap{ width:min(720px, 96vw); display:flex; flex-direction:column; align-items:center; gap: clamp(12px, 2.5vw, 24px); }
+    .title{
+      margin:0;
+      font-size: clamp(26px, 7vw, 48px);
+      text-align:center;
+      color:#1f2937;
+      text-shadow: 0 2px 0 rgba(255,255,255,.6);
+      display:flex; align-items:center; justify-content:center; gap:.4em;
+    }
+    .title .sparkle{ display:inline-block; animation: pop 1.6s ease-in-out infinite; }
+    @keyframes pop{ 0%,100%{ transform: translateY(0) scale(1);} 50%{ transform: translateY(-4px) scale(1.08);} }
+
+    .card{
+      width:100%;
+      background: var(--card);
+      backdrop-filter: blur(6px);
+      border: 3px solid rgba(255,255,255,.7);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: clamp(14px, 3.5vw, 28px);
+      display:flex;
+      flex-direction:column;
+      gap: clamp(14px, 2.5vw, 24px);
+      position:relative;
+      overflow:hidden;
+    }
+    .expr{
+      font-weight:800;
+      font-size: clamp(36px, 12vw, 76px);
+      letter-spacing: 1.5px;
+      text-align:center;
+      color:#111827;
+      line-height:1.05;
+      display:flex; align-items:center; justify-content:center; gap:.35em; flex-wrap:wrap;
+    }
+    .expr .qmark{ color:var(--accent); filter: drop-shadow(0 2px 0 rgba(255,255,255,.7)); }
+    .expr.correct{ animation: bounce 600ms ease; color: #065f46; }
+    .expr.wrong{ animation: shake 420ms ease; color:#7f1d1d; }
+    @keyframes bounce{
+      0%{ transform: scale(1); }
+      30%{ transform: scale(1.08); }
+      60%{ transform: scale(0.97); }
+      100%{ transform: scale(1); }
+    }
+    @keyframes shake{
+      0%{ transform: translateX(0); }
+      20%{ transform: translateX(-12px); }
+      40%{ transform: translateX(10px); }
+      60%{ transform: translateX(-8px); }
+      80%{ transform: translateX(6px); }
+      100%{ transform: translateX(0); }
+    }
+
+    .opts{
+      display:grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: clamp(10px, 2.5vw, 16px);
+      width:100%;
+    }
+    @media (min-width: 520px){
+      .opts{ grid-template-columns: repeat(4, 1fr); }
+    }
+
+    .btn{
+      position:relative;
+      display:flex; align-items:center; justify-content:center; gap:.5em;
+      width:100%;
+      border:none;
+      border-radius: 18px;
+      padding: clamp(14px, 3.6vw, 22px) clamp(12px, 2.8vw, 18px);
+      font-weight:800;
+      font-size: clamp(22px, 6vw, 32px);
+      color:#0b1324;
+      cursor:pointer;
+      background: linear-gradient(135deg, #fff7, #fff0);
+      box-shadow: 0 8px 0 rgba(0,0,0,.08), 0 12px 22px rgba(0,0,0,.12);
+      outline:none;
+      transition: transform .06s ease, box-shadow .2s ease, filter .15s ease;
+      min-height: 64px;
+      touch-action: manipulation;
+    }
+    .btn:active{ transform: translateY(2px) scale(.98); box-shadow: 0 5px 0 rgba(0,0,0,.06), 0 8px 18px rgba(0,0,0,.10); }
+    .btn .emoji{ font-size: 1.1em; }
+    .btn[disabled]{ opacity:.6; filter: grayscale(.2); cursor:not-allowed; }
+
+    .choice{
+      background: var(--grad, linear-gradient(135deg, #fde68a, #fca5a5));
+      color:#0b1324;
+      border: 3px solid rgba(255,255,255,.9);
+    }
+    .choice.correct{
+      background: linear-gradient(135deg, #bbf7d0, #86efac);
+      border-color: #16a34a;
+      animation: pulse 600ms ease;
+    }
+    .choice.wrong{
+      background: linear-gradient(135deg, #fecaca, #fca5a5);
+      border-color: #ef4444;
+      animation: wobble 420ms ease;
+    }
+
+    @keyframes pulse{
+      0%{ transform: scale(1); }
+      50%{ transform: scale(1.05); }
+      100%{ transform: scale(1); }
+    }
+    @keyframes wobble{
+      0%{ transform: rotate(0deg); }
+      25%{ transform: rotate(-5deg); }
+      50%{ transform: rotate(4deg); }
+      75%{ transform: rotate(-3deg); }
+      100%{ transform: rotate(0deg); }
+    }
+
+    .meta{
+      display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+      color:#0b1324;
+      font-size: clamp(16px, 4.3vw, 20px);
+      padding: 8px 10px;
+      background: linear-gradient(90deg, rgba(255,255,255,.9), rgba(255,255,255,.75));
+      border-radius: 14px;
+      border: 2px solid rgba(255,255,255,.9);
+    }
+    .stat{ display:flex; align-items:center; gap:.35em; font-weight:800; }
+    .stat.good{ color:#065f46; }
+    .stat.bad{ color:#7f1d1d; }
+    .stat.time{ color:#1e3a8a; }
+
+    .bar{
+      width:100%;
+      height: 18px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow:hidden;
+      border: 2px solid #fff;
+      box-shadow: inset 0 0 0 2px rgba(0,0,0,.04);
+    }
+    .bar > .fill{
+      height:100%;
+      width:100%;
+      background: linear-gradient(90deg, #4ade80, #facc15, #fb7185);
+      transition: width .35s ease;
+    }
+
+    .row-center{ display:flex; justify-content:center; }
+    .restart{
+      font-size: clamp(18px, 5.5vw, 24px);
+      padding: 14px 18px;
+      border-radius: 999px;
+      border:none;
+      background: linear-gradient(135deg, #a5b4fc, #f0abfc);
+      color:#0b1324;
+      font-weight:800;
+      box-shadow: 0 8px 0 rgba(0,0,0,.08), 0 12px 22px rgba(0,0,0,.12);
+      cursor:pointer;
+      display:inline-flex; align-items:center; gap:.6em;
+    }
+    .restart:active{ transform: translateY(2px); }
+
+    .end{
+      position:absolute; inset:0;
+      background: radial-gradient(1200px 400px at 50% 0%, rgba(255,255,255,.96), rgba(255,255,255,.75));
+      display:none;
+      align-items:center; justify-content:center;
+      text-align:center;
+      padding: 24px;
+      flex-direction:column; gap:18px;
+    }
+    .end.show{ display:flex; }
+    .end h2{ margin:0; font-size: clamp(26px, 8vw, 42px); color:#065f46; }
+    .end p{ margin:0; font-size: clamp(18px, 5vw, 22px); color:#0b1324; }
+    .end .big-score{ font-size: clamp(22px, 7vw, 34px); font-weight:800; }
+
+    /* Confetti */
+    #confetti{
+      pointer-events:none;
+      position: fixed; inset: 0;
+      overflow: hidden;
+      z-index: 9;
+    }
+    .confetti{
+      position:absolute;
+      width: 10px; height: 14px;
+      opacity: .9;
+      border-radius: 2px;
+      transform: translate3d(0,0,0);
+      animation: confettiPop var(--dur,900ms) ease-out forwards;
+    }
+    @keyframes confettiPop{
+      0%{ transform: translate(0,0) rotate(0deg); opacity: 1; }
+      100%{ transform: translate(var(--tx, 80px), var(--ty, -120px)) rotate(var(--rot, 180deg)); opacity: 0; }
+    }
+
+    /* Focus styles */
+    .btn:focus-visible, .restart:focus-visible{
+      outline: 4px solid #fbbf24;
+      outline-offset: 2px;
+    }
+    .sr-only{
+      position:absolute;
+      width:1px; height:1px;
+      padding:0; margin:-1px;
+      overflow:hidden;
+      clip: rect(0,0,0,0);
+      white-space: nowrap; border:0;
+    }
   </style>
 </head>
 <body>
+  <div id="confetti" aria-hidden="true"></div>
+
   <div class="wrap">
-    <h1>Math Sprint</h1>
-    <div class="card">
-      <div class="row"><div id="expr" class="big">2 + 2 = ?</div></div>
-      <div class="opts" id="opts"></div>
-      <div class="meta"><div>Correct: <span id="ok">0</span></div><div>Wrong: <span id="bad">0</span></div><div>Time: <span id="time">30</span>s</div></div>
-      <div class="row"><button class="btn" id="restart">Restart</button></div>
+    <h1 class="title"><span class="sparkle">✨</span> Math Sprint <span class="sparkle">🚀</span></h1>
+
+    <div class="card" id="card">
+      <div class="expr" id="expr" aria-live="polite" aria-atomic="true">3 + 2 = <span class="qmark">❓</span></div>
+
+      <div class="opts" id="opts" role="group" aria-label="Answer choices"></div>
+
+      <div class="meta">
+        <div class="stat good" aria-live="polite" aria-atomic="true">✅ <span id="ok">0</span></div>
+        <div class="stat bad" aria-live="polite" aria-atomic="true">❌ <span id="bad">0</span></div>
+        <div class="stat time">⏱️ <span id="time">30</span>s</div>
+        <div class="bar" aria-hidden="true"><div class="fill" id="fill"></div></div>
+      </div>
+
+      <div class="row-center">
+        <button class="restart" id="restart" type="button">🔄 Play Again</button>
+      </div>
+
+      <div class="end" id="end">
+        <h2 id="endTitle">Time’s up! ⏰</h2>
+        <p class="big-score" id="summary">Score: 0 ✅ | 0 ❌</p>
+        <button class="restart" id="playAgain" type="button">🎉 Play Again</button>
+      </div>
     </div>
+    <div class="sr-only" aria-live="polite" id="live"></div>
   </div>
+
   <script>
-    let ok=0, bad=0, t=30, timer=null, a,b,op,ans;
-    const expr=document.getElementById('expr');
-    const opts=document.getElementById('opts');
-    function randint(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
-    function newExpr(){
-      op = ['+','-','×'][randint(0,2)];
-      if(op==='+'){ a=randint(1,20); b=randint(1,20); ans=a+b; }
-      if(op==='-'){ a=randint(6,30); b=randint(1,Math.min(a-1,20)); ans=a-b; }
-      if(op==='×'){ a=randint(2,10); b=randint(2,10); ans=a*b; }
-      expr.textContent = `${a} ${op} ${b} = ?`;
-      const correct = ans; const set = new Set([correct]); const options=[correct];
-      while(options.length<4){ const v = correct + randint(-10,10); if(v>=0 && !set.has(v)){ set.add(v); options.push(v); } }
-      options.sort(()=>Math.random()-0.5);
-      opts.innerHTML='';
-      options.forEach(v=>{ const btn=document.createElement('button'); btn.className='btn'; btn.textContent=v; btn.onclick=()=>pick(v); opts.appendChild(btn); });
-    }
-    function pick(v){ if(v===ans){ ok++; } else { bad++; } document.getElementById('ok').textContent=ok; document.getElementById('bad').textContent=bad; newExpr(); }
-    function tick(){ t--; document.getElementById('time').textContent=t; if(t<=0){ clearInterval(timer); Array.from(opts.children).forEach(b=>b.disabled=true); expr.textContent = `Gata! Scor: ${ok} ✅ | Greșite: ${bad} ❌`; }
-    }
-    function start(){ ok=0; bad=0; t=30; document.getElementById('ok').textContent=ok; document.getElementById('bad').textContent=bad; document.getElementById('time').textContent=t; newExpr(); clearInterval(timer); timer=setInterval(tick,1000); }
-    document.getElementById('restart').onclick=start; start();
+    (function(){
+      "use strict";
+
+      // DOM
+      const exprEl = document.getElementById('expr');
+      const optsEl = document.getElementById('opts');
+      const okEl = document.getElementById('ok');
+      const badEl = document.getElementById('bad');
+      const timeEl = document.getElementById('time');
+      const fillEl = document.getElementById('fill');
+      const restartBtn = document.getElementById('restart');
+      const endScreen = document.getElementById('end');
+      const playAgainBtn = document.getElementById('playAgain');
+      const summaryEl = document.getElementById('summary');
+      const endTitleEl = document.getElementById('endTitle');
+      const cardEl = document.getElementById('card');
+      const confettiLayer = document.getElementById('confetti');
+      const liveEl = document.getElementById('live');
+
+      // Game State
+      const DURATION = 30;
+      const COLORS = ['#f87171','#fb923c','#f59e0b','#84cc16','#34d399','#22d3ee','#60a5fa','#a78bfa','#f472b6','#fb7185'];
+      const GRADS = [
+        ['#fde68a','#fca5a5'], ['#93c5fd','#c4b5fd'], ['#86efac','#a7f3d0'], ['#fbcfe8','#f5d0fe'],
+        ['#fdba74','#fca5a5'], ['#a7f3d0','#67e8f9'], ['#fcd34d','#fda4af'], ['#c7d2fe','#fbcfe8']
+      ];
+      const Ops = ['+','-','×'];
+
+      const state = {
+        ok:0, bad:0, t:DURATION, timer:null,
+        a:0, b:0, op:'+', ans:0, active:true
+      };
+
+      function randint(a,b){ return (Math.random() * (b - a + 1) + a) | 0; }
+      function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+      function vibrate(pattern){ if(navigator.vibrate){ try{ navigator.vibrate(pattern); }catch{} } }
+
+      function randomGrad(){
+        const [c1,c2] = choice(GRADS);
+        return `linear-gradient(135deg, ${c1}, ${c2})`;
+      }
+
+      function newQuestion(){
+        state.active = true;
+        // pick operator
+        state.op = choice(Ops);
+        if(state.op === '+'){ state.a = randint(1, 20); state.b = randint(1, 20); state.ans = state.a + state.b; }
+        else if(state.op === '-'){
+          state.a = randint(6, 30);
+          state.b = randint(1, Math.min(state.a - 1, 20));
+          state.ans = state.a - state.b;
+        } else { // ×
+          state.a = randint(2, 10);
+          state.b = randint(2, 10);
+          state.ans = state.a * state.b;
+        }
+
+        exprEl.classList.remove('correct','wrong');
+        exprEl.innerHTML = `${state.a} ${state.op} ${state.b} = <span class="qmark">❓</span>`;
+        liveEl.textContent = `New question: ${state.a} ${state.op} ${state.b}`;
+
+        // options
+        const correct = state.ans;
+        const set = new Set([correct]);
+        const options = [correct];
+
+        while(options.length < 4){
+          let v;
+          if(state.op === '×'){
+            v = correct + randint(-10, 10);
+          } else {
+            v = correct + randint(-7, 7);
+          }
+          if(v < 0) continue;
+          if(!set.has(v)){
+            set.add(v);
+            options.push(v);
+          }
+        }
+        // shuffle
+        for(let i=options.length-1;i>0;i--){
+          const j = Math.floor(Math.random()*(i+1));
+          [options[i], options[j]] = [options[j], options[i]];
+        }
+
+        // render options
+        optsEl.innerHTML = '';
+        options.forEach(v=>{
+          const btn = document.createElement('button');
+          btn.className = 'btn choice';
+          btn.setAttribute('type', 'button');
+          btn.setAttribute('aria-label', `Answer ${v}`);
+          btn.dataset.value = v;
+          btn.style.setProperty('--grad', randomGrad());
+          btn.innerHTML = `<span class="emoji">👆</span> <strong>${v}</strong>`;
+          btn.addEventListener('pointerup', onPick, { passive:true });
+          btn.addEventListener('click', onPick, { passive:true });
+          optsEl.appendChild(btn);
+        });
+      }
+
+      function onPick(e){
+        if(!state.active) return;
+        const target = e.currentTarget;
+        const value = Number(target.dataset.value);
+        const correct = value === state.ans;
+        // lock
+        state.active = false;
+        // reveal feedback
+        if(correct){
+          state.ok++;
+          okEl.textContent = state.ok;
+          target.classList.add('correct');
+          exprEl.classList.add('correct');
+          popConfettiFrom(target);
+          vibrate(30);
+        }else{
+          state.bad++;
+          badEl.textContent = state.bad;
+          target.classList.add('wrong');
+          exprEl.classList.add('wrong');
+          // highlight the correct one
+          const buttons = Array.from(optsEl.children);
+          const goodBtn = buttons.find(b => Number(b.dataset.value) === state.ans);
+          if(goodBtn){ goodBtn.classList.add('correct'); }
+          shake(cardEl);
+          vibrate([120,50,120]);
+        }
+        // short delay then next
+        setTimeout(newQuestion, 650);
+      }
+
+      function shake(el){
+        el.style.transition = 'transform .05s';
+        el.style.transform = 'translateX(0)';
+        requestAnimationFrame(()=>{
+          el.style.transform = 'translateX(-2px)';
+          setTimeout(()=>{ el.style.transform = 'translateX(2px)'; }, 50);
+          setTimeout(()=>{ el.style.transform = 'translateX(0)'; }, 100);
+        });
+      }
+
+      function tick(){
+        state.t--;
+        if(state.t < 0) state.t = 0;
+        timeEl.textContent = state.t;
+        const pct = (state.t / DURATION) * 100;
+        fillEl.style.width = pct + '%';
+        if(state.t <= 0){
+          stopTimer();
+          endGame();
+        }
+      }
+
+      function startTimer(){
+        stopTimer();
+        state.timer = setInterval(tick, 1000);
+      }
+      function stopTimer(){ if(state.timer){ clearInterval(state.timer); state.timer = null; } }
+
+      function endGame(){
+        // disable choices
+        Array.from(optsEl.children).forEach(b => b.disabled = true);
+        const message = state.ok >= state.bad ? 'Amazing job! 🌟' : 'You can do it! 💪';
+        endTitleEl.textContent = `Time’s up! ⏰ ${message}`;
+        summaryEl.textContent = `Score: ${state.ok} ✅ | ${state.bad} ❌`;
+        endScreen.classList.add('show');
+
+        // big confetti celebration
+        setTimeout(()=>popConfettiCenter(120), 50);
+      }
+
+      function resetGame(){
+        state.ok = 0;
+        state.bad = 0;
+        state.t = DURATION;
+        okEl.textContent = '0';
+        badEl.textContent = '0';
+        timeEl.textContent = DURATION;
+        fillEl.style.width = '100%';
+        endScreen.classList.remove('show');
+        Array.from(optsEl.children).forEach(b => b.disabled = false);
+        newQuestion();
+        startTimer();
+      }
+
+      // Confetti helpers
+      function popConfettiFrom(el){
+        const rect = el.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        popConfetti(x, y, 18 + randint(4,10));
+      }
+      function popConfettiCenter(count=24){
+        const rect = cardEl.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height * 0.25;
+        popConfetti(x, y, count);
+      }
+      function popConfetti(x, y, count){
+        for(let i=0;i<count;i++){
+          const piece = document.createElement('div');
+          piece.className = 'confetti';
+          const angle = Math.random() * Math.PI * 2;
+          const power = 80 + Math.random()*120;
+          const tx = Math.cos(angle) * power;
+          const ty = Math.sin(angle) * power - (80 + Math.random()*80);
+          const rot = (Math.random() * 540 - 270) + 'deg';
+          const dur = 700 + Math.random()*700;
+          piece.style.left = (x) + 'px';
+          piece.style.top = (y) + 'px';
+          piece.style.background = COLORS[i % COLORS.length];
+          piece.style.setProperty('--tx', tx + 'px');
+          piece.style.setProperty('--ty', ty + 'px');
+          piece.style.setProperty('--rot', rot);
+          piece.style.setProperty('--dur', dur + 'ms');
+          confettiLayer.appendChild(piece);
+          piece.addEventListener('animationend', ()=> piece.remove());
+        }
+      }
+
+      // Controls
+      restartBtn.addEventListener('click', resetGame);
+      playAgainBtn.addEventListener('click', resetGame);
+
+      // Keyboard support (optional)
+      window.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter' && endScreen.classList.contains('show')){ resetGame(); }
+      });
+
+      // Init
+      resetGame();
+    })();
   </script>
 </body>
 </html>

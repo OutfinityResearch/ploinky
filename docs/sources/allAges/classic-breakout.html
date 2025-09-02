@@ -483,6 +483,22 @@
     
     // Particles system
     const particles = [];
+
+    // Ensure colors passed to CanvasGradient are valid color values (not CSS gradients)
+    function normalizeCanvasColor(input) {
+      if (!input) return '#4facfe';
+      if (typeof input !== 'string') return '#4facfe';
+      // Prefer the first hex color if present
+      const hex = input.match(/#(?:[0-9a-fA-F]{3}){1,2}/);
+      if (hex) return hex[0];
+      // Accept rgb()/rgba() or hsl()/hsla()
+      const fn = input.match(/(?:rgba?|hsla?)\([^\)]+\)/i);
+      if (fn) return fn[0];
+      // If a gradient string slipped through, fallback to a safe default
+      if (/gradient\(/i.test(input)) return '#4facfe';
+      // Otherwise return as-is (named colors, etc.)
+      return input;
+    }
     
     class Particle {
       constructor(x, y, color = '#4facfe') {
@@ -512,7 +528,7 @@
         ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         
         const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
-        gradient.addColorStop(0, this.color);
+        gradient.addColorStop(0, normalizeCanvasColor(this.color));
         gradient.addColorStop(1, 'transparent');
         ctx.fillStyle = gradient;
         ctx.fill();

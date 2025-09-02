@@ -46,6 +46,7 @@
       font-size:clamp(26px, 5vw, 36px); font-weight:800;
       color:#0b1533; text-shadow:0 2px 0 rgba(255,255,255,.7);
       user-select:none;
+      letter-spacing:.3px;
     }
     .mascot{
       font-size:1.4em; filter:drop-shadow(0 6px 6px rgba(0,0,0,.15));
@@ -53,17 +54,27 @@
     }
     @keyframes bob{
       0%,100%{ transform:translateY(0) }
-      50%{ transform:translateY(-6px) }
+      50%{ transform:translateY(-6px) rotate(-3deg) }
     }
 
     .card{
-      width:min(680px, 96vw);
+      width:min(720px, 96vw);
       background:var(--card);
       border-radius:24px;
       box-shadow:var(--shadow);
       padding:18px 16px 20px;
       position:relative;
       overflow:hidden;
+      backdrop-filter:saturate(1.2) blur(.5px);
+      isolation:isolate;
+    }
+    .card::after{
+      content:"";
+      position:absolute; inset:auto -30% -40% -30%;
+      height:120px;
+      background:radial-gradient(60% 120% at 50% 0%, rgba(96,165,250,.15), transparent 60%);
+      pointer-events:none;
+      z-index:-1;
     }
 
     .topbar{
@@ -72,13 +83,25 @@
     }
 
     .streak{
-      display:flex; align-items:center; gap:6px; font-weight:700; color:var(--sub);
+      display:flex; align-items:center; gap:8px; font-weight:700; color:var(--sub);
       font-size:clamp(16px, 3.6vw, 18px);
     }
-    .stars{ display:flex; gap:4px; }
-    .star{ filter:drop-shadow(0 2px 2px rgba(0,0,0,.2)); transform-origin:center }
+    .stars{ display:flex; gap:4px; align-items:center }
+    .star{
+      display:inline-block; transform-origin:center;
+      filter:drop-shadow(0 2px 2px rgba(0,0,0,.2));
+      transition:transform .2s ease;
+    }
     .star.pop{ animation:pop .42s ease both }
     @keyframes pop{ 0%{ transform:scale(.3) rotate(-15deg) } 70%{ transform:scale(1.2) } 100%{ transform:scale(1) } }
+
+    .meter{
+      height:8px; width:92px; background:#e2e8f0; border-radius:9999px; overflow:hidden; box-shadow:inset 0 1px 1px rgba(0,0,0,.08);
+    }
+    .meter .fill{
+      height:100%; width:0%; background:linear-gradient(90deg, #34d399, #60a5fa);
+      transition:width .35s ease; border-radius:inherit;
+    }
 
     .controls{
       display:flex; align-items:center; gap:8px;
@@ -87,14 +110,15 @@
       appearance:none; border:none; border-radius:16px; padding:10px 12px;
       background:linear-gradient(180deg,#fff,#f3f4f6);
       box-shadow:0 6px 16px rgba(0,0,0,.12);
-      font-size:18px; font-weight:700; color:#0f172a; cursor:pointer;
+      font-size:16px; font-weight:700; color:#0f172a; cursor:pointer;
       display:flex; align-items:center; gap:8px;
-      transition:transform .06s ease, box-shadow .15s ease, background .2s ease;
+      transition:transform .06s ease, box-shadow .15s ease, background .2s ease, filter .2s ease;
       touch-action:manipulation;
     }
+    .iconbtn:hover{ filter:brightness(1.03) }
     .iconbtn:active{ transform:translateY(1px) scale(.98) }
     .iconbtn:focus-visible{ outline:none; box-shadow:var(--ring) }
-    .iconbtn .emoji{ font-size:22px }
+    .iconbtn .emoji{ font-size:20px }
 
     .expression{
       display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -102,20 +126,22 @@
       text-align:center; user-select:none;
     }
     .prompt{
-      font-size:clamp(24px, 4.8vw, 28px);
+      font-size:clamp(20px, 4.2vw, 24px);
       color:var(--sub);
       margin-bottom:4px;
     }
     .big{
-      font-size:clamp(44px, 12vw, 80px);
+      font-size:clamp(44px, 12vw, 84px);
       font-weight:900; letter-spacing:1px;
       background:linear-gradient(90deg, #0ea5e9, #f43f5e, #22c55e);
       -webkit-background-clip:text; background-clip:text; color:transparent;
       text-shadow:0 2px 0 rgba(255,255,255,.5);
+      padding:4px 10px; border-radius:12px;
     }
+    .big.touchhint{ box-shadow:0 0 0 6px rgba(14,165,233,.18) }
 
     .opts{
-      margin-top:6px;
+      margin-top:10px;
       display:grid;
       grid-template-columns:repeat(2, minmax(130px, 1fr));
       gap:12px;
@@ -130,19 +156,26 @@
       padding:14px 12px; min-height:var(--btn-size);
       font-size:clamp(28px, 8vw, 40px); font-weight:900; color:#0b1533;
       box-shadow:0 8px 18px rgba(0,0,0,.12), inset 0 2px 0 rgba(255,255,255,.9);
-      cursor:pointer; transition:transform .06s ease, box-shadow .18s ease, background .18s ease;
+      cursor:pointer; transition:transform .06s ease, box-shadow .18s ease, background .18s ease, filter .2s ease;
       touch-action:manipulation; position:relative; overflow:hidden;
     }
-    .btn:active{ transform:translateY(1px) scale(.98) }
+    @media (max-width:420px){
+      :root{ --btn-size:86px }
+      .btn{ border-radius:16px }
+    }
+    .btn:hover{ filter:brightness(1.02) }
+    .btn:active{ transform:translateY(1px) scale(.985) }
     .btn:focus-visible{ outline:none; box-shadow:var(--ring) }
     .btn .face{ position:absolute; right:8px; bottom:6px; font-size:22px; opacity:.9 }
     .btn.correct{
       background:linear-gradient(180deg,#bbf7d0,#86efac);
       animation:bounce .6s ease;
+      box-shadow:0 10px 24px rgba(34,197,94,.25), inset 0 2px 0 rgba(255,255,255,.9);
     }
     .btn.wrong{
       background:linear-gradient(180deg,#fecaca,#fca5a5);
       animation:shake .4s ease;
+      box-shadow:0 10px 24px rgba(239,68,68,.25), inset 0 2px 0 rgba(255,255,255,.9);
     }
     @keyframes shake{
       10%,90%{transform:translateX(-3px)}
@@ -156,7 +189,17 @@
       60%{transform:scale(0.98)}
       100%{transform:scale(1)}
     }
-    .locked .btn{ pointer-events:none; filter:grayscale(.1); opacity:.9 }
+    .locked .btn{ pointer-events:none; filter:grayscale(.1); opacity:.92 }
+
+    .ripple{
+      position:absolute; border-radius:50%; transform:scale(0); opacity:1; pointer-events:none;
+      background:radial-gradient(circle, rgba(14,165,233,.35) 0, rgba(14,165,233,.22) 40%, rgba(14,165,233,0) 70%);
+      animation:ripple .6s ease-out;
+      mix-blend-mode:multiply;
+    }
+    .btn.correct .ripple{ background:radial-gradient(circle, rgba(34,197,94,.4) 0, rgba(34,197,94,.22) 40%, rgba(34,197,94,0) 70%) }
+    .btn.wrong .ripple{ background:radial-gradient(circle, rgba(244,63,94,.35) 0, rgba(244,63,94,.22) 40%, rgba(244,63,94,0) 70%) }
+    @keyframes ripple{ to{ transform:scale(4.2); opacity:0 } }
 
     .overlay{
       position:fixed; inset:0; display:none;
@@ -195,7 +238,9 @@
     }
     .bubble{
       position:absolute; width:80px; height:80px; border-radius:50%;
-      background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.9), rgba(255,255,255,.6) 40%, transparent 60%);
+      background:
+        radial-gradient(circle at 30% 30%, rgba(255,255,255,.9), rgba(255,255,255,.6) 40%, transparent 60%),
+        radial-gradient(circle at 70% 80%, rgba(255,255,255,.4), transparent 50%);
       opacity:.35; filter:blur(.4px);
       animation:float 12s ease-in-out infinite;
     }
@@ -210,7 +255,7 @@
     .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0 }
 
     @media (prefers-reduced-motion:reduce){
-      .mascot, .star.pop, .btn.correct, .btn.wrong, .bubble, .confetti, .count{ animation:none }
+      .mascot, .star.pop, .btn.correct, .btn.wrong, .bubble, .confetti, .count, .ripple{ animation:none }
     }
   </style>
 </head>
@@ -226,18 +271,19 @@
         <div class="streak" aria-live="polite" aria-atomic="true">
           <span>Streak</span>
           <div class="stars" id="stars" title="Streak stars" aria-hidden="true"></div>
+          <div class="meter" aria-hidden="true"><div class="fill" id="streakFill"></div></div>
         </div>
         <div class="controls">
           <button class="iconbtn" id="repeatBtn" aria-label="Repeat the question">
             <span class="emoji">🔊</span><span>Repeat</span>
           </button>
-          <button class="iconbtn" id="muteBtn" aria-label="Mute voice">
+          <button class="iconbtn" id="muteBtn" aria-label="Toggle sound" aria-pressed="false">
             <span class="emoji" id="muteIcon">🔊</span><span id="muteLabel">Sound</span>
           </button>
         </div>
       </div>
 
-      <div class="expression">
+      <div class="expression" id="exprWrap" title="Tap to hear the question">
         <div class="prompt">What is</div>
         <div class="big" id="expr">2 + 3 = ?</div>
       </div>
@@ -262,7 +308,10 @@
 
   <script>
     (function(){
+      'use strict';
+
       const exprEl = document.getElementById('expr');
+      const exprWrap = document.getElementById('exprWrap');
       const optsEl = document.getElementById('opts');
       const overlay = document.getElementById('overlay');
       const countNum = document.getElementById('countNum');
@@ -274,11 +323,79 @@
       const muteIcon = document.getElementById('muteIcon');
       const muteLabel = document.getElementById('muteLabel');
       const starsEl = document.getElementById('stars');
+      const streakFill = document.getElementById('streakFill');
       const live = document.getElementById('live');
 
-      let a=0,b=0,ans=0, locked=false, streak=0, muted=false;
+      let a=0,b=0,ans=0, locked=false, streak=0;
+      let muted = localStorage.getItem('sprintMuted') === '1';
 
-      function randint(n,m){ return Math.floor(Math.random()*(m-n+1))+n; }
+      function randint(n,m){ return Math.floor(Math.random()*(m-n+1))+n }
+      function clamp(n, min, max){ return Math.min(max, Math.max(min, n)) }
+
+      const SFX = (() => {
+        let ctx = null, master = null, enabled = false;
+        function ensure(){
+          if(muted) return;
+          try{
+            if(!ctx){
+              ctx = new (window.AudioContext || window.webkitAudioContext)();
+              master = ctx.createGain();
+              master.gain.value = 0.18;
+              master.connect(ctx.destination);
+            }
+            if(ctx.state !== 'running'){
+              ctx.resume().then(()=>{ enabled = true }).catch(()=>{ enabled=false });
+            }else{
+              enabled = true;
+            }
+          }catch(e){}
+        }
+        function now(){ return ctx ? ctx.currentTime : 0 }
+        function tone({freq=440, start=0, dur=.1, type='sine', vol=.2, attack=.005, release=.12, pan=0}){
+          if(muted || !ctx || !enabled) return;
+          const t0 = now() + start;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const p = (ctx.createStereoPanner) ? ctx.createStereoPanner() : null;
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, t0);
+
+          gain.gain.setValueAtTime(0, t0);
+          gain.gain.linearRampToValueAtTime(vol, t0 + attack);
+          gain.gain.setValueAtTime(vol, t0 + dur);
+          gain.gain.linearRampToValueAtTime(0.0001, t0 + dur + release);
+
+          if(p){ p.pan.value = pan; osc.connect(gain).connect(p).connect(master) }
+          else { osc.connect(gain).connect(master) }
+
+          osc.start(t0);
+          osc.stop(t0 + dur + release + .02);
+        }
+        function click(){ ensure(); tone({freq:520, dur:.04, vol:.11, type:'square', attack:.003, release:.06}) }
+        function success(){
+          ensure();
+          const base=now();
+          tone({freq:660, start:0, dur:.12, vol:.20, type:'sine'});
+          tone({freq:880, start:.10, dur:.14, vol:.20, type:'sine'});
+          tone({freq:1320,start:.20, dur:.16, vol:.18, type:'triangle'});
+        }
+        function error(){
+          ensure();
+          tone({freq:220, dur:.16, vol:.18, type:'sawtooth'});
+          tone({freq:160, start:.08, dur:.10, vol:.16, type:'sawtooth'});
+        }
+        function tick(high=true){
+          ensure();
+          tone({freq: high? 880:480, dur:.08, vol:.16, type:'sine', attack:.002, release:.06});
+        }
+        return { ensure, click, success, error, tick };
+      })();
+
+      function vibrate(ms=60){
+        if(navigator.vibrate){
+          try{ navigator.vibrate(ms) }catch(e){}
+        }
+      }
 
       function speak(text){
         try{
@@ -287,16 +404,24 @@
           const u = new SpeechSynthesisUtterance(String(text));
           u.lang = 'en-US';
           u.rate = 0.95;
-          u.pitch = 1.15;
+          u.pitch = 1.12;
           u.volume = 1;
           window.speechSynthesis.speak(u);
         }catch(e){}
       }
 
-      function vibrate(ms=60){
-        if(navigator.vibrate){
-          try{ navigator.vibrate(ms) }catch(e){}
-        }
+      function announce(msg){ live.textContent = msg }
+
+      function createRipple(target, x, y){
+        const rect = target.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height) * 0.66;
+        const span = document.createElement('span');
+        span.className = 'ripple';
+        span.style.width = span.style.height = size + 'px';
+        span.style.left = (x - rect.left - size/2) + 'px';
+        span.style.top  = (y - rect.top  - size/2) + 'px';
+        target.appendChild(span);
+        setTimeout(()=> span.remove(), 620);
       }
 
       function updateStars(){
@@ -308,6 +433,10 @@
           s.textContent='⭐';
           starsEl.appendChild(s);
         }
+        const fillPct = clamp((streak % 5) / 5 * 100, 0, 100);
+        streakFill.style.width = fillPct + '%';
+        starsEl.setAttribute('aria-label', `Current streak ${streak}`);
+        starsEl.title = `Streak: ${streak}`;
       }
 
       function buildOptions(correct){
@@ -324,10 +453,6 @@
         return options;
       }
 
-      function announce(msg){
-        live.textContent = msg;
-      }
-
       function newQuestion(){
         locked=false;
         card.classList.remove('locked');
@@ -336,26 +461,20 @@
         ans = a + b;
         exprEl.textContent = `${a} + ${b} = ?`;
         optsEl.innerHTML = '';
+
         const options = buildOptions(ans);
-        options.forEach(v=>{
+        options.forEach((v, idx)=>{
           const btn = document.createElement('button');
           btn.className='btn';
           btn.setAttribute('aria-label', `Answer ${v}`);
+          btn.dataset.value = String(v);
+          btn.dataset.index = String(idx+1);
           btn.innerHTML = `<span>${v}</span><span class="face" aria-hidden="true">🔢</span>`;
-          btn.addEventListener('click', ()=> pick(v, btn), {passive:true});
           optsEl.appendChild(btn);
         });
+
         speak(`${a} plus ${b}. What is the answer?`);
         announce(`New question: ${a} plus ${b}`);
-      }
-
-      function pick(value, btn){
-        if(locked) return;
-        if(value === ans){
-          correctAnimation(btn);
-        }else{
-          wrongAnimation(btn);
-        }
       }
 
       function wrongAnimation(btn){
@@ -364,6 +483,7 @@
         speak('Oops, try again!');
         announce('Wrong answer, try again');
         vibrate(80);
+        SFX.error();
         exprEl.style.animation = 'shake .4s ease';
         setTimeout(()=>{ btn.classList.remove('wrong'); exprEl.style.animation='none'; }, 420);
       }
@@ -375,6 +495,7 @@
         speak(`Yes! ${ans} is correct!`);
         announce('Correct!');
         vibrate([30, 40, 30]);
+        SFX.success();
 
         shootConfetti();
         streak++;
@@ -387,20 +508,30 @@
         });
       }
 
+      function pick(value, btn){
+        if(locked) return;
+        const v = Number(value);
+        if(v === ans){
+          correctAnimation(btn);
+        }else{
+          wrongAnimation(btn);
+        }
+      }
+
       function randomCheer(){
-        const msgs = ['Great job! 🎉','You did it! 👏','Awesome! 🌟','Yay! 🎈','High five! 🖐️'];
+        const msgs = ['Great job! 🎉','You did it! 👏','Awesome! 🌟','Yay! 🎈','High five! 🖐️','Brilliant! 💡'];
         return msgs[randint(0,msgs.length-1)];
       }
 
       function shootConfetti(){
         confettiBox.innerHTML='';
-        const emojis = ['🎉','✨','🌟','🎈','🍬','🎊','💫','🧁'];
-        for(let i=0;i<40;i++){
+        const emojis = ['🎉','✨','🌟','🎈','🍬','🎊','💫','🧁','🍀','🥳'];
+        for(let i=0;i<42;i++){
           const s = document.createElement('span');
           s.className='confetti';
           s.textContent = emojis[randint(0,emojis.length-1)];
           s.style.left = Math.random()*100 + '%';
-          s.style.fontSize = (26 + Math.random()*18) + 'px';
+          s.style.fontSize = (24 + Math.random()*20) + 'px';
           s.style.animationDelay = (Math.random()*0.6) + 's';
           confettiBox.appendChild(s);
         }
@@ -420,28 +551,86 @@
           }
           countNum.textContent = k;
           countNum.style.animation = 'none';
-          // force reflow to restart animation
           void countNum.offsetWidth;
           countNum.style.animation = '';
+          SFX.tick(k===1); // high beep at last tick
           k--;
           setTimeout(step, 600);
         };
         step();
       }
 
-      repeatBtn.addEventListener('click', ()=> {
-        speak(`${a} plus ${b}. What is the answer?`);
-      }, {passive:true});
-
-      muteBtn.addEventListener('click', ()=> {
-        muted = !muted;
+      function setMuted(state){
+        muted = !!state;
+        localStorage.setItem('sprintMuted', muted ? '1' : '0');
         muteIcon.textContent = muted ? '🔇' : '🔊';
         muteLabel.textContent = muted ? 'Muted' : 'Sound';
+        muteBtn.setAttribute('aria-pressed', String(!muted));
         announce(muted ? 'Sound off' : 'Sound on');
         if(!muted){ speak('Sound on') }
+      }
+
+      // Event delegation for options (improves performance on mobile)
+      optsEl.addEventListener('click', (e)=>{
+        const btn = e.target.closest('.btn');
+        if(!btn || !optsEl.contains(btn)) return;
+        if(locked) return;
+        SFX.click();
+        createRipple(btn, e.clientX || 0, e.clientY || 0);
+        pick(Number(btn.dataset.value), btn);
+      });
+
+      // Touch ripple support for touch events
+      optsEl.addEventListener('touchstart', (e)=>{
+        const touch = e.touches[0];
+        const btn = e.target.closest('.btn');
+        if(!btn) return;
+        createRipple(btn, touch.clientX, touch.clientY);
       }, {passive:true});
 
-      // Initialize
+      repeatBtn.addEventListener('click', ()=> {
+        SFX.click();
+        speak(`${a} plus ${b}. What is the answer?`);
+      });
+
+      muteBtn.addEventListener('click', ()=> {
+        SFX.click();
+        setMuted(!muted);
+      });
+
+      // Tap the expression to repeat (mobile-friendly)
+      exprWrap.addEventListener('click', ()=>{
+        SFX.click();
+        exprEl.classList.add('touchhint');
+        setTimeout(()=>exprEl.classList.remove('touchhint'), 250);
+        speak(`${a} plus ${b}. What is the answer?`);
+      });
+
+      // Keyboard shortcuts (desktop)
+      window.addEventListener('keydown', (e)=>{
+        if(locked) return;
+        const idx = parseInt(e.key,10);
+        if(idx>=1 && idx<=4){
+          const btn = optsEl.querySelector(`.btn:nth-child(${idx})`);
+          if(btn){
+            SFX.click();
+            createRipple(btn, btn.getBoundingClientRect().left + 10, btn.getBoundingClientRect().top + 10);
+            pick(Number(btn.dataset.value), btn);
+          }
+        }
+        if(e.key.toLowerCase()==='r'){
+          SFX.click();
+          speak(`${a} plus ${b}. What is the answer?`);
+        }
+      });
+
+      // Unlock audio on first interaction for mobile
+      ['pointerdown','touchstart','keydown'].forEach(evt=>{
+        window.addEventListener(evt, ()=> SFX.ensure(), {once:true, passive:true});
+      });
+
+      // Initialize UI
+      setMuted(muted);
       updateStars();
       newQuestion();
     })();

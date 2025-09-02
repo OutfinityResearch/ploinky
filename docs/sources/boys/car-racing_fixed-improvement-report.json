@@ -1,0 +1,24 @@
+{
+  "success": false,
+  "finalIssues": [
+    {
+      "type": "javascript_error",
+      "message": "Cannot access 'player' before initialization",
+      "stack": "ReferenceError: Cannot access 'player' before initialization\n    at recalcRoad (file:///home/salboaie/work/ploinky/docs/sources/boys/car-racing_fixed.html:130:18)\n    at resize (file:///home/salboaie/work/ploinky/docs/sources/boys/car-racing_fixed.html:141:9)\n    at <anonymous> (file:///home/salboaie/work/ploinky/docs/sources/boys/car-racing_fixed.html:144:7)\n    at <anonymous> (file:///home/salboaie/work/ploinky/docs/sources/boys/car-racing_fixed.html:772:7)"
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.13 for div-11",
+      "details": {
+        "element": "div-11",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(233, 242, 255)",
+        "contrastRatio": 1.1284510509738306,
+        "text": ""
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": null
+}
