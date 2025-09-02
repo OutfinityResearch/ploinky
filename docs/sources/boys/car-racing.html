@@ -27,7 +27,7 @@
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;margin:0;padding:0}
 html,body{height:100%;width:100%;overflow:hidden;overscroll-behavior:none;background:radial-gradient(1200px 800px at 50% -10%, var(--bg-2), var(--bg-1));font-family:Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", Arial, sans-serif;color:var(--text)}
-body{display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+body{display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);-webkit-user-select:none;user-select:none}
 
 .header{
   position:fixed;top:10px;left:0;right:0;display:flex;justify-content:center;pointer-events:none;z-index:5
@@ -42,12 +42,25 @@ body{display:flex;align-items:center;justify-content:center;padding:env(safe-are
 }
 
 .game-container{
-  position:relative;width:min(440px,92vw);aspect-ratio:4/7;border-radius:18px;box-shadow:0 30px 80px var(--shadow);
+  position:relative;width:min(480px,94vw);aspect-ratio:4/7;border-radius:18px;box-shadow:0 30px 80px var(--shadow);
   background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
   backdrop-filter:blur(10px);overflow:hidden
 }
+/* touch visual steer zones */
+.game-container::before,
+.game-container::after{
+  content:"";position:absolute;inset:0;opacity:0;transition:opacity .15s ease;pointer-events:none
+}
+.game-container::before{
+  background:linear-gradient(90deg, rgba(0,229,255,.22), transparent 55%);
+}
+.game-container::after{
+  background:linear-gradient(-90deg, rgba(0,229,255,.22), transparent 55%);
+}
+.game-container.hold-left::before{opacity:.16}
+.game-container.hold-right::after{opacity:.16}
 
-canvas{display:block;width:100%;height:100%;border-radius:18px;filter:drop-shadow(0 10px 25px rgba(0,0,0,.35))}
+canvas{display:block;width:100%;height:100%;border-radius:18px;filter:drop-shadow(0 10px 25px rgba(0,0,0,.35));touch-action:none}
 
 .hud{
   position:absolute;inset:0;pointer-events:none;z-index:3
@@ -86,21 +99,29 @@ canvas{display:block;width:100%;height:100%;border-radius:18px;filter:drop-shado
   background:rgba(0,229,255,.12);border:1px solid rgba(255,255,255,.1);box-shadow:var(--glow);font-size:.8rem;font-weight:800
 }
 .chip .bar{width:50px;height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
-.chip .bar .fill{height:100%;width:0%;background:linear-gradient(90deg, var(--primary), var(--secondary))}
+.chip .bar .fill{height:100%;width:0%;background:linear-gradient(90deg, var(--primary), var(--secondary));transition:width .15s ease}
+
 .chip .label{opacity:.9}
 
 .bars{
   position:absolute;bottom:10px;left:10px;right:10px;display:flex;justify-content:space-between;gap:10px;pointer-events:none
 }
 .bar{flex:1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:10px;height:14px;overflow:hidden;position:relative}
-.bar > .fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:linear-gradient(90deg,var(--accent),#ffd166);box-shadow:0 0 14px rgba(255,140,0,.45)}
+.bar > .fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:linear-gradient(90deg,var(--accent),#ffd166);box-shadow:0 0 14px rgba(255,140,0,.45);transition:width .18s ease}
 .bar.nitro > .fill{background:linear-gradient(90deg,var(--primary),var(--secondary));box-shadow:0 0 14px rgba(0,229,255,.5)}
+
+@keyframes nitroPulse{
+  0%{filter:drop-shadow(0 0 0 rgba(0,229,255,.4))}
+  50%{filter:drop-shadow(0 0 14px rgba(0,229,255,.8))}
+  100%{filter:drop-shadow(0 0 0 rgba(0,229,255,.4))}
+}
+.bar.nitro > .fill.full{animation:nitroPulse 1s ease-in-out infinite}
 
 .controls{
   position:absolute;left:10px;right:10px;bottom:32px;display:flex;gap:10px;pointer-events:auto
 }
 .control-btn{
-  flex:1;min-height:58px;border:none;border-radius:14px;
+  flex:1;min-height:64px;border:none;border-radius:14px;
   background:linear-gradient(135deg, rgba(0,229,255,.15), rgba(10,103,255,.15));
   color:var(--text);font-size:1.05rem;font-weight:900;letter-spacing:.06em;
   box-shadow:var(--glow);transition:transform .06s ease, box-shadow .2s ease
@@ -120,7 +141,7 @@ canvas{display:block;width:100%;height:100%;border-radius:18px;filter:drop-shado
 }
 .overlay.show{display:flex}
 .panel{
-  width:min(440px,92vw);border-radius:18px;padding:20px;
+  width:min(480px,94vw);border-radius:18px;padding:20px;
   background:linear-gradient(180deg, rgba(0,229,255,.08), rgba(10,103,255,.06));
   border:1px solid rgba(255,255,255,.1);box-shadow:0 30px 80px var(--shadow);text-align:center
 }
@@ -150,7 +171,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
 <body>
 <div class="header"><h1>NEON STREET RACER+</h1></div>
 
-<div class="game-container">
+<div class="game-container" id="gameContainer" aria-label="Neon Street Racer game area">
   <canvas id="game"></canvas>
 
   <div class="hud" aria-hidden="true">
@@ -170,10 +191,10 @@ body, .overlay, .game-container{overscroll-behavior:contain}
         <div class="badge">
           <span class="label">COMBO</span><span class="value" id="comboLabel">x1</span>
         </div>
-        <div class="badge hearts" id="hearts">
+        <div class="badge hearts" id="hearts" aria-label="Lives">
           <div class="heart"></div><div class="heart"></div><div class="heart"></div>
         </div>
-        <button class="btn pause-btn" id="pauseBtn">PAUSE</button>
+        <button class="btn pause-btn" id="pauseBtn" aria-label="Pause game">PAUSE</button>
       </div>
     </div>
 
@@ -183,7 +204,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
       <div class="chip" id="weatherChip" style="display:none"><span class="label" id="weatherLabel">RAIN</span></div>
     </div>
 
-    <div class="bars">
+    <div class="bars" aria-hidden="true">
       <div class="bar fuel"><div class="fill" id="fuelFill"></div></div>
       <div class="bar nitro"><div class="fill" id="nitroFill"></div></div>
     </div>
@@ -191,10 +212,10 @@ body, .overlay, .game-container{overscroll-behavior:contain}
 
   <div class="float-layer" id="floatLayer"></div>
 
-  <div class="controls">
-    <button class="control-btn primary" id="leftBtn">⟵ LEFT</button>
-    <button class="control-btn" id="nitroBtn">NITRO</button>
-    <button class="control-btn primary" id="rightBtn">RIGHT ⟶</button>
+  <div class="controls" aria-label="Touch controls">
+    <button class="control-btn primary" id="leftBtn" aria-label="Move Left">⟵ LEFT</button>
+    <button class="control-btn" id="nitroBtn" aria-label="Nitro Boost">NITRO</button>
+    <button class="control-btn primary" id="rightBtn" aria-label="Move Right">RIGHT ⟶</button>
   </div>
 </div>
 
@@ -204,16 +225,16 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     <h2>Start Your Engines</h2>
     <p>Survive traffic, collect coins, draft for Nitro, and push your Combo with near-misses.</p>
     <div class="grid">
-      <div class="cell"><strong>Move</strong><br>Arrow keys / A-D<br>Swipe or touch LEFT/RIGHT</div>
-      <div class="cell"><strong>Nitro</strong><br>Hold Shift/Space<br>or Nitro button</div>
+      <div class="cell"><strong>Move</strong><br>Arrow keys / A-D<br>Tap & hold LEFT/RIGHT side</div>
+      <div class="cell"><strong>Nitro</strong><br>Hold Shift/Space<br>Tap center or Nitro button</div>
       <div class="cell"><strong>Extras</strong><br>Shield, Magnet, Fuel</div>
       <div class="cell"><strong>Tips</strong><br>Draft close behind cars<br>Near-miss for Combo</div>
     </div>
     <div class="actions">
-      <button class="primary-btn" id="startBtn">Tap to Start</button>
-      <button class="ghost-btn" id="muteBtn">Sound: Off</button>
+      <button class="primary-btn" id="startBtn" aria-label="Tap to start">Tap to Start</button>
+      <button class="ghost-btn" id="muteBtn" aria-label="Toggle sound">Sound: Off</button>
     </div>
-    <p class="small">No scrolling. Tuned for a 10–15 minute skill run.</p>
+    <p class="small">Mobile-ready: big touch zones, haptics, and optimized visuals.</p>
   </div>
 </div>
 
@@ -248,6 +269,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
+  const gameContainer = document.getElementById('gameContainer');
 
   // HUD elements
   const distanceLabel = document.getElementById('distanceLabel');
@@ -294,6 +316,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
   }
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas, {passive:true});
+  window.addEventListener('orientationchange', resizeCanvas, {passive:true});
 
   // Road / lanes
   const roadMargin = 40;
@@ -340,7 +363,8 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     height: 90,
     targetX: laneCenters[1] - 22,
     moveCooldown: 0,
-    slip: 0 // lateral slip from oil/rain
+    slip: 0, // lateral slip from oil/rain
+    tilt: 0
   };
 
   // Entities
@@ -354,7 +378,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
   let invulnUntil = 0;
   let shieldUntil = 0;
   let magnetUntil = 0;
-  let jumpUntil = 0; // not used now, reserved
+  let jumpUntil = 0; // reserved
 
   // Spawners
   let obstacleTimer = 0;
@@ -381,34 +405,54 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     if (k === ' ' || k === 'shift') nitroDown = false;
   }, {passive:true});
 
-  // Touch buttons
+  // Touch buttons + haptic indicator on container
+  const setHoldVisual = (side, on) => {
+    if (on) {
+      gameContainer.classList.add(side === 'left' ? 'hold-left' : 'hold-right');
+    } else {
+      gameContainer.classList.remove(side === 'left' ? 'hold-left' : 'hold-right');
+    }
+  };
   const press = (fn) => (e)=>{ e.preventDefault(); fn(true); };
   const release = (fn) => (e)=>{ e.preventDefault(); fn(false); };
-  leftBtn.addEventListener('pointerdown', press(()=>tryLane(-1)));
-  leftBtn.addEventListener('pointerup', release(()=>{}));
-  rightBtn.addEventListener('pointerdown', press(()=>tryLane(1)));
-  rightBtn.addEventListener('pointerup', release(()=>{}));
+
+  leftBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); tryLane(-1); setHoldVisual('left', true); });
+  leftBtn.addEventListener('pointerup', e=>{ e.preventDefault(); setHoldVisual('left', false); });
+  leftBtn.addEventListener('pointercancel', e=>{ setHoldVisual('left', false); });
+
+  rightBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); tryLane(1); setHoldVisual('right', true); });
+  rightBtn.addEventListener('pointerup', e=>{ e.preventDefault(); setHoldVisual('right', false); });
+  rightBtn.addEventListener('pointercancel', e=>{ setHoldVisual('right', false); });
+
   nitroBtn.addEventListener('pointerdown', e=>{e.preventDefault(); nitroDown = true;});
   nitroBtn.addEventListener('pointerup', e=>{e.preventDefault(); nitroDown = false;});
+  nitroBtn.addEventListener('pointercancel', e=>{ nitroDown = false; });
 
-  // Canvas swipe + hold zones
+  // Canvas swipe + hold zones (full-area steering)
   let touchStartX = null;
   let holdLeft = false, holdRight = false, nextHoldMoveAt = 0, holdingPointer = null;
   canvas.addEventListener('pointerdown', e=>{
+    e.preventDefault();
     if (!started) return;
     holdingPointer = e.pointerId;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const half = rect.width/2;
-    if (x < half - rect.width*0.08){ holdLeft = true; holdRight = false; tryLane(-1); nextHoldMoveAt = performance.now()+160; }
-    else if (x > half + rect.width*0.08){ holdRight = true; holdLeft = false; tryLane(1); nextHoldMoveAt = performance.now()+160; }
-    else { // center tap toggles nitro short burst
+    if (x < half - rect.width*0.08){
+      holdLeft = true; holdRight = false; tryLane(-1); nextHoldMoveAt = performance.now()+160; setHoldVisual('left', true);
+    } else if (x > half + rect.width*0.08){
+      holdRight = true; holdLeft = false; tryLane(1); nextHoldMoveAt = performance.now()+160; setHoldVisual('right', true);
+    } else { // center tap toggles nitro short burst
       nitroDown = true; setTimeout(()=>nitroDown=false, 220);
     }
-  }, {passive:true});
+  }, {passive:false});
   window.addEventListener('pointerup', e=>{
-    if (e.pointerId === holdingPointer){ holdLeft = holdRight = false; holdingPointer = null; }
+    if (e.pointerId === holdingPointer){ holdLeft = holdRight = false; holdingPointer = null; gameContainer.classList.remove('hold-left','hold-right'); }
   }, {passive:true});
+  window.addEventListener('pointercancel', e=>{
+    if (e.pointerId === holdingPointer){ holdLeft = holdRight = false; holdingPointer = null; gameContainer.classList.remove('hold-left','hold-right'); }
+  }, {passive:true});
+
   canvas.addEventListener('touchstart', e => {
     touchStartX = e.touches[0].clientX;
   }, {passive:true});
@@ -422,9 +466,12 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     touchStartX = null;
   }, {passive:true});
 
+  // prevent context menu on long-press inside game area
+  gameContainer.addEventListener('contextmenu', e => e.preventDefault());
+
   // UI controls
-  startBtn.onclick = () => {
-    started = true; hide(startOverlay); initAudio(); startGame();
+  startBtn.onclick = async () => {
+    started = true; hide(startOverlay); initAudio(); await goFullscreen(); startGame();
   };
   pauseBtn.onclick = ()=> togglePause(true);
   resumeBtn.onclick = ()=> togglePause(false);
@@ -433,11 +480,25 @@ body, .overlay, .game-container{overscroll-behavior:contain}
   backToMenuBtn.onclick = ()=> { hide(gameOverOverlay); show(startOverlay); resetToMenu(); };
   muteBtn.onclick = ()=> { muted = !muted; muteBtn.textContent = `Sound: ${muted?'Off':'On'}`; };
 
+  // Auto pause on tab hidden (mobile friendly)
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && running && !paused) togglePause(true);
+  }, {passive:true});
+
   // Utils
   function show(el){ el.classList.add('show'); }
   function hide(el){ el.classList.remove('show'); }
   function clamp(v,min,max){ return v<min?min:v>max?max:v; }
   function lerp(a,b,t){ return a+(b-a)*t; }
+
+  async function goFullscreen(){
+    const el = document.documentElement;
+    try{
+      if (!document.fullscreenElement && el.requestFullscreen){
+        await el.requestFullscreen({navigationUI:'hide'});
+      }
+    }catch(_){}
+  }
 
   function tryLane(dir){
     if (!running || paused) return;
@@ -459,7 +520,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     invulnUntil = shieldUntil = magnetUntil = jumpUntil = 0;
     obstacleTimer = 0; obstacleInterval = 1100; pickupTimer = 0; pickupInterval = 2300; time = 0; last = 0;
     obstacles.length = 0; pickups.length = 0; particles.length = 0; messages.length = 0; roadside.length = 0;
-    car.lane = 1; car.x = car.targetX = laneCenters[1] - car.width/2; car.y = H - 130; car.moveCooldown = 0; car.slip = 0;
+    car.lane = 1; car.x = car.targetX = laneCenters[1] - car.width/2; car.y = H - 130; car.moveCooldown = 0; car.slip = 0; car.tilt = 0;
     weather = 'clear'; weatherUntil = 0; weatherChip.style.display = 'none';
     updateHUD();
     drawFrame(0);
@@ -595,6 +656,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     comboLabel.textContent = `x${combo}`;
     fuelFill.style.width = `${clamp(fuel,0,100)}%`;
     nitroFill.style.width = `${clamp(nitro,0,100)}%`;
+    nitroFill.classList.toggle('full', nitro >= 99);
     [...heartsEl.children].forEach((el,i) => el.classList.toggle('off', i > hearts-1));
     const kmh = Math.round(speed * 3.6 / 100); // tuned display
     speedLabel.textContent = `${kmh*10} km/h`;
@@ -674,10 +736,12 @@ body, .overlay, .game-container{overscroll-behavior:contain}
       return;
     }
 
-    // Smooth lane movement with slip
+    // Smooth lane movement with slip + tilt
     const grip = weather==='rain' ? 8 : 12;
     car.slip += (car.targetX - car.x - car.slip) * Math.min(1, dt*grip);
     car.x += car.slip * dt * (weather==='rain'?1.2:1);
+    const targetTilt = clamp((car.targetX - car.x) * 0.003, -0.20, 0.20);
+    car.tilt += (targetTilt - car.tilt) * Math.min(1, dt*8);
 
     // Roadside
     roadsideTimer += dt*1000;
@@ -695,6 +759,9 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     for (let i=obstacles.length-1;i>=0;i--){
       const o = obstacles[i];
       o.y += (speed + o.extraSpeed) * dt;
+      // slight wobble for cars
+      if (o.type==='car') o.x += Math.sin((o.y+time*120)*0.01) * 0.2;
+
       // near-miss check when passes player
       if (!o.passed && o.y + o.h >= car.y + car.height - 10){
         o.passed = true;
@@ -1062,61 +1129,66 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     const x = car.x, y = car.y, w = car.width, h = car.height;
     const night = dayCycleT > 0.6;
 
+    // Rotate around center for leaning effect
+    ctx.translate(x + w/2, y + h/2);
+    ctx.rotate(car.tilt);
+    const rx = -w/2, ry = -h/2;
+
     // Body with shading
-    const g = ctx.createLinearGradient(x, y, x, y+h);
+    const g = ctx.createLinearGradient(rx, ry, rx, ry+h);
     g.addColorStop(0, '#0ac3ff');
     g.addColorStop(0.45, '#0a67ff');
     g.addColorStop(1, '#05307a');
     ctx.fillStyle = g;
     ctx.shadowColor = 'rgba(0,229,255,.35)';
     ctx.shadowBlur = 14;
-    roundRect(ctx, x, y, w, h, 10); ctx.fill();
+    roundRect(ctx, rx, ry, w, h, 10); ctx.fill();
     ctx.shadowBlur = 0;
 
     // Hood and roof reflections
     ctx.globalAlpha = 0.25;
     ctx.fillStyle = 'white';
-    roundRect(ctx, x+6, y+8, w-12, 16, 6); ctx.fill();
+    roundRect(ctx, rx+6, ry+8, w-12, 16, 6); ctx.fill();
     ctx.globalAlpha = 0.18;
-    roundRect(ctx, x+6, y+40, w-12, 20, 6); ctx.fill();
+    roundRect(ctx, rx+6, ry+40, w-12, 20, 6); ctx.fill();
     ctx.globalAlpha = 1;
 
     // Windows darker
     ctx.fillStyle = '#6fbff7';
-    roundRect(ctx, x+8, y+14, w-16, 14, 5); ctx.fill();
-    roundRect(ctx, x+8, y+44, w-16, 16, 5); ctx.fill();
+    roundRect(ctx, rx+8, ry+14, w-16, 14, 5); ctx.fill();
+    roundRect(ctx, rx+8, ry+44, w-16, 16, 5); ctx.fill();
 
     // Wheels with rims
-    drawWheel(x-6, y+16);
-    drawWheel(x+w-4, y+16);
-    drawWheel(x-6, y+h-30);
-    drawWheel(x+w-4, y+h-30);
+    drawWheel(rx-6, ry+16);
+    drawWheel(rx+w-4, ry+16);
+    drawWheel(rx-6, ry+h-30);
+    drawWheel(rx+w-4, ry+h-30);
 
     // Headlights (at night stronger)
     ctx.save();
     ctx.globalAlpha = night?0.65:0.25;
-    const hx1 = x+6, hx2 = x+w-6, hy = y+6;
+    const hx1 = rx+6, hx2 = rx+w-6, hy = ry+6;
     ctx.fillStyle = night?'rgba(255,255,200,.9)':'rgba(180,220,255,.7)';
     ctx.beginPath(); ctx.ellipse(hx1, hy, 4, 3, 0, 0, Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(hx2, hy, 4, 3, 0, 0, Math.PI*2); ctx.fill();
 
     // Light cone
-    const cone = ctx.createRadialGradient((x+w/2), y, 0, (x+w/2), y-10, 80);
+    const cone = ctx.createRadialGradient((rx+w/2), ry, 0, (rx+w/2), ry-10, 80);
     cone.addColorStop(0, night?'rgba(255,255,230,.2)':'rgba(200,230,255,.1)');
     cone.addColorStop(1, 'rgba(255,255,230,0)');
     ctx.fillStyle = cone;
-    ctx.beginPath(); ctx.ellipse(x+w/2, y-6, 36, 80, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(rx+w/2, ry-6, 36, 80, 0, 0, Math.PI*2); ctx.fill();
     ctx.restore();
 
     // Tail lights
     ctx.fillStyle = 'rgba(255,60,60,.9)';
-    roundRect(ctx, x+6, y+h-10, 10, 6, 2); ctx.fill();
-    roundRect(ctx, x+w-16, y+h-10, 10, 6, 2); ctx.fill();
+    roundRect(ctx, rx+6, ry+h-10, 10, 6, 2); ctx.fill();
+    roundRect(ctx, rx+w-16, ry+h-10, 10, 6, 2); ctx.fill();
 
     // Exhaust flames when nitro
     if (speedBoost > 1.2){
       ctx.globalCompositeOperation = 'screen';
-      const fx = x + w/2, fy = y + h + 6;
+      const fx = rx + w/2, fy = ry + h + 6;
       const flame = ctx.createRadialGradient(fx, fy, 0, fx, fy, 26);
       flame.addColorStop(0, 'rgba(0,229,255,.95)');
       flame.addColorStop(0.5, 'rgba(10,103,255,.6)');
@@ -1282,7 +1354,6 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     function hexToRgb(h){
       const m = h.match(/\d+,\s*\d+,\s*\d+/);
       if (m){ const [r,g,bl]=m[0].split(',').map(Number); return [r,g,bl]; }
-      // simple hex support
       let c = h.replace('#','');
       if (c.length===3) c = c.split('').map(s=>s+s).join('');
       const n = parseInt(c,16);
@@ -1306,6 +1377,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     if (muted || !ac) return;
     const o = ac.createOscillator();
     const g = ac.createGain();
+    o.type = 'square';
     o.connect(g); g.connect(ac.destination);
     let f=440, t=0.1;
     if (type==='coin'){ f=880; t=0.07; }
@@ -1318,7 +1390,7 @@ body, .overlay, .game-container{overscroll-behavior:contain}
     if (type==='tick'){ f=500; t=0.06; }
     o.frequency.value = f;
     g.gain.setValueAtTime(0.0001, ac.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.2, ac.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.18, ac.currentTime+0.01);
     g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+t);
     o.start();
     o.stop(ac.currentTime + t+0.02);

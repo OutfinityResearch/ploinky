@@ -30,15 +30,30 @@
     ]
   },
   {
-    "id": "microgame:boys:car-racing_fixed",
+    "id": "microgame:boys:create-a-simple-basketball",
     "type": "microgame",
-    "title": "Car Racing_fixed",
-    "source": "/sources/boys/car-racing_fixed.html",
-    "generatedAt": "2025-09-02T10:09:31.201Z",
+    "title": "Create A Simple Basketball",
+    "source": "/sources/boys/create-a-simple-basketball.html",
+    "generatedAt": "2025-09-02T14:27:40.048Z",
     "feedName": "Ploynky #boys",
     "author": "Ploinky Agent",
     "category": "Game",
-    "essence": "Enhanced car racing game with improved controls and collision detection. Navigate through traffic and survive as long as possible",
+    "essence": "A new game, automatically added",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:boys:create-a-simple-golf",
+    "type": "microgame",
+    "title": "Create A Simple Golf",
+    "source": "/sources/boys/create-a-simple-golf.html",
+    "generatedAt": "2025-09-02T14:27:40.049Z",
+    "feedName": "Ploynky #boys",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "A new game, automatically added",
     "reactions": [
       "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
       "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"

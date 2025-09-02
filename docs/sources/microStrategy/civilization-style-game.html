@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiny Civ — Stone to Iron</title>
+<style>
+  :root{
+    --bg:#0f1226;
+    --bg2:#14183a;
+    --panel:#1a1f48;
+    --panel2:#20265b;
+    --accent:#5be3b0;
+    --accent2:#9bdcff;
+    --warn:#ffb84d;
+    --danger:#ff6b6b;
+    --text:#eef2ff;
+    --muted:#b8c1ff;
+    --shadow: 0 10px 20px rgba(0,0,0,.35);
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    color:var(--text);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #2a3077 0%, rgba(42,48,119,0) 60%),
+      radial-gradient(1000px 500px at 10% 110%, #1e254f 0%, rgba(30,37,79,0) 60%),
+      linear-gradient(180deg, var(--bg) 0%, #0c1024 100%);
+    background-attachment: fixed;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrap{
+    max-width:1100px;
+    margin:0 auto;
+    padding:16px;
+    display:grid;
+    gap:16px;
+  }
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:linear-gradient(180deg, rgba(255,255,255,.06), transparent);
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow: var(--shadow);
+    border-radius:var(--radius);
+    padding:12px 14px;
+    position:sticky; top:0; z-index:5; backdrop-filter: blur(6px);
+  }
+  .title{
+    display:flex; align-items:center; gap:12px;
+  }
+  .title h1{font-size:20px; margin:0; letter-spacing:.3px;}
+  .age-badge{
+    padding:8px 12px; border-radius:999px;
+    background:linear-gradient(180deg, var(--panel) 0%, var(--panel2) 100%);
+    border:1px solid rgba(255,255,255,.08);
+    display:flex; align-items:center; gap:8px; font-weight:600;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
+  }
+  .age-badge small{color:var(--muted); font-weight:500}
+  .controls-header{display:flex; gap:8px; align-items:center}
+  button, .btn{
+    appearance:none; border:0; background:var(--panel2); color:var(--text);
+    padding:10px 12px; border-radius:12px; font-weight:700; letter-spacing:.2px;
+    border:1px solid rgba(255,255,255,.08); box-shadow: var(--shadow);
+    cursor:pointer; transition: transform .05s ease, background .2s ease, opacity .2s ease;
+    touch-action: manipulation;
+  }
+  button:active{ transform: translateY(1px) scale(.99) }
+  button[disabled]{ opacity:.5; cursor:not-allowed; filter:saturate(.6) }
+  .btn-accent{ background: linear-gradient(180deg, #40dca0, #24b781); color:#031a13 }
+  .btn-warn{ background: linear-gradient(180deg, #ffd07a, #f6a039); color:#241802 }
+  .btn-danger{ background: linear-gradient(180deg, #ff9e9e, #ff6363) }
+  .grid{
+    display:grid; gap:16px;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 880px){
+    .grid{ grid-template-columns: 1.1fr .9fr; }
+  }
+  .card{
+    background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.08); border-radius:var(--radius);
+    box-shadow: var(--shadow);
+    padding:14px;
+  }
+  .section-title{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    margin-bottom:10px; font-weight:800; letter-spacing:.3px;
+  }
+  .resources{
+    display:grid; gap:10px;
+  }
+  .res{
+    display:grid; grid-template-columns: 1fr auto; gap:8px;
+    align-items:center; background: rgba(0,0,0,.15);
+    border:1px solid rgba(255,255,255,.06);
+    padding:10px; border-radius:12px;
+  }
+  .res-name{ font-weight:800; display:flex; align-items:center; gap:8px }
+  .res-amt{ color:var(--accent2); font-weight:800 }
+  .res-rate{ color:var(--muted); font-size:12px }
+  .assign{
+    display:flex; align-items:center; gap:6px;
+    background:linear-gradient(180deg, var(--panel), var(--panel2));
+    padding:6px; border-radius:10px; border:1px solid rgba(255,255,255,.08);
+  }
+  .assign button{ padding:8px 10px; font-size:18px; line-height:1; }
+  .assign .count{
+    min-width:54px; text-align:center; font-weight:800; color:var(--accent);
+    background: rgba(0,0,0,.25); border-radius:8px; padding:6px 8px; border:1px solid rgba(255,255,255,.08);
+  }
+  .row{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 0 }
+  .sub{ color:var(--muted); font-size:13px }
+  .cap{ font-weight:700 }
+  .builds{
+    display:grid; gap:10px;
+  }
+  .build{
+    display:grid; gap:8px; grid-template-columns: 1fr auto;
+    align-items:center; background: rgba(0,0,0,.15);
+    border:1px solid rgba(255,255,255,.06); padding:10px; border-radius:12px;
+  }
+  .build h4{ margin:0; font-size:15px }
+  .cost{ color:var(--muted); font-size:12px }
+  .locked{ color:#d2d6ff; opacity:.7; font-style:italic }
+  .tag{
+    display:inline-flex; align-items:center; gap:6px; padding:6px 8px; border-radius:999px;
+    background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); font-size:12px;
+  }
+  .bar{
+    height:8px; border-radius:999px; background: rgba(255,255,255,.09); overflow:hidden;
+    border:1px solid rgba(255,255,255,.08);
+  }
+  .bar > span{ display:block; height:100%; background: linear-gradient(90deg, #53e0ab, #89e8ff); width:0% }
+  .muted{ color:var(--muted) }
+  .footer-actions{
+    position:sticky; bottom:8px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
+    background: linear-gradient(180deg, transparent, rgba(0,0,0,.35));
+    padding-top:8px;
+  }
+  .pill{
+    display:flex; align-items:center; gap:6px;
+    padding:10px 12px; border-radius:999px; border:1px solid rgba(255,255,255,.1);
+    background:linear-gradient(180deg, var(--panel), var(--panel2));
+    box-shadow: var(--shadow); color:var(--text); font-weight:700;
+  }
+  .kbd{
+    background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2);
+    padding:2px 6px; border-radius:6px; font-size:12px; font-weight:800; color:#fff;
+  }
+  .notice{
+    background: linear-gradient(180deg, rgba(91,227,176,.15), rgba(155,220,255,.1));
+    border:1px solid rgba(91,227,176,.3);
+    color:#eafffb; padding:10px; border-radius:12px; font-size:14px;
+  }
+  .danger{
+    background: linear-gradient(180deg, rgba(255,107,107,.15), rgba(255,107,107,.08));
+    border:1px solid rgba(255,107,107,.35);
+    color:#fff0f0;
+  }
+  .toast{
+    position:fixed; left:50%; transform:translateX(-50%);
+    bottom:20px; background:rgba(20,24,60,.9); border:1px solid rgba(255,255,255,.12);
+    padding:10px 14px; border-radius:999px; box-shadow: var(--shadow);
+    font-weight:700; display:none; z-index:100;
+  }
+  .modal{
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:50;
+    padding:18px;
+  }
+  .modal.show{ display:flex }
+  .modal .inner{
+    width:min(720px, 100%); background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.1); border-radius:18px; box-shadow: var(--shadow); padding:18px;
+    max-height:90vh; overflow:auto;
+  }
+  .help-list{ display:grid; gap:10px }
+  .help-list .item{ background: rgba(0,0,0,.15); border:1px solid rgba(255,255,255,.08); padding:12px; border-radius:12px }
+  .flex{ display:flex; align-items:center; gap:8px; flex-wrap:wrap }
+  .spacer{ flex:1 }
+  .small{ font-size:12px }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">
+        <div class="age-badge" id="ageBadge">🪨 <span id="ageName">Stone Age</span> <small>×1.0</small></div>
+        <h1>Tiny Civ</h1>
+      </div>
+      <div class="controls-header">
+        <div class="pill"><span id="popInfo">👥 3 / 4</span></div>
+        <button id="btnHelp" aria-label="Help">❓ Help</button>
+        <button id="btnReset" class="btn-danger" aria-label="New Game">New Game</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="section-title">
+          <div>City & Resources</div>
+          <div class="tag">Goal: Reach Iron Age and build a Wonder</div>
+        </div>
+
+        <div class="resources" id="resourcePanel">
+          <!-- Resource rows injected -->
+        </div>
+
+        <div class="row">
+          <div class="sub">Unassigned workers: <span id="unassigned" class="cap">0</span></div>
+          <div class="flex">
+            <button id="btnTrain" class="btn-accent">Train Villager (🍖20)</button>
+            <div class="tag">Cap <span id="capInfo">0</span></div>
+          </div>
+        </div>
+
+        <div class="notice">
+          Tip: Assign workers to Food, Wood, and Gold. Build structures to boost production. Advance through ages to unlock more buildings. Build a Wonder in the Iron Age to win!
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <div>Research & Ages</div>
+          <div class="tag">Progress</div>
+        </div>
+        <div class="builds">
+          <div class="build">
+            <div>
+              <h4>Advance to Bronze Age 🛡️</h4>
+              <div class="cost">Costs: 🍖200, 🪵150, 🪙50 — Boosts all production. Unlocks House, Pasture, Mill, Mine.</div>
+            </div>
+            <button id="btnBronze" class="btn-warn">Advance</button>
+          </div>
+          <div class="build">
+            <div>
+              <h4>Advance to Iron Age ⚒️</h4>
+              <div class="cost">Costs: 🍖800, 🪵600, 🪙300 — Further boosts. Unlocks Villa, Foundry & Wonder.</div>
+            </div>
+            <button id="btnIron" class="btn-warn">Advance</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="sub">Global production bonus</div>
+          <div class="bar" style="flex:1">
+            <span id="ageBar"></span>
+          </div>
+        </div>
+
+        <div class="section-title" style="margin-top:14px">
+          <div>Build Structures</div>
+          <div class="tag">Each adds passive production or capacity</div>
+        </div>
+        <div class="builds" id="buildPanel">
+          <!-- Building cards injected -->
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-actions">
+      <button id="btnWonder" class="btn-accent" style="display:none">Build Wonder (🍖2000 🪵1500 🪙1000)</button>
+      <div class="pill small">
+        Keyboard: A/Z food, S/X wood, D/C gold, T train, B build Hut, F Farm, L Lumber, R Age-up, W Wonder
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal" id="helpModal" aria-modal="true" role="dialog">
+    <div class="inner">
+      <div class="flex">
+        <h2 style="margin:0">How to Play</h2>
+        <div class="spacer"></div>
+        <button id="closeHelp">Close</button>
+      </div>
+      <div class="help-list" style="margin-top:10px">
+        <div class="item">
+          - Assign workers to gather Food (🍖), Wood (🪵), and Gold (🪙) using + and - buttons. Long-press to repeat.
+        </div>
+        <div class="item">
+          - Build structures to increase passive resource production and house more citizens.
+        </div>
+        <div class="item">
+          - Train Villagers using Food. You need enough housing to increase population.
+        </div>
+        <div class="item">
+          - Advance through ages to unlock new buildings and boost all production.
+        </div>
+        <div class="item">
+          - Goal: Reach the Iron Age and build a Wonder to win!
+        </div>
+        <div class="item">
+          - Keyboard Controls:
+          A/Z = +/− Food workers, S/X = +/− Wood, D/C = +/− Gold,
+          T = Train, B = Build Hut, F = Build Farm, L = Build Lumber Camp,
+          H = Build House, P = Build Pasture, M = Build Mill, N = Build Mine,
+          V = Build Villa, O = Build Foundry, R = Age Up, W = Wonder, ? or / = Help.
+        </div>
+        <div class="item">
+          - Your game auto-saves every few seconds. Use New Game to reset.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="winModal" aria-modal="true" role="dialog">
+    <div class="inner" style="text-align:center">
+      <h2 style="margin:0 0 6px">You Built a Wonder! 🏛️</h2>
+      <div class="muted">Your civilization thrives into legend.</div>
+      <div class="row" style="justify-content:center; margin-top:12px">
+        <div class="pill">Time Played: <span id="timePlayed">0:00</span></div>
+        <div class="pill">Population: <span id="finalPop">0</span></div>
+      </div>
+      <div class="row" style="justify-content:center; margin-top:16px">
+        <button id="btnContinue">Keep Playing</button>
+        <button id="btnRestart" class="btn-danger">New Game</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => document.querySelectorAll(sel);
+  const fmt = n => n.toLocaleString(undefined, {maximumFractionDigits: (n<10?1:0)});
+  const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+
+  const ages = [
+    {name:"Stone Age", icon:"🪨", mult:1.0},
+    {name:"Bronze Age", icon:"🛡️", mult:1.6},
+    {name:"Iron Age", icon:"⚒️", mult:2.3},
+  ];
+
+  const baseRates = { food: .20, wood: .20, gold: .15 };
+
+  const buildings = {
+    hut:      {name:"Hut 🛖",   reqAge:0, cap:+2, rates:{}, cost:{food:20, wood:30}},
+    farm:     {name:"Farm 🌾",  reqAge:0, cap:0,  rates:{food:.50}, cost:{food:30, wood:20}},
+    lumber:   {name:"Lumber Camp 🪓", reqAge:0, cap:0, rates:{wood:.50}, cost:{food:20, wood:30}},
+    house:    {name:"House 🏠", reqAge:1, cap:+4, rates:{}, cost:{food:60, wood:80}},
+    pasture:  {name:"Pasture 🐄", reqAge:1, cap:0, rates:{food:1.20}, cost:{food:80, wood:50}},
+    mill:     {name:"Mill 🪵", reqAge:1, cap:0, rates:{wood:1.20}, cost:{food:50, wood:80}},
+    mine:     {name:"Mine ⛏️", reqAge:1, cap:0, rates:{gold:.80}, cost:{food:40, wood:80}},
+    villa:    {name:"Villa 🏛️", reqAge:2, cap:+6, rates:{}, cost:{food:150, wood:200, gold:100}},
+    foundry:  {name:"Foundry ⚙️", reqAge:2, cap:0, rates:{gold:1.60}, cost:{food:80, wood:120, gold:100}},
+  };
+
+  const wonderCost = { food:2000, wood:1500, gold:1000 };
+  const ageCosts = [
+    null,
+    {food:200, wood:150, gold:50}, // to Bronze
+    {food:800, wood:600, gold:300} // to Iron
+  ];
+
+  const stateDefault = {
+    ageIndex: 0,
+    resources: {food:50, wood:20, gold:0},
+    workers: {total:3, cap:4, unassigned:3, food:0, wood:0, gold:0},
+    b: Object.keys(buildings).reduce((o,k)=> (o[k]=0,o), {}),
+    wonder:0,
+    timePlayed:0
+  };
+
+  let S = null;
+
+  function load(){
+    const raw = localStorage.getItem('tinyciv_save_v1');
+    if(raw){
+      try{
+        const data = JSON.parse(raw);
+        S = Object.assign({}, structuredClone(stateDefault), data);
+        // Backward compatibility for new keys
+        if(!S.b) S.b = structuredClone(stateDefault.b);
+      }catch(e){
+        S = structuredClone(stateDefault);
+      }
+    }else{
+      S = structuredClone(stateDefault);
+    }
+  }
+
+  function save(){
+    localStorage.setItem('tinyciv_save_v1', JSON.stringify(S));
+  }
+
+  function reset(){
+    S = structuredClone(stateDefault);
+    save();
+    toast("New game started");
+    updateUI();
+  }
+
+  // Production per second from workers and buildings
+  function calcRates(){
+    const mult = ages[S.ageIndex].mult;
+    const br = baseRates;
+    const w = S.workers;
+    let food = w.food * br.food * mult;
+    let wood = w.wood * br.wood * mult;
+    let gold = w.gold * br.gold * mult;
+
+    for(const k in S.b){
+      const count = S.b[k];
+      if(count<=0) continue;
+      const def = buildings[k];
+      if(def.rates.food) food += def.rates.food * count;
+      if(def.rates.wood) wood += def.rates.wood * count;
+      if(def.rates.gold) gold += def.rates.gold * count;
+    }
+    return {food, wood, gold};
+  }
+
+  function canAfford(cost){
+    if(!cost) return true;
+    for(const k in cost){
+      if(S.resources[k] < cost[k]) return false;
+    }
+    return true;
+  }
+
+  function pay(cost){
+    for(const k in cost){
+      S.resources[k] -= cost[k];
+    }
+  }
+
+  // UI building
+  function renderResources(){
+    const panel = $('#resourcePanel');
+    panel.innerHTML = '';
+    const rates = calcRates();
+
+    const rows = [
+      {key:'food', icon:'🍖', name:'Food', assignedKey:'food', rate:rates.food},
+      {key:'wood', icon:'🪵', name:'Wood', assignedKey:'wood', rate:rates.wood},
+      {key:'gold', icon:'🪙', name:'Gold', assignedKey:'gold', rate:rates.gold},
+    ];
+    rows.forEach(r=>{
+      const div = document.createElement('div');
+      div.className='res';
+      div.innerHTML = `
+        <div>
+          <div class="res-name">${r.icon} ${r.name} <span class="res-amt" id="amt_${r.key}">${fmt(S.resources[r.key])}</span></div>
+          <div class="res-rate">Rate: <b id="rate_${r.key}">${fmt(r.rate)}/s</b> | Workers: <b id="w_${r.key}">${S.workers[r.assignedKey]}</b></div>
+        </div>
+        <div class="assign">
+          <button data-act="dec" data-key="${r.assignedKey}" aria-label="Decrease ${r.name}">−</button>
+          <div class="count" id="count_${r.key}">${S.workers[r.assignedKey]}</div>
+          <button data-act="inc" data-key="${r.assignedKey}" aria-label="Increase ${r.name}">＋</button>
+        </div>
+      `;
+      panel.appendChild(div);
+    });
+
+    panel.querySelectorAll('button').forEach(btn=>{
+      makeHoldable(btn, ()=>{
+        const key = btn.getAttribute('data-key');
+        if(btn.getAttribute('data-act')==='inc'){
+          assign(key, +1);
+        }else{
+          assign(key, -1);
+        }
+      });
+    });
+  }
+
+  function renderBuilds(){
+    const panel = $('#buildPanel');
+    panel.innerHTML = '';
+    const entries = Object.entries(buildings);
+    entries.forEach(([key, def])=>{
+      const div = document.createElement('div');
+      div.className='build';
+      const costStr = Object.entries(def.cost).map(([k,v])=>{
+        return (k==='food'?'🍖':k==='wood'?'🪵':'🪙')+v;
+      }).join(', ');
+      const locked = S.ageIndex < def.reqAge;
+      const capStr = def.cap? ` | +${def.cap} cap` : '';
+      const rates = def.rates;
+      const ratesStr = (rates.food?` +${rates.food}/s 🍖`:'') + (rates.wood?` +${rates.wood}/s 🪵`:'') + (rates.gold?` +${rates.gold}/s 🪙`:'');
+      div.innerHTML = `
+        <div>
+          <h4>${def.name} <span class="muted">×${S.b[key]}</span></h4>
+          <div class="cost">Costs: ${costStr}${capStr}${ratesStr?` —${ratesStr}`:''} ${locked?`<span class="locked"> (Requires ${ages[def.reqAge].name})</span>`:''}</div>
+        </div>
+        <button data-build="${key}" ${locked?'disabled':''}>Build</button>
+      `;
+      panel.appendChild(div);
+    });
+
+    panel.querySelectorAll('button[data-build]').forEach(btn=>{
+      const key = btn.getAttribute('data-build');
+      btn.addEventListener('click', ()=> build(key));
+      makeHoldable(btn, ()=> build(key));
+    });
+  }
+
+  function updateTop(){
+    const age = ages[S.ageIndex];
+    $('#ageBadge').innerHTML = `${age.icon} <span id="ageName">${age.name}</span> <small>×${age.mult.toFixed(1)}</small>`;
+    $('#popInfo').textContent = `👥 ${S.workers.total} / ${S.workers.cap}`;
+    $('#capInfo').textContent = S.workers.cap;
+    $('#unassigned').textContent = S.workers.unassigned;
+
+    // Resource amounts and rates refresh
+    const rates = calcRates();
+    ['food','wood','gold'].forEach(k=>{
+      const amt = $('#amt_'+k); if(amt) amt.textContent = fmt(S.resources[k]);
+      const rate = $('#rate_'+k); if(rate) rate.textContent = `${fmt(rates[k])}/s`;
+      const cnt = $('#count_'+k); if(cnt) cnt.textContent = S.workers[k];
+      const w = $('#w_'+k); if(w) w.textContent = S.workers[k];
+    });
+
+    // Age buttons
+    const toBronze = $('#btnBronze');
+    const toIron = $('#btnIron');
+    toBronze.disabled = !(S.ageIndex===0 && canAfford(ageCosts[1]));
+    toIron.disabled = !(S.ageIndex===1 && canAfford(ageCosts[2]));
+
+    // Wonder button
+    const btnWonder = $('#btnWonder');
+    const canSeeWonder = (S.ageIndex>=2);
+    btnWonder.style.display = canSeeWonder ? 'inline-block' : 'none';
+    btnWonder.disabled = !(S.ageIndex>=2 && canAfford(wonderCost));
+
+    // Age progress bar purely illustrative
+    $('#ageBar').style.width = ((S.ageIndex+1)/ages.length*100)+'%';
+  }
+
+  function updateUI(){
+    // Ensure UI elements exist
+    if(!$('#amt_food')){ renderResources(); }
+    if(!$('#buildPanel').children.length){ renderBuilds(); }
+    updateTop();
+  }
+
+  // Logic actions
+  function assign(key, delta){
+    if(delta>0){
+      const take = Math.min(delta, S.workers.unassigned);
+      if(take<=0) return;
+      S.workers[key] += take;
+      S.workers.unassigned -= take;
+    }else if(delta<0){
+      const give = Math.min(-delta, S.workers[key]);
+      if(give<=0) return;
+      S.workers[key] -= give;
+      S.workers.unassigned += give;
+    }
+    updateTop();
+  }
+
+  function capacityFromBuildings(){
+    let cap = 4; // base
+    for(const k in S.b){
+      const def = buildings[k];
+      if(def.cap) cap += def.cap * S.b[k];
+    }
+    return cap;
+  }
+
+  function train(){
+    if(S.workers.total >= S.workers.cap){
+      toast("Not enough housing");
+      return;
+    }
+    if(S.resources.food < 20){ toast("Need 🍖20"); return; }
+    S.resources.food -= 20;
+    S.workers.total += 1;
+    S.workers.unassigned += 1;
+    updateUI();
+  }
+
+  function build(key){
+    const def = buildings[key];
+    if(S.ageIndex < def.reqAge){ toast("Requires "+ages[def.reqAge].name); return; }
+    if(!canAfford(def.cost)){ toast("Not enough resources"); return; }
+    pay(def.cost);
+    S.b[key] += 1;
+    // Update capacity when building houses
+    S.workers.cap = capacityFromBuildings();
+    updateUI();
+  }
+
+  function tryAgeUp(targetIndex){
+    const cost = ageCosts[targetIndex];
+    if(S.ageIndex !== targetIndex-1) return;
+    if(!canAfford(cost)){ toast("Need more resources"); return; }
+    pay(cost);
+    S.ageIndex = targetIndex;
+    toast("Advanced to "+ages[targetIndex].name+"!");
+    updateUI();
+  }
+
+  function buildWonder(){
+    if(S.ageIndex<2){ toast("Requires Iron Age"); return; }
+    if(!canAfford(wonderCost)){ toast("Not enough for Wonder"); return; }
+    pay(wonderCost);
+    S.wonder = 1;
+    showWin();
+  }
+
+  function showWin(){
+    $('#winModal').classList.add('show');
+    $('#finalPop').textContent = S.workers.total;
+    $('#timePlayed').textContent = formatTime(S.timePlayed);
+  }
+
+  function toast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.style.display='block';
+    t.style.opacity='1';
+    setTimeout(()=>{ t.style.opacity='0'; }, 1500);
+    setTimeout(()=>{ t.style.display='none'; }, 1900);
+  }
+
+  function formatTime(sec){
+    sec = Math.floor(sec);
+    const h = Math.floor(sec/3600);
+    const m = Math.floor((sec%3600)/60);
+    const s = sec%60;
+    return (h? h+':':'') + (m<10 && h? '0'+m : m) + ':' + (s<10? '0'+s : s);
+  }
+
+  // Long press helper
+  function makeHoldable(el, action){
+    let holdTimer = null;
+    const start = (e)=>{
+      e.preventDefault?.();
+      action();
+      clearInterval(holdTimer);
+      holdTimer = setInterval(action, 140);
+    };
+    const end = ()=>{
+      clearInterval(holdTimer);
+      holdTimer = null;
+    };
+    el.addEventListener('mousedown', start);
+    el.addEventListener('touchstart', start, {passive:true});
+    document.addEventListener('mouseup', end);
+    document.addEventListener('touchend', end);
+  }
+
+  // Bindings
+  function bind(){
+    $('#btnTrain').addEventListener('click', train);
+    makeHoldable($('#btnTrain'), train);
+
+    $('#btnBronze').addEventListener('click', ()=>tryAgeUp(1));
+    $('#btnIron').addEventListener('click', ()=>tryAgeUp(2));
+    $('#btnWonder').addEventListener('click', buildWonder);
+
+    $('#btnHelp').addEventListener('click', ()=> $('#helpModal').classList.add('show'));
+    $('#closeHelp').addEventListener('click', ()=> $('#helpModal').classList.remove('show'));
+
+    $('#btnReset').addEventListener('click', ()=>{
+      if(confirm('Start a new game? Your current progress will be lost.')){
+        reset();
+      }
+    });
+
+    $('#btnContinue').addEventListener('click', ()=> $('#winModal').classList.remove('show'));
+    $('#btnRestart').addEventListener('click', ()=>{
+      $('#winModal').classList.remove('show');
+      reset();
+    });
+
+    // Keyboard
+    window.addEventListener('keydown', (e)=>{
+      const k = e.key.toLowerCase();
+      if(k==='a'){ assign('food', +1); }
+      else if(k==='z'){ assign('food', -1); }
+      else if(k==='s'){ assign('wood', +1); }
+      else if(k==='x'){ assign('wood', -1); }
+      else if(k==='d'){ assign('gold', +1); }
+      else if(k==='c'){ assign('gold', -1); }
+      else if(k==='t'){ train(); }
+      else if(k==='b'){ build('hut'); }
+      else if(k==='f'){ build('farm'); }
+      else if(k==='l'){ build('lumber'); }
+      else if(k==='h'){ build('house'); }
+      else if(k==='p'){ build('pasture'); }
+      else if(k==='m'){ build('mill'); }
+      else if(k==='n'){ build('mine'); }
+      else if(k==='v'){ build('villa'); }
+      else if(k==='o'){ build('foundry'); }
+      else if(k==='r'){ S.ageIndex===0?tryAgeUp(1):S.ageIndex===1?tryAgeUp(2):null; }
+      else if(k==='w'){ buildWonder(); }
+      else if(k==='?' || k==='/'){ $('#helpModal').classList.add('show'); }
+    }, {passive:true});
+  }
+
+  // Game loop
+  let last = performance.now();
+  function loop(now){
+    const dt = (now - last)/1000;
+    last = now;
+
+    // produce resources
+    const rates = calcRates();
+    S.resources.food += rates.food * dt;
+    S.resources.wood += rates.wood * dt;
+    S.resources.gold += rates.gold * dt;
+
+    S.timePlayed += dt;
+
+    // clamp
+    for(const k of ['food','wood','gold']){
+      if(S.resources[k] < 0) S.resources[k] = 0;
+    }
+
+    // Ensure cap reflects buildings if changed
+    const newCap = capacityFromBuildings();
+    if(newCap !== S.workers.cap){
+      S.workers.cap = newCap;
+      if(S.workers.total > newCap){
+        const overflow = S.workers.total - newCap;
+        // remove from unassigned first, then from gold, wood, food
+        const order = ['unassigned','gold','wood','food'];
+        let toRemove = overflow;
+        order.forEach(type=>{
+          if(toRemove<=0) return;
+          let take = Math.min(toRemove, S.workers[type] ?? 0);
+          if(type==='unassigned'){ S.workers.unassigned -= take; }
+          else { S.workers[type] -= take; }
+          S.workers.total -= take;
+          toRemove -= take;
+        });
+        toast("Some citizens left due to lack of housing");
+      }
+    }
+
+    // UI update at ~10 fps
+    if(now%100 < 16){
+      updateTop();
+    }
+
+    requestAnimationFrame(loop);
+  }
+
+  // Autosave
+  setInterval(save, 5000);
+
+  // Init
+  load();
+  renderResources();
+  renderBuilds();
+  bind();
+  updateUI();
+  requestAnimationFrame(loop);
+
+  // Expose wonder button state after UI rendered
+  $('#btnWonder').addEventListener('click', buildWonder);
+})();
+</script>
+</body>
+</html>

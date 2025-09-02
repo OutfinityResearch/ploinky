@@ -74,16 +74,26 @@
 .favorites-list {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch; /* allow children to span available width */
   gap: 16px;
 }
 
 .favorites-list story-card {
   display: block;
-  width: 94%;
-  max-width: 560px;
-  aspect-ratio: 1.15;
-  margin: 0 auto;
+  width: 92%;
+  max-width: 520px; /* default cap on phones for readability */
+  margin: 8px auto; /* centered on small screens */
+}
+
+/* Tablet/Desktop: align with header gutters and fill width */
+@media (min-width: 768px) {
+  .favorites-container { padding-left: 12px; padding-right: 12px; }
+  .favorites-list story-card {
+    width: calc(100% - 24px); /* 12px gutters left/right to align with app header buttons */
+    max-width: none;
+    margin-left: 12px;
+    margin-right: 12px;
+  }
 }
 
 .favorites-empty {

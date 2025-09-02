@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ro">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#0b1426">
-  <title>Arc & Țintă+ (Natură)</title>
+  <title>Archery & Target+ (Nature)</title>
   <style>
     :root{
       --bg1:#0a1428; --bg2:#0b1426;
@@ -53,56 +53,56 @@
 <body>
   <div class="hud" aria-hidden="false">
     <div class="hud-left">
-      <div class="pill" id="scorePill" data-accent>Scor: <span id="score">0</span></div>
+      <div class="pill" id="scorePill" data-accent>Score: <span id="score">0</span></div>
       <div class="pill">Best: <span id="best">0</span></div>
       <div class="pill" id="livesPill"><span id="lives">❤❤❤</span></div>
       <div class="pill">Lv <span id="level">1</span></div>
       <div class="pill hidden" id="comboPill">Combo x<span id="comboVal">1</span></div>
-      <div class="pill" id="windPill">Vânt: <span id="windVal">0</span></div>
+      <div class="pill" id="windPill">Wind: <span id="windVal">0</span></div>
     </div>
     <div class="hud-right">
-      <button class="btn glow" id="btnPause" aria-label="Pauză (P)">Pauză</button>
-      <button class="btn" id="btnHUDMute" aria-pressed="false" aria-label="Sunet">🔈</button>
+      <button class="btn glow" id="btnPause" aria-label="Pause (P)">Pause</button>
+      <button class="btn" id="btnHUDMute" aria-pressed="false" aria-label="Sound">🔈</button>
     </div>
   </div>
 
   <div class="hint" id="hint">
-    Ține apăsat sau glisează spre stânga pentru a întinde coarda, eliberează pentru a trage • Sus/Jos pentru a ținti • Space/Enter pentru a trage • Vântul influențează traiectoria • P pentru pauză
+    Hold or swipe left to draw, release to shoot • Up/Down to aim • Space/Enter to shoot • Wind affects trajectory • P to pause
   </div>
 
   <div class="overlay show" id="ovStart" aria-modal="true" role="dialog">
     <div class="panel">
-      <h1>Arc & Țintă+ Natură</h1>
-      <p>Experiență mai realistă: țintă din lemn, vânt, păsări bonus, power‑up‑uri și provocări. Gândit pentru sesiuni de 10–15 minute.</p>
+      <h1>Archery & Target+ Nature</h1>
+      <p>More realistic experience: wooden target, wind, bonus birds, power‑ups and challenges. Designed for 10–15 minute sessions.</p>
       <div class="row">
-        <span class="badge">Vânt Dinamic</span>
-        <span class="badge">Țintă Realistă</span>
-        <span class="badge">Păsări Bonus</span>
-        <span class="badge">Responsiv + Touch</span>
-        <span class="badge">Combo & Power‑up‑uri</span>
+        <span class="badge">Dynamic Wind</span>
+        <span class="badge">Realistic Target</span>
+        <span class="badge">Bonus Birds</span>
+        <span class="badge">Responsive + Touch</span>
+        <span class="badge">Combos & Power‑ups</span>
       </div>
       <ul class="list">
-        <li>Ține apăsat/glisează spre stânga pentru a întinde, eliberează pentru a trage. Vezi traiectoria ghid.</li>
-        <li>Săgeată sus/jos pentru țintire fină. Space/Enter pentru a întinde/elibera.</li>
-        <li>Vântul variază treptat – consultă indicatorul. Compensează deriva.</li>
-        <li>Power‑up‑uri: Încetinire, Țintă Mare, x2 Scor, +Viață (rar). Lovește păsările pentru puncte bonus.</li>
-        <li>Combo: lovituri consecutive cresc multiplicatorul. Miss resetează combo.</li>
+        <li>Hold/swipe left to draw, release to shoot. Watch the guide trajectory.</li>
+        <li>Up/Down arrows for fine aim. Space/Enter to draw/release.</li>
+        <li>Wind varies gradually — check the indicator and compensate drift.</li>
+        <li>Power‑ups: Slow motion, Bigger Target, x2 Score, +Life (rare). Hit birds for bonus points.</li>
+        <li>Combos: consecutive hits increase multiplier. A miss resets combo.</li>
       </ul>
       <div class="grid">
-        <button id="btnStart" class="btn" style="font-size:18px">Joacă</button>
-        <button id="btnMute" class="btn" aria-pressed="false">🔈 Sunet</button>
+        <button id="btnStart" class="btn" style="font-size:18px">Play</button>
+        <button id="btnMute" class="btn" aria-pressed="false">🔈 Sound</button>
       </div>
-      <p class="blink" style="margin-top:10px;color:#cfe0ff">Apasă Joacă pentru a începe</p>
+      <p class="blink" style="margin-top:10px;color:#cfe0ff">Press Play to start</p>
     </div>
   </div>
 
   <div class="overlay" id="ovPause" aria-modal="true" role="dialog">
     <div class="panel">
-      <h2>Pauză</h2>
-      <p>Respiră adânc. Natură liniștită. Ținta te așteaptă.</p>
+      <h2>Pause</h2>
+      <p>Take a deep breath. Calm nature. The target waits.</p>
       <div class="grid">
-        <button id="btnResume" class="btn">Continuă (P)</button>
-        <button id="btnRetryFromPause" class="btn">Reîncepe</button>
+        <button id="btnResume" class="btn">Resume (P)</button>
+        <button id="btnRetryFromPause" class="btn">Restart</button>
       </div>
     </div>
   </div>
@@ -110,10 +110,10 @@
   <div class="overlay" id="ovGameOver" aria-modal="true" role="dialog">
     <div class="panel">
       <h2>Game Over</h2>
-      <p>Scor: <strong id="finalScore">0</strong> • Best: <strong id="finalBest">0</strong></p>
+      <p>Score: <strong id="finalScore">0</strong> • Best: <strong id="finalBest">0</strong></p>
       <div class="grid">
-        <button id="btnRetry" class="btn">Rejoacă</button>
-        <button id="btnMenu" class="btn">Meniu</button>
+        <button id="btnRetry" class="btn">Play Again</button>
+        <button id="btnMenu" class="btn">Menu</button>
       </div>
     </div>
   </div>
@@ -510,7 +510,7 @@
       muted = !muted;
       const label = muted ? '🔇' : '🔈';
       btnMute.setAttribute('aria-pressed', String(muted));
-      btnMute.textContent = (muted ? '🔇 Mut' : '🔈 Sunet');
+      btnMute.textContent = (muted ? '🔇 Mute' : '🔈 Sound');
       btnHUDMute.setAttribute('aria-pressed', String(muted));
       btnHUDMute.textContent = label;
       sfx('ui');
@@ -540,7 +540,7 @@
     function startGame(){
       resetGame();
       Game.state = 'playing';
-      btnPause.textContent = 'Pauză';
+      btnPause.textContent = 'Pause';
       btnPause.setAttribute('aria-pressed','false');
       hintEl.style.opacity = '0.9';
       setTimeout(()=>{ hintEl.style.opacity = '0.45'; }, 3500);
@@ -549,7 +549,7 @@
     function pauseGame(){
       if (Game.state !== 'playing') return;
       Game.state = 'paused';
-      btnPause.textContent = 'Continuă';
+      btnPause.textContent = 'Resume';
       btnPause.setAttribute('aria-pressed','true');
       showOverlay(ovPause);
       sfx('pause');
@@ -558,7 +558,7 @@
       if (Game.state !== 'paused') return;
       Game.state = 'playing';
       hideAllOverlays();
-      btnPause.textContent = 'Pauză';
+      btnPause.textContent = 'Pause';
       btnPause.setAttribute('aria-pressed','false');
       sfx('pause');
     }

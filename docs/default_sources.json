@@ -9,7 +9,6 @@
     { "id": "learnItalian", "type": "category", "url": "/sources/learnItalian/games.json", "tag": "learnItalian", "removable": false, "visible": true },
     { "id": "learnSpanish", "type": "category", "url": "/sources/learnSpanish/games.json", "tag": "learnSpanish", "removable": false, "visible": true },
     { "id": "learnEnglish", "type": "category", "url": "/sources/learnEnglish/games.json", "tag": "learnEnglish", "removable": false, "visible": true },
-    { "id": "addGame", "type": "special", "url": "/sources/addGame/games.json", "tag": "addGame", "removable": false, "visible": true },
     { "id": "learnRomanian", "type": "category", "url": "/sources/learnRomanian/games.json", "tag": "learnRomanian", "removable": false, "visible": true },
     { "id": "classicArcade", "type": "category", "url": "/sources/classicArcade/games.json", "tag": "classicArcade", "removable": false, "visible": true }
   ]

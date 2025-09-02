@@ -15,6 +15,51 @@
     ]
   },
   {
+    "id": "microgame:classicArcade:classic-breakout",
+    "type": "microgame",
+    "title": "Classic Breakout",
+    "source": "/sources/classicArcade/classic-breakout.html",
+    "generatedAt": "2025-09-02T14:53:56.779Z",
+    "feedName": "Ploynky #classicArcade",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "A new game, automatically added.",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:classicArcade:classic-pac-man",
+    "type": "microgame",
+    "title": "Classic Pac Man",
+    "source": "/sources/classicArcade/classic-pac-man.html",
+    "generatedAt": "2025-09-02T14:53:56.779Z",
+    "feedName": "Ploynky #classicArcade",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "A new game, automatically added.",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:classicArcade:classic-space-invaders",
+    "type": "microgame",
+    "title": "Classic Space Invaders",
+    "source": "/sources/classicArcade/classic-space-invaders.html",
+    "generatedAt": "2025-09-02T14:53:56.779Z",
+    "feedName": "Ploynky #classicArcade",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "A new game, automatically added.",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
     "id": "microgame:classicArcade:frogger",
     "type": "microgame",
     "title": "Frogger",
