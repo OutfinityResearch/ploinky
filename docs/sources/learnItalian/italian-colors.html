@@ -5,33 +5,416 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Italian Colors</title>
   <style>
-    html,body{height:100%;margin:0;background:#0a1224;color:#f8fafc;font-family:system-ui,sans-serif}
-    .wrap{height:100%;display:flex;align-items:center;justify-content:center}
-    .card{width:min(540px,94vw);background:#0f172a;border:1px solid #1f2a44;border-radius:16px;padding:16px;box-shadow:0 12px 30px rgba(0,0,0,.35)}
-    .big{font-size:28px;font-weight:800;margin-bottom:8px;text-align:center}
-    .opts{display:grid;grid-template-columns:repeat(2,min(220px,44vw));gap:10px;justify-content:center}
-    .btn{background:#12223a;color:#fff;border:none;border-radius:12px;padding:12px;font-weight:700}
-    .bar{height:6px;background:#0b1b34;border-radius:6px;margin:10px 0}
-    .fill{height:100%;width:0;background:linear-gradient(90deg,#60a5fa,#22c55e);border-radius:6px}
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body {
+      height: 100%;
+      font-family: 'Poppins', system-ui, sans-serif;
+      overflow: hidden;
+    }
+    
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #fda085 75%, #ffeaa7 100%);
+      background-size: 400% 400%;
+      animation: gradientShift 15s ease infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    
+    .floating-shapes {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      z-index: 0;
+    }
+    
+    .shape {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(40px);
+      opacity: 0.5;
+      animation: float 20s infinite ease-in-out;
+    }
+    
+    .shape1 {
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(255,107,107,0.8) 0%, rgba(255,230,109,0.6) 100%);
+      top: 10%;
+      left: 10%;
+      animation-delay: 0s;
+    }
+    
+    .shape2 {
+      width: 200px;
+      height: 200px;
+      background: radial-gradient(circle, rgba(78,205,196,0.8) 0%, rgba(85,98,112,0.6) 100%);
+      top: 60%;
+      right: 10%;
+      animation-delay: 5s;
+    }
+    
+    .shape3 {
+      width: 250px;
+      height: 250px;
+      background: radial-gradient(circle, rgba(255,175,204,0.8) 0%, rgba(189,147,249,0.6) 100%);
+      bottom: 10%;
+      left: 30%;
+      animation-delay: 10s;
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      33% { transform: translateY(-30px) rotate(120deg); }
+      66% { transform: translateY(30px) rotate(240deg); }
+    }
+    
+    .wrap {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 600px;
+      padding: 20px;
+    }
+    
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      border-radius: 30px;
+      padding: 40px;
+      box-shadow: 
+        0 30px 60px rgba(0, 0, 0, 0.12),
+        0 4px 6px rgba(0, 0, 0, 0.08),
+        inset 0 -3px 0 rgba(0, 0, 0, 0.02);
+      transform: translateY(0);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 
+        0 40px 80px rgba(0, 0, 0, 0.15),
+        0 8px 12px rgba(0, 0, 0, 0.1),
+        inset 0 -3px 0 rgba(0, 0, 0, 0.02);
+    }
+    
+    .title-container {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .title {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+    }
+    
+    .big {
+      font-size: 32px;
+      font-weight: 800;
+      color: #2d3436;
+      margin-bottom: 8px;
+      text-align: center;
+      line-height: 1.2;
+      animation: fadeInUp 0.5s ease;
+    }
+    
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .bar {
+      height: 8px;
+      background: rgba(0, 0, 0, 0.08);
+      border-radius: 100px;
+      margin: 25px 0;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .fill {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #f093fb 0%, #f5576c 25%, #fda085 50%, #ffeaa7 75%, #55a3ff 100%);
+      background-size: 200% 100%;
+      border-radius: 100px;
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: shimmer 3s linear infinite;
+      box-shadow: 0 2px 8px rgba(240, 147, 251, 0.4);
+    }
+    
+    @keyframes shimmer {
+      0% { background-position: -100% 0; }
+      100% { background-position: 100% 0; }
+    }
+    
+    .opts {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin-top: 30px;
+    }
+    
+    .btn {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 20px;
+      padding: 18px 24px;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      text-transform: capitalize;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+    
+    .btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .btn span {
+      position: relative;
+      z-index: 1;
+    }
+    
+    .btn:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn:hover::before {
+      opacity: 1;
+    }
+    
+    .btn:active {
+      transform: translateY(-1px) scale(1);
+    }
+    
+    .btn.correct {
+      animation: correctPulse 0.6s ease;
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    
+    .btn.incorrect {
+      animation: shake 0.5s ease;
+      background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
+    }
+    
+    @keyframes correctPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+    
+    .speaker-icon {
+      display: inline-block;
+      width: 30px;
+      height: 30px;
+      margin-left: 10px;
+      cursor: pointer;
+      vertical-align: middle;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+    
+    @media (max-width: 480px) {
+      .card {
+        padding: 25px;
+      }
+      
+      .big {
+        font-size: 24px;
+      }
+      
+      .opts {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap"><div class="card">
-    <div class="big" id="q">Ascolta e scegli il significato</div>
-    <div class="bar"><div class="fill" id="f"></div></div>
-    <div class="opts" id="opts"></div>
-  </div></div>
+  <div class="floating-shapes">
+    <div class="shape shape1"></div>
+    <div class="shape shape2"></div>
+    <div class="shape shape3"></div>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <div class="title-container">
+        <div class="title">Italian Colors Game</div>
+        <div class="big" id="q">Ascolta e scegli il significato 🎨</div>
+      </div>
+      <div class="bar"><div class="fill" id="f"></div></div>
+      <div class="opts" id="opts"></div>
+    </div>
+  </div>
   <script>
-    function speak(t){ try{ if(!('speechSynthesis' in window))return; const u=new SpeechSynthesisUtterance(String(t)); u.lang='it-IT'; speechSynthesis.cancel(); speechSynthesis.speak(u);}catch(_){}}
-    const PAIRS=[["rosso","red"],["giallo","yellow"],["verde","green"],["blu","blue"],["nero","black"],["bianco","white"],["arancione","orange"],["rosa","pink"],["viola","purple"],["grigio","gray"]];
-    let idx=0; const opts=document.getElementById('opts'),fill=document.getElementById('f');
-    function next(){ const p=PAIRS[idx%PAIRS.length]; const it=p[0], en=p[1]; const choices=[en];
-      while(choices.length<4){ const pick=PAIRS[Math.random()*PAIRS.length|0][1]; if(!choices.includes(pick)) choices.push(pick); }
-      choices.sort(()=>Math.random()-.5); opts.innerHTML='';
-      choices.forEach(ch=>{ const b=document.createElement('button'); b.className='btn'; b.textContent=ch; b.onclick=()=>pick(ch,en); opts.appendChild(b); });
-      document.getElementById('q').textContent='Ascolta e scegli il significato'; setTimeout(()=>speak(it),200);
+    function speak(t) {
+      try {
+        if (!('speechSynthesis' in window)) return;
+        const u = new SpeechSynthesisUtterance(String(t));
+        u.lang = 'it-IT';
+        u.rate = 0.9;
+        u.pitch = 1.1;
+        speechSynthesis.cancel();
+        speechSynthesis.speak(u);
+      } catch (_) {}
     }
-    function pick(sel,ans){ if(sel===ans){ idx++; fill.style.width=Math.min(100, idx/PAIRS.length*100)+'%'; next(); } else { document.getElementById('q').textContent='Riprova'; } }
+    
+    const PAIRS = [
+      ["rosso", "red", "🔴"],
+      ["giallo", "yellow", "🟡"],
+      ["verde", "green", "🟢"],
+      ["blu", "blue", "🔵"],
+      ["nero", "black", "⚫"],
+      ["bianco", "white", "⚪"],
+      ["arancione", "orange", "🟠"],
+      ["rosa", "pink", "🚀"],
+      ["viola", "purple", "🟣"],
+      ["grigio", "gray", "🧡"]
+    ];
+    
+    let idx = 0;
+    let score = 0;
+    let streak = 0;
+    const opts = document.getElementById('opts');
+    const fill = document.getElementById('f');
+    const qElement = document.getElementById('q');
+    
+    function next() {
+      const p = PAIRS[idx % PAIRS.length];
+      const it = p[0], en = p[1], emoji = p[2];
+      const choices = [en];
+      
+      while (choices.length < 4) {
+        const pick = PAIRS[Math.random() * PAIRS.length | 0][1];
+        if (!choices.includes(pick)) choices.push(pick);
+      }
+      
+      choices.sort(() => Math.random() - 0.5);
+      opts.innerHTML = '';
+      
+      choices.forEach((ch, i) => {
+        const b = document.createElement('button');
+        b.className = 'btn';
+        b.innerHTML = `<span>${ch}</span>`;
+        b.style.animationDelay = `${i * 0.1}s`;
+        b.onclick = () => pick(ch, en, b);
+        opts.appendChild(b);
+      });
+      
+      qElement.innerHTML = `${emoji} Ascolta: "<strong>${it}</strong>" <span class="speaker-icon" onclick="speak('${it}')">🔊</span>`;
+      setTimeout(() => speak(it), 500);
+    }
+    
+    function pick(sel, ans, button) {
+      const allButtons = opts.querySelectorAll('.btn');
+      allButtons.forEach(btn => btn.disabled = true);
+      
+      if (sel === ans) {
+        button.classList.add('correct');
+        idx++;
+        score++;
+        streak++;
+        
+        fill.style.width = Math.min(100, idx / PAIRS.length * 100) + '%';
+        
+        const messages = ["Eccellente! ✨", "Bravissimo! 🌟", "Perfetto! 🎯", "Fantastico! 🎉", "Magnifico! 🏆"];
+        qElement.innerHTML = `<span style="color: #11998e;">${messages[Math.floor(Math.random() * messages.length)]}</span>`;
+        
+        if (idx % PAIRS.length === 0) {
+          setTimeout(() => {
+            qElement.innerHTML = `🎊 Complimenti! Hai completato il ciclo! Score: ${score}/${idx} 🎊`;
+            setTimeout(next, 2000);
+          }, 1000);
+        } else {
+          setTimeout(next, 1500);
+        }
+      } else {
+        button.classList.add('incorrect');
+        streak = 0;
+        
+        const correctButton = Array.from(allButtons).find(btn => 
+          btn.querySelector('span').textContent === ans
+        );
+        if (correctButton) {
+          setTimeout(() => correctButton.classList.add('correct'), 300);
+        }
+        
+        qElement.innerHTML = `<span style="color: #ee0979;">Ops! La risposta era "${ans}" 🔄</span>`;
+        setTimeout(() => {
+          allButtons.forEach(btn => {
+            btn.classList.remove('correct', 'incorrect');
+            btn.disabled = false;
+          });
+          next();
+        }, 2500);
+      }
+    }
+    
+    // Add keyboard support
+    document.addEventListener('keydown', (e) => {
+      if (e.key >= '1' && e.key <= '4') {
+        const buttonIndex = parseInt(e.key) - 1;
+        const buttons = opts.querySelectorAll('.btn:not([disabled])');
+        if (buttons[buttonIndex]) {
+          buttons[buttonIndex].click();
+        }
+      }
+    });
+    
+    // Initialize
     next();
   </script>
 </body>

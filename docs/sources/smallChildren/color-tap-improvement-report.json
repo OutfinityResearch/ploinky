@@ -1,0 +1,68 @@
+{
+  "success": true,
+  "finalIssues": [
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 4.11 for button-14",
+      "details": {
+        "element": "button-14",
+        "background": "rgb(232, 247, 255)",
+        "foreground": "rgb(13, 110, 253)",
+        "contrastRatio": 4.110600651198492,
+        "text": "Say it"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 3.27 for button-16",
+      "details": {
+        "element": "button-16",
+        "background": "rgb(255, 77, 79)",
+        "foreground": "rgb(255, 255, 255)",
+        "contrastRatio": 3.267743233071127,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.40 for button-18",
+      "details": {
+        "element": "button-18",
+        "background": "rgb(255, 215, 0)",
+        "foreground": "rgb(255, 255, 255)",
+        "contrastRatio": 1.4026017808936917,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 3.14 for button-20",
+      "details": {
+        "element": "button-20",
+        "background": "rgb(255, 0, 255)",
+        "foreground": "rgb(255, 255, 255)",
+        "contrastRatio": 3.1362007168458783,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.60 for div-26",
+      "details": {
+        "element": "div-26",
+        "background": "rgba(0, 0, 0, 0.25)",
+        "foreground": "rgb(22, 50, 79)",
+        "contrastRatio": 1.603258110736903,
+        "text": "3"
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": "/home/salboaie/work/ploinky/docs/sources/smallChildren/color-tap.html",
+  "backupFile": "/home/salboaie/work/ploinky/docs/sources/smallChildren/color-tap.html.backup"
+}

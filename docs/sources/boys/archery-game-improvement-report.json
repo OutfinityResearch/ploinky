@@ -1,0 +1,11 @@
+{
+  "success": false,
+  "finalIssues": [
+    {
+      "type": "javascript_error",
+      "message": "Cannot access 'bow' before initialization",
+      "stack": "ReferenceError: Cannot access 'bow' before initialization\n    at resize (file:///home/salboaie/work/ploinky/docs/sources/boys/archery-game.html:22:242)\n    at <anonymous> (file:///home/salboaie/work/ploinky/docs/sources/boys/archery-game.html:23:62)"
+    }
+  ],
+  "improvementApplied": false
+}

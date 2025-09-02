@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "finalIssues": [
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.62 for body-0",
+      "details": {
+        "element": "body-0",
+        "background": "rgb(143, 211, 255)",
+        "foreground": "rgb(255, 255, 255)",
+        "contrastRatio": 1.6241758835765399,
+        "text": "⚽\n0\n👆\nDraw a line, then lift to kick\n🔊\n👟\n🔄"
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": "/home/salboaie/work/ploinky/docs/sources/smallChildren/goal-kick.html",
+  "backupFile": "/home/salboaie/work/ploinky/docs/sources/smallChildren/goal-kick.html.backup"
+}

@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "finalIssues": [
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 2.37 for div-19",
+      "details": {
+        "element": "div-19",
+        "background": "rgb(248, 250, 252)",
+        "foreground": "rgb(154, 166, 178)",
+        "contrastRatio": 2.369298804784938,
+        "text": "VS"
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": "/home/salboaie/work/ploinky/docs/sources/smallChildren/rock-paper-scissors.html",
+  "backupFile": "/home/salboaie/work/ploinky/docs/sources/smallChildren/rock-paper-scissors.html.backup"
+}

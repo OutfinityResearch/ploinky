@@ -34,7 +34,11 @@ class SourcesManager {
                     { id: 'allAges', type: 'category', url: '/sources/allAges/games.json', tag: '@allAges', removable: false, visible: true },
                     { id: 'girls', type: 'category', url: '/sources/girls/games.json', tag: 'girls', removable: false, visible: true },
                     { id: 'boys', type: 'category', url: '/sources/boys/games.json', tag: 'boys', removable: false, visible: true },
-                    { id: 'microStrategy', type: 'category', url: '/sources/microStrategy/games.json', tag: 'microStrategy', removable: false, visible: true }
+                    { id: 'microStrategy', type: 'category', url: '/sources/microStrategy/games.json', tag: 'microStrategy', removable: false, visible: true },
+                    { id: 'learnItalian', type: 'category', url: '/sources/learnItalian/games.json', tag: 'learnItalian', removable: false, visible: true },
+                    { id: 'learnSpanish', type: 'category', url: '/sources/learnSpanish/games.json', tag: 'learnSpanish', removable: false, visible: true },
+                    { id: 'learnEnglish', type: 'category', url: '/sources/learnEnglish/games.json', tag: 'learnEnglish', removable: false, visible: true },
+                    { id: 'addGame', type: 'special', url: '/sources/addGame/games.json', tag: 'addGame', removable: false, visible: true }
                 ];
             }
             if (savedSources && Array.isArray(savedSources) && savedSources.length > 0) {
@@ -95,7 +99,10 @@ class SourcesManager {
     async syncExternalSources() {
         const externalSources = await window.LocalStorage.get('externalPostSources') || [];
         const existingUrls = new Set(this.sources.map(s => s.url).filter(Boolean));
-        
+        const allowedUrls = new Set(externalSources.map(s => s && s.url).filter(Boolean));
+
+        let changed = false;
+        // Add any new external sources
         externalSources.forEach(ext => {
             if (ext && ext.url && !existingUrls.has(ext.url)) {
                 this.sources.push({
@@ -104,10 +111,29 @@ class SourcesManager {
                     tag: ext.tag || this.deriveTag(ext.url),
                     type: 'external',
                     removable: true,
-                    visible: false
+                    // New external sources should appear in the selector immediately
+                    visible: true
                 });
+                changed = true;
             }
         });
+
+        // Remove externals no longer present in storage
+        const before = this.sources.length;
+        this.sources = this.sources.filter(s => {
+            if (s.type !== 'external') return true;
+            if (!s.url) return false;
+            return allowedUrls.has(s.url);
+        });
+        if (this.sources.length !== before) changed = true;
+
+        // Persist visibility state so changes remain across sessions
+        if (changed) {
+            try {
+                await this.saveSources();
+                await this.saveVisibility();
+            } catch (_) {}
+        }
     }
 
     /**
@@ -116,6 +142,10 @@ class SourcesManager {
     async getAllSources() {
         if (!this.initialized) {
             await this.initialize();
+        } else {
+            // Keep externals in sync with any changes made from settings page
+            await this.syncExternalSources();
+            try { await this.saveSources(); } catch (_) {}
         }
         return [...this.sources];
     }

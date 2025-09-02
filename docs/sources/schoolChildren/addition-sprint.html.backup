@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Addition Sprint</title>
+  <style>
+    :root { --bg:#0b1020; --fg:#eef2ff; --accent:#22d3ee; }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
+    .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:16px}
+    .card{width:min(520px,92vw);background:#0f172a;border:1px solid #1f2a44;border-radius:16px;padding:16px;box-shadow:0 12px 30px rgba(0,0,0,.35)}
+    .big{font-size:44px;font-weight:800;letter-spacing:1px;text-align:center}
+    .opts{display:grid;grid-template-columns:repeat(2,min(180px,40vw));gap:12px;justify-content:center;margin-top:8px}
+    .btn{background:#12223a;color:#fff;border:none;border-radius:14px;padding:14px;font-weight:700;font-size:18px}
+    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:10}
+    .overlay .num{font-size:72px;font-weight:900}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="big" id="expr">2 + 3 = ?</div>
+      <div class="opts" id="opts"></div>
+    </div>
+  </div>
+  <div class="overlay" id="overlay"><div class="num" id="num">3</div></div>
+  <script>
+    function speak(t){ try{ if(!('speechSynthesis' in window))return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.speak(u);}catch(_){}}
+    const expr=document.getElementById('expr'); const opts=document.getElementById('opts'); const ov=document.getElementById('overlay'); const num=document.getElementById('num');
+    let a=0,b=0,ans=0;
+    function randint(n,m){ return Math.floor(Math.random()*(m-n+1))+n; }
+    function newExpr(){ a=randint(1,9); b=randint(1,9); const e=`${a}+${b}`; ans=eval(e); expr.textContent=`${a} + ${b} = ?`; speak(`${a} plus ${b}`); const set=new Set([ans]); const options=[ans]; while(options.length<4){ const v=ans+randint(-5,5); if(v>=0 && !set.has(v)){ set.add(v); options.push(v); } } options.sort(()=>Math.random()-0.5); opts.innerHTML=''; options.forEach(v=>{ const btn=document.createElement('button'); btn.className='btn'; btn.textContent=v; btn.onclick=()=>pick(v); opts.appendChild(btn); }); }
+    function pick(v){ if(v===ans){ speak('Correct'); countdown(()=>newExpr()); } else { speak('Try again'); } }
+    function countdown(cb){ ov.style.display='flex'; let k=3; num.textContent=k; const t=()=>{ k--; if(k<=0){ ov.style.display='none'; cb(); } else { num.textContent=k; setTimeout(t,600);} }; setTimeout(t,600); }
+    newExpr();
+  </script>
+</body>
+</html>
+

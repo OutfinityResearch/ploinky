@@ -1,5 +1,20 @@
 [
   {
+    "id": "microgame:microStrategy:2048-game",
+    "type": "microgame",
+    "title": "2048 Game",
+    "source": "/sources/microStrategy/2048-game.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #microStrategy",
+    "author": "CodeWithRandom",
+    "category": "Game",
+    "essence": "Slide tiles to merge matching numbers and create the 2048 tile. A simple but addictive puzzle game",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
     "id": "microgame:microStrategy:lights-out",
     "type": "microgame",
     "title": "Lights Out (3×3)",
@@ -8,27 +23,10 @@
     "feedName": "Ploynky #microStrategy",
     "author": "Ploynky",
     "category": "MicroGame",
-    "essence": "Toggle tiles to turn off all lights. Each tap flips neighbors — solve the 3×3 board in as few taps as possible.",
+    "essence": "Toggle tiles to turn off all lights. Each tap flips neighbors — solve the 3×3 board in as few taps as possible",
     "reactions": [
-      "Tiny board, real strategy.",
-      "Always solvable from a random start.",
-      "Quick puzzles for short breaks."
-    ]
-  },
-  {
-    "id": "microgame:microStrategy:tic-tac-toe",
-    "type": "microgame",
-    "title": "Tic-Tac-Toe (vs Random)",
-    "source": "/sources/microStrategy/tic-tac-toe.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #microStrategy",
-    "author": "Ploynky",
-    "category": "MicroGame",
-    "essence": "Play X vs a simple random AI. Win, lose, or draw — each game takes seconds.",
-    "reactions": [
-      "Great for kids learning turn-taking.",
-      "Fast, no menus.",
-      "Zero setup, instant fun."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -40,27 +38,25 @@
     "feedName": "Ploynky #microStrategy",
     "author": "CodeWithRandom",
     "category": "Game",
-    "essence": "The classic logic puzzle. Fill the 9x9 grid so that each column, each row, and each of the nine 3x3 subgrids contain all of the digits from 1 to 9.",
+    "essence": "The classic logic puzzle. Fill the 9x9 grid so that each column, each row, and each of the nine 3x3 subgrids contain all of the digits from 1 to 9",
     "reactions": [
-      "A great brain workout.",
-      "Simple interface.",
-      "Includes a solver."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
-    "id": "microgame:microStrategy:2048-game",
+    "id": "microgame:microStrategy:tic-tac-toe",
     "type": "microgame",
-    "title": "2048 Game",
-    "source": "/sources/microStrategy/2048-game.html",
+    "title": "Tic-Tac-Toe (vs Random)",
+    "source": "/sources/microStrategy/tic-tac-toe.html",
     "generatedAt": "2025-09-01T00:00:00.000Z",
     "feedName": "Ploynky #microStrategy",
-    "author": "CodeWithRandom",
-    "category": "Game",
-    "essence": "Slide tiles to merge matching numbers and create the 2048 tile. A simple but addictive puzzle game.",
+    "author": "Ploynky",
+    "category": "MicroGame",
+    "essence": "Play X vs a simple random AI. Win, lose, or draw — each game takes seconds",
     "reactions": [
-      "Easy to learn, hard to master.",
-      "A great game for strategic thinking.",
-      "Highly addictive."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   }
 ]

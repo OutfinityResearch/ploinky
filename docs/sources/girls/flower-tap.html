@@ -5,31 +5,514 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <title>Flower Tap</title>
   <style>
-    :root { --bg:#0f1320; --fg:#fff; }
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
-    canvas{width:100%;height:100%;display:block;touch-action:none}
-    .hud{position:fixed;top:10px;left:12px;right:12px;display:flex;justify-content:space-between;gap:8px;}
-    .pill{background:#1e2a45;color:#fff;border:1px solid #2c3e66;border-radius:999px;padding:6px 10px;font-weight:700}
+    :root{
+      --bg-top:#a8ddff;
+      --bg-mid:#cfeeff;
+      --bg-bottom:#f6fbff;
+      --hud-bg:rgba(255,255,255,0.75);
+      --hud-border:rgba(255,255,255,0.9);
+      --hud-text:#084b8a;
+      --accent:#ffd54f;
+      --shadow:rgba(0,0,0,0.15);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{
+      background: linear-gradient(180deg,var(--bg-top) 0%,var(--bg-mid) 45%,var(--bg-bottom) 100%);
+      font-family: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, sans-serif;
+      color: var(--hud-text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      touch-action: none;
+      -webkit-user-select:none;
+      user-select:none;
+    }
+    canvas{
+      width:100vw;height:100vh;display:block;touch-action:none;
+    }
+    .hud{
+      position:fixed;top:0;left:0;right:0;
+      display:flex;align-items:center;justify-content:space-between;
+      gap:10px;padding: max(10px, env(safe-area-inset-top)) 12px 12px 12px;
+      z-index:2;
+      pointer-events:none; /* allow taps through except on buttons */
+    }
+    .left, .right{
+      display:flex;align-items:center;gap:10px;pointer-events:auto;
+    }
+    .pill, .icon-btn{
+      display:inline-flex;align-items:center;gap:8px;
+      background: var(--hud-bg);
+      border: 2px solid var(--hud-border);
+      color: var(--hud-text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-weight:800;
+      font-size: clamp(16px, 3.2vw, 22px);
+      box-shadow: 0 6px 18px var(--shadow);
+      backdrop-filter: blur(6px);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .icon{
+      font-size: 1.25em; line-height:1;
+      filter: drop-shadow(0 1px 0 rgba(255,255,255,0.6));
+    }
+    .score{
+      min-width: 120px; justify-content:center;
+    }
+    .icon-btn{
+      width:52px;height:52px;justify-content:center;padding:0;
+    }
+    .icon-btn:active, .pill:active{
+      transform: scale(0.98);
+    }
+    .tip{
+      position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));
+      transform:translateX(-50%);
+      background: var(--hud-bg);
+      border:2px solid var(--hud-border);
+      color: var(--hud-text);
+      border-radius: 16px;
+      padding: 10px 14px;
+      font-weight:700;
+      font-size: clamp(14px, 3vw, 18px);
+      box-shadow: 0 6px 18px var(--shadow);
+      backdrop-filter: blur(6px);
+      animation: float 3s ease-in-out infinite;
+      z-index:2;
+      pointer-events:none;
+    }
+    @keyframes float{
+      0%,100%{ transform: translate(-50%,0) }
+      50%{ transform: translate(-50%,-6px) }
+    }
+    .hidden{opacity:0; visibility:hidden; transition: opacity .4s ease, visibility .4s ease}
+    .visible{opacity:1; visibility:visible; transition: opacity .4s ease}
+    .a11y{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden;}
   </style>
-  </head>
+</head>
 <body>
-  <div class="hud"><div class="pill">Score: <span id="s">0</span></div><div class="pill" id="restart">Restart</div></div>
-  <canvas id="c"></canvas>
+  <div class="hud" aria-hidden="false">
+    <div class="left">
+      <div class="pill score" aria-live="polite" aria-label="Score">
+        <span class="icon" aria-hidden="true">⭐</span>
+        <span id="score">0</span>
+      </div>
+    </div>
+    <div class="right">
+      <button class="icon-btn" id="soundBtn" aria-label="Sound on/off" title="Sound">
+        <span class="icon" id="soundIcon">🔊</span>
+      </button>
+      <button class="icon-btn" id="restart" aria-label="Restart" title="Restart">
+        <span class="icon">🔄</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="tip" class="tip visible">Tap the flowers! 🌼</div>
+
+  <canvas id="game" aria-label="Flower Tap Game" role="img"></canvas>
+
+  <div class="a11y" id="ariaStatus" aria-live="polite"></div>
+
   <script>
-    const c=document.getElementById('c'),x=c.getContext('2d');let W,H,flowers=[],score=0,last=0;function R(){W=c.width=c.clientWidth;H=c.height=c.clientHeight}addEventListener('resize',R,{passive:true});R();
-    const col=['#ff79c6','#ffd166','#8be9fd','#c6ffdd','#a78bfa'];
-    function rand(a,b){return Math.random()*(b-a)+a}
-    function spawn(){const r=rand(14,30);return {x:rand(r,W-r),y:H+r,r,vy:-rand(20,60)/60,c:col[(Math.random()*col.length)|0]}}
-    function addFlower(){ flowers.push(spawn()); }
-    for(let i=0;i<8;i++)addFlower();
-    function petal(cx,cy,r,a){x.beginPath();x.moveTo(cx,cy);x.quadraticCurveTo(cx+r*Math.cos(a-0.6),cy+r*Math.sin(a-0.6),cx+r*0.8*Math.cos(a),cy+r*0.8*Math.sin(a));x.quadraticCurveTo(cx+r*Math.cos(a+0.6),cy+r*Math.sin(a+0.6),cx,cy);x.fill()}
-    function drawFlower(f){x.save();x.translate(f.x,f.y);x.fillStyle=f.c;for(let i=0;i<6;i++){petal(0,0,f.r, i*Math.PI/3)}x.fillStyle='#ffe082';x.beginPath();x.arc(0,0,f.r*0.35,0,Math.PI*2);x.fill();x.restore()}
-    function loop(t){const dt=Math.min(32,t-last);last=t;update(dt);x.clearRect(0,0,W,H);for(const f of flowers)drawFlower(f);requestAnimationFrame(loop)}
-    function update(dt){for(const f of flowers){f.y+=f.vy*dt}for(let i=0;i<flowers.length;i++){if(flowers[i].y<-flowers[i].r){flowers[i]=spawn();score=Math.max(0,score-1);document.getElementById('s').textContent=score}}}
-    function tap(xp,yp){for(let i=0;i<flowers.length;i++){const f=flowers[i],dx=xp-f.x,dy=yp-f.y;if(dx*dx+dy*dy<=(f.r*0.9)*(f.r*0.9)){flowers[i]=spawn();score++;document.getElementById('s').textContent=score;return}}}
-    c.addEventListener('pointerdown',e=>{const r=c.getBoundingClientRect();tap(e.clientX-r.left,e.clientY-r.top)})
-    document.getElementById('restart').onclick=()=>{score=0;document.getElementById('s').textContent=score;flowers=[];for(let i=0;i<8;i++)spawn()}
+  (() => {
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    let W = 0, H = 0, dpr = 1;
+
+    // Game state
+    const flowers = [];
+    const particles = [];
+    const clouds = [];
+    const MAX_FLOWERS = 10;
+    let score = 0;
+    let lastTime = 0;
+    let tSec = 0;
+    let tipVisible = true;
+
+    // UI elements
+    const scoreEl = document.getElementById('score');
+    const ariaStatus = document.getElementById('ariaStatus');
+    const tipEl = document.getElementById('tip');
+    const restartBtn = document.getElementById('restart');
+    const soundBtn = document.getElementById('soundBtn');
+    const soundIcon = document.getElementById('soundIcon');
+
+    // Colors
+    const PETAL_COLORS = ['#ff9ecb','#ffd166','#8ee5ff','#c0ffd9','#c7b5ff','#ffcf9f','#f4a6ff'];
+    const CENTER_COLOR = '#ffe082';
+
+    // Audio (pop) via WebAudio with tiny synth
+    let audioCtx = null;
+    let soundOn = true;
+    function initAudio() {
+      if (!audioCtx) {
+        try {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch(e) { audioCtx = null; }
+      }
+    }
+    function playPop() {
+      if (!soundOn) return;
+      if (!audioCtx) return;
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const t = audioCtx.currentTime;
+      // A quick "pop": noise burst + sine blip
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, t);
+      osc.frequency.exponentialRampToValueAtTime(220, t + 0.10);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.2, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.15);
+    }
+
+    // Utils
+    const rand = (a,b)=>Math.random()*(b-a)+a;
+    const clamp = (v, a, b)=>Math.max(a, Math.min(b, v));
+
+    // Resize / DPR
+    function resize() {
+      dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      const csw = Math.floor(canvas.clientWidth);
+      const csh = Math.floor(canvas.clientHeight);
+      canvas.width  = Math.max(1, Math.floor(csw * dpr));
+      canvas.height = Math.max(1, Math.floor(csh * dpr));
+      W = csw; H = csh;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Adjust cloud count with size
+      setupClouds();
+    }
+    addEventListener('resize', resize, { passive:true });
+    resize();
+
+    // Clouds
+    function makeCloud() {
+      const scale = rand(0.8, 1.6);
+      return {
+        x: rand(-W*0.1, W*1.1),
+        y: rand(H*0.04, H*0.22),
+        s: scale,
+        spd: rand(6, 14) * (0.5 + (2 - scale)), // slower for bigger
+        o: rand(0.22, 0.38)
+      };
+    }
+    function setupClouds() {
+      const target = Math.round(clamp(Math.floor(W/200)+3, 4, 9));
+      while (clouds.length < target) clouds.push(makeCloud());
+      while (clouds.length > target) clouds.pop();
+    }
+
+    function drawCloud(c) {
+      ctx.save();
+      ctx.globalAlpha = c.o;
+      ctx.fillStyle = '#ffffff';
+      ctx.translate(c.x, c.y);
+      ctx.scale(c.s, c.s);
+      // draw a puffy cloud using circles
+      const blobs = [
+        {x:0,y:0,r:18},
+        {x:18,y:-6,r:16},
+        {x:36,y:0,r:20},
+        {x:20,y:8,r:14},
+        {x:-12,y:4,r:14}
+      ];
+      for (const b of blobs) {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Flowers
+    function spawnFlower() {
+      const r = rand(20, 36);
+      const baseX = rand(r, W - r);
+      const f = {
+        baseX,
+        x: baseX,
+        y: H + r + rand(0, H*0.25),
+        r,
+        vy: -rand(22, 48), // px/s
+        c: PETAL_COLORS[(Math.random()*PETAL_COLORS.length)|0],
+        swayAmp: rand(r*0.12, r*0.22),
+        swaySpd: rand(0.8, 1.6),
+        swayPhase: rand(0, Math.PI*2),
+        rot: rand(0, Math.PI*2),
+        rotSpd: rand(-0.6, 0.6)
+      };
+      return f;
+    }
+
+    function ensureFlowers() {
+      while (flowers.length < MAX_FLOWERS) flowers.push(spawnFlower());
+    }
+
+    // Particles
+    function burst(x,y,color,r) {
+      const n = 10 + ((r|0) % 6);
+      for (let i=0;i<n;i++) {
+        const a = rand(0, Math.PI*2);
+        const sp = rand(40, 140);
+        particles.push({
+          x, y,
+          vx: Math.cos(a)*sp,
+          vy: Math.sin(a)*sp,
+          life: 0.5,
+          age: 0,
+          c: Math.random()<0.2 ? CENTER_COLOR : color,
+          size: rand(2, 5)
+        });
+      }
+    }
+
+    // Drawing helpers
+    function petalPath(r, a) {
+      // Build a single petal as curves from center
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      const px1 = r*Math.cos(a-0.6), py1 = r*Math.sin(a-0.6);
+      const px2 = r*0.8*Math.cos(a), py2 = r*0.8*Math.sin(a);
+      const px3 = r*Math.cos(a+0.6), py3 = r*Math.sin(a+0.6);
+      ctx.quadraticCurveTo(px1, py1, px2, py2);
+      ctx.quadraticCurveTo(px3, py3, 0, 0);
+      ctx.closePath();
+    }
+
+    function drawFlower(f) {
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.rot);
+      // subtle drop shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.12)';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
+      // petals
+      ctx.fillStyle = f.c;
+      for (let i=0;i<6;i++){
+        petalPath(f.r, i*Math.PI/3);
+        ctx.fill();
+      }
+      // center
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = CENTER_COLOR;
+      ctx.beginPath();
+      ctx.arc(0, 0, f.r*0.32, 0, Math.PI*2);
+      ctx.fill();
+      // smiley face for kid-friendliness
+      ctx.fillStyle = 'rgba(120,80,20,0.8)';
+      const R = f.r*0.22;
+      ctx.beginPath(); ctx.arc(-R*0.55, -R*0.2, R*0.18, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(R*0.55, -R*0.2, R*0.18, 0, Math.PI*2); ctx.fill();
+      ctx.lineWidth = Math.max(1.5, f.r*0.05);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(0, R*0.1, R*0.55, 0.15*Math.PI, 0.85*Math.PI);
+      ctx.strokeStyle = 'rgba(120,80,20,0.8)';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawParticles(dt) {
+      for (let i=particles.length-1;i>=0;i--) {
+        const p = particles[i];
+        p.age += dt;
+        if (p.age >= p.life) { particles.splice(i,1); continue; }
+        const k = 1 - (p.age/p.life);
+        // integrate
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 180 * dt; // gravity
+        ctx.globalAlpha = k;
+        ctx.fillStyle = p.c;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size*(0.8 + 0.4*(1-k)), 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Game loop
+    function update(dt) {
+      tSec += dt;
+
+      // clouds
+      for (const c of clouds) {
+        c.x -= c.spd * dt;
+        if (c.x < -W*0.2) {
+          c.x = W + rand(10, 40);
+          c.y = rand(H*0.04, H*0.22);
+          c.s = rand(0.8, 1.6);
+          c.spd = rand(6, 14) * (0.5 + (2 - c.s));
+          c.o = rand(0.22, 0.38);
+        }
+      }
+
+      // flowers
+      for (const f of flowers) {
+        f.y += f.vy * dt;
+        f.rot += f.rotSpd * dt * 0.25;
+        f.x = f.baseX + Math.sin(tSec * f.swaySpd + f.swayPhase) * f.swayAmp;
+      }
+      // recycle flowers reaching sky top
+      for (let i=0;i<flowers.length;i++){
+        const f = flowers[i];
+        if (f.y < -f.r - 10) {
+          flowers[i] = spawnFlower();
+        }
+      }
+      ensureFlowers();
+    }
+
+    function render(dt) {
+      // clear sky bg gradient already in CSS; but canvas is opaque to optimize fills
+      ctx.fillStyle = '#dff3ff';
+      ctx.fillRect(0,0,W,H);
+
+      // draw sun
+      ctx.save();
+      const sunX = W - 70, sunY = 70, sunR = 38;
+      const grd = ctx.createRadialGradient(sunX, sunY, 4, sunX, sunY, sunR);
+      grd.addColorStop(0, '#fff9c4');
+      grd.addColorStop(1, '#ffe082');
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, sunR, 0, Math.PI*2);
+      ctx.fill();
+      // sun rays
+      ctx.strokeStyle = 'rgba(255,224,130,0.8)';
+      ctx.lineWidth = 3;
+      for (let i=0;i<12;i++){
+        const a = i*(Math.PI*2/12);
+        ctx.beginPath();
+        ctx.moveTo(sunX + Math.cos(a)*sunR*1.1, sunY + Math.sin(a)*sunR*1.1);
+        ctx.lineTo(sunX + Math.cos(a)*sunR*1.6, sunY + Math.sin(a)*sunR*1.6);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // clouds
+      for (const c of clouds) drawCloud(c);
+
+      // soft ground
+      ctx.save();
+      const groundH = Math.min(120, H*0.18);
+      const gy = H - groundH;
+      const ggrd = ctx.createLinearGradient(0, gy, 0, H);
+      ggrd.addColorStop(0, '#c8f7c5');
+      ggrd.addColorStop(1, '#a9e7a4');
+      ctx.fillStyle = ggrd;
+      ctx.fillRect(0, gy, W, groundH);
+      // tiny flowers hints
+      ctx.fillStyle = '#8bd48a';
+      for (let i=0;i<14;i++){
+        const x = (i/14)*W + rand(-10,10);
+        const y = gy + rand(8, groundH-6);
+        ctx.fillRect(x, y, 2, 6);
+      }
+      ctx.restore();
+
+      // flowers
+      for (const f of flowers) drawFlower(f);
+
+      // particles
+      drawParticles(dt);
+    }
+
+    function loop(ts) {
+      if (!lastTime) lastTime = ts;
+      let dt = (ts - lastTime) / 1000;
+      dt = Math.min(0.033, Math.max(0.001, dt));
+      lastTime = ts;
+      update(dt);
+      render(dt);
+      requestAnimationFrame(loop);
+    }
+
+    // Interaction
+    function screenToCanvas(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: (e.clientX - rect.left), y: (e.clientY - rect.top) };
+    }
+
+    function popAt(px, py) {
+      // From topmost flower under finger
+      for (let i=flowers.length-1;i>=0;i--){
+        const f = flowers[i];
+        const dx = px - f.x, dy = py - f.y;
+        // Easier tapping: slightly larger hit radius
+        const rr = (f.r * 1.05);
+        if (dx*dx + dy*dy <= rr*rr) {
+          burst(f.x, f.y, f.c, f.r);
+          flowers[i] = spawnFlower();
+          score++;
+          scoreEl.textContent = score;
+          ariaStatus.textContent = `Score ${score}`;
+          tipHide();
+          playPop();
+          if ('vibrate' in navigator) { try { navigator.vibrate(10); } catch(_){} }
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function tipHide() {
+      if (tipVisible) {
+        tipVisible = false;
+        tipEl.classList.remove('visible');
+        tipEl.classList.add('hidden');
+      }
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      initAudio();
+      const p = screenToCanvas(e);
+      popAt(p.x, p.y);
+    }, { passive: true });
+
+    // Multi-touch friendly
+    canvas.addEventListener('touchstart', (e) => {
+      initAudio();
+      const rect = canvas.getBoundingClientRect();
+      for (let i=0;i<e.touches.length;i++){
+        const t = e.touches[i];
+        popAt(t.clientX - rect.left, t.clientY - rect.top);
+      }
+    }, { passive: true });
+
+    // Buttons
+    restartBtn.addEventListener('click', () => {
+      score = 0;
+      scoreEl.textContent = score;
+      ariaStatus.textContent = 'Game restarted';
+      flowers.length = 0;
+      particles.length = 0;
+      ensureFlowers();
+      tipVisible = true;
+      tipEl.classList.remove('hidden');
+      tipEl.classList.add('visible');
+      if ('vibrate' in navigator) { try { navigator.vibrate(20); } catch(_){} }
+    });
+
+    soundBtn.addEventListener('click', () => {
+      initAudio();
+      soundOn = !soundOn;
+      soundIcon.textContent = soundOn ? '🔊' : '🔇';
+      if ('vibrate' in navigator) { try { navigator.vibrate(8); } catch(_){} }
+    });
+
+    // Init
+    setupClouds();
+    ensureFlowers();
     requestAnimationFrame(loop);
+  })();
   </script>
 </body>
 </html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Numere Românești 1-10 - Learn Romanian Numbers</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      min-height: 100vh;
+      font-family: 'Rubik', sans-serif;
+      background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 25%, #fd79a8 50%, #a29bfe 75%, #74b9ff 100%);
+      background-size: 400% 400%;
+      animation: colorWave 20s ease infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    @keyframes colorWave {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    
+    .floating-numbers {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    
+    .floating-num {
+      position: absolute;
+      font-size: 60px;
+      font-weight: 800;
+      opacity: 0.1;
+      animation: floatUp 15s linear infinite;
+    }
+    
+    @keyframes floatUp {
+      from {
+        transform: translateY(100vh) rotate(0deg);
+        opacity: 0;
+      }
+      10% {
+        opacity: 0.1;
+      }
+      90% {
+        opacity: 0.1;
+      }
+      to {
+        transform: translateY(-100vh) rotate(360deg);
+        opacity: 0;
+      }
+    }
+    
+    .game-container {
+      max-width: 700px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(20px);
+      border-radius: 40px;
+      padding: 45px;
+      box-shadow: 0 40px 80px rgba(0, 0, 0, 0.2);
+      position: relative;
+      z-index: 1;
+    }
+    
+    .title {
+      text-align: center;
+      margin-bottom: 35px;
+    }
+    
+    .title h1 {
+      font-size: 42px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fd79a8, #a29bfe, #74b9ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .subtitle {
+      color: #666;
+      font-size: 18px;
+      font-weight: 500;
+    }
+    
+    .number-display {
+      text-align: center;
+      margin: 35px 0;
+      padding: 40px;
+      background: linear-gradient(135deg, rgba(253, 121, 168, 0.1), rgba(162, 155, 254, 0.1));
+      border-radius: 30px;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .number-display:hover {
+      transform: scale(1.02);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    
+    .visual-numbers {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 25px;
+      min-height: 80px;
+      align-items: center;
+    }
+    
+    .dot {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #fd79a8, #a29bfe);
+      box-shadow: 0 4px 12px rgba(253, 121, 168, 0.3);
+      animation: popIn 0.3s ease;
+    }
+    
+    @keyframes popIn {
+      from {
+        transform: scale(0);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    
+    .number-text {
+      font-size: 72px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fd79a8, #a29bfe, #74b9ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 15px;
+    }
+    
+    .number-word {
+      font-size: 36px;
+      font-weight: 700;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    
+    .pronunciation {
+      color: #888;
+      font-size: 20px;
+      font-style: italic;
+      margin-bottom: 20px;
+    }
+    
+    .play-sound {
+      background: linear-gradient(135deg, #fd79a8, #a29bfe);
+      color: white;
+      border: none;
+      padding: 14px 30px;
+      border-radius: 50px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 6px 20px rgba(253, 121, 168, 0.4);
+    }
+    
+    .play-sound:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(253, 121, 168, 0.5);
+    }
+    
+    .play-sound:active {
+      transform: translateY(0);
+    }
+    
+    .options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 35px;
+    }
+    
+    .option-btn {
+      background: white;
+      border: 3px solid transparent;
+      padding: 20px;
+      border-radius: 20px;
+      font-size: 20px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .option-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+      border-color: #a29bfe;
+    }
+    
+    .option-btn.correct {
+      background: linear-gradient(135deg, #00b894, #00cec9);
+      color: white;
+      animation: correctBounce 0.6s ease;
+    }
+    
+    .option-btn.wrong {
+      background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+      color: white;
+      animation: wrongShake 0.5s ease;
+    }
+    
+    @keyframes correctBounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    @keyframes wrongShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+    
+    .progress-container {
+      margin-top: 35px;
+    }
+    
+    .progress {
+      height: 12px;
+      background: rgba(0,0,0,0.08);
+      border-radius: 50px;
+      overflow: hidden;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #fd79a8, #a29bfe, #74b9ff);
+      border-radius: 50px;
+      width: 0%;
+      transition: width 0.8s ease;
+      box-shadow: 0 2px 10px rgba(253, 121, 168, 0.4);
+    }
+    
+    .score-display {
+      text-align: center;
+      margin-top: 25px;
+    }
+    
+    .score-text {
+      font-size: 22px;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .stars {
+      font-size: 32px;
+      margin-top: 10px;
+    }
+    
+    .hint {
+      text-align: center;
+      margin-top: 15px;
+      padding: 10px;
+      background: rgba(253, 121, 168, 0.1);
+      border-radius: 15px;
+      color: #666;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="floating-numbers">
+    <div class="floating-num" style="left: 10%; animation-delay: 0s; color: #fd79a8;">1</div>
+    <div class="floating-num" style="left: 20%; animation-delay: 3s; color: #a29bfe;">2</div>
+    <div class="floating-num" style="left: 30%; animation-delay: 6s; color: #74b9ff;">3</div>
+    <div class="floating-num" style="left: 40%; animation-delay: 9s; color: #fdcb6e;">4</div>
+    <div class="floating-num" style="left: 50%; animation-delay: 12s; color: #fd79a8;">5</div>
+    <div class="floating-num" style="left: 60%; animation-delay: 2s; color: #a29bfe;">6</div>
+    <div class="floating-num" style="left: 70%; animation-delay: 5s; color: #74b9ff;">7</div>
+    <div class="floating-num" style="left: 80%; animation-delay: 8s; color: #fdcb6e;">8</div>
+    <div class="floating-num" style="left: 90%; animation-delay: 11s; color: #fd79a8;">9</div>
+    <div class="floating-num" style="left: 15%; animation-delay: 14s; color: #a29bfe;">10</div>
+  </div>
+  
+  <div class="game-container">
+    <div class="title">
+      <h1>🔢 Numere Românești 🔢</h1>
+      <div class="subtitle">Învață numerele de la 1 la 10!</div>
+    </div>
+    
+    <div class="number-display" onclick="playSound()">
+      <div class="visual-numbers" id="visualNumbers"></div>
+      <div class="number-text" id="numberText">5</div>
+      <div class="number-word" id="numberWord">Cinci</div>
+      <div class="pronunciation" id="pronunciation">[chinch]</div>
+      <button class="play-sound" onclick="playSound(event)">🔊 Ascultă Pronunția</button>
+    </div>
+    
+    <div class="hint" id="hint">💡 Numără punctele pentru a ghici numărul!</div>
+    
+    <div class="options" id="options">
+      <button class="option-btn" onclick="checkAnswer(this)">Five</button>
+      <button class="option-btn" onclick="checkAnswer(this)">Three</button>
+      <button class="option-btn" onclick="checkAnswer(this)">Seven</button>
+      <button class="option-btn" onclick="checkAnswer(this)">Two</button>
+    </div>
+    
+    <div class="progress-container">
+      <div class="progress">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+    
+    <div class="score-display">
+      <div class="score-text">Scor: <span id="score">0</span> / <span id="total">0</span></div>
+      <div class="stars" id="stars">⭐⭐⭐⭐⭐</div>
+    </div>
+  </div>
+  
+  <script>
+    const numbers = [
+      { num: 1, ro: 'Unu', en: 'One', sound: 'oo-noo' },
+      { num: 2, ro: 'Doi', en: 'Two', sound: 'doy' },
+      { num: 3, ro: 'Trei', en: 'Three', sound: 'tray' },
+      { num: 4, ro: 'Patru', en: 'Four', sound: 'pah-troo' },
+      { num: 5, ro: 'Cinci', en: 'Five', sound: 'chinch' },
+      { num: 6, ro: 'Șase', en: 'Six', sound: 'shah-seh' },
+      { num: 7, ro: 'Șapte', en: 'Seven', sound: 'shahp-teh' },
+      { num: 8, ro: 'Opt', en: 'Eight', sound: 'opt' },
+      { num: 9, ro: 'Nouă', en: 'Nine', sound: 'no-wah' },
+      { num: 10, ro: 'Zece', en: 'Ten', sound: 'zeh-cheh' }
+    ];
+    
+    let currentNumber = null;
+    let score = 0;
+    let total = 0;
+    let round = 0;
+    
+    function playSound(event) {
+      if (event) event.stopPropagation();
+      if (!currentNumber) return;
+      
+      const utterance = new SpeechSynthesisUtterance(currentNumber.ro);
+      utterance.lang = 'ro-RO';
+      utterance.rate = 0.8;
+      utterance.pitch = 1.0;
+      
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utterance);
+      
+      // Animate dots
+      const dots = document.querySelectorAll('.dot');
+      dots.forEach((dot, index) => {
+        setTimeout(() => {
+          dot.style.animation = 'none';
+          setTimeout(() => {
+            dot.style.animation = 'popIn 0.3s ease';
+          }, 10);
+        }, index * 50);
+      });
+    }
+    
+    function createVisualNumbers(num) {
+      const container = document.getElementById('visualNumbers');
+      container.innerHTML = '';
+      
+      for (let i = 0; i < num; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        dot.style.animationDelay = `${i * 0.05}s`;
+        container.appendChild(dot);
+      }
+    }
+    
+    function getRandomOptions(correct, count = 4) {
+      const options = [correct];
+      const available = numbers.filter(n => n.num !== correct.num);
+      
+      while (options.length < count) {
+        const random = available[Math.floor(Math.random() * available.length)];
+        if (!options.some(o => o.num === random.num)) {
+          options.push(random);
+        }
+      }
+      
+      return options.sort(() => Math.random() - 0.5);
+    }
+    
+    function loadNewNumber() {
+      round++;
+      currentNumber = numbers[round % numbers.length];
+      
+      createVisualNumbers(currentNumber.num);
+      document.getElementById('numberText').textContent = currentNumber.num;
+      document.getElementById('numberWord').textContent = currentNumber.ro;
+      document.getElementById('pronunciation').textContent = `[${currentNumber.sound}]`;
+      
+      const options = getRandomOptions(currentNumber);
+      const optionsContainer = document.getElementById('options');
+      optionsContainer.innerHTML = '';
+      
+      options.forEach((option, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.textContent = option.en;
+        btn.onclick = function() { checkAnswer(this, option.num === currentNumber.num); };
+        btn.style.animationDelay = `${index * 0.1}s`;
+        optionsContainer.appendChild(btn);
+      });
+      
+      // Update hint
+      const hints = [
+        '💡 Numără punctele pentru a ghici numărul!',
+        '🎯 Ascultă cu atenție pronunția!',
+        '✨ Fiecare punct reprezintă o unitate!',
+        '🌟 Apasă pe număr pentru a auzi din nou!'
+      ];
+      document.getElementById('hint').textContent = hints[Math.floor(Math.random() * hints.length)];
+      
+      // Auto-play sound
+      setTimeout(playSound, 500);
+    }
+    
+    function checkAnswer(button, isCorrect) {
+      const buttons = document.querySelectorAll('.option-btn');
+      buttons.forEach(btn => btn.disabled = true);
+      
+      total++;
+      
+      if (isCorrect) {
+        score++;
+        button.classList.add('correct');
+        
+        // Success effect
+        createVisualNumbers(currentNumber.num);
+        
+        const messages = ['Excelent! 🎉', 'Bravo! ⭐', 'Perfect! 🏆', 'Super! 👏', 'Minunat! 🌟'];
+        document.getElementById('hint').textContent = messages[Math.floor(Math.random() * messages.length)];
+      } else {
+        button.classList.add('wrong');
+        
+        // Show correct answer
+        buttons.forEach(btn => {
+          if (btn.textContent === currentNumber.en) {
+            btn.classList.add('correct');
+          }
+        });
+        
+        document.getElementById('hint').textContent = `Numărul era ${currentNumber.num} - "${currentNumber.en}" 🔄`;
+      }
+      
+      // Update score
+      document.getElementById('score').textContent = score;
+      document.getElementById('total').textContent = total;
+      
+      // Update progress
+      const progress = (round / 10) * 100;
+      document.getElementById('progressBar').style.width = `${Math.min(progress, 100)}%`;
+      
+      // Update stars
+      const accuracy = total > 0 ? (score / total) * 100 : 100;
+      let stars = '⭐⭐⭐⭐⭐';
+      if (accuracy < 90) stars = '⭐⭐⭐⭐☆';
+      if (accuracy < 70) stars = '⭐⭐⭐☆☆';
+      if (accuracy < 50) stars = '⭐⭐☆☆☆';
+      if (accuracy < 30) stars = '⭐☆☆☆☆';
+      document.getElementById('stars').textContent = stars;
+      
+      // Load next number
+      setTimeout(() => {
+        buttons.forEach(btn => {
+          btn.classList.remove('correct', 'wrong');
+          btn.disabled = false;
+        });
+        loadNewNumber();
+      }, 2500);
+    }
+    
+    // Initialize
+    loadNewNumber();
+    
+    // Keyboard support
+    document.addEventListener('keydown', (e) => {
+      if (e.key >= '1' && e.key <= '4') {
+        const buttons = document.querySelectorAll('.option-btn:not([disabled])');
+        const index = parseInt(e.key) - 1;
+        if (buttons[index]) {
+          buttons[index].click();
+        }
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        playSound();
+      }
+    });
+  </script>
+</body>
+</html>

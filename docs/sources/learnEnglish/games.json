@@ -1,0 +1,82 @@
+[
+  {
+    "id": "microgame:learnEnglish:animal-match",
+    "type": "microgame",
+    "title": "Animals 🐾",
+    "tag": "learnEnglish",
+    "source": "/sources/learnEnglish/animal-match.html",
+    "generatedAt": "2025-09-02T00:00:00.000Z",
+    "feedName": "Ploynky #learnEnglish",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Hear the animal, tap the matching emoji. Voices say the name",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnEnglish:color-match",
+    "type": "microgame",
+    "title": "Colors 🎨",
+    "tag": "learnEnglish",
+    "source": "/sources/learnEnglish/color-match.html",
+    "generatedAt": "2025-09-02T00:00:00.000Z",
+    "feedName": "Ploynky #learnEnglish",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Tap the color you hear. Big circles, TTS speaks the color",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnEnglish:fruit-pick",
+    "type": "microgame",
+    "title": "Fruits 🍎",
+    "tag": "learnEnglish",
+    "source": "/sources/learnEnglish/fruit-pick.html",
+    "generatedAt": "2025-09-02T00:00:00.000Z",
+    "feedName": "Ploynky #learnEnglish",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Voice says a fruit. Tap the correct big emoji",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnEnglish:number-dots",
+    "type": "microgame",
+    "title": "Numbers 1–3 🔢",
+    "tag": "learnEnglish",
+    "source": "/sources/learnEnglish/number-dots.html",
+    "generatedAt": "2025-09-02T00:00:00.000Z",
+    "feedName": "Ploynky #learnEnglish",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Hear a number, pick the card with that many dots",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnEnglish:shape-match",
+    "type": "microgame",
+    "title": "Shapes ⭕⬜▲",
+    "tag": "learnEnglish",
+    "source": "/sources/learnEnglish/shape-match.html",
+    "generatedAt": "2025-09-02T00:00:00.000Z",
+    "feedName": "Ploynky #learnEnglish",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Voice says a shape. Tap the correct big shape",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  }
+]

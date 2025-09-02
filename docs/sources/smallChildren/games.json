@@ -1,18 +1,17 @@
 [
   {
-    "id": "microgame:smallChildren:tap-balloons",
+    "id": "game:smallChildren:goal-kick",
     "type": "microgame",
-    "title": "Pop the Balloons",
-    "source": "/sources/smallChildren/tap-balloons.html",
+    "title": "Goal Kick",
+    "source": "/sources/smallChildren/goal-kick.html",
     "generatedAt": "2025-09-01T00:00:00.000Z",
     "feedName": "Ploynky #smallChildren",
-    "author": "MicroGames",
-    "category": "MicroGame",
-    "essence": "Balloons float up the screen — tap them to pop and score! Missed balloons reduce your score. Bright colors and gentle motion, perfect for first touch interactions on mobile.",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Ball at center, moving target band on the goal. Tap to shoot; TTS feedback for Goal or Miss; auto-restart with countdown",
     "reactions": [
-      "Gentle rhythm: Constant motion with instant visual feedback after each tap — no menus or reading required.",
-      "Hand–eye coordination: Tapping targets improves precision and attention while keeping frustration very low.",
-      "Snackable: Rounds can be started and resumed quickly, fully optimized for touch on phones."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -24,11 +23,10 @@
     "feedName": "Ploynky #smallChildren",
     "author": "MicroGames",
     "category": "MicroGame",
-    "essence": "A color name appears; tap the circle that matches it. Each choice updates your progress and starts a new, simple round with three big options for easy touch.",
+    "essence": "A color name appears; tap the circle that matches it. Each choice updates your progress and starts a new, simple round with three big options for easy touch",
     "reactions": [
-      "Learn by play: Recognize basic colors, with friendly feedback on each choice.",
-      "Clean UI: Three large, spaced circles — no clutter and no distractions.",
-      "Short and repeatable: New rounds take seconds, ideal for quick sessions on mobile."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -40,59 +38,25 @@
     "feedName": "Ploynky #smallChildren",
     "author": "Ploynky",
     "category": "Game",
-    "essence": "Tap simple objects (apple, star, car, house, tree, sun) and Ploynky will say their names. A gentle game for first words on mobile.",
+    "essence": "Tap simple objects (apple, star, car, house, tree, sun) and Ploynky will say their names. A gentle game for first words on mobile",
     "reactions": [
-      "Clear visuals and big tap targets.",
-      "Instant TTS feedback for vocabulary building.",
-      "Great for toddlers exploring on touch screens."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
-    "id": "game:smallChildren:goal-kick",
+    "id": "microgame:smallChildren:tap-balloons",
     "type": "microgame",
-    "title": "Goal Kick",
-    "source": "/sources/smallChildren/goal-kick.html",
+    "title": "Pop the Balloons",
+    "source": "/sources/smallChildren/tap-balloons.html",
     "generatedAt": "2025-09-01T00:00:00.000Z",
     "feedName": "Ploynky #smallChildren",
-    "author": "Ploynky",
-    "category": "Game",
-    "essence": "Ball at center, moving target band on the goal. Tap to shoot; TTS feedback for Goal or Miss; auto-restart with countdown.",
+    "author": "MicroGames",
+    "category": "MicroGame",
+    "essence": "Balloons float up the screen — tap them to pop and score! Missed balloons reduce your score. Bright colors and gentle motion, perfect for first touch interactions on mobile",
     "reactions": [
-      "Simple timing challenge for kids.",
-      "Short rounds with instant feedback.",
-      "No manual restart needed."
-    ]
-  },
-  {
-    "id": "game:smallChildren:tic-tac-toe-simple",
-    "type": "microgame",
-    "title": "Tic‑Tac‑Toe",
-    "source": "/sources/smallChildren/tic-tac-toe-simple.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #smallChildren",
-    "author": "Ploynky",
-    "category": "Game",
-    "essence": "Classic 3×3 tic‑tac‑toe with a friendly opponent. Simple visuals for kids.",
-    "reactions": [
-      "Tap to place your X.",
-      "Very simple AI for kids.",
-      "Fast rounds, instant reset."
-    ]
-  },
-  {
-    "id": "microgame:smallChildren:whack-a-mole",
-    "type": "microgame",
-    "title": "Whack-a-Mole",
-    "source": "/sources/smallChildren/whack-a-mole.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #smallChildren",
-    "author": "CodeWithRandom",
-    "category": "Game",
-    "essence": "Whack the moles as they pop up from their holes. A fun game to test your reflexes.",
-    "reactions": [
-      "Classic arcade fun.",
-      "Simple and satisfying.",
-      "Improves reaction time."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -104,11 +68,40 @@
     "feedName": "Ploynky #smallChildren",
     "author": "CodeWithRandom",
     "category": "Game",
-    "essence": "The classic hand game. Choose rock, paper, or scissors and see if you can beat the computer.",
+    "essence": "The classic hand game. Choose rock, paper, or scissors and see if you can beat the computer",
     "reactions": [
-      "Simple and fun.",
-      "A game of chance and psychology.",
-      "Endlessly replayable."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "game:smallChildren:tic-tac-toe-simple",
+    "type": "microgame",
+    "title": "Tic‑Tac‑Toe",
+    "source": "/sources/smallChildren/tic-tac-toe-simple.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #smallChildren",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Classic 3×3 tic‑tac‑toe with a friendly opponent. Simple visuals for kids",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:smallChildren:whack-a-mole",
+    "type": "microgame",
+    "title": "Whack-a-Mole",
+    "source": "/sources/smallChildren/whack-a-mole.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #smallChildren",
+    "author": "CodeWithRandom",
+    "category": "Game",
+    "essence": "Whack the moles as they pop up from their holes. A fun game to test your reflexes",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   }
 ]

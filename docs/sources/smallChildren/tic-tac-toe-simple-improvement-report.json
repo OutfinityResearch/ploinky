@@ -1,0 +1,80 @@
+{
+  "success": true,
+  "finalIssues": [
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.05 for div-2",
+      "details": {
+        "element": "div-2",
+        "background": "rgba(255, 255, 255, 0.04)",
+        "foreground": "rgb(248, 250, 252)",
+        "contrastRatio": 1.0462758042084466,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.05 for div-3",
+      "details": {
+        "element": "div-3",
+        "background": "rgba(255, 255, 255, 0.04)",
+        "foreground": "rgb(248, 250, 252)",
+        "contrastRatio": 1.0462758042084466,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.05 for div-4",
+      "details": {
+        "element": "div-4",
+        "background": "rgba(255, 255, 255, 0.04)",
+        "foreground": "rgb(248, 250, 252)",
+        "contrastRatio": 1.0462758042084466,
+        "text": ""
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.43 for div-13",
+      "details": {
+        "element": "div-13",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(255, 211, 77)",
+        "contrastRatio": 1.4308227229659864,
+        "text": "🌞\n0"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.69 for div-16",
+      "details": {
+        "element": "div-16",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(167, 201, 255)",
+        "contrastRatio": 1.687864687612675,
+        "text": "🌙\n0"
+      }
+    },
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.05 for span-20",
+      "details": {
+        "element": "span-20",
+        "background": "rgba(255, 255, 255, 0.06)",
+        "foreground": "rgb(248, 250, 252)",
+        "contrastRatio": 1.0462758042084466,
+        "text": "🌞\nYour turn"
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": "/home/salboaie/work/ploinky/docs/sources/smallChildren/tic-tac-toe-simple.html",
+  "backupFile": "/home/salboaie/work/ploinky/docs/sources/smallChildren/tic-tac-toe-simple.html.backup"
+}

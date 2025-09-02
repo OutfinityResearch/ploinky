@@ -1,90 +1,550 @@
-<!-- Inspired by: https://www.codewithrandom.com/2024/02/25/html-game-code/ -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Whack-a-Mole</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f0f0f0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
-            text-align: center;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(3, 100px);
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .hole {
-            width: 100px;
-            height: 100px;
-            background-color: #888;
-            border-radius: 50%;
-            position: relative;
-        }
-        .mole {
-            width: 80px;
-            height: 80px;
-            background-color: brown;
-            border-radius: 50%;
-            position: absolute;
-            top: 20px;
-            left: 10px;
-            transition: top 0.2s;
-        }
-        .mole.up {
-            top: -20px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Whack-a-Mole - Friendly Tap Game</title>
+  <style>
+    :root{
+      --bg-sky1:#cfeffd;
+      --bg-sky2:#a8ddff;
+      --ground1:#95d587;
+      --ground2:#74c46d;
+      --text:#1b2a2f;
+      --accent:#ffb703;
+      --accent2:#ff7b7b;
+      --panel:#ffffffcc;
+      --shadow:0 8px 20px rgba(0,0,0,.15);
+      --hole: clamp(80px, 24vw, 140px);
+      --mole: calc(var(--hole) * .7);
+      --radius: 18px;
+      --gap: clamp(10px, 3vw, 20px);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color:var(--text);
+      background: linear-gradient(180deg,var(--bg-sky1),var(--bg-sky2));
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    /* Soft clouds */
+    .clouds{
+      position:fixed; inset:0; pointer-events:none; overflow:hidden;
+    }
+    .cloud{
+      position:absolute; width: 40vmin; height: 18vmin; background: #fff;
+      border-radius: 50vmin; filter: drop-shadow(0 6px 10px rgba(0,0,0,.08));
+      opacity:.75;
+      animation: float linear infinite;
+    }
+    .cloud::before,.cloud::after{
+      content:""; position:absolute; background:#fff; border-radius:50%;
+    }
+    .cloud::before{ width: 50%; height: 70%; left:-12%; top:10%;}
+    .cloud::after{ width: 60%; height: 90%; right:-15%; top:0;}
+    .cloud.c1{ top:8vmin; left:-30vmin; animation-duration: 65s;}
+    .cloud.c2{ top:18vmin; left:-50vmin; width: 36vmin; height:16vmin; opacity:.7; animation-duration: 80s;}
+    .cloud.c3{ top:6vmin; left:-70vmin; width:44vmin; height:20vmin; opacity:.6; animation-duration: 95s;}
+    @keyframes float{
+      from{ transform: translateX(0) }
+      to{ transform: translateX(120vmin) }
+    }
+    @media (prefers-reduced-motion: reduce){
+      .cloud{animation:none}
+    }
+
+    /* Ground strip */
+    .ground{
+      position:fixed; left:0; right:0; bottom:0; height: 35vmin; max-height: 40%;
+      background: linear-gradient(180deg, var(--ground1), var(--ground2));
+      box-shadow: inset 0 12px 30px rgba(0,0,0,.08);
+      border-top-left-radius: 24vmin;
+      border-top-right-radius: 24vmin;
+    }
+
+    .wrap{
+      position:relative;
+      width:min(92vw, 560px);
+      margin:auto;
+      z-index:2;
+    }
+
+    .topbar{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px;
+      background: var(--panel);
+      padding: clamp(10px, 3vw, 16px);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+    }
+    .title{
+      display:flex; align-items:center; gap:10px;
+      font-weight:900; letter-spacing:.3px;
+      font-size: clamp(18px, 4.4vw, 26px);
+    }
+    .title .emoji{ font-size: 1.2em }
+    .scoreboard{
+      display:flex; align-items:center; gap:10px;
+    }
+    .pill{
+      display:flex; align-items:center; gap:8px;
+      padding: 6px 10px; border-radius: 999px; background:#fff; box-shadow: inset 0 -2px 0 rgba(0,0,0,.06);
+      font-weight:700;
+      font-size: clamp(14px, 3.8vw, 18px);
+      min-width: 90px; justify-content:center;
+    }
+    .controls{
+      display:flex; gap:8px;
+    }
+    .btn{
+      border:0; border-radius:12px; background:#fff;
+      box-shadow: var(--shadow);
+      font-size: clamp(18px, 5.5vw, 22px);
+      padding: 10px 12px;
+      cursor:pointer;
+      display:inline-flex; align-items:center; justify-content:center;
+      transition: transform .06s ease;
+      user-select:none;
+    }
+    .btn:active{ transform: scale(.96) }
+    .btn[aria-pressed="true"]{ background:#ffe8a6 }
+    .btn .label{ margin-left:8px; font-weight:700; font-size:.9em }
+
+    .grid{
+      margin-top: clamp(12px, 3.5vw, 18px);
+      display:grid;
+      grid-template-columns: repeat(3, var(--hole));
+      gap: var(--gap);
+      justify-content:center;
+      padding-bottom: 2vmin;
+    }
+
+    .hole{
+      position:relative;
+      width: var(--hole);
+      height: var(--hole);
+      border-radius:50%;
+      background: radial-gradient(circle at 50% 45%, #6d5236 0 25%, #5a442c 26% 60%, #4a3925 61% 100%);
+      box-shadow: inset 0 6px 12px rgba(0,0,0,.35), 0 8px 16px rgba(0,0,0,.15);
+      overflow:hidden;
+      isolation:isolate;
+    }
+    /* Dirt rim */
+    .hole::after{
+      content:"";
+      position:absolute; left:50%; top:50%;
+      transform: translate(-50%,-50%);
+      width: 88%; height: 46%;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,.35), rgba(0,0,0,0) 70%);
+      border-radius: 50%;
+      z-index:1;
+      pointer-events:none;
+    }
+
+    .mole{
+      position:absolute;
+      left:50%;
+      bottom:-68%;
+      transform: translateX(-50%) translateY(0);
+      width: var(--mole);
+      height: var(--mole);
+      border:none;
+      border-radius: 50%;
+      outline: none;
+      background: radial-gradient(circle at 50% 35%, #ffe7c6 0 55%, #f5c08f 56% 100%);
+      box-shadow: 0 6px 0 #b57548, 0 12px 18px rgba(0,0,0,.2);
+      z-index:2;
+      display:flex; align-items:center; justify-content:center;
+      font-size: calc(var(--mole) * .6);
+      line-height:1;
+      cursor:pointer;
+      will-change: transform, bottom;
+      transition: transform .28s cubic-bezier(.2,.9,.25,1.2), box-shadow .2s ease;
+      user-select:none;
+    }
+    .mole .face{ transform: translateY(-6%); }
+    .mole.up{
+      bottom:-6%;
+      transform: translateX(-50%) translateY(0);
+    }
+    @media (prefers-reduced-motion: reduce){
+      .mole{ transition:none }
+    }
+
+    /* Tap feedback */
+    .mole.hit{
+      transform: translateX(-50%) translateY(6%) scale(.9) rotate(-8deg);
+      box-shadow: 0 2px 0 #b57548, 0 6px 12px rgba(0,0,0,.2);
+    }
+
+    /* Floating +1 badge */
+    .pop{
+      position:absolute; left:50%; top:20%;
+      transform: translateX(-50%);
+      background:#fff; color:#2a2a2a; border-radius:999px; padding:4px 8px;
+      font-weight:900; font-size: clamp(12px, 3.5vw, 16px);
+      box-shadow: var(--shadow);
+      animation: rise .7s ease-out forwards;
+      z-index:3;
+      pointer-events:none;
+    }
+    @keyframes rise{
+      from{ opacity:0; transform: translate(-50%, 10px) scale(.8) }
+      30%{ opacity:1 }
+      to{ opacity:0; transform: translate(-50%, -30px) scale(1) }
+    }
+
+    /* Sparkles */
+    .sparkle{
+      position:absolute; font-size: clamp(14px, 4vw, 18px); pointer-events:none; z-index:3;
+      animation: burst .6s ease-out forwards;
+    }
+    @keyframes burst{
+      from{ opacity:1; transform: translate(0,0) scale(1) rotate(0) }
+      to{ opacity:0; transform: translate(var(--dx), var(--dy)) scale(1.2) rotate(35deg) }
+    }
+
+    /* Overlay for first start */
+    .overlay{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+      background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.6));
+      z-index:5;
+      padding: 24px;
+    }
+    .card{
+      width:min(92vw, 520px);
+      background:#fff;
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+      text-align:center;
+    }
+    .card h2{
+      margin:10px 0 6px; font-size: clamp(20px, 5.5vw, 28px)
+    }
+    .card p{ margin:6px 0 14px; font-size: clamp(14px, 4vw, 18px) }
+    .big-btn{
+      display:inline-flex; align-items:center; gap:10px;
+      background:#ffcf66; border:none; border-radius:14px;
+      padding: 12px 18px; font-weight:900; font-size: clamp(16px, 5vw, 20px);
+      box-shadow: var(--shadow); cursor:pointer;
+    }
+    .big-btn:active{ transform: scale(.98) }
+
+    /* Footer hint */
+    .hint{ margin-top: 8px; font-size: clamp(12px, 3.5vw, 14px); opacity:.8 }
+
+    /* Accessibility focus */
+    .mole:focus-visible, .btn:focus-visible, .big-btn:focus-visible{
+      outline: 3px solid #3a86ff; outline-offset: 2px;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Whack-a-Mole</h1>
-        <p>Score: <span id="score">0</span></p>
-        <div class="grid" id="grid"></div>
+  <div class="clouds" aria-hidden="true">
+    <div class="cloud c1"></div>
+    <div class="cloud c2"></div>
+    <div class="cloud c3"></div>
+  </div>
+  <div class="ground" aria-hidden="true"></div>
+
+  <div class="wrap">
+    <div class="topbar">
+      <div class="title" aria-live="polite">
+        <span class="emoji" role="img" aria-label="Mole">🐹</span>
+        <span>Tap the Mole!</span>
+      </div>
+      <div class="scoreboard">
+        <div class="pill" id="scorePill" aria-label="Score">
+          ⭐ Score: <span id="score">0</span>
+        </div>
+        <div class="pill" id="bestPill" aria-label="Best">
+          🏆 Best: <span id="best">0</span>
+        </div>
+        <div class="controls">
+          <button id="playBtn" class="btn" aria-pressed="false" title="Play or Pause">
+            <span class="icon" id="playIcon">▶️</span>
+          </button>
+          <button id="muteBtn" class="btn" aria-pressed="false" title="Sound on/off">
+            <span class="icon" id="muteIcon">🔊</span>
+          </button>
+        </div>
+      </div>
     </div>
-    <script>
-        const grid = document.getElementById('grid');
-        const scoreText = document.getElementById('score');
-        let score = 0;
 
-        for (let i = 0; i < 9; i++) {
-            const hole = document.createElement('div');
-            hole.classList.add('hole');
-            const mole = document.createElement('div');
-            mole.classList.add('mole');
-            hole.appendChild(mole);
-            grid.appendChild(hole);
+    <div class="grid" id="grid" aria-label="Mole holes" role="group"></div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <div style="font-size:64px" aria-hidden="true">🐹✨</div>
+      <h2>Tap the popping friend!</h2>
+      <p>When the cute face pops up, tap it to get a star point.</p>
+      <button class="big-btn" id="startGame">
+        ▶️ Start
+      </button>
+      <div class="hint">Tip: Works with fingers or mouse. Have fun!</div>
+    </div>
+  </div>
+
+  <script>
+    // Elements
+    const grid = document.getElementById('grid');
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const playBtn = document.getElementById('playBtn');
+    const playIcon = document.getElementById('playIcon');
+    const muteBtn = document.getElementById('muteBtn');
+    const muteIcon = document.getElementById('muteIcon');
+    const overlay = document.getElementById('overlay');
+    const startGameBtn = document.getElementById('startGame');
+
+    // State
+    let running = false;
+    let score = 0;
+    let best = Number(localStorage.getItem('mole_best') || 0);
+    bestEl.textContent = best;
+    let muted = JSON.parse(localStorage.getItem('mole_muted') || 'false');
+    updateMuteUI();
+
+    const HOLES = 9;
+    let currentIndex = -1;
+    let currentMole = null;
+    let hideTO = null;
+    let nextTO = null;
+
+    // Cute faces to cycle
+    const FACES = ['🐹','🐰','🐭','🐱','🐵'];
+
+    // Build grid
+    for (let i = 0; i < HOLES; i++) {
+      const hole = document.createElement('div');
+      hole.className = 'hole';
+      hole.setAttribute('role','presentation');
+
+      const mole = document.createElement('button');
+      mole.className = 'mole';
+      mole.type = 'button';
+      mole.setAttribute('aria-label','Mole');
+      mole.setAttribute('tabindex','0');
+
+      const face = document.createElement('div');
+      face.className = 'face';
+      face.textContent = '🐹';
+      mole.appendChild(face);
+
+      hole.appendChild(mole);
+      grid.appendChild(hole);
+    }
+
+    // Input: tap/click using pointer events
+    grid.addEventListener('pointerdown', onTap, {passive:true});
+    grid.addEventListener('click', onTap, {passive:true}); // fallback
+
+    function onTap(e){
+      const target = e.target.closest('.mole');
+      if (!target) return;
+      if (target !== currentMole) return;
+      if (!target.classList.contains('up')) return;
+      if (target.dataset.hit === '1') return; // already hit this pop
+
+      target.dataset.hit = '1';
+      target.classList.add('hit');
+      addScore(1);
+      haptic(40);
+      beep(660, 0.06);
+
+      // Floating +1
+      showPlusOne(target);
+
+      // Sparkles
+      sparkleBurst(target);
+
+      // Hide mole quickly after hit
+      clearTimeout(hideTO);
+      hideTO = setTimeout(hideMole, 220);
+    }
+
+    function showPlusOne(target){
+      const badge = document.createElement('div');
+      badge.className = 'pop';
+      badge.textContent = '+1';
+      target.parentElement.appendChild(badge);
+      setTimeout(() => badge.remove(), 700);
+    }
+
+    function sparkleBurst(target){
+      const hole = target.parentElement;
+      const rect = hole.getBoundingClientRect();
+      const cx = rect.width/2, cy = rect.height*0.35;
+      const emojis = ['✨','⭐','🌟'];
+      for (let i=0;i<6;i++){
+        const s = document.createElement('div');
+        s.className = 'sparkle';
+        s.textContent = emojis[i%emojis.length];
+        const angle = (i/6) * Math.PI*2;
+        const dx = Math.cos(angle) * (rect.width*0.25);
+        const dy = Math.sin(angle) * (rect.height*0.18);
+        s.style.left = (cx) + 'px';
+        s.style.top = (cy) + 'px';
+        s.style.setProperty('--dx', dx+'px');
+        s.style.setProperty('--dy', dy+'px');
+        hole.appendChild(s);
+        setTimeout(()=>s.remove(), 650);
+      }
+    }
+
+    // Game loop
+    function start(){
+      if (running) return;
+      running = true;
+      playBtn.setAttribute('aria-pressed','true');
+      playIcon.textContent = '⏸️';
+      overlay.style.display = 'none';
+      scheduleNext(400);
+    }
+    function pause(){
+      running = false;
+      playBtn.setAttribute('aria-pressed','false');
+      playIcon.textContent = '▶️';
+      clearTimeout(nextTO);
+      clearTimeout(hideTO);
+      hideMole(true);
+    }
+    function togglePlay(){
+      running ? pause() : start();
+    }
+    playBtn.addEventListener('click', togglePlay);
+    startGameBtn.addEventListener('click', start);
+
+    function scheduleNext(delay){
+      clearTimeout(nextTO);
+      nextTO = setTimeout(showMole, delay ?? rand(700, 1100));
+    }
+
+    function rand(min,max){ return Math.floor(Math.random()*(max-min+1))+min }
+
+    function pickIndex(){
+      let idx;
+      do { idx = Math.floor(Math.random()*HOLES) } while (idx === currentIndex);
+      currentIndex = idx;
+      return idx;
+    }
+
+    function showMole(){
+      if (!running) return;
+      const holes = grid.querySelectorAll('.hole');
+      const idx = pickIndex();
+      const hole = holes[idx];
+      const mole = hole.querySelector('.mole');
+      currentMole = mole;
+
+      mole.classList.remove('hit');
+      mole.dataset.hit = '0';
+      mole.querySelector('.face').textContent = FACES[rand(0, FACES.length-1)];
+      mole.classList.add('up');
+
+      // Time the mole stays up, a bit generous for small kids
+      const upTime = rand(900, 1300);
+      clearTimeout(hideTO);
+      hideTO = setTimeout(hideMole, upTime);
+    }
+
+    function hideMole(immediate=false){
+      if (currentMole){
+        if (immediate){
+          currentMole.classList.remove('up','hit');
+        } else {
+          currentMole.classList.remove('up','hit');
         }
+      }
+      currentMole = null;
+      if (running) scheduleNext(rand(650, 1100));
+    }
 
-        function randomMole() {
-            const moles = document.querySelectorAll('.mole');
-            const randomIndex = Math.floor(Math.random() * moles.length);
-            const mole = moles[randomIndex];
-            mole.classList.add('up');
-            setTimeout(() => {
-                mole.classList.remove('up');
-            }, 1000);
+    function addScore(n){
+      score += n;
+      scoreEl.textContent = score;
+      if (score > best){
+        best = score;
+        bestEl.textContent = best;
+        localStorage.setItem('mole_best', String(best));
+      }
+    }
+
+    // Audio feedback with WebAudio
+    let audioCtx = null;
+    function ensureAudio(){
+      if (!audioCtx){
+        try {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+          audioCtx = null;
         }
+      }
+    }
+    function beep(freq=660, dur=0.07){
+      if (muted) return;
+      ensureAudio();
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.08, t + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+    }
 
-        setInterval(randomMole, 1500);
+    function haptic(ms=30){
+      if (navigator.vibrate) navigator.vibrate(ms);
+    }
 
-        grid.addEventListener('click', (e) => {
-            if (e.target.classList.contains('mole') && e.target.classList.contains('up')) {
-                score++;
-                scoreText.textContent = score;
-                e.target.classList.remove('up');
-            }
-        });
-    </script>
+    function updateMuteUI(){
+      muteBtn.setAttribute('aria-pressed', String(muted));
+      muteIcon.textContent = muted ? '🔇' : '🔊';
+    }
+    muteBtn.addEventListener('click', ()=>{
+      muted = !muted;
+      localStorage.setItem('mole_muted', JSON.stringify(muted));
+      updateMuteUI();
+      haptic(10);
+    });
+
+    // Reset score when starting a fresh run via overlay
+    startGameBtn.addEventListener('click', ()=>{
+      score = 0;
+      scoreEl.textContent = '0';
+    });
+
+    // Pause when tab hidden, resume when visible (gentle for kids)
+    document.addEventListener('visibilitychange', ()=>{
+      if (document.hidden) {
+        if (running) pause();
+      }
+    });
+
+    // Keyboard accessibility: Space/Enter hits focused mole
+    grid.addEventListener('keydown', (e)=>{
+      if ((e.key === ' ' || e.key === 'Enter') && document.activeElement.classList.contains('mole')){
+        onTap({target: document.activeElement});
+        e.preventDefault();
+      }
+    });
+
+    // Start paused with overlay visible; user can also press play button
+  </script>
 </body>
 </html>

@@ -7,6 +7,8 @@
     { "id": "boys", "type": "category", "url": "/sources/boys/games.json", "tag": "boys", "removable": false, "visible": true },
     { "id": "microStrategy", "type": "category", "url": "/sources/microStrategy/games.json", "tag": "microStrategy", "removable": false, "visible": true },
     { "id": "learnItalian", "type": "category", "url": "/sources/learnItalian/games.json", "tag": "learnItalian", "removable": false, "visible": true },
-    { "id": "learnSpanish", "type": "category", "url": "/sources/learnSpanish/games.json", "tag": "learnSpanish", "removable": false, "visible": true }
+    { "id": "learnSpanish", "type": "category", "url": "/sources/learnSpanish/games.json", "tag": "learnSpanish", "removable": false, "visible": true },
+    { "id": "learnEnglish", "type": "category", "url": "/sources/learnEnglish/games.json", "tag": "learnEnglish", "removable": false, "visible": true },
+    { "id": "addGame", "type": "special", "url": "/sources/addGame/games.json", "tag": "addGame", "removable": false, "visible": true }
   ]
 }

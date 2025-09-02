@@ -235,8 +235,11 @@
         let particles = [];
         
         function resize() {
-            W = canvas.width = window.innerWidth;
-            H = canvas.height = window.innerHeight;
+            const DPR = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            W = canvas.width = Math.max(1, Math.floor(rect.width * DPR));
+            H = canvas.height = Math.max(1, Math.floor(rect.height * DPR));
+            ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
             reset();
         }
         

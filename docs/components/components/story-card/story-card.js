@@ -48,11 +48,9 @@ export class StoryCard {
         }
         
         const isMicro = this.post?.type === 'microgame';
-        // Build text slides
-        this.createMainContinuationSlidesIfNeeded();
+        // Build text slides: only essence on first slide + reactions from config
+        // Do not auto-split essence or add extra 'About' slide
         this.createReactionSlides();
-        // Add About slide for games
-        if (isMicro) this.createAboutSlide();
         // Inline play button in header
         if (isMicro) {
             try {
@@ -333,25 +331,8 @@ export class StoryCard {
                 if (time) time.style.display = 'none';
             }
         } else {
-            // Populate main slide essence for other cards
+            // Populate main slide essence for other cards (no reactions mirrored here)
             if (essenceElement) essenceElement.textContent = this.post.essence;
-            // Also show reaction bullets quickly on first slide for a quick skim
-            try {
-                if (Array.isArray(this.post.reactions) && this.post.reactions.length > 0) {
-                    const body = this.element.querySelector('.card-slide[data-id="main"] .card-body');
-                    if (body) {
-                        const ul = document.createElement('ul');
-                        ul.className = 'reaction-bullets';
-                        const top = this.post.reactions.slice(0, 3);
-                        top.forEach(txt => {
-                            const li = document.createElement('li');
-                            li.innerHTML = `<span class="dot"></span><span>${txt}</span>`;
-                            ul.appendChild(li);
-                        });
-                        body.appendChild(ul);
-                    }
-                }
-            } catch (_) { }
         }
 
         // Compute and set subtitle (hashtag [+ time])
@@ -407,7 +388,10 @@ export class StoryCard {
                 anybody: '🕹️',
                 girls: '🌸',
                 boys: '🚀',
-                microstrategy: '♟️'
+                microstrategy: '♟️',
+                learnenglish: '🗣️',
+                learnspanish: '🗣️',
+                learnitalian: '🗣️'
             };
             if (map[tag]) return map[tag];
             // Fallback heuristics by title
@@ -492,98 +476,7 @@ export class StoryCard {
         });
     }
 
-    createMainContinuationSlidesIfNeeded() {
-        try {
-            const full = (this.post.essence || '').trim();
-            const chunkSize = 500;
-            if (!full || full.length <= chunkSize) return;
-
-            const chunks = [];
-            let pos = 0;
-            const len = full.length;
-            while (pos < len) {
-                if (pos + chunkSize >= len) {
-                    chunks.push(full.slice(pos).trim());
-                    break;
-                }
-                const forwardStart = Math.min(len - 1, pos + chunkSize - 20);
-                const forwardEnd = Math.min(len, pos + chunkSize + 300);
-                const forwardSlice = full.slice(forwardStart, forwardEnd);
-                const punctMatch = forwardSlice.match(/[\.\!\?]/);
-                let splitIdx = -1;
-                if (punctMatch && typeof punctMatch.index === 'number') {
-                    splitIdx = forwardStart + punctMatch.index;
-                } else {
-                    // Try a backward search near chunkSize
-                    const backStart = Math.max(pos + 200, pos);
-                    const backEnd = Math.min(len, pos + chunkSize + 1);
-                    const backSlice = full.slice(backStart, backEnd);
-                    const lastDot = backSlice.lastIndexOf('.')
-                    const lastExc = backSlice.lastIndexOf('!')
-                    const lastQue = backSlice.lastIndexOf('?')
-                    const lastPunct = Math.max(lastDot, lastExc, lastQue);
-                    if (lastPunct !== -1) splitIdx = backStart + lastPunct;
-                }
-                if (splitIdx === -1) {
-                    // Fallback to nearest space to avoid mid-word cuts
-                    const spaceBack = full.lastIndexOf(' ', pos + chunkSize);
-                    if (spaceBack !== -1 && spaceBack > pos + 200) {
-                        splitIdx = spaceBack;
-                    } else {
-                        splitIdx = pos + chunkSize;
-                    }
-                }
-                const piece = full.slice(pos, splitIdx + 1).trim();
-                chunks.push(piece);
-                pos = splitIdx + 1;
-            }
-
-            // Avoid tiny tail chunk
-            if (chunks.length > 1 && chunks[chunks.length - 1].length < 60) {
-                chunks[chunks.length - 2] += ' ' + chunks.pop();
-            }
-
-            // Update main slide with first chunk
-            const mainEssenceEl = this.element.querySelector('.card-slide[data-id="main"] .card-essence');
-            if (mainEssenceEl) mainEssenceEl.textContent = chunks[0] || '';
-
-            // Build continuation slides for remaining chunks
-            if (chunks.length <= 1) return;
-
-            const cleanTitle = this.sanitizeTitle(this.post.title);
-            const timeText = this.formatTimeAgo(this.post.publishedAt || this.post.generatedAt);
-            const container = this.element.querySelector('.card-container');
-            const mainSlide = this.element.querySelector('.card-slide[data-id="main"]');
-            if (!container || !mainSlide) return;
-
-            let insertAfter = mainSlide.nextSibling;
-            for (let i = 1; i < chunks.length; i++) {
-                const contSlide = document.createElement('div');
-                contSlide.className = 'card-slide';
-                contSlide.setAttribute('data-id', `main-continued-${i}`);
-                contSlide.innerHTML = `
-                    <div class=\"card-gradient-overlay\"></div>
-                    <div class=\"card-content\">\n\
-                        <div class=\"card-header\">\n\
-                            <h2 class=\"card-title\">${cleanTitle}</h2>\n\
-                            <div class=\"card-badge\">Details</div>\n\
-                            <div class=\"card-time\">${timeText}</div>\n\
-                        </div>\n\
-                        <div class=\"card-body\">\n\
-                            <p class=\"card-essence\">${chunks[i]}</p>\n\
-                        </div>\n\
-                    </div>`;
-                if (insertAfter) {
-                    container.insertBefore(contSlide, insertAfter);
-                } else {
-                    container.appendChild(contSlide);
-                }
-                insertAfter = contSlide.nextSibling;
-            }
-        } catch (_) {
-            // ignore
-        }
-    }
+    createMainContinuationSlidesIfNeeded() { /* disabled: essence stays only on the first slide */ }
 
 
     createAboutSlide() {
@@ -724,11 +617,7 @@ export class StoryCard {
 
         if (Math.abs(diff) > swipeThreshold) {
             if (diff > 0) {
-                // Swipe left - next slide
-                // If swiping from first slide on essence area, enable autoplay from now on
-                if (this.currentSlide === 0 && this.isStartOnEssence()) {
-                    this.autoplayEnabled = true;
-                }
+                // Swipe left - next slide (autoplay disabled by design)
                 this.nextSlide();
             } else {
                 // Swipe right - previous slide or request next post if on first slide
@@ -1247,7 +1136,27 @@ export class StoryCard {
             manageSourcesBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                await window.webSkel.changeToDynamicPage('external-sources-settings-page', 'app');
+                try {
+                    if (window.webSkel && typeof window.webSkel.showModal === 'function') {
+                        // Prefer the dedicated Manage Sources modal for visibility + add/remove
+                        const res = await window.webSkel.showModal('manage-sources-modal', {}, true);
+                        // If changes were saved, refresh selector and content
+                        const saved = res && (res.data?.saved || res.saved);
+                        if (saved) {
+                            try { await window.SourcesManager.reload(); } catch (_) {}
+                            await this.setupDataSourcesSelector();
+                            // Also refresh feed to reflect new selection options
+                            const refreshButton = document.querySelector('#refresh-button');
+                            if (refreshButton) refreshButton.click();
+                        }
+                    } else {
+                        // Fallback: navigate to the settings page
+                        await window.webSkel.changeToDynamicPage('external-sources-settings-page', 'app');
+                    }
+                } catch (_) {
+                    // As a last resort, navigate to settings page
+                    try { await window.webSkel.changeToDynamicPage('external-sources-settings-page', 'app'); } catch (__) {}
+                }
             });
         }
     }

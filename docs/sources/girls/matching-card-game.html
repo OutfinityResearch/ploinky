@@ -1,93 +1,530 @@
-<!-- Inspired by: https://www.codewithrandom.com/2024/02/25/html-game-code/ -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matching Card Game</title>
-    <style>
-        body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #f0f0f0;
-        }
-        .grid-container {
-            display: grid;
-            grid-template-columns: repeat(4, 100px);
-            gap: 10px;
-        }
-        .card {
-            width: 100px;
-            height: 100px;
-            background-color: #888;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-            cursor: pointer;
-        }
-        .card.flipped {
-            background-color: #fff;
-        }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Match Friends - Kid Friendly Memory Game</title>
+<style>
+  :root{
+    --bg1:#fef6ff;
+    --bg2:#e7f6ff;
+    --primary:#7c4dff;
+    --accent:#ffb300;
+    --good:#35c759;
+    --bad:#ff3b30;
+    --card:#ffffff;
+    --cardBack:#b3e5fc;
+    --shadow:0 6px 16px rgba(0,0,0,.15);
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji;
+    color:#2c2c2c;
+    background: radial-gradient(100% 100% at 100% 0%, var(--bg1) 0%, var(--bg2) 100%);
+    overflow-x:hidden;
+  }
+  .wrap{
+    margin-inline:auto;
+    padding:16px clamp(12px, 3vw, 24px) 28px;
+    max-width:800px;
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .title{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:clamp(20px, 4.5vw, 28px);
+    margin:0;
+    color:#4a3f8f;
+    letter-spacing:.3px;
+  }
+  .title .bubble{
+    display:inline-grid;
+    place-items:center;
+    width:38px;height:38px;
+    border-radius:50%;
+    background:linear-gradient(135deg,#ffd54f,#ff8a65);
+    box-shadow: var(--shadow);
+    animation: floaty 4s ease-in-out infinite;
+  }
+  @keyframes floaty{
+    0%,100%{ transform: translateY(0) }
+    50%{ transform: translateY(-6px) }
+  }
+  .controls{
+    display:flex;
+    align-items:center;
+    gap:8px 10px;
+    flex-wrap:wrap;
+  }
+  .btn{
+    -webkit-tap-highlight-color: transparent;
+    border:0;
+    background:#fff;
+    color:#333;
+    padding:10px 12px;
+    border-radius:14px;
+    box-shadow: var(--shadow);
+    cursor:pointer;
+    font-weight:700;
+    font-size:18px;
+    line-height:1;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    transition: transform .1s ease, background .2s ease;
+  }
+  .btn:active{ transform: scale(.98) }
+  .btn.round{
+    width:44px;height:44px;padding:0;border-radius:50%;
+    font-size:22px;
+  }
+  .btn.large{
+    padding:14px 18px;
+    font-size:20px;
+    border-radius:16px;
+  }
+  .status{
+    background:#fff;
+    padding:10px 12px;
+    border-radius:14px;
+    box-shadow: var(--shadow);
+    font-weight:700;
+    font-size:16px;
+  }
+
+  .hint{
+    margin:2px 2px 6px;
+    font-size:clamp(14px, 3.5vw, 16px);
+    color:#5b5b5b;
+  }
+
+  .grid{
+    display:grid;
+    gap:12px;
+    grid-template-columns: repeat(auto-fit, minmax(clamp(76px, 22vw, 120px), 1fr));
+    justify-items:stretch;
+    align-items:stretch;
+  }
+
+  .card{
+    position:relative;
+    aspect-ratio:1/1;
+    perspective: 900px;
+    outline:none;
+  }
+  .card.is-matched{ pointer-events:none }
+  .card-inner{
+    position:absolute; inset:0;
+    transform-style: preserve-3d;
+    transition: transform .5s ease;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .card.flipped .card-inner,
+  .card.is-matched .card-inner{
+    transform: rotateY(180deg);
+  }
+  .face{
+    position:absolute; inset:0;
+    display:grid; place-items:center;
+    border-radius: var(--radius);
+    backface-visibility:hidden;
+    user-select:none;
+  }
+  .face.back{
+    background:
+      radial-gradient(circle at 25% 25%, rgba(255,255,255,.45) 0 30%, transparent 31%) 0 0/22px 22px,
+      linear-gradient(135deg, #80deea, #4fc3f7);
+    color:#fff;
+    transform: rotateY(0deg);
+  }
+  .face.back .q{
+    font-size: clamp(36px, 10vw, 54px);
+    text-shadow: 0 3px 0 rgba(0,0,0,.08);
+  }
+  .face.front{
+    background: var(--card);
+    transform: rotateY(180deg);
+    border: 4px solid #f1f1f1;
+  }
+  .icon{
+    font-size: clamp(36px, 11vw, 58px);
+    line-height:1;
+    transform: translateZ(2px);
+  }
+
+  .card.is-matched .face.front{
+    border-color: #c8f7d3;
+    box-shadow: 0 0 0 4px rgba(53,199,89,.15) inset, var(--shadow);
+    animation: pop .35s ease;
+  }
+  @keyframes pop{
+    0%{ transform: scale(.92) }
+    60%{ transform: scale(1.05) }
+    100%{ transform: scale(1) }
+  }
+  .shake .card-inner{ animation: shake .4s ease }
+  @keyframes shake{
+    0%,100%{ transform: rotateY(180deg) translateX(0) }
+    25%{ transform: rotateY(180deg) translateX(-6px) }
+    75%{ transform: rotateY(180deg) translateX(6px) }
+  }
+
+  /* Win overlay */
+  .overlay{
+    position:fixed; inset:0;
+    background: rgba(20,20,30,.5);
+    backdrop-filter: blur(2px);
+    display:grid;
+    place-items:center;
+    opacity:0; pointer-events:none;
+    transition: opacity .25s ease;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto }
+  .win-box{
+    position:relative;
+    z-index:2;
+    width:min(92vw, 480px);
+    background:#fff;
+    border-radius:22px;
+    padding:20px;
+    text-align:center;
+    box-shadow: 0 20px 40px rgba(0,0,0,.2);
+    animation: pop .35s ease;
+  }
+  .trophy{
+    font-size: clamp(48px, 14vw, 80px);
+    margin-bottom:6px;
+  }
+  .win-box h2{
+    margin:6px 0 6px;
+    font-size: clamp(22px, 6vw, 28px);
+    color:#333;
+  }
+  .win-box p{
+    margin:0 0 14px;
+    color:#555;
+    font-size:clamp(16px,4.5vw,18px)
+  }
+  #confetti{
+    position:fixed; inset:0;
+    width:100%; height:100%;
+    pointer-events:none;
+    z-index:1;
+  }
+
+  /* Accessibility and motion */
+  .card:focus-visible{ outline: 3px solid var(--accent) }
+  @media (prefers-reduced-motion: reduce){
+    .card-inner, .shake .card-inner{ transition:none; animation:none }
+    .overlay, .btn{ transition:none }
+  }
+</style>
 </head>
 <body>
-    <div class="grid-container" id="grid"></div>
-    <script>
-        const grid = document.getElementById('grid');
-        const cards = ['A', 'A', 'B', 'B', 'C', 'C', 'D', 'D', 'E', 'E', 'F', 'F', 'G', 'G', 'H', 'H'];
-        let flippedCards = [];
-        let matchedCards = [];
+  <div class="wrap">
+    <header class="topbar" role="banner">
+      <h1 class="title"><span class="bubble" aria-hidden="true">🎈</span> Match Friends</h1>
+      <div class="controls">
+        <div class="status" aria-live="polite" aria-atomic="true">Pairs: <span id="pairs">0</span>/8</div>
+        <button id="restart" class="btn round" title="Restart" aria-label="Restart game">🔄</button>
+        <button id="sound" class="btn round" title="Sound" aria-label="Toggle sound"><span id="soundIcon">🔊</span></button>
+      </div>
+    </header>
 
-        function shuffle(array) {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]];
-            }
+    <p class="hint">Tap two cards to find a pair!</p>
+
+    <div id="grid" class="grid" role="grid" aria-label="Matching cards area"></div>
+  </div>
+
+  <div id="overlay" class="overlay" aria-hidden="true">
+    <canvas id="confetti"></canvas>
+    <div class="win-box" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+      <div class="trophy">🏆</div>
+      <h2 id="winTitle">Hooray!</h2>
+      <p>You found all the friends!</p>
+      <button id="playAgain" class="btn large">Play again 🔁</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const grid = document.getElementById('grid');
+  const pairsEl = document.getElementById('pairs');
+  const overlay = document.getElementById('overlay');
+  const playAgainBtn = document.getElementById('playAgain');
+  const restartBtn = document.getElementById('restart');
+  const soundBtn = document.getElementById('sound');
+  const soundIcon = document.getElementById('soundIcon');
+
+  const icons = ['🐶','🐱','🐰','🦊','🐼','🐨','🐸','🐵'];
+  let deck = [];
+  let first = null;
+  let second = null;
+  let lock = false;
+  let pairs = 0;
+  let audioOn = true;
+  let audioCtx = null;
+
+  function initAudio(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ audioOn = false; updateSoundIcon(); }
+    }
+  }
+
+  function beep(type){
+    if(!audioOn) return;
+    initAudio();
+    if(!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const vol = audioCtx.createGain();
+    vol.connect(audioCtx.destination);
+    vol.gain.setValueAtTime(0.0001, now);
+
+    function tone(freq, dur, when, type='sine'){
+      const osc = audioCtx.createOscillator();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now + when);
+      osc.connect(vol);
+      vol.gain.exponentialRampToValueAtTime(0.12, now + when + 0.01);
+      vol.gain.exponentialRampToValueAtTime(0.0001, now + when + dur);
+      osc.start(now + when);
+      osc.stop(now + when + dur);
+    }
+
+    if(type === 'flip'){
+      tone(520, 0.08, 0, 'triangle');
+    }else if(type === 'match'){
+      tone(500, 0.09, 0, 'sine');
+      tone(760, 0.12, 0.09, 'sine');
+    }else if(type === 'miss'){
+      tone(200, 0.08, 0, 'square');
+      tone(160, 0.08, 0.08, 'square');
+    }else if(type === 'win'){
+      tone(600, 0.12, 0, 'sine');
+      tone(800, 0.12, 0.12, 'sine');
+      tone(1000, 0.2, 0.24, 'sine');
+    }
+  }
+
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  function cardTemplate(icon, id){
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.tabIndex = 0;
+    card.setAttribute('role','button');
+    card.setAttribute('aria-label','Hidden card');
+    card.dataset.icon = icon;
+    card.dataset.id = id;
+
+    card.innerHTML = `
+      <div class="card-inner">
+        <div class="face back" aria-hidden="true"><div class="q">?</div></div>
+        <div class="face front"><div class="icon" aria-hidden="true">${icon}</div></div>
+      </div>
+    `;
+
+    card.addEventListener('click', () => onSelect(card));
+    card.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onSelect(card);
+      }
+    });
+    return card;
+  }
+
+  function buildDeck(){
+    const data = shuffle([...icons, ...icons]);
+    deck = data.map((icon, i)=> cardTemplate(icon, `${i}-${icon}`));
+  }
+
+  function render(){
+    grid.innerHTML = '';
+    deck.forEach(c => grid.appendChild(c));
+  }
+
+  function updatePairs(){
+    pairsEl.textContent = pairs;
+  }
+
+  function resetTurn(){
+    [first, second] = [null, null];
+    lock = false;
+  }
+
+  function flip(el){
+    el.classList.add('flipped');
+  }
+  function unflip(el){
+    el.classList.remove('flipped');
+  }
+
+  function onSelect(card){
+    if(lock) return;
+    if(card.classList.contains('flipped') || card.classList.contains('is-matched')) return;
+
+    flip(card);
+    beep('flip');
+    if(!first) { first = card; return; }
+
+    second = card;
+    lock = true;
+
+    const isMatch = first.dataset.icon === second.dataset.icon && first.dataset.id !== second.dataset.id;
+
+    if(isMatch){
+      setTimeout(()=>{
+        first.classList.add('is-matched');
+        second.classList.add('is-matched');
+        first.setAttribute('aria-label', `Matched ${first.dataset.icon}`);
+        second.setAttribute('aria-label', `Matched ${second.dataset.icon}`);
+        beep('match');
+        pairs++;
+        updatePairs();
+        resetTurn();
+        if(pairs === icons.length){
+          setTimeout(showWin, 350);
         }
+      }, 200);
+    }else{
+      setTimeout(()=>{
+        first.classList.add('shake');
+        second.classList.add('shake');
+        beep('miss');
+      }, 220);
+      setTimeout(()=>{
+        first.classList.remove('shake');
+        second.classList.remove('shake');
+        unflip(first);
+        unflip(second);
+        resetTurn();
+      }, 900);
+    }
+  }
 
-        function createCards() {
-            shuffle(cards);
-            for (const card of cards) {
-                const cardElement = document.createElement('div');
-                cardElement.classList.add('card');
-                cardElement.dataset.value = card;
-                cardElement.addEventListener('click', flipCard);
-                grid.appendChild(cardElement);
-            }
-        }
+  function newGame(){
+    pairs = 0;
+    updatePairs();
+    resetTurn();
+    buildDeck();
+    render();
+    hideWin();
+  }
 
-        function flipCard() {
-            if (flippedCards.length < 2 && !this.classList.contains('flipped')) {
-                this.classList.add('flipped');
-                this.textContent = this.dataset.value;
-                flippedCards.push(this);
+  // Win Overlay + Confetti
+  let confettiTimer = null;
+  function showWin(){
+    overlay.classList.add('show');
+    overlay.setAttribute('aria-hidden','false');
+    startConfetti();
+    beep('win');
+  }
+  function hideWin(){
+    overlay.classList.remove('show');
+    overlay.setAttribute('aria-hidden','true');
+    stopConfetti();
+  }
 
-                if (flippedCards.length === 2) {
-                    setTimeout(checkForMatch, 500);
-                }
-            }
-        }
+  // Confetti animation
+  const canvas = document.getElementById('confetti');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  function resizeCanvas(){
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resizeCanvas, {passive:true});
+  resizeCanvas();
 
-        function checkForMatch() {
-            const [card1, card2] = flippedCards;
-            if (card1.dataset.value === card2.dataset.value) {
-                matchedCards.push(card1, card2);
-                if (matchedCards.length === cards.length) {
-                    alert('You win!');
-                }
-            } else {
-                card1.classList.remove('flipped');
-                card1.textContent = '';
-                card2.classList.remove('flipped');
-                card2.textContent = '';
-            }
-            flippedCards = [];
-        }
+  function startConfetti(){
+    particles = [];
+    const colors = ['#ff5252','#ffb300','#00e5ff','#7c4dff','#35c759'];
+    const count = Math.min(140, Math.floor(window.innerWidth/6));
+    for(let i=0;i<count;i++){
+      particles.push({
+        x: Math.random()*canvas.width,
+        y: -10 - Math.random()*canvas.height*0.3,
+        r: 4 + Math.random()*6,
+        c: colors[Math.floor(Math.random()*colors.length)],
+        vx: -1 + Math.random()*2,
+        vy: 2 + Math.random()*3,
+        a: 1,
+        rot: Math.random()*Math.PI,
+        vr: (-0.1+Math.random()*0.2)
+      });
+    }
+    cancelAnimationFrame(confettiTimer);
+    loop();
+    setTimeout(stopConfetti, 3000);
+  }
+  function stopConfetti(){
+    particles = [];
+    cancelAnimationFrame(confettiTimer);
+    clearCanvas();
+  }
+  function clearCanvas(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
+  function loop(){
+    clearCanvas();
+    for(const p of particles){
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.a -= 0.004;
+      ctx.globalAlpha = Math.max(0, p.a);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(-p.r/2, -p.r/2, p.r, p.r);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    particles = particles.filter(p => p.a > 0 && p.y < canvas.height + 20);
+    confettiTimer = requestAnimationFrame(loop);
+  }
 
-        createCards();
-    </script>
+  // Controls
+  restartBtn.addEventListener('click', newGame);
+  playAgainBtn.addEventListener('click', newGame);
+  soundBtn.addEventListener('click', ()=>{
+    audioOn = !audioOn;
+    updateSoundIcon();
+    if(audioOn){ beep('flip'); }
+  });
+  function updateSoundIcon(){
+    soundIcon.textContent = audioOn ? '🔊' : '🔇';
+    soundBtn.setAttribute('aria-label', audioOn ? 'Sound on' : 'Sound off');
+  }
+
+  // Start
+  newGame();
+})();
+</script>
 </body>
 </html>

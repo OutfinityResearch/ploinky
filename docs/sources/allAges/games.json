@@ -1,18 +1,62 @@
 [
   {
-    "id": "microgame:anyAge:reaction-time",
+    "id": "microgame:allAges:classic-breakout",
     "type": "microgame",
-    "title": "Reaction Timer",
-    "source": "/sources/allAges/reaction-time.html",
+    "title": "Classic Breakout",
+    "source": "/sources/allAges/classic-breakout.html",
     "generatedAt": "2025-09-01T00:00:00.000Z",
     "feedName": "Ploynky #allAges",
-    "author": "MicroGames",
-    "category": "MicroGame",
-    "essence": "Press START, wait for green, then tap as fast as you can. The game measures your reaction time in milliseconds and shows it clearly for quick comparisons.",
+    "author": "Classic Arcade Collection",
+    "category": "Game",
+    "essence": "Break all the bricks with your ball and paddle. Don't let the ball fall!",
     "reactions": [
-      "Clear mechanic: One simple step and you’re playing — ideal on mobile.",
-      "Intrinsic motivation: Milliseconds invite improvement and friendly competition.",
-      "Instant rounds: Perfect for quick breaks, no loading or connectivity required."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:allAges:classic-frogger",
+    "type": "microgame",
+    "title": "Classic Frogger",
+    "source": "/sources/allAges/classic-frogger.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #allAges",
+    "author": "Classic Arcade Collection",
+    "category": "Game",
+    "essence": "Help the frog cross busy roads and treacherous rivers to reach safety",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:allAges:classic-pong",
+    "type": "microgame",
+    "title": "Classic Pong",
+    "source": "/sources/allAges/classic-pong.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #allAges",
+    "author": "Classic Arcade Collection",
+    "category": "Game",
+    "essence": "The original arcade tennis game. Control your paddle to hit the ball past the AI opponent",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:allAges:flappy-dot",
+    "type": "microgame",
+    "title": "Flappy Dot",
+    "source": "/sources/allAges/flappy-dot.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #allAges",
+    "author": "Ploynky",
+    "category": "Game",
+    "essence": "Navigate a dot through pipes by tapping to fly. Inspired by the viral Flappy Bird game",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -24,11 +68,10 @@
     "feedName": "Ploynky #allAges",
     "author": "Ploynky",
     "category": "Game",
-    "essence": "Drag the dot from START to GOAL without touching the walls. Each level grows the maze size; the timer tracks completion time.",
+    "essence": "Drag the dot from START to GOAL without touching the walls. Each level grows the maze size; the timer tracks completion time",
     "reactions": [
-      "Explodes on wall touch — then try again.",
-      "Short levels, fast retries.",
-      "More cells per level means longer routes."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -40,11 +83,25 @@
     "feedName": "Ploynky #allAges",
     "author": "CodeWithRandom",
     "category": "Game",
-    "essence": "Classic Ping Pong game. Move your paddle to hit the ball and score against the computer.",
+    "essence": "Classic Ping Pong game. Move your paddle to hit the ball and score against the computer",
     "reactions": [
-      "Simple and classic gameplay.",
-      "Responsive mouse controls.",
-      "Fun for all ages."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:anyAge:reaction-time",
+    "type": "microgame",
+    "title": "Reaction Timer",
+    "source": "/sources/allAges/reaction-time.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #allAges",
+    "author": "MicroGames",
+    "category": "MicroGame",
+    "essence": "Press START, wait for green, then tap as fast as you can. The game measures your reaction time in milliseconds and shows it clearly for quick comparisons",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -58,9 +115,8 @@
     "category": "Game",
     "essence": "Eat the food and grow your snake. Don't hit the walls or yourself!",
     "reactions": [
-      "Classic arcade fun.",
-      "Simple controls.",
-      "Increasingly challenging."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -74,9 +130,8 @@
     "category": "Game",
     "essence": "Defend the galaxy from waves of alien invaders. Shoot them down before they reach you!",
     "reactions": [
-      "Iconic arcade shooter.",
-      "Simple controls, addictive gameplay.",
-      "Increasing difficulty."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -88,78 +143,10 @@
     "feedName": "Ploynky #allAges",
     "author": "CodeWithRandom",
     "category": "Game",
-    "essence": "The classic puzzle game. Fit the falling blocks together to clear lines and score points.",
+    "essence": "The classic puzzle game. Fit the falling blocks together to clear lines and score points",
     "reactions": [
-      "Timeless puzzle gameplay.",
-      "Simple controls, deep strategy.",
-      "Endlessly replayable."
-    ]
-  },
-  {
-    "id": "microgame:allAges:classic-pong",
-    "type": "microgame",
-    "title": "Classic Pong",
-    "source": "/sources/allAges/classic-pong.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #allAges",
-    "author": "Classic Arcade Collection",
-    "category": "Game",
-    "essence": "The original arcade tennis game. Control your paddle to hit the ball past the AI opponent.",
-    "reactions": [
-      "The game that started it all.",
-      "Mouse or touch controls for smooth gameplay.",
-      "AI opponent with adaptive difficulty.",
-      "Source: https://gist.github.com/straker/ff00b4b49669ad3dec890306d348adc4"
-    ]
-  },
-  {
-    "id": "microgame:allAges:classic-breakout",
-    "type": "microgame",
-    "title": "Classic Breakout",
-    "source": "/sources/allAges/classic-breakout.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #allAges",
-    "author": "Classic Arcade Collection",
-    "category": "Game",
-    "essence": "Break all the bricks with your ball and paddle. Don't let the ball fall!",
-    "reactions": [
-      "Addictive brick-breaking action.",
-      "Multiple colored brick rows for varied scoring.",
-      "Lives system and progressive difficulty.",
-      "Source: https://gist.github.com/straker/ff00b4b49669ad3dec890306d348adc4"
-    ]
-  },
-  {
-    "id": "microgame:allAges:classic-frogger",
-    "type": "microgame",
-    "title": "Classic Frogger",
-    "source": "/sources/allAges/classic-frogger.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #allAges",
-    "author": "Classic Arcade Collection",
-    "category": "Game",
-    "essence": "Help the frog cross busy roads and treacherous rivers to reach safety.",
-    "reactions": [
-      "Navigate through traffic and floating logs.",
-      "Multiple levels with increasing difficulty.",
-      "Classic arcade challenge reimagined.",
-      "Source: https://gist.github.com/straker/ff00b4b49669ad3dec890306d348adc4"
-    ]
-  },
-  {
-    "id": "microgame:allAges:flappy-dot",
-    "type": "microgame",
-    "title": "Flappy Dot",
-    "source": "/sources/allAges/flappy-dot.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #allAges",
-    "author": "Ploynky",
-    "category": "Game",
-    "essence": "Navigate a dot through pipes by tapping to fly. Inspired by the viral Flappy Bird game.",
-    "reactions": [
-      "Simple one-tap control.",
-      "Endless gameplay with increasing difficulty.",
-      "Addictive challenge for all ages."
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   }
 ]

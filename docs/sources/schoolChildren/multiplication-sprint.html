@@ -2,38 +2,769 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <title>Multiplication Sprint</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#a6c1ee">
+  <title>Multiply Magic</title>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { --bg:#0b1020; --fg:#eef2ff; }
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
-    .wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:16px}
-    .card{width:min(520px,92vw);background:#0f172a;border:1px solid #1f2a44;border-radius:16px;padding:16px;box-shadow:0 12px 30px rgba(0,0,0,.35)}
-    .big{font-size:44px;font-weight:800;letter-spacing:1px;text-align:center}
-    .opts{display:grid;grid-template-columns:repeat(2,min(180px,40vw));gap:12px;justify-content:center;margin-top:8px}
-    .btn{background:#12223a;color:#fff;border:none;border-radius:14px;padding:14px;font-weight:700;font-size:18px}
-    .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:10}
-    .overlay .num{font-size:72px;font-weight:900}
+    :root{
+      --bg1:#ff9a9e;
+      --bg2:#fad0c4;
+      --bg3:#fbc2eb;
+      --bg4:#a6c1ee;
+      --card:#ffffffee;
+      --text:#10233a;
+      --muted:#4b5563;
+      --correct:#22c55e;
+      --wrong:#ef4444;
+      --accent:#7c3aed;
+      --shadow:0 14px 40px rgba(0,0,0,.18);
+      --radius:24px;
+      --btnH:86px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{
+      font-family:"Baloo 2", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji", "Segoe UI Symbol";
+      color:var(--text);
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      background:linear-gradient(120deg,var(--bg1),var(--bg2),var(--bg3),var(--bg4));
+      background-size:400% 400%;
+      animation:bgSlide 18s ease infinite;
+      overflow-x:hidden;
+      touch-action:manipulation;
+      -webkit-tap-highlight-color:transparent;
+    }
+    @keyframes bgSlide{
+      0%{background-position:0% 50%}
+      50%{background-position:100% 50%}
+      100%{background-position:0% 50%}
+    }
+    @media (prefers-reduced-motion: reduce){
+      body{animation:none}
+      .btn,.title{animation:none}
+    }
+    .wrap{
+      min-height:100%;
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      padding:calc(16px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));
+      align-items:center;
+      justify-content:center;
+    }
+
+    .titleRow{
+      display:flex;align-items:center;justify-content:space-between;
+      width:min(820px,96vw);
+      padding:4px 2px;
+      gap:10px;
+    }
+    .title{
+      display:flex;align-items:center;gap:10px;
+      font-weight:800;
+      font-size:clamp(24px, 5.2vw, 36px);
+      letter-spacing:.5px;
+      text-shadow:0 2px 0 rgba(255,255,255,.35);
+      animation:floaty 3s ease-in-out infinite;
+      position:relative;
+    }
+    .title::after{
+      content:"";
+      position:absolute;left:-10px;right:-10px;bottom:-6px;height:6px;border-radius:999px;
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);
+      filter:blur(6px);
+      opacity:.7;
+    }
+    .title .logo{
+      font-size:1.2em;
+      filter:drop-shadow(0 6px 6px rgba(0,0,0,.15));
+      animation:twinkle 2.8s ease-in-out infinite;
+    }
+    @keyframes floaty{
+      0%,100%{transform:translateY(0)}
+      50%{transform:translateY(-4px)}
+    }
+    @keyframes twinkle{
+      0%,100%{transform:rotate(0deg) scale(1)}
+      50%{transform:rotate(-6deg) scale(1.06)}
+    }
+
+    .controls{
+      display:flex;gap:8px;align-items:center;flex-shrink:0;
+    }
+    .iconBtn{
+      border:none;border-radius:16px;
+      height:52px;min-width:52px;padding:0 16px;
+      font-size:24px;font-weight:800;
+      background:rgba(255,255,255,.6);
+      box-shadow:var(--shadow);
+      color:var(--text);
+      display:flex;align-items:center;justify-content:center;gap:8px;
+      cursor:pointer;transition:transform .08s ease, background .2s ease, box-shadow .2s ease;
+      user-select:none;
+      position:relative;overflow:hidden;
+    }
+    .iconBtn:active{transform:scale(.96)}
+    .iconBtn .label{font-size:16px}
+    .muted{opacity:.8}
+
+    .card{
+      width:min(820px,96vw);
+      background:radial-gradient(140% 120% at 0% 0%, #fff, #f8fbff 60%);
+      border-radius:var(--radius);
+      padding:18px 16px 20px;
+      box-shadow:var(--shadow);
+      border:2px solid rgba(255,255,255,.65);
+      position:relative;
+      overflow:hidden;
+      will-change:transform;
+    }
+    .card::before,.card::after{
+      content:"";
+      position:absolute;border-radius:50%;
+      filter:blur(26px);opacity:.35;pointer-events:none;
+      animation:blob 12s ease-in-out infinite alternate;
+    }
+    .card::before{
+      width:220px;height:220px;background:radial-gradient(circle at 30% 30%, #c7d2fe, transparent 60%);
+      top:-60px;left:-40px;animation-delay:0s;
+    }
+    .card::after{
+      width:260px;height:260px;background:radial-gradient(circle at 70% 70%, #fbcfe8, transparent 60%);
+      bottom:-80px;right:-60px;animation-delay:.8s;
+    }
+    @keyframes blob{
+      0%{transform:translate(0,0) scale(1)}
+      100%{transform:translate(10px,-8px) scale(1.08)}
+    }
+
+    .stats{
+      display:flex;justify-content:space-between;align-items:center;
+      padding:2px 4px 8px;
+      color:var(--muted);
+      font-size:clamp(14px,3.2vw,18px);
+      gap:10px;
+    }
+    .badge{
+      background:linear-gradient(120deg,#fee2e2,#fef9c3);
+      color:#7c2d12;
+      border-radius:999px;
+      padding:6px 12px;
+      font-weight:700;
+      display:inline-flex;align-items:center;gap:8px;
+      box-shadow:0 8px 20px rgba(0,0,0,.08) inset;
+      white-space:nowrap;
+    }
+
+    .problem{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:10px;margin:8px 0 14px;position:relative;
+    }
+    .expr{
+      font-size:clamp(40px, 10vw, 70px);
+      font-weight:800;
+      letter-spacing:1px;
+      line-height:1.1;
+      display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:center;
+      text-align:center;
+    }
+    .expr .bubble{
+      background:linear-gradient(120deg,#e0f2fe,#dbeafe);
+      border:2px solid #bfdbfe;
+      border-radius:18px;
+      padding:3px 10px;
+      font-size:clamp(18px,5vw,26px);
+      color:#1d4ed8;
+      font-weight:800;
+      box-shadow:0 6px 14px rgba(30,64,175,.12);
+      transition:transform .25s ease;
+    }
+    .expr.glow .bubble{
+      transform:scale(1.06);
+      box-shadow:0 0 0 6px rgba(59,130,246,.15), 0 12px 24px rgba(37,99,235,.25);
+    }
+    .sparkles{
+      position:absolute;inset:0;pointer-events:none;
+    }
+    .spark{
+      position:absolute;width:10px;height:10px;border-radius:50%;
+      background:radial-gradient(circle,#fff,#fde68a 60%, transparent 70%);
+      animation:spark 700ms ease-out forwards;filter:blur(.6px);
+    }
+    @keyframes spark{
+      0%{transform:translate(0,0) scale(.2);opacity:1}
+      100%{transform:translate(var(--tx),var(--ty)) scale(1.6);opacity:0}
+    }
+
+    .opts{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:12px;
+      width:100%;
+      margin-top:10px;
+    }
+    @media (min-width:720px){
+      .opts{grid-template-columns:repeat(4, minmax(0,1fr))}
+    }
+    .btn{
+      position:relative;
+      border:none;cursor:pointer;user-select:none;
+      border-radius:22px;
+      padding:12px 16px;
+      min-height:var(--btnH);
+      font-weight:900;
+      font-size:clamp(28px, 8vw, 40px);
+      color:#0b1220;
+      background-size:160% 160%;
+      background-position:50% 0%;
+      transition:transform .08s ease, filter .2s ease, background-position .6s ease, box-shadow .2s ease;
+      box-shadow:0 10px 24px rgba(0,0,0,.12);
+      display:flex;align-items:center;justify-content:center;
+      gap:10px;
+      outline:none;
+      overflow:hidden;
+    }
+    .btn:active{transform:scale(.98)}
+    .btn .emoji{font-size:clamp(24px, 6vw, 30px); filter:drop-shadow(0 2px 0 rgba(255,255,255,.6))}
+    .btn.choice-0{background-image:linear-gradient(135deg,#fef3c7,#fbcfe8)}
+    .btn.choice-1{background-image:linear-gradient(135deg,#bbf7d0,#a7f3d0)}
+    .btn.choice-2{background-image:linear-gradient(135deg,#bfdbfe,#c7d2fe)}
+    .btn.choice-3{background-image:linear-gradient(135deg,#fde68a,#fca5a5)}
+    .btn:hover{background-position:50% 100%}
+    .ripple{
+      position:absolute;border-radius:999px;transform:scale(0);
+      background:rgba(255,255,255,.55);
+      animation:ripple .6s ease-out forwards;
+      pointer-events:none;mix-blend-mode:overlay;
+    }
+    @keyframes ripple{to{transform:scale(12);opacity:0}}
+
+    .btn.correct{
+      background-image:linear-gradient(135deg,#34d399,#86efac);
+      box-shadow:0 0 0 6px rgba(34,197,94,.25), 0 16px 28px rgba(16,185,129,.35);
+      animation:pop .35s cubic-bezier(.17,.67,.3,1.42);
+    }
+    .btn.wrong{
+      background-image:linear-gradient(135deg,#fecaca,#fca5a5);
+      box-shadow:0 0 0 6px rgba(239,68,68,.25), 0 16px 28px rgba(239,68,68,.25);
+      animation:shake .35s ease;
+    }
+    @keyframes pop{
+      0%{transform:scale(1)}
+      50%{transform:scale(1.06)}
+      100%{transform:scale(1)}
+    }
+    @keyframes shake{
+      0%,100%{transform:translateX(0)}
+      20%{transform:translateX(-6px)}
+      40%{transform:translateX(6px)}
+      60%{transform:translateX(-4px)}
+      80%{transform:translateX(4px)}
+    }
+
+    .feedback{
+      min-height:28px;
+      text-align:center;
+      font-size:clamp(18px,4.8vw,22px);
+      font-weight:800;
+      color:#0b1220;
+      display:flex;align-items:center;justify-content:center;gap:8px;
+    }
+    .feedback.ok{color:#16a34a}
+    .feedback.no{color:#dc2626}
+    .fadeIn{animation:fadeIn .35s ease}
+    @keyframes fadeIn{
+      from{opacity:0; transform:translateY(6px)}
+      to{opacity:1; transform:none}
+    }
+
+    .overlay{
+      position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+      background:rgba(0,0,0,.4);z-index:10;
+      backdrop-filter:blur(2px);
+    }
+    .countWrap{
+      background:linear-gradient(135deg,#eef2ff,#e0e7ff);
+      color:#1f2937;
+      border:3px solid #c7d2fe;
+      border-radius:28px;
+      width:min(420px,86vw);
+      padding:22px 16px;
+      text-align:center;
+      box-shadow:0 24px 60px rgba(0,0,0,.28);
+      display:flex;flex-direction:column;align-items:center;gap:8px;
+      animation:pop .36s ease;
+    }
+    .countNum{
+      font-size:clamp(60px, 18vw, 100px);
+      font-weight:900;
+      line-height:1;
+      text-shadow:0 4px 0 rgba(255,255,255,.6);
+      animation:countPulse .6s ease infinite;
+    }
+    .countEmoji{font-size:clamp(28px,10vw,40px)}
+    @keyframes countPulse{
+      0%,100%{transform:scale(1)}
+      50%{transform:scale(1.08)}
+    }
+
+    .confetti{
+      position:absolute;inset:0;pointer-events:none;overflow:hidden;
+    }
+    .piece{
+      position:absolute;width:10px;height:14px;border-radius:3px;
+      opacity:.9;
+      animation:fall 900ms ease-out forwards;
+    }
+    @keyframes fall{
+      0%{transform:translateY(-20px) rotate(0deg)}
+      100%{transform:translateY(120%) rotate(290deg)}
+    }
+
+    .swipeHint{
+      position:absolute;right:8px;top:8px;
+      font-size:12px;color:#6b7280;background:rgba(255,255,255,.6);
+      padding:4px 8px;border-radius:999px;backdrop-filter:saturate(140%) blur(3px);
+      display:flex;align-items:center;gap:6px;
+    }
+
+    /* Accessibility helpers */
+    .sr-only{
+      position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+      clip:rect(0,0,0,0);white-space:nowrap;border:0;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="card">
-      <div class="big" id="expr">3 × 4 = ?</div>
-      <div class="opts" id="opts"></div>
+    <div class="titleRow">
+      <div class="title"><span class="logo">🧠✨</span> Multiply Magic</div>
+      <div class="controls">
+        <button id="soundBtn" class="iconBtn" aria-pressed="true" aria-label="Sound on">
+          <span class="btnIcon" aria-hidden="true">🔊</span><span class="label">Sound</span>
+        </button>
+        <button id="skipBtn" class="iconBtn" aria-label="Skip">
+          <span class="btnIcon" aria-hidden="true">⏭️</span><span class="label">Skip</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="card" id="card" role="region" aria-label="Math Game">
+      <div class="swipeHint" id="swipeHint" aria-hidden="true">⬅️ Swipe to skip</div>
+      <div class="stats">
+        <div class="badge" id="streak"><span aria-hidden="true">🔥</span> Streak: <span id="streakNum">0</span></div>
+        <div class="badge"><span aria-hidden="true">⭐</span> Level: Easy</div>
+      </div>
+
+      <div class="problem">
+        <div class="expr" id="expr" aria-live="polite">
+          <span class="bubble" id="bubbleA">?</span>
+          <span>×</span>
+          <span class="bubble" id="bubbleB">?</span>
+          <span>=</span>
+          <span class="bubble">?</span>
+        </div>
+        <div class="sparkles" id="sparkles"></div>
+        <div class="feedback" id="feedback" aria-live="polite"></div>
+      </div>
+
+      <div class="opts" id="opts" role="group" aria-label="Choose the answer"></div>
+
+      <div class="confetti" id="confetti"></div>
     </div>
   </div>
-  <div class="overlay" id="overlay"><div class="num" id="num">3</div></div>
+
+  <div class="overlay" id="overlay" aria-hidden="true">
+    <div class="countWrap" role="dialog" aria-live="assertive" aria-label="Next question countdown">
+      <div class="countEmoji" id="countEmoji">🎉</div>
+      <div class="countNum" id="countNum">3</div>
+      <div class="countEmoji" id="countSub">Get ready!</div>
+    </div>
+  </div>
+
+  <div class="sr-only" id="srStatus" aria-live="polite"></div>
+
   <script>
-    function speak(t){ try{ if(!('speechSynthesis' in window))return; speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.speak(u);}catch(_){}}
-    const expr=document.getElementById('expr'); const opts=document.getElementById('opts'); const ov=document.getElementById('overlay'); const num=document.getElementById('num');
-    let a=0,b=0,ans=0;
-    function randint(n,m){ return Math.floor(Math.random()*(m-n+1))+n; }
-    function newExpr(){ a=randint(2,9); b=randint(2,9); const e=`${a}*${b}`; ans=eval(e); expr.textContent=`${a} × ${b} = ?`; speak(`${a} times ${b}`); const set=new Set([ans]); const options=[ans]; while(options.length<4){ const v=ans+randint(-10,10); if(v>=0 && !set.has(v)){ set.add(v); options.push(v); } } options.sort(()=>Math.random()-0.5); opts.innerHTML=''; options.forEach(v=>{ const btn=document.createElement('button'); btn.className='btn'; btn.textContent=v; btn.onclick=()=>pick(v); opts.appendChild(btn); }); }
-    function pick(v){ if(v===ans){ speak('Correct'); countdown(()=>newExpr()); } else { speak('Try again'); } }
-    function countdown(cb){ ov.style.display='flex'; let k=3; num.textContent=k; const t=()=>{ k--; if(k<=0){ ov.style.display='none'; cb(); } else { num.textContent=k; setTimeout(t,600);} }; setTimeout(t,600); }
-    newExpr();
+    // Utility: Random helpers
+    const randInt=(min,max)=>Math.floor(Math.random()*(max-min+1))+min;
+    const shuffle=arr=>arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
+
+    // Elements
+    const exprEl = document.getElementById('expr');
+    const bubbleA = document.getElementById('bubbleA');
+    const bubbleB = document.getElementById('bubbleB');
+    const optsEl = document.getElementById('opts');
+    const feedback = document.getElementById('feedback');
+    const confettiEl = document.getElementById('confetti');
+    const overlay = document.getElementById('overlay');
+    const countNum = document.getElementById('countNum');
+    const countEmoji = document.getElementById('countEmoji');
+    const countSub = document.getElementById('countSub');
+    const soundBtn = document.getElementById('soundBtn');
+    const skipBtn = document.getElementById('skipBtn');
+    const streakEl = document.getElementById('streakNum');
+    const srStatus = document.getElementById('srStatus');
+    const card = document.getElementById('card');
+    const sparkles = document.getElementById('sparkles');
+    const swipeHint = document.getElementById('swipeHint');
+
+    // State
+    let a=0, b=0, answer=0, locked=false, streak=0, soundOn=true;
+
+    // Audio SFX (WebAudio)
+    let audioCtx=null, masterGain=null, initedAudio=false;
+    function initAudio(){
+      if(initedAudio) return;
+      try{
+        audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.value = 0.6;
+        masterGain.connect(audioCtx.destination);
+        initedAudio = true;
+      }catch(_){}
+    }
+    function resumeAudio(){
+      if(!audioCtx) return;
+      if(audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+    }
+    function playTone(freq, type='sine', duration=0.12, gain=0.15, startAt=0){
+      if(!soundOn || !audioCtx || !masterGain) return;
+      const now = audioCtx.currentTime + startAt;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, now);
+      o.connect(g); g.connect(masterGain);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(gain, now + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      o.start(now); o.stop(now + duration + 0.05);
+    }
+    function playNoise(duration=0.15, startAt=0, lowpass=800){
+      if(!soundOn || !audioCtx || !masterGain) return;
+      const now = audioCtx.currentTime + startAt;
+      const bufferSize = Math.floor(audioCtx.sampleRate * duration);
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for(let i=0;i<bufferSize;i++) data[i] = Math.random()*2-1;
+      const src = audioCtx.createBufferSource();
+      src.buffer = buffer;
+      const filt = audioCtx.createBiquadFilter();
+      filt.type='lowpass';
+      filt.frequency.setValueAtTime(lowpass, now);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.14, now);
+      src.connect(filt); filt.connect(g); g.connect(masterGain);
+      src.start(now); src.stop(now + duration + 0.02);
+    }
+    function sfx(name){
+      if(!soundOn) return;
+      if(!initedAudio){ initAudio(); }
+      resumeAudio();
+      switch(name){
+        case 'click':
+          playTone(650,'square',0.06,0.07);
+          break;
+        case 'correct':
+          playTone(523.25,'triangle',0.08,0.15,0);
+          playTone(659.25,'triangle',0.09,0.16,0.08);
+          playTone(783.99,'sine',0.12,0.18,0.16);
+          playNoise(0.08,0.18,1400);
+          break;
+        case 'wrong':
+          playTone(220,'sawtooth',0.12,0.12,0);
+          playTone(170,'sawtooth',0.14,0.12,0.08);
+          playNoise(0.12,0.02,500);
+          break;
+        case 'count':
+          playTone(880,'sine',0.07,0.1);
+          break;
+        case 'go':
+          playNoise(0.22,0,1800);
+          playTone(600,'triangle',0.08,0.12,0.02);
+          playTone(900,'triangle',0.08,0.12,0.12);
+          break;
+        case 'skip':
+          playNoise(0.18,0,1200);
+          playTone(480,'sine',0.08,0.08,0.04);
+          break;
+      }
+    }
+
+    // Speech
+    function speak(t){
+      try{
+        if(!soundOn || !('speechSynthesis' in window)) return;
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(String(t));
+        u.lang='en-US';
+        u.rate=1.02;
+        u.pitch=1.1;
+        speechSynthesis.speak(u);
+      }catch(_){}
+    }
+
+    // Haptics
+    const vibrate = ms => { try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(_){ } };
+
+    // Build a new problem
+    function newProblem(){
+      locked = false;
+      feedback.textContent = '';
+      feedback.className = 'feedback';
+      exprEl.classList.remove('glow');
+
+      // pick numbers
+      a = randInt(2,9);
+      b = randInt(2,9);
+      answer = a*b;
+
+      bubbleA.textContent = a;
+      bubbleB.textContent = b;
+
+      srStatus.textContent = `What is ${a} times ${b}?`;
+      speak(`${a} times ${b}. What is the answer?`);
+
+      // options
+      const options = new Set([answer]);
+      while(options.size < 4){
+        let mode = Math.random();
+        let v;
+        if(mode < .4){
+          v = (a+randInt(-2,2))*(b+randInt(-2,2));
+        }else if(mode < .7){
+          v = answer + randInt(-9,9);
+        }else{
+          v = (a*randInt(1,9));
+        }
+        if(v === answer || v < 0) continue;
+        options.add(v);
+      }
+      const opts = shuffle([...options]);
+
+      // render
+      optsEl.innerHTML = '';
+      opts.forEach((val,idx)=>{
+        const btn = document.createElement('button');
+        btn.className = `btn choice-${idx%4}`;
+        btn.setAttribute('type','button');
+        btn.setAttribute('aria-label', String(val));
+        btn.dataset.value = String(val);
+        btn.innerHTML = `<span class="emoji" aria-hidden="true">${['🍭','🎈','🧸','🌟'][idx%4]}</span><span class="num">${val}</span>`;
+        optsEl.appendChild(btn);
+      });
+    }
+
+    // Confetti
+    function burstConfetti(){
+      confettiEl.innerHTML = '';
+      const colors = ['#f87171','#fbbf24','#34d399','#60a5fa','#a78bfa','#f472b6'];
+      const pieces = 28;
+      for(let i=0;i<pieces;i++){
+        const p = document.createElement('div');
+        p.className='piece';
+        p.style.left = Math.random()*100 + '%';
+        p.style.top = '-10px';
+        p.style.background = colors[i%colors.length];
+        p.style.transform = `translateY(-20px) rotate(${Math.random()*180}deg)`;
+        p.style.animationDuration = 700 + Math.random()*450 + 'ms';
+        p.style.width = (8 + Math.random()*6) + 'px';
+        p.style.height = (10 + Math.random()*10) + 'px';
+        confettiEl.appendChild(p);
+      }
+      setTimeout(()=>{ confettiEl.innerHTML=''; }, 1200);
+    }
+
+    // Sparkles around equation
+    function popSparkles(){
+      sparkles.innerHTML = '';
+      const count = 10;
+      const rect = exprEl.getBoundingClientRect();
+      for(let i=0;i<count;i++){
+        const s = document.createElement('div');
+        s.className='spark';
+        const angle = Math.random()*Math.PI*2;
+        const dist = 40 + Math.random()*60;
+        const tx = Math.cos(angle)*dist;
+        const ty = Math.sin(angle)*dist;
+        s.style.left = (rect.width/2) + 'px';
+        s.style.top = (rect.height/2) + 'px';
+        s.style.setProperty('--tx', tx+'px');
+        s.style.setProperty('--ty', ty+'px');
+        sparkles.appendChild(s);
+      }
+      setTimeout(()=>{ sparkles.innerHTML=''; }, 800);
+    }
+
+    // Visual countdown
+    function countdownNext(cb){
+      overlay.style.display='flex';
+      overlay.setAttribute('aria-hidden','false');
+      const faces = ['🎉','😺','🌈','⭐','🚀','🦄'];
+      let k = 3;
+      function tick(){
+        if(k===0){
+          countNum.textContent = 'Go!';
+          countEmoji.textContent = '🚀';
+          countSub.textContent = 'You rock!';
+          sfx('go');
+          setTimeout(()=>{
+            overlay.style.display='none';
+            overlay.setAttribute('aria-hidden','true');
+            cb();
+          }, 450);
+          return;
+        }
+        countNum.textContent = String(k);
+        countEmoji.textContent = faces[randInt(0,faces.length-1)];
+        countSub.textContent = 'Next question';
+        sfx('count');
+        k--;
+        setTimeout(tick, 600);
+      }
+      tick();
+    }
+
+    // Ripple effect
+    function addRipple(el, x, y){
+      const r = document.createElement('span');
+      r.className='ripple';
+      const rect = el.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height);
+      r.style.width = r.style.height = size+'px';
+      r.style.left = (x - rect.left - size/2) + 'px';
+      r.style.top = (y - rect.top - size/2) + 'px';
+      el.appendChild(r);
+      setTimeout(()=>r.remove(), 650);
+    }
+
+    // Handle choice
+    function handlePick(value, btn){
+      if(locked) return;
+      const v = Number(value);
+      sfx('click');
+      if(v === answer){
+        locked = true;
+        streak++;
+        streakEl.textContent = String(streak);
+        btn.classList.add('correct');
+        feedback.classList.add('ok','fadeIn');
+        feedback.innerHTML = 'Yay! <span aria-hidden="true">✅🎉</span>';
+        srStatus.textContent = 'Correct!';
+        exprEl.classList.add('glow');
+        sfx('correct');
+        speak('Correct! Great job!');
+        vibrate(30);
+        popSparkles();
+        burstConfetti();
+        setTimeout(()=>countdownNext(newProblem), 600);
+      }else{
+        // wrong
+        streak = 0;
+        streakEl.textContent = '0';
+        btn.classList.add('wrong');
+        setTimeout(()=>btn.classList.remove('wrong'), 420);
+        feedback.classList.add('no','fadeIn');
+        feedback.textContent = 'Try again ❌';
+        srStatus.textContent = 'Wrong. Try again.';
+        sfx('wrong');
+        speak('Try again!');
+        vibrate(120);
+      }
+    }
+
+    // Event delegation for options
+    optsEl.addEventListener('pointerdown', (e)=>{
+      const btn = e.target.closest('.btn');
+      if(!btn) return;
+      addRipple(btn, e.clientX||0, e.clientY||0);
+    }, {passive:true});
+    optsEl.addEventListener('pointerup', (e)=>{
+      const btn = e.target.closest('.btn');
+      if(!btn) return;
+      handlePick(btn.dataset.value, btn);
+    });
+
+    // Controls
+    soundBtn.addEventListener('click', (e)=>{
+      addRipple(soundBtn, e.clientX||0, e.clientY||0);
+      soundOn = !soundOn;
+      soundBtn.setAttribute('aria-pressed', String(soundOn));
+      soundBtn.setAttribute('aria-label', soundOn ? 'Sound on' : 'Sound off');
+      soundBtn.firstElementChild.textContent = soundOn ? '🔊' : '🔇';
+      soundBtn.classList.toggle('muted', !soundOn);
+      if(soundOn){ initAudio(); resumeAudio(); sfx('click'); }
+      if(!soundOn && 'speechSynthesis' in window) try{ speechSynthesis.cancel(); }catch(_){}
+    });
+
+    skipBtn.addEventListener('click', (e)=>{
+      addRipple(skipBtn, e.clientX||0, e.clientY||0);
+      sfx('skip');
+      speak('Skipping.');
+      feedback.textContent='';
+      newProblem();
+    });
+
+    // Swipe to skip (mobile-friendly touch control)
+    let startX=0, startY=0, swiping=false;
+    card.addEventListener('pointerdown', (e)=>{
+      startX = e.clientX; startY = e.clientY; swiping = true;
+    }, {passive:true});
+    card.addEventListener('pointermove', (e)=>{
+      if(!swiping) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 20){
+        card.style.transform = `translateX(${dx*0.15}px) rotate(${dx*0.02}deg)`;
+      }
+    }, {passive:true});
+    card.addEventListener('pointerup', (e)=>{
+      if(!swiping) return;
+      const dx = e.clientX - startX;
+      swiping = false;
+      card.style.transition = 'transform .2s ease';
+      if(Math.abs(dx) > 80){
+        sfx('skip');
+        vibrate(20);
+        card.style.transform = `translateX(${dx>0?200:-200}px) rotate(${dx>0?6:-6}deg)`;
+        setTimeout(()=>{
+          card.style.transition=''; card.style.transform='';
+          feedback.textContent = '';
+          newProblem();
+        }, 200);
+      }else{
+        card.style.transform = '';
+      }
+      setTimeout(()=>{ card.style.transition=''; }, 200);
+    });
+
+    // Show swipe hint on small screens briefly
+    function showSwipeHint(){
+      if(window.innerWidth > 720) return;
+      swipeHint.style.opacity='0';
+      swipeHint.style.display='flex';
+      swipeHint.animate([{opacity:0, transform:'translateY(-4px)'},{opacity:1, transform:'translateY(0)'}],{duration:250,fill:'forwards'});
+      setTimeout(()=>{
+        swipeHint.animate([{opacity:1},{opacity:0}],{duration:500,fill:'forwards'});
+        setTimeout(()=>{ swipeHint.style.display='none'; }, 520);
+      }, 1800);
+    }
+
+    // Prime audio on first user gesture
+    const primeAudioOnce = (e)=>{
+      initAudio(); resumeAudio();
+      document.removeEventListener('pointerdown', primeAudioOnce);
+    };
+    document.addEventListener('pointerdown', primeAudioOnce, {once:true, passive:true});
+
+    // Initialize
+    newProblem();
+    showSwipeHint();
+
+    // Prevent iOS rubberband on the card a little
+    document.addEventListener('gesturestart', e=>e.preventDefault?.(), {passive:false});
   </script>
 </body>
 </html>
-

@@ -2,13 +2,61 @@
   {
     "id": "game:learnItalian:colors",
     "type": "microgame",
-    "title": "Italian Colors",
+    "title": "Colori Italiani - Base",
     "source": "/sources/learnItalian/italian-colors.html",
     "generatedAt": "2025-09-01T00:00:00.000Z",
     "feedName": "Ploynky #learnItalian",
     "author": "Ploynky",
     "category": "Game",
-    "essence": "Hear a color in Italian, pick its English meaning. TTS prompts; auto-advance on correct.",
-    "reactions": ["TTS Italian prompts.", "Small multiple-choice.", "Gentle pacing."]
+    "essence": "Învață culorile de bază în italiană cu animații vibrante și pronunție clară. Ascultă și alege traducerea corectă",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnItalian:colori-avanzati",
+    "type": "microgame",
+    "title": "Culori Avansate",
+    "source": "/sources/learnItalian/colori-avanzati.html",
+    "generatedAt": "2025-09-02T10:09:31.204Z",
+    "feedName": "Ploynky #learnItalian",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Explorează nuanțe și culori avansate în italiană. Design modern cu efecte vizuale captivante",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnItalian:numeri",
+    "type": "microgame",
+    "title": "Numeri Italiani 1-10",
+    "source": "/sources/learnItalian/numeri-italiani.html",
+    "generatedAt": "2025-09-02T10:09:31.203Z",
+    "feedName": "Ploynky #learnItalian",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Antrenament interactiv pentru numerele 1-10 în italiană cu reprezentare vizuală și exerciții de numărare",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:learnItalian:parole",
+    "type": "microgame",
+    "title": "Potrivește Cuvintele",
+    "source": "/sources/learnItalian/parole-italiane.html",
+    "generatedAt": "2025-09-02T10:09:31.204Z",
+    "feedName": "Ploynky #learnItalian",
+    "author": "Ploinky Agent",
+    "category": "Game",
+    "essence": "Joc de potrivire pentru vocabular italian esențial. Conectează cuvintele italiene cu traducerile lor",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
   }
 ]

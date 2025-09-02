@@ -16,6 +16,7 @@ export class ManageSourcesModal {
     afterRender() {
         this.renderSourcesTable();
         this.setupEventListeners();
+        this.updateToggleSelectLabel();
     }
 
     renderSourcesTable() {
@@ -63,6 +64,7 @@ export class ManageSourcesModal {
                 const index = parseInt(e.target.dataset.index);
                 this.sources[index].visible = e.target.checked;
                 this.hasChanges = true;
+                this.updateToggleSelectLabel();
             });
         });
 
@@ -78,6 +80,7 @@ export class ManageSourcesModal {
                             await window.SourcesManager.removeSource(src.id || src.url);
                             this.sources = await window.SourcesManager.getAllSources();
                             this.renderSourcesTable();
+                            this.updateToggleSelectLabel();
                         } catch (_) {
                             alert('Could not delete source.');
                         }
@@ -85,6 +88,9 @@ export class ManageSourcesModal {
                 });
             }
         });
+
+        // Update the toggle button state after rendering
+        this.updateToggleSelectLabel();
     }
 
     setupEventListeners() {
@@ -94,8 +100,7 @@ export class ManageSourcesModal {
         const addButton = this.element.querySelector('#add-source-button');
         const filterInput = this.element.querySelector('#filter-text');
         const onlyVisibleToggle = this.element.querySelector('#only-visible');
-        const selectAllButton = this.element.querySelector('#select-all-button');
-        const deselectAllButton = this.element.querySelector('#deselect-all-button');
+        const toggleSelectButton = this.element.querySelector('#toggle-select-button');
 
         if (closeButton) {
             closeButton.addEventListener('click', () => {
@@ -133,37 +138,26 @@ export class ManageSourcesModal {
             });
         }
         if (filterInput) {
-            filterInput.addEventListener('input', () => this.renderSourcesTable());
+            filterInput.addEventListener('input', () => { this.renderSourcesTable(); this.updateToggleSelectLabel(); });
         }
         if (onlyVisibleToggle) {
-            onlyVisibleToggle.addEventListener('change', () => this.renderSourcesTable());
+            onlyVisibleToggle.addEventListener('change', () => { this.renderSourcesTable(); this.updateToggleSelectLabel(); });
         }
-        
-        if (selectAllButton) {
-            selectAllButton.addEventListener('click', () => {
-                const checkboxes = this.element.querySelectorAll('.visibility-checkbox');
-                checkboxes.forEach(cb => {
-                    cb.checked = true;
+        if (toggleSelectButton) {
+            toggleSelectButton.addEventListener('click', () => {
+                const boxes = Array.from(this.element.querySelectorAll('.visibility-checkbox'));
+                const total = boxes.length;
+                const checked = boxes.filter(cb => cb.checked).length;
+                const shouldSelect = !(total > 0 && checked === total);
+                boxes.forEach(cb => {
+                    cb.checked = shouldSelect;
                     const index = parseInt(cb.dataset.index);
                     if (this.sources[index]) {
-                        this.sources[index].visible = true;
+                        this.sources[index].visible = shouldSelect;
                     }
                 });
                 this.hasChanges = true;
-            });
-        }
-        
-        if (deselectAllButton) {
-            deselectAllButton.addEventListener('click', () => {
-                const checkboxes = this.element.querySelectorAll('.visibility-checkbox');
-                checkboxes.forEach(cb => {
-                    cb.checked = false;
-                    const index = parseInt(cb.dataset.index);
-                    if (this.sources[index]) {
-                        this.sources[index].visible = false;
-                    }
-                });
-                this.hasChanges = true;
+                this.updateToggleSelectLabel();
             });
         }
     }
@@ -221,6 +215,7 @@ export class ManageSourcesModal {
 
         this.hasChanges = true;
         this.renderSourcesTable();
+        this.updateToggleSelectLabel();
     }
 
     async saveChanges() {
@@ -254,6 +249,17 @@ export class ManageSourcesModal {
             modal.close();
             modal.remove();
         }
+    }
+
+    updateToggleSelectLabel() {
+        try {
+            const btn = this.element.querySelector('#toggle-select-button');
+            if (!btn) return;
+            const boxes = Array.from(this.element.querySelectorAll('.visibility-checkbox'));
+            const total = boxes.length;
+            const checked = boxes.filter(cb => cb.checked).length;
+            btn.textContent = (total > 0 && checked === total) ? 'Deselect All' : 'Select All';
+        } catch (_) {}
     }
 
     isValidUrl(url) {

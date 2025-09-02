@@ -1,0 +1,20 @@
+{
+  "success": true,
+  "finalIssues": [
+    {
+      "type": "color_issue",
+      "subtype": "low_contrast",
+      "message": "Low contrast ratio of 1.60 for div-62",
+      "details": {
+        "element": "div-62",
+        "background": "rgba(0, 0, 0, 0.25)",
+        "foreground": "rgb(38, 50, 56)",
+        "contrastRatio": 1.59575941960485,
+        "text": ""
+      }
+    }
+  ],
+  "improvementApplied": true,
+  "improvedFile": "/home/salboaie/work/ploinky/docs/sources/schoolChildren/guess-the-word-game.html",
+  "backupFile": "/home/salboaie/work/ploinky/docs/sources/schoolChildren/guess-the-word-game.html.backup"
+}

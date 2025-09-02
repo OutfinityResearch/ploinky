@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fructe Românești - Learn Romanian Fruits</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Bungee+Shade&family=Comfortaa:wght@400;600;700&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body { height: 100%; }
+    body {
+      min-height: 100vh;
+      font-family: 'Comfortaa', sans-serif;
+      background: linear-gradient(135deg, #ffeaa7, #dfe6e9, #74b9ff, #a29bfe, #fd79a8);
+      background-size: 500% 500%;
+      animation: fruitGradient 20s ease infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+    }
+    
+    @keyframes fruitGradient {
+      0% { background-position: 0% 50%; }
+      25% { background-position: 100% 50%; }
+      50% { background-position: 100% 100%; }
+      75% { background-position: 0% 100%; }
+      100% { background-position: 0% 50%; }
+    }
+    
+    .fruit-rain {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    
+    .falling-fruit {
+      position: absolute;
+      font-size: 30px;
+      animation: fall linear infinite;
+      opacity: 0.3;
+    }
+    
+    @keyframes fall {
+      from {
+        transform: translateY(-100px) rotate(0deg);
+      }
+      to {
+        transform: translateY(calc(100vh + 100px)) rotate(360deg);
+      }
+    }
+    
+    .game-container {
+      max-width: 640px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.97);
+      backdrop-filter: blur(20px);
+      border-radius: 32px;
+      padding: 22px 18px;
+      box-shadow: 
+        0 40px 80px rgba(0, 0, 0, 0.25),
+        inset 0 2px 10px rgba(255, 255, 255, 0.9);
+      position: relative;
+      z-index: 1;
+      border: 3px solid rgba(255, 255, 255, 0.6);
+      max-height: calc(100vh - 24px);
+      overflow: auto;
+    }
+    
+    .title {
+      text-align: center;
+      margin-bottom: 35px;
+    }
+    
+    .title h1 {
+      font-family: 'Bungee Shade', cursive;
+      font-size: 30px;
+      background: linear-gradient(135deg, #ff6b6b, #ffd93d, #6bcf7f, #4d96ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 15px;
+    }
+    
+    .subtitle { color: #666; font-size: 16px; font-weight: 600; }
+    
+    .fruit-card {
+      text-align: center;
+      padding: 24px 16px;
+      background: linear-gradient(135deg, rgba(255, 107, 107, 0.1), rgba(255, 217, 61, 0.1));
+      border-radius: 24px;
+      margin: 20px 0 12px;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    
+    .fruit-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+    }
+    
+    .fruit-emoji {
+      font-size: 100px;
+      margin-bottom: 16px;
+      animation: bounce 3s ease-in-out infinite;
+      cursor: pointer;
+      user-select: none;
+      filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.2));
+    }
+    
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0) scale(1) rotate(0deg); }
+      25% { transform: translateY(-10px) scale(1.05) rotate(-5deg); }
+      75% { transform: translateY(-10px) scale(1.05) rotate(5deg); }
+    }
+    
+    .fruit-name {
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ff6b6b, #4d96ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+    
+    .pronunciation { color: #888; font-size: 14px; font-style: italic; margin-bottom: 14px; }
+    
+    .audio-btn {
+      background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 40px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .audio-btn:hover {
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 8px 25px rgba(255, 107, 107, 0.5);
+    }
+    
+    .audio-btn:active {
+      transform: translateY(0) scale(1);
+    }
+    
+    .fruit-basket {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 18px 0 8px;
+      flex-wrap: wrap;
+    }
+    
+    .basket-fruit {
+      font-size: 36px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 15px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .basket-fruit:hover {
+      transform: translateY(-5px) rotate(10deg) scale(1.2);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+    }
+    
+    .basket-fruit.selected {
+      background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+      transform: scale(1.2);
+    }
+    
+    .options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; }
+    
+    .option-btn { background: linear-gradient(135deg, #6bcf7f, #4d96ff); color: white; border: none; padding: 14px; border-radius: 18px; font-size: 18px; font-weight: 700; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 5px 15px rgba(77, 150, 255, 0.3); position: relative; overflow: hidden; }
+    
+    .option-btn::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+    
+    .option-btn:hover::before {
+      width: 400px;
+      height: 400px;
+    }
+    
+    .option-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 20px rgba(77, 150, 255, 0.4);
+    }
+    
+    .option-btn.correct {
+      background: linear-gradient(135deg, #00b894, #00cec9);
+      animation: correctWiggle 0.6s ease;
+    }
+    
+    .option-btn.wrong {
+      background: linear-gradient(135deg, #d63031, #e17055);
+      animation: wrongShake 0.5s ease;
+    }
+    
+    @keyframes correctWiggle {
+      0%, 100% { transform: rotate(0deg) scale(1); }
+      25% { transform: rotate(-3deg) scale(1.05); }
+      75% { transform: rotate(3deg) scale(1.05); }
+    }
+    
+    @keyframes wrongShake {
+      0%, 100% { transform: translateX(0); }
+      10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+      20%, 40%, 60%, 80% { transform: translateX(5px); }
+    }
+    
+    .score-board {
+      margin-top: 18px;
+      padding: 14px;
+      background: linear-gradient(135deg, rgba(255, 107, 107, 0.1), rgba(77, 150, 255, 0.1));
+      border-radius: 25px;
+      text-align: center;
+    }
+    
+    .score-fruits { font-size: 28px; margin-bottom: 6px; }
+    
+    .score-text { font-size: 16px; font-weight: 600; color: #555; }
+    
+    .combo { font-size: 18px; font-weight: 700; color: #ff6b6b; margin-top: 8px; opacity: 0; animation: comboFlash 1s ease; }
+    
+    @media (max-width: 480px) {
+      .game-container { padding: 14px 12px; border-radius: 24px; }
+      .title h1 { font-size: 24px; }
+      .subtitle { font-size: 14px; }
+      .fruit-emoji { font-size: 88px; }
+      .fruit-name { font-size: 26px; }
+      .pronunciation { font-size: 13px; }
+      .option-btn { padding: 12px; font-size: 16px; }
+    }
+    @media (max-width: 360px) {
+      .options { grid-template-columns: 1fr; }
+      .title h1 { font-size: 22px; }
+      .fruit-emoji { font-size: 80px; }
+    }
+    
+    @keyframes comboFlash {
+      0% { opacity: 0; transform: scale(0.5); }
+      50% { opacity: 1; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div class="fruit-rain">
+    <div class="falling-fruit" style="left: 5%; animation-duration: 8s; animation-delay: 0s;">🍎</div>
+    <div class="falling-fruit" style="left: 15%; animation-duration: 10s; animation-delay: 2s;">🍊</div>
+    <div class="falling-fruit" style="left: 25%; animation-duration: 9s; animation-delay: 1s;">🍋</div>
+    <div class="falling-fruit" style="left: 35%; animation-duration: 11s; animation-delay: 3s;">🍇</div>
+    <div class="falling-fruit" style="left: 45%; animation-duration: 8s; animation-delay: 4s;">🍓</div>
+    <div class="falling-fruit" style="left: 55%; animation-duration: 12s; animation-delay: 2s;">🍑</div>
+    <div class="falling-fruit" style="left: 65%; animation-duration: 9s; animation-delay: 5s;">🍉</div>
+    <div class="falling-fruit" style="left: 75%; animation-duration: 10s; animation-delay: 1s;">🍌</div>
+    <div class="falling-fruit" style="left: 85%; animation-duration: 11s; animation-delay: 3s;">🥝</div>
+    <div class="falling-fruit" style="left: 95%; animation-duration: 8s; animation-delay: 6s;">🍒</div>
+  </div>
+  
+  <div class="game-container">
+    <div class="title">
+      <h1>FRUCTE ROMÂNEȘTI</h1>
+      <div class="subtitle">🍓 Învață fructele delicioase! 🍎</div>
+    </div>
+    
+    <div class="fruit-card" onclick="playSound()">
+      <div class="fruit-emoji" id="fruitEmoji">🍎</div>
+      <div class="fruit-name" id="fruitName">Măr</div>
+      <div class="pronunciation" id="pronunciation">[mər]</div>
+      <button class="audio-btn" onclick="playSound(event)">🔊 Ascultă</button>
+    </div>
+    
+    <div class="fruit-basket" id="fruitBasket"></div>
+    
+    <div class="options" id="options">
+      <button class="option-btn">Apple</button>
+      <button class="option-btn">Orange</button>
+      <button class="option-btn">Banana</button>
+      <button class="option-btn">Grape</button>
+    </div>
+    
+    <div class="score-board">
+      <div class="score-fruits" id="scoreFruits">🍎🍎🍎🍎🍎</div>
+      <div class="score-text">Punctaj: <span id="score">0</span> / <span id="total">0</span></div>
+      <div class="combo" id="combo">COMBO x3! 🎉</div>
+    </div>
+  </div>
+  
+  <script>
+    const fruits = [
+      { emoji: '🍎', ro: 'Măr', en: 'Apple', sound: 'mər' },
+      { emoji: '🍊', ro: 'Portocală', en: 'Orange', sound: 'por-to-ka-lə' },
+      { emoji: '🍌', ro: 'Banană', en: 'Banana', sound: 'ba-na-nə' },
+      { emoji: '🍇', ro: 'Struguri', en: 'Grapes', sound: 'stru-guri' },
+      { emoji: '🍓', ro: 'Căpșună', en: 'Strawberry', sound: 'kəp-shu-nə' },
+      { emoji: '🍑', ro: 'Piersică', en: 'Peach', sound: 'pyer-si-kə' },
+      { emoji: '🍉', ro: 'Pepene', en: 'Watermelon', sound: 'pe-pe-ne' },
+      { emoji: '🍋', ro: 'Lămâie', en: 'Lemon', sound: 'lə-mɨ-ye' },
+      { emoji: '🥝', ro: 'Kiwi', en: 'Kiwi', sound: 'ki-wi' },
+      { emoji: '🍒', ro: 'Cireșe', en: 'Cherries', sound: 'chi-re-she' },
+      { emoji: '🍐', ro: 'Pară', en: 'Pear', sound: 'pa-rə' },
+      { emoji: '🥭', ro: 'Mango', en: 'Mango', sound: 'man-go' },
+      { emoji: '🍍', ro: 'Ananas', en: 'Pineapple', sound: 'a-na-nas' },
+      { emoji: '🥥', ro: 'Nucă de cocos', en: 'Coconut', sound: 'nu-kə de ko-kos' },
+      { emoji: '🫐', ro: 'Afine', en: 'Blueberries', sound: 'a-fi-ne' }
+    ];
+    
+    let currentFruit = null;
+    let score = 0;
+    let total = 0;
+    let combo = 0;
+    let collectedFruits = [];
+    
+    // Improved Romanian TTS selection and settings
+    let roVoice = null;
+    function pickRomanianVoice() {
+      const voices = window.speechSynthesis?.getVoices?.() || [];
+      const roVoices = voices.filter(v => (v.lang||'').toLowerCase().startsWith('ro'));
+      const pref = roVoices.find(v => /google|microsoft/i.test(v.name)) || roVoices[0] || null;
+      roVoice = pref; return roVoice;
+    }
+    if (typeof speechSynthesis !== 'undefined') {
+      speechSynthesis.onvoiceschanged = () => { if (!roVoice) pickRomanianVoice(); };
+      pickRomanianVoice();
+    }
+    function speakRO(text){
+      if (!text) return;
+      try { speechSynthesis.cancel(); } catch(_){ }
+      const u = new SpeechSynthesisUtterance(String(text));
+      u.lang = (roVoice && roVoice.lang) ? roVoice.lang : 'ro-RO';
+      u.voice = roVoice || null;
+      u.rate = 0.9; u.pitch = 1.0; u.volume = 1.0;
+      speechSynthesis.speak(u);
+    }
+
+    function playSound(event) {
+      if (event) event.stopPropagation();
+      if (!currentFruit) return;
+      speakRO(currentFruit.ro.toLowerCase());
+      
+      // Animate fruit
+      document.getElementById('fruitEmoji').style.animation = 'none';
+      setTimeout(() => {
+        document.getElementById('fruitEmoji').style.animation = 'bounce 3s ease-in-out infinite';
+      }, 10);
+    }
+    
+    function createFruitBasket() {
+      const basket = document.getElementById('fruitBasket');
+      basket.innerHTML = '';
+      
+      const displayFruits = fruits.slice(0, 8);
+      displayFruits.forEach(fruit => {
+        const fruitDiv = document.createElement('div');
+        fruitDiv.className = 'basket-fruit';
+        fruitDiv.textContent = fruit.emoji;
+        fruitDiv.title = fruit.ro;
+        fruitDiv.onclick = () => selectFruit(fruit);
+        
+        if (fruit === currentFruit) {
+          fruitDiv.classList.add('selected');
+        }
+        
+        basket.appendChild(fruitDiv);
+      });
+    }
+    
+    function selectFruit(fruit) {
+      currentFruit = fruit;
+      document.getElementById('fruitEmoji').textContent = fruit.emoji;
+      document.getElementById('fruitName').textContent = fruit.ro;
+      document.getElementById('pronunciation').textContent = `[${fruit.sound}]`;
+      
+      createFruitBasket();
+      loadOptions();
+      playSound();
+    }
+    
+    function getRandomOptions(correct, count = 4) {
+      const options = [correct];
+      const available = fruits.filter(f => f.en !== correct.en);
+      
+      while (options.length < count) {
+        const random = available[Math.floor(Math.random() * available.length)];
+        if (!options.some(o => o.en === random.en)) {
+          options.push(random);
+        }
+      }
+      
+      return options.sort(() => Math.random() - 0.5);
+    }
+    
+    function loadOptions() {
+      const options = getRandomOptions(currentFruit);
+      const container = document.getElementById('options');
+      container.innerHTML = '';
+      
+      options.forEach((option, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.textContent = option.en;
+        btn.onclick = function() { checkAnswer(this, option.en === currentFruit.en); };
+        btn.style.animationDelay = `${index * 0.1}s`;
+        container.appendChild(btn);
+      });
+    }
+    
+    function loadNewFruit() {
+      const randomIndex = Math.floor(Math.random() * fruits.length);
+      currentFruit = fruits[randomIndex];
+      
+      document.getElementById('fruitEmoji').textContent = currentFruit.emoji;
+      document.getElementById('fruitName').textContent = currentFruit.ro;
+      document.getElementById('pronunciation').textContent = `[${currentFruit.sound}]`;
+      
+      createFruitBasket();
+      loadOptions();
+      
+      // Auto-play sound
+      setTimeout(playSound, 500);
+    }
+    
+    function updateScoreFruits() {
+      const fruitDisplay = document.getElementById('scoreFruits');
+      let display = '';
+      for (let i = 0; i < 5; i++) {
+        if (i < collectedFruits.length) {
+          display += collectedFruits[i];
+        } else {
+          display += '❓';
+        }
+      }
+      fruitDisplay.textContent = display;
+    }
+    
+    function checkAnswer(button, isCorrect) {
+      const buttons = document.querySelectorAll('.option-btn');
+      buttons.forEach(btn => btn.disabled = true);
+      
+      total++;
+      
+      if (isCorrect) {
+        score++;
+        combo++;
+        button.classList.add('correct');
+        
+        // Add fruit to collection
+        if (collectedFruits.length < 5) {
+          collectedFruits.push(currentFruit.emoji);
+          updateScoreFruits();
+        }
+        
+        // Show combo
+        if (combo >= 3) {
+          const comboEl = document.getElementById('combo');
+          comboEl.textContent = `COMBO x${combo}! 🎉`;
+          comboEl.style.animation = 'none';
+          setTimeout(() => {
+            comboEl.style.animation = 'comboFlash 1s ease';
+          }, 10);
+        }
+        
+        // Success effect
+        document.getElementById('fruitEmoji').style.animation = 'correctWiggle 0.6s ease';
+      } else {
+        combo = 0;
+        button.classList.add('wrong');
+        
+        // Show correct answer
+        buttons.forEach(btn => {
+          if (btn.textContent === currentFruit.en) {
+            btn.classList.add('correct');
+          }
+        });
+        
+        document.getElementById('combo').style.opacity = '0';
+      }
+      
+      // Update score
+      document.getElementById('score').textContent = score;
+      document.getElementById('total').textContent = total;
+      
+      // Load next fruit
+      setTimeout(() => {
+        buttons.forEach(btn => {
+          btn.classList.remove('correct', 'wrong');
+          btn.disabled = false;
+        });
+        loadNewFruit();
+      }, 1400);
+    }
+    
+    // Initialize
+    loadNewFruit();
+    updateScoreFruits();
+    
+    // Keyboard support
+    document.addEventListener('keydown', (e) => {
+      if (e.key >= '1' && e.key <= '4') {
+        const buttons = document.querySelectorAll('.option-btn:not([disabled])');
+        const index = parseInt(e.key) - 1;
+        if (buttons[index]) {
+          buttons[index].click();
+        }
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        playSound();
+      }
+    });
+  </script>
+</body>
+</html>

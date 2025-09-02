@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>Colori Italiani — Learn Italian Colors</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;500;600;700&display=swap');
+  
+  :root{
+    --bg1:#0f2027;
+    --bg2:#203a43;
+    --bg3:#2c5364;
+    --card:#ffffff;
+    --ink:#0e1116;
+    --muted:#5f6b76;
+    --accent:#38bdf8;
+    --good:#22c55e;
+    --bad:#ef4444;
+    --ring:#3b82f6;
+    --radius:24px;
+    --gap:16px;
+  }
+  
+  *{box-sizing:border-box}
+  html,body{height:100%;overflow:hidden}
+  
+  @keyframes gradientWave {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  
+  @keyframes float {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50% { transform: translateY(-20px) scale(1.02); }
+  }
+  
+  @keyframes sparkle {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+  
+  body{
+    margin:0;
+    font-family: 'Comfortaa', system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    color:var(--ink);
+    background: linear-gradient(135deg, #fc466b 0%, #3f5efb 25%, #667eea 50%, #764ba2 75%, #f093fb 100%);
+    background-size: 400% 400%;
+    animation: gradientWave 15s ease infinite;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
+    position: relative;
+  }
+  
+  body::before,
+  body::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  
+  body::before {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(255,119,48,0.8) 0%, transparent 70%);
+    top: -250px;
+    left: -250px;
+    animation: float 20s ease-in-out infinite;
+  }
+  
+  body::after {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(138,43,226,0.8) 0%, transparent 70%);
+    bottom: -200px;
+    right: -200px;
+    animation: float 25s ease-in-out infinite reverse;
+  }
+  .app{
+    width:min(100%,1000px);
+    background:rgba(255,255,255,.95);
+    box-shadow:
+      0 30px 80px rgba(0,0,0,.2),
+      0 15px 40px rgba(0,0,0,.15),
+      inset 0 2px 4px rgba(255,255,255,1);
+    border-radius:var(--radius);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    overflow:hidden;
+    position: relative;
+    border: 2px solid rgba(255,255,255,0.5);
+    animation: cardFloat 8s ease-in-out infinite;
+  }
+  
+  @keyframes cardFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:18px 24px;
+    background:linear-gradient(135deg, rgba(255,255,255,1), rgba(255,255,255,0.9));
+    border-bottom:2px solid rgba(255,255,255,0.5);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #fc466b, #3f5efb, #667eea, #764ba2, #f093fb);
+    background-size: 200% 100%;
+    animation: shimmerLine 3s linear infinite;
+  }
+  
+  @keyframes shimmerLine {
+    0% { background-position: -100% 0; }
+    100% { background-position: 100% 0; }
+  }
+  .title{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .logo{
+    width:42px;
+    height:42px;
+    border-radius:12px;
+    background:conic-gradient(from 0deg at 50% 50%, #e74c3c, #f39c12, #f1c40f, #27ae60, #00bcd4, #2962ff, #8e44ad, #e74c3c);
+    box-shadow:
+      0 4px 12px rgba(0,0,0,0.15),
+      inset 0 2px 4px rgba(255,255,255,0.5);
+    animation: spinSlow 20s linear infinite;
+  }
+  
+  @keyframes spinSlow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .title h1{
+    font-size:22px;
+    margin:0;
+    letter-spacing:.5px;
+    font-weight:700;
+    background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .scoreboard{
+    display:flex;
+    gap:14px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .pill{
+    background: linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.7));
+    backdrop-filter: blur(10px);
+    border:2px solid rgba(255,255,255,0.8);
+    padding:10px 16px;
+    border-radius:999px;
+    font-weight:700;
+    font-size:15px;
+    color:#333;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    transition: all 0.3s ease;
+  }
+  
+  .pill:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  }
+  .pill .label{
+    color:var(--muted);
+    font-weight:500;
+    margin-right:6px;
+  }
+  .ghostbtn{
+    appearance:none;
+    border:2px solid rgba(102, 126, 234, 0.5);
+    background:linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    color:#333;
+    padding:10px 16px;
+    border-radius:14px;
+    font-weight:700;
+    cursor:pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .ghostbtn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(102, 126, 234, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+  }
+  
+  .ghostbtn:hover::before {
+    width: 200px;
+    height: 200px;
+  }
+  
+  .ghostbtn:hover {
+    background:linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+    border-color: rgba(102, 126, 234, 0.8);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+  }
+  
+  .ghostbtn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+  }
+  main{
+    padding:22px clamp(14px,4vw,28px) 26px;
+  }
+  .prompt{
+    text-align:center;
+    margin:6px 0 18px;
+  }
+  .prompt .hint{
+    color:var(--muted);
+    font-size:14px;
+    letter-spacing:.2px;
+  }
+  .word{
+    margin-top:8px;
+    font-size:clamp(28px,7vw,56px);
+    line-height:1.05;
+    font-weight:800;
+    letter-spacing:.5px;
+    color:#0b1220;
+    text-shadow:0 1px 0 rgba(255,255,255,.6);
+  }
+  .grid{
+    --cols:2;
+    display:grid;
+    grid-template-columns:repeat(var(--cols), minmax(110px,1fr));
+    gap:var(--gap);
+    margin:12px auto 10px;
+    width:min(760px,100%);
+  }
+  .tile{
+    position:relative;
+    aspect-ratio:1/1;
+    border-radius:14px;
+    border:2px solid rgba(0,0,0,.1);
+    overflow:hidden;
+    cursor:pointer;
+    padding:0;
+    outline:none;
+    background: var(--bg, #ddd);
+    box-shadow: 0 6px 16px rgba(0,0,0,.12);
+    transition: transform .12s ease, box-shadow .2s ease, border-color .2s ease, filter .2s ease;
+    touch-action:manipulation;
+  }
+  .tile::before{
+    content:"";
+    position:absolute;inset:0;
+    background: linear-gradient(180deg, rgba(255,255,255,.25), rgba(0,0,0,.0) 40%, rgba(0,0,0,.14));
+    mix-blend-mode:soft-light;
+    pointer-events:none;
+  }
+  .tile:active{transform:scale(.97)}
+  .tile:hover{box-shadow: 0 10px 24px rgba(0,0,0,.18)}
+  .kbd-focus, .tile:focus-visible{
+    box-shadow: 0 0 0 3px var(--ring), 0 10px 24px rgba(0,0,0,.2);
+  }
+  .tile .num{
+    position:absolute;
+    top:8px;left:8px;
+    font-size:13px;
+    font-weight:800;
+    padding:4px 8px;
+    border-radius:999px;
+    background:rgba(255,255,255,.75);
+    border:1px solid rgba(0,0,0,.08);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    letter-spacing:.5px;
+  }
+  .tile .check{
+    position:absolute; right:8px; bottom:8px;
+    width:28px;height:28px;border-radius:50%;
+    display:grid;place-items:center;
+    background:rgba(255,255,255,.75);
+    border:1px solid rgba(0,0,0,.08);
+    opacity:0; transform:scale(.8);
+    transition:.18s ease;
+  }
+  .tile.correct .check{opacity:1; transform:scale(1)}
+  .tile.correct{animation:pop .22s ease}
+  @keyframes pop{
+    0%{transform:scale(1)}
+    50%{transform:scale(1.06)}
+    100%{transform:scale(1)}
+  }
+  .shake{animation:shake .28s cubic-bezier(.36,.07,.19,.97)}
+  @keyframes shake{
+    10%,90%{transform:translateX(-1px)}
+    20%,80%{transform:translateX(2px)}
+    30%,50%,70%{transform:translateX(-4px)}
+    40%,60%{transform:translateX(4px)}
+  }
+  .hud{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-top:12px;
+    flex-wrap:wrap;
+  }
+  .controls{
+    color:var(--muted);
+    font-size:14px;
+  }
+  .actions{
+    display:flex;gap:10px;
+  }
+  .sr-only{
+    position:absolute !important;
+    height:1px;width:1px;overflow:hidden;
+    clip:rect(1px,1px,1px,1px);
+    white-space:nowrap;
+  }
+  dialog{
+    margin:auto;
+    border:none;
+    border-radius:16px;
+    padding:0;
+    width:min(680px,calc(100% - 28px));
+    box-shadow:0 30px 80px rgba(0,0,0,.35);
+    overflow:hidden;
+  }
+  dialog::backdrop{
+    background:rgba(0,0,0,.5);
+    backdrop-filter: blur(2px);
+  }
+  .modal-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 16px;
+    background:#0b122005;
+    border-bottom:1px solid rgba(0,0,0,.06);
+  }
+  .modal-body{padding:16px}
+  .modal-body h3{margin:.2em 0 .4em;font-size:20px}
+  .modal-body p{margin:.2em 0 1em;color:#243141}
+  .list{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;font-size:14px;color:#233047;
+  }
+  .footer{
+    display:flex;justify-content:flex-end;gap:10px;padding:12px 16px;border-top:1px solid rgba(0,0,0,.06);background:#0b122005;
+  }
+  .primary{
+    background:var(--ring); color:#fff; border-color:transparent;
+  }
+  .primary:hover{filter:brightness(1.05)}
+  @media (max-width:560px){
+    .grid{gap:12px}
+    .tile .num{top:6px;left:6px}
+    .tile .check{right:6px;bottom:6px}
+    .controls{font-size:13px}
+  }
+</style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header>
+      <div class="title">
+        <div class="logo" aria-hidden="true"></div>
+        <h1>Colori Italiani</h1>
+      </div>
+      <div class="scoreboard">
+        <div class="pill"><span class="label">Punteggio</span><span id="score">0</span></div>
+        <div class="pill"><span class="label">Record</span><span id="best">0</span></div>
+        <button class="ghostbtn" id="helpBtn" aria-haspopup="dialog" aria-controls="help">?</button>
+      </div>
+    </header>
+    <main>
+      <div class="prompt" role="group" aria-labelledby="word">
+        <div class="hint">Scegli il colore giusto</div>
+        <div class="word" id="word">—</div>
+      </div>
+      <div class="grid" id="grid" style="--cols:2"></div>
+      <div class="hud">
+        <div class="controls">Tap/click a color • Keys 1–6 • Arrows + Enter/Space</div>
+        <div class="actions">
+          <button class="ghostbtn" id="resetBtn" title="Reset score">Reset</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="help" aria-label="How to play">
+    <div class="modal-head">
+      <strong>How to play</strong>
+      <button class="ghostbtn" id="closeHelp">Close</button>
+    </div>
+    <div class="modal-body">
+      <h3>Match the Italian word to its color</h3>
+      <p>Read the Italian color word at the top and tap/click the matching color box.</p>
+      <p>Keyboard controls:</p>
+      <ul>
+        <li>Press numbers 1–6 to pick a tile.</li>
+        <li>Use Arrow keys to move and Enter/Space to select.</li>
+      </ul>
+      <p>Score increases by 1 for each correct match. Aim to beat your best!</p>
+      <h3>Quick color glossary</h3>
+      <div class="list" id="glossary"></div>
+    </div>
+    <div class="footer">
+      <button class="ghostbtn" id="startPractice">Start</button>
+      <button class="ghostbtn primary" id="startClose">Start & Close</button>
+    </div>
+  </dialog>
+
+  <div class="sr-only" aria-live="polite" id="live"></div>
+
+<script>
+(function(){
+  const COLORS = [
+    { it:'Rosso', hex:'#e74c3c' },
+    { it:'Verde', hex:'#27ae60' },
+    { it:'Blu', hex:'#2962ff' },
+    { it:'Giallo', hex:'#f1c40f' },
+    { it:'Arancione', hex:'#e67e22' },
+    { it:'Viola', hex:'#8e44ad' },
+    { it:'Nero', hex:'#111111' },
+    { it:'Bianco', hex:'#ffffff' },
+    { it:'Grigio', hex:'#7f8c8d' },
+    { it:'Rosa', hex:'#ff6b9c' },
+    { it:'Marrone', hex:'#8d5a2b' },
+    { it:'Azzurro', hex:'#00bcd4' }
+  ];
+  const ENGLISH = {
+    'Rosso':'Red','Verde':'Green','Blu':'Blue','Giallo':'Yellow',
+    'Arancione':'Orange','Viola':'Purple','Nero':'Black','Bianco':'White',
+    'Grigio':'Gray','Rosa':'Pink','Marrone':'Brown','Azzurro':'Light Blue'
+  };
+
+  const wordEl = document.getElementById('word');
+  const gridEl = document.getElementById('grid');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const liveEl = document.getElementById('live');
+  const helpDlg = document.getElementById('help');
+  const helpBtn = document.getElementById('helpBtn');
+  const closeHelp = document.getElementById('closeHelp');
+  const startPractice = document.getElementById('startPractice');
+  const startClose = document.getElementById('startClose');
+  const resetBtn = document.getElementById('resetBtn');
+  const glossary = document.getElementById('glossary');
+
+  let score = 0;
+  let best = Number(localStorage.getItem('itcolor_best')||0);
+  bestEl.textContent = best;
+  let lastTarget = -1;
+  let targetIndex = -1;
+  let optionIndices = [];
+  let optionCount = 4;
+  let cols = 2;
+  let kbdIndex = -1;
+  let isTransitioning = false;
+
+  let audioCtx = null;
+  function ensureAudio(){
+    if(!audioCtx){
+      try{ audioCtx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ audioCtx = null; }
+    }
+  }
+  function beep(type='ok'){
+    if(!audioCtx) return;
+    const ctx = audioCtx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    const now = ctx.currentTime;
+    if(type==='ok'){
+      o.type='triangle';
+      o.frequency.setValueAtTime(660, now);
+      o.frequency.exponentialRampToValueAtTime(880, now+0.12);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.07, now+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+0.18);
+      o.start(now); o.stop(now+0.2);
+    }else{
+      o.type='sawtooth';
+      o.frequency.setValueAtTime(180, now);
+      o.frequency.exponentialRampToValueAtTime(140, now+0.08);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.06, now+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+0.14);
+      o.start(now); o.stop(now+0.16);
+    }
+  }
+  function vibrate(ms){ if(navigator.vibrate) try{ navigator.vibrate(ms); }catch(e){} }
+
+  function contrast(hex){
+    let h = hex.replace('#','');
+    if(h.length===3) h=[...h].map(x=>x+x).join('');
+    const r = parseInt(h.slice(0,2),16);
+    const g = parseInt(h.slice(2,4),16);
+    const b = parseInt(h.slice(4,6),16);
+    const yiq = (r*299 + g*587 + b*114) / 1000;
+    return yiq >= 175 ? '#0b1220' : '#ffffff';
+  }
+  function borderFor(hex){
+    const c = contrast(hex);
+    return c==='#ffffff' ? 'rgba(255,255,255,.6)' : 'rgba(0,0,0,.22)';
+  }
+
+  function getOptionCount(){
+    const w = Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth);
+    const portrait = window.matchMedia('(orientation: portrait)').matches;
+    return (w < 580 || portrait) ? 4 : 6;
+  }
+  function setColsByCount(n){
+    const c = (n<=4) ? 2 : 3;
+    cols = c;
+    gridEl.style.setProperty('--cols', String(c));
+  }
+
+  function shuffle(arr){
+    for(let i=arr.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+    }
+    return arr;
+  }
+
+  function newTarget(){
+    let idx;
+    do{ idx = Math.floor(Math.random()*COLORS.length); }while(idx===lastTarget);
+    lastTarget = idx;
+    targetIndex = idx;
+    wordEl.textContent = COLORS[idx].it;
+    liveEl.textContent = 'Trova: ' + COLORS[idx].it;
+  }
+
+  function buildOptions(){
+    optionCount = getOptionCount();
+    setColsByCount(optionCount);
+    const opts = new Set([targetIndex]);
+    while(opts.size < optionCount){
+      const r = Math.floor(Math.random()*COLORS.length);
+      opts.add(r);
+    }
+    optionIndices = shuffle(Array.from(opts));
+  }
+
+  function clearGrid(){
+    gridEl.innerHTML = '';
+  }
+
+  function renderGrid(){
+    clearGrid();
+    optionIndices.forEach((colorIdx, i)=>{
+      const color = COLORS[colorIdx];
+      const btn = document.createElement('button');
+      btn.className = 'tile';
+      btn.style.setProperty('--bg', color.hex);
+      btn.style.borderColor = borderFor(color.hex);
+      btn.setAttribute('aria-label', `${i+1}: ${color.it} tile`);
+      btn.dataset.colorIndex = String(colorIdx);
+      btn.dataset.pos = String(i);
+      btn.innerHTML = `
+        <span class="num" style="color:${contrast(color.hex)}">${i+1}</span>
+        <span class="check">✓</span>
+      `;
+      btn.addEventListener('click', onTileSelect);
+      gridEl.appendChild(btn);
+    });
+    kbdIndex = -1;
+  }
+
+  function onTileSelect(e){
+    if(isTransitioning) return;
+    ensureAudio();
+    const btn = e.currentTarget;
+    const chosen = Number(btn.dataset.colorIndex);
+    if(chosen === targetIndex){
+      isTransitioning = true;
+      score += 1;
+      if(score > best){ best = score; localStorage.setItem('itcolor_best', String(best)); }
+      scoreEl.textContent = score;
+      bestEl.textContent = best;
+      btn.classList.add('correct');
+      beep('ok'); vibrate(12);
+      disableTiles(true);
+      setTimeout(()=>{
+        isTransitioning = false;
+        nextRound();
+      }, 420);
+    }else{
+      gridEl.classList.remove('shake'); void gridEl.offsetWidth; gridEl.classList.add('shake');
+      beep('bad'); vibrate(50);
+      flashBorder(btn);
+    }
+  }
+
+  function flashBorder(btn){
+    const old = btn.style.borderColor;
+    btn.style.borderColor = 'rgba(239,68,68,.95)';
+    setTimeout(()=>{ btn.style.borderColor = old; }, 220);
+  }
+
+  function disableTiles(dis=true){
+    const tiles = gridEl.querySelectorAll('.tile');
+    tiles.forEach(t=> t.disabled = !!dis);
+  }
+
+  function nextRound(){
+    newTarget();
+    buildOptions();
+    renderGrid();
+  }
+
+  function resetScore(){
+    score = 0;
+    scoreEl.textContent = score;
+  }
+
+  function openHelp(){
+    if(typeof helpDlg.showModal === 'function'){
+      populateGlossary();
+      helpDlg.showModal();
+    }else{
+      alert('How to play:\n\nMatch the Italian word to its color.\nTap/click a box or use keyboard:\n- 1–6 to pick\n- Arrow keys + Enter.\nScore +1 for each correct match.');
+    }
+  }
+  function closeHelpDialog(){
+    if(helpDlg.open) helpDlg.close();
+  }
+  function populateGlossary(){
+    if(glossary.dataset.ready) return;
+    const frag = document.createDocumentFragment();
+    COLORS.forEach(c=>{
+      const div = document.createElement('div');
+      div.style.display='flex'; div.style.alignItems='center'; div.style.gap='8px';
+      const sw = document.createElement('span');
+      sw.style.display='inline-block';
+      sw.style.width='18px'; sw.style.height='18px'; sw.style.borderRadius='5px';
+      sw.style.background=c.hex;
+      sw.style.border='1px solid '+borderFor(c.hex);
+      const text = document.createElement('span');
+      text.textContent = `${c.it} — ${ENGLISH[c.it]||''}`;
+      div.appendChild(sw); div.appendChild(text);
+      frag.appendChild(div);
+    });
+    glossary.appendChild(frag);
+    glossary.dataset.ready = '1';
+  }
+
+  function setKbdFocus(idx){
+    const tiles = [...gridEl.querySelectorAll('.tile')];
+    tiles.forEach(t=>t.classList.remove('kbd-focus'));
+    if(idx>=0 && idx<tiles.length){
+      tiles[idx].classList.add('kbd-focus');
+      tiles[idx].focus({preventScroll:true});
+      kbdIndex = idx;
+    }
+  }
+  function kbdMove(dx, dy){
+    const total = optionIndices.length;
+    const r = cols;
+    if(total===0) return;
+    if(kbdIndex < 0) { setKbdFocus(0); return; }
+    const c = r;
+    const currentRow = Math.floor(kbdIndex / c);
+    const currentCol = kbdIndex % c;
+    let newRow = currentRow + dy;
+    let newCol = currentCol + dx;
+    if(newCol < 0){ newCol = c-1; newRow -= 1; }
+    if(newCol >= c){ newCol = 0; newRow += 1; }
+    const maxRow = Math.ceil(total / c) - 1;
+    if(newRow < 0) newRow = maxRow;
+    if(newRow > maxRow) newRow = 0;
+    let newIndex = newRow * c + newCol;
+    // clamp to last element if overflow in short last row
+    if(newIndex >= total) newIndex = total - 1;
+    setKbdFocus(newIndex);
+  }
+  function kbdPick(index){
+    const tiles = gridEl.querySelectorAll('.tile');
+    if(index>=0 && index<tiles.length){
+      tiles[index].click();
+    }
+  }
+
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='?' || (e.key.toLowerCase()==='h' && !helpDlg.open)){
+      e.preventDefault(); openHelp(); return;
+    }
+    if(helpDlg.open){
+      if(e.key==='Escape'){ closeHelpDialog(); }
+      return;
+    }
+    ensureAudio();
+    if(e.key>='1' && e.key<='9'){
+      const n = parseInt(e.key,10) - 1;
+      if(n < optionIndices.length){
+        e.preventDefault();
+        kbdPick(n);
+      }
+      return;
+    }
+    switch(e.key){
+      case 'ArrowLeft': e.preventDefault(); kbdMove(-1,0); break;
+      case 'ArrowRight': e.preventDefault(); kbdMove(1,0); break;
+      case 'ArrowUp': e.preventDefault(); kbdMove(0,-1); break;
+      case 'ArrowDown': e.preventDefault(); kbdMove(0,1); break;
+      case 'Enter':
+      case ' ': if(kbdIndex>=0){ e.preventDefault(); kbdPick(kbdIndex); } break;
+      case 'r':
+      case 'R': resetScore(); break;
+      default: break;
+    }
+  }, {passive:false});
+
+  window.addEventListener('resize', ()=>{
+    const prevCount = optionCount;
+    const n = getOptionCount();
+    if(n !== prevCount){
+      optionCount = n;
+      setColsByCount(optionCount);
+      // keep same target, rebuild options
+      buildOptions();
+      renderGrid();
+    }
+  });
+
+  helpBtn.addEventListener('click', openHelp);
+  closeHelp.addEventListener('click', closeHelpDialog);
+  startPractice.addEventListener('click', ()=>{ resetScore(); nextRound(); });
+  startClose.addEventListener('click', ()=>{ resetScore(); nextRound(); closeHelpDialog(); });
+  resetBtn.addEventListener('click', ()=>{ resetScore(); });
+
+  // Kick off
+  nextRound();
+
+  // Small UX: open help on first visit (optional, only once)
+  const SEEN = 'itcolor_seen';
+  if(!localStorage.getItem(SEEN)){
+    setTimeout(openHelp, 300);
+    localStorage.setItem(SEEN,'1');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Comida en Español - Juego de Vocabulario</title>
+<style>
+  :root{
+    --bg1:#ffe9f0;
+    --bg2:#eaf7ff;
+    --text:#1f2330;
+    --muted:#718096;
+    --primary:#ff4d6d;
+    --accent:#3ecf8e;
+    --warning:#ffcc00;
+    --card:#ffffff;
+    --shadow:0 10px 25px rgba(0,0,0,0.12);
+    --radius:18px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, sans-serif;
+    color:var(--text);
+    background: radial-gradient(1200px 800px at 10% -10%, var(--bg1), transparent),
+                radial-gradient(1200px 800px at 110% 10%, var(--bg2), #fff);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    -webkit-font-smoothing:antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .container{
+    width: min(100%, 1000px);
+    padding: clamp(12px, 3vw, 24px);
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .title{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .logo{
+    width:40px;height:40px;border-radius:12px;
+    background: conic-gradient(from 0deg at 50% 50%, #ff9fb2, #ffd166, #8fd3fe, #a0e9a5, #ff9fb2);
+    box-shadow: var(--shadow);
+  }
+  h1{
+    margin:0;
+    font-size: clamp(20px, 2.6vw, 28px);
+    letter-spacing:.2px;
+  }
+  .scoreboard{
+    display:flex;
+    align-items:center;gap:14px;
+    background:rgba(255,255,255,.7);
+    padding:8px 12px;border-radius:14px;
+    box-shadow: var(--shadow);
+    font-weight:600;
+  }
+  .scoreboard .pill{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:6px 10px;border-radius:999px;background:#fff;
+    box-shadow: 0 4px 12px rgba(0,0,0,.06);
+    font-size:14px;
+  }
+  .progress{
+    height:10px;border-radius:999px;background:#e8eef7;overflow:hidden;
+    width:100%;
+  }
+  .progress > span{
+    display:block;height:100%;width:0%;
+    background: linear-gradient(90deg,#00c9a7,#00e7b7);
+    transition: width .35s ease;
+  }
+  .prompt{
+    background:#ffffffa6;
+    backdrop-filter: blur(4px);
+    border-radius:var(--radius);
+    padding:14px 16px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    box-shadow: var(--shadow);
+  }
+  .prompt .text{
+    font-size: clamp(16px, 2.2vw, 20px);
+    line-height:1.25;
+  }
+  .controls{
+    display:flex;gap:10px;flex-wrap:wrap;
+  }
+  button{
+    appearance:none;border:0;cursor:pointer;
+    padding:12px 16px;border-radius:14px;font-weight:700;
+    background:#1f8efa;color:#fff;box-shadow: var(--shadow);
+    font-size:16px;
+    transition: transform .06s ease, filter .2s ease, background .2s ease, opacity .2s ease;
+    touch-action: manipulation;
+  }
+  button:active{transform: translateY(1px) scale(.98)}
+  .btn-secondary{background:#5a6c7b}
+  .btn-ghost{background:#ffffffd6;color:#1f2330}
+  .btn-success{background:#2ecb70}
+  .btn-warning{background:#ffb703}
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(2, minmax(140px,1fr));
+    gap: clamp(12px, 2.2vw, 18px);
+  }
+  @media (min-width: 820px){
+    .grid{grid-template-columns: repeat(4, 1fr);}
+  }
+  .card{
+    user-select:none;
+    background: #fff;
+    border-radius: 22px;
+    padding: 14px;
+    aspect-ratio: 1/1;
+    display:flex;align-items:center;justify-content:center;
+    position:relative;
+    box-shadow: var(--shadow);
+    transition: transform .12s ease, box-shadow .2s ease, filter .2s ease;
+  }
+  .card:focus-visible{outline:3px solid #5ec4ff}
+  .card:hover{transform: translateY(-2px)}
+  .card .kbd{
+    position:absolute;top:10px;left:10px;
+    background:#111827;color:#fff;border-radius:10px;padding:4px 8px;font-weight:800;
+    font-size:12px;opacity:.85;
+    box-shadow: 0 4px 10px rgba(0,0,0,.2);
+  }
+  .card .svgwrap{width:85%;height:85%}
+  .card.correct{animation: pop .35s ease}
+  .card.correct::after{
+    content:"¡Muy bien!";
+    position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+    background:#eafff5;color:#0a8f55;border:2px solid #b8f4d4;
+    padding:4px 10px;border-radius:999px;font-weight:800;font-size:13px;
+  }
+  .card.wrong{animation: shake .3s ease}
+  .card.locked{filter:grayscale(.25) saturate(.8) opacity(.9)}
+  @keyframes shake{
+    10%,90%{transform: translateX(-2px)}
+    20%,80%{transform: translateX(4px)}
+    30%,50%,70%{transform: translateX(-6px)}
+    40%,60%{transform: translateX(6px)}
+  }
+  @keyframes pop{
+    0%{transform:scale(1)}
+    40%{transform:scale(1.05)}
+    100%{transform:scale(1)}
+  }
+  .footer{
+    color:var(--muted);
+    font-size:13px;text-align:center;margin-top:8px;
+  }
+  .overlay{
+    position:fixed;inset:0;background: linear-gradient(180deg,#fff, #f3f7ff);
+    display:flex;align-items:center;justify-content:center;z-index:50;
+    padding:24px;
+  }
+  .panel{
+    width:min(680px,100%);
+    background:#fff;border-radius:28px;padding:24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.15);
+    text-align:center;display:flex;flex-direction:column;gap:16px;
+  }
+  .panel h2{margin:0;font-size: clamp(22px, 4vw, 34px)}
+  .panel p{margin:0;color:#4a5568}
+  .howto{
+    background:#f6f9ff;border-radius:16px;padding:16px;text-align:left;display:grid;gap:8px;
+    font-size:15px;color:#334155
+  }
+  .howto b{color:#0f172a}
+  .hidden{display:none}
+  .celebrate{
+    font-size:42px;line-height:1
+  }
+  .muted-note{
+    font-size:12px;color:#6b7280
+  }
+</style>
+</head>
+<body>
+  <div class="overlay" id="start">
+    <div class="panel">
+      <div class="celebrate">🥑🍎🥖🥛</div>
+      <h2>Comida en Español</h2>
+      <p>Escucha la palabra en español y toca el alimento correcto.</p>
+      <div class="howto">
+        <div>• Pulsa <b>Empezar</b> para activar el sonido.</div>
+        <div>• Botón <b>Repetir</b> para oír de nuevo.</div>
+        <div>• Teclado: <b>1-4</b> para elegir, <b>R</b> o <b>Espacio</b> para repetir.</div>
+      </div>
+      <div class="muted-note">Consejo: Asegúrate de que el volumen del dispositivo esté activado. Usamos una voz en español del navegador.</div>
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
+        <button class="btn-success" id="btnStart">Empezar ▶</button>
+        <button class="btn-ghost" id="btnMuteToggleStart">🔊 Voz: Activada</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="container" aria-live="polite">
+    <header>
+      <div class="title">
+        <div class="logo" aria-hidden="true"></div>
+        <h1>Comida en Español</h1>
+      </div>
+      <div class="scoreboard">
+        <div class="pill">Puntos: <span id="score">0</span></div>
+        <div class="pill">Ronda: <span id="round">1</span>/10</div>
+      </div>
+    </header>
+
+    <div class="prompt">
+      <div class="text">
+        Escucha y elige: <b id="targetText">—</b>
+      </div>
+      <div class="controls">
+        <button id="btnRepeat" class="btn-warning">🔊 Repetir</button>
+        <button id="btnMute" class="btn-ghost">🔊 Voz: Activada</button>
+      </div>
+    </div>
+
+    <div class="progress" aria-hidden="true">
+      <span id="bar" style="width:0%"></span>
+    </div>
+
+    <div class="grid" id="grid" role="group" aria-label="Opciones de comida"></div>
+
+    <div class="footer">
+      Toca la imagen correcta. ¡Aprende: manzana, plátano, pan, leche!
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="end">
+    <div class="panel">
+      <div class="celebrate">🎉</div>
+      <h2>¡Bien hecho!</h2>
+      <p>Tu resultado: <b id="finalScore">0</b> de <b>10</b></p>
+      <div class="howto">
+        ¿Otra vez? Practicar refuerza el vocabulario. Pulsa Repetir para escuchar la palabra y elige la imagen.
+      </div>
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap">
+        <button id="btnAgain" class="btn-success">Jugar de nuevo ↻</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const TOTAL_ROUNDS = 10;
+
+  const FOODS = [
+    { id:'manzana', speak:'manzana', en:'apple', svg: svgApple },
+    { id:'platano', speak:'plátano', en:'banana', svg: svgBanana },
+    { id:'pan', speak:'pan', en:'bread', svg: svgBread },
+    { id:'leche', speak:'leche', en:'milk', svg: svgMilk },
+  ];
+
+  // DOM
+  const grid = document.getElementById('grid');
+  const scoreEl = document.getElementById('score');
+  const roundEl = document.getElementById('round');
+  const targetTextEl = document.getElementById('targetText');
+  const barEl = document.getElementById('bar');
+  const startOverlay = document.getElementById('start');
+  const endOverlay = document.getElementById('end');
+  const finalScoreEl = document.getElementById('finalScore');
+  const btnRepeat = document.getElementById('btnRepeat');
+  const btnMute = document.getElementById('btnMute');
+  const btnStart = document.getElementById('btnStart');
+  const btnMuteToggleStart = document.getElementById('btnMuteToggleStart');
+  const btnAgain = document.getElementById('btnAgain');
+
+  // State
+  let score = 0;
+  let round = 1;
+  let currentTarget = null;
+  let currentOrder = [];
+  let accepting = true;
+  let muted = false;
+  let firstTry = true;
+  let lastTargetId = null;
+
+  // Audio - Speech
+  let preferredVoice = null;
+  function loadVoices(){
+    const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+    const esVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
+    const esPref = esVoices.find(v => /spain|es-es|castellano/i.test(v.name+v.lang)) || esVoices[0];
+    preferredVoice = esPref || voices[0] || null;
+  }
+  if ('speechSynthesis' in window){
+    speechSynthesis.onvoiceschanged = loadVoices;
+    // Some browsers need a touch to unlock; we will trigger speak after Start
+  }
+
+  function speak(text){
+    if (muted) return;
+    if (!('speechSynthesis' in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.9;
+    u.pitch = 1.0;
+    u.lang = 'es-ES';
+    if (preferredVoice) u.voice = preferredVoice;
+    try{
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    }catch(e){}
+  }
+
+  // Simple SFX beeps using WebAudio (no external files)
+  const ACtx = window.AudioContext || window.webkitAudioContext;
+  let audioCtx = null;
+  function initAudio(){
+    if (!audioCtx && ACtx) audioCtx = new ACtx();
+  }
+  function beep(frequency=800, duration=120, type='sine', volume=0.2){
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = frequency;
+    g.gain.value = volume;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    setTimeout(()=>{ o.stop(); }, duration);
+  }
+  function chimeCorrect(){
+    if (!audioCtx) return;
+    // Cute two-tone chime
+    beep(880, 120, 'sine', 0.18);
+    setTimeout(()=>beep(1175, 120, 'sine', 0.18), 130);
+  }
+  function buzzWrong(){
+    if (!audioCtx) return;
+    beep(220, 80, 'square', 0.12);
+    setTimeout(()=>beep(180, 100, 'square', 0.12), 80);
+  }
+
+  // Utils
+  function shuffle(arr){
+    const a = arr.slice();
+    for (let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]] = [a[j],a[i]];
+    }
+    return a;
+  }
+  function byId(id){ return FOODS.find(f=>f.id===id); }
+
+  // Build grid cards (persistent elements)
+  const cardEls = [];
+  for(let i=0;i<4;i++){
+    const card = document.createElement('button');
+    card.className = 'card';
+    card.setAttribute('type','button');
+    card.setAttribute('aria-label','opción');
+    card.innerHTML = `
+      <div class="kbd">${i+1}</div>
+      <div class="svgwrap" aria-hidden="true"></div>
+    `;
+    card.dataset.idx = i;
+    grid.appendChild(card);
+    cardEls.push(card);
+    // pointer/touch
+    card.addEventListener('pointerup', () => handlePick(card));
+    card.addEventListener('keydown', (e)=> {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handlePick(card);
+      }
+    });
+  }
+
+  function renderRound(){
+    currentOrder = shuffle(FOODS);
+    // choose target different from last one if possible
+    let choices = FOODS.filter(f => f.id !== lastTargetId);
+    if (choices.length === 0) choices = FOODS.slice();
+    currentTarget = choices[Math.floor(Math.random()*choices.length)];
+    lastTargetId = currentTarget.id;
+
+    // Render icons in cards
+    for(let i=0;i<4;i++){
+      const food = currentOrder[i];
+      const wrap = cardEls[i].querySelector('.svgwrap');
+      wrap.innerHTML = food.svg();
+      cardEls[i].dataset.food = food.id;
+      cardEls[i].classList.remove('correct','wrong','locked');
+      cardEls[i].disabled = false;
+    }
+
+    accepting = true;
+    firstTry = true;
+    targetTextEl.textContent = `"${currentTarget.speak}"`;
+    barEl.style.width = ((round-1)/TOTAL_ROUNDS*100)+'%';
+    roundEl.textContent = String(round);
+
+    setTimeout(()=> { if (!muted) speak(currentTarget.speak); }, 150);
+  }
+
+  function handlePick(card){
+    if (!accepting) return;
+    const chosenId = card.dataset.food;
+    const good = chosenId === currentTarget.id;
+
+    if (good){
+      accepting = false;
+      card.classList.add('correct');
+      if (firstTry) {
+        score++;
+        scoreEl.textContent = String(score);
+      }
+      chimeCorrect();
+      navigator.vibrate && navigator.vibrate(40);
+      lockOthers(chosenId);
+      setTimeout(nextStep, 700);
+    }else{
+      firstTry = false;
+      card.classList.add('wrong');
+      buzzWrong();
+      navigator.vibrate && navigator.vibrate(80);
+      setTimeout(()=>card.classList.remove('wrong'), 260);
+    }
+  }
+
+  function lockOthers(correctId){
+    for (const c of cardEls){
+      if (c.dataset.food !== correctId){
+        c.classList.add('locked');
+        c.disabled = true;
+      }
+    }
+  }
+
+  function nextStep(){
+    if (round >= TOTAL_ROUNDS){
+      endGame();
+      return;
+    }
+    round++;
+    renderRound();
+  }
+
+  function startGame(){
+    // Unlock audio contexts and prepare voices
+    initAudio();
+    loadVoices();
+    startOverlay.classList.add('hidden');
+    score = 0; round = 1; scoreEl.textContent = '0'; roundEl.textContent = '1';
+    barEl.style.width = '0%';
+    renderRound();
+  }
+
+  function endGame(){
+    finalScoreEl.textContent = String(score);
+    endOverlay.classList.remove('hidden');
+  }
+
+  // Buttons
+  btnRepeat.addEventListener('click', ()=> { speak(currentTarget?.speak || ''); initAudio(); });
+  btnMute.addEventListener('click', toggleMute);
+  btnStart.addEventListener('click', ()=> {
+    startGame();
+    if (audioCtx && audioCtx.state === 'suspended'){ audioCtx.resume(); }
+  });
+  btnMuteToggleStart.addEventListener('click', toggleMute);
+  btnAgain.addEventListener('click', ()=> {
+    endOverlay.classList.add('hidden');
+    startGame();
+  });
+
+  function toggleMute(){
+    muted = !muted;
+    btnMute.textContent = muted ? '🔇 Voz: Silenciada' : '🔊 Voz: Activada';
+    btnMuteToggleStart.textContent = muted ? '🔇 Voz: Silenciada' : '🔊 Voz: Activada';
+    if (!muted && currentTarget) speak(currentTarget.speak);
+  }
+
+  // Keyboard controls
+  window.addEventListener('keydown', (e)=>{
+    if (!startOverlay.classList.contains('hidden')) return; // start overlay on
+    if (!endOverlay.classList.contains('hidden')) {
+      if (e.key.toLowerCase() === 'r' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        btnAgain.click();
+      }
+      return;
+    }
+    const k = e.key;
+    if (['1','2','3','4'].includes(k)){
+      e.preventDefault();
+      const idx = parseInt(k,10)-1;
+      const card = cardEls[idx];
+      if (card) handlePick(card);
+    } else if (k.toLowerCase() === 'r' || k === ' ') {
+      e.preventDefault();
+      btnRepeat.click();
+    }
+  });
+
+  // SVG Icon makers
+  function svgBase(inner){
+    return `<svg viewBox="0 0 128 128" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">${inner}</svg>`;
+  }
+  function svgApple(){
+    const inner = `
+      <defs>
+        <radialGradient id="ag" cx="40%" cy="30%" r="70%">
+          <stop offset="0%" stop-color="#ff9fb2"/>
+          <stop offset="60%" stop-color="#ff4d6d"/>
+          <stop offset="100%" stop-color="#d93a56"/>
+        </radialGradient>
+      </defs>
+      <g transform="translate(0,2)">
+        <path d="M74 22c6 7 2 18-5 20-5 2-11-2-13-7-3-8 7-21 18-13z" fill="#6b4226"/>
+        <path d="M78 19c-6-4-13-3-17 0" stroke="#603813" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <path d="M75 26c8-7 20-9 28 0 4 4 4 5-1 6-9 2-18 2-27-6z" fill="#59c36a"/>
+        <path d="M64 40c24-12 46 8 45 29-1 21-16 37-45 37S20 92 20 67c0-25 20-41 44-27z" fill="url(#ag)"/>
+        <ellipse cx="51" cy="55" rx="8" ry="10" fill="#ffccd6" opacity=".7"/>
+        <circle cx="86" cy="90" r="6" fill="#ffffff33"/>
+      </g>
+    `;
+    return svgBase(inner);
+  }
+  function svgBanana(){
+    const inner = `
+      <defs>
+        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#ffe066"/>
+          <stop offset="60%" stop-color="#ffd43b"/>
+          <stop offset="100%" stop-color="#f4be2a"/>
+        </linearGradient>
+      </defs>
+      <g transform="translate(4,8)">
+        <path d="M12 26c5-7 10-10 16-10 3 0 4 2 4 4 0 10-8 21 2 35 8 11 22 20 39 20 10 0 18-3 24-7 3-2 6-1 6 2 0 3-4 8-9 12-7 5-18 9-33 9C44 91 26 79 17 62 8 46 6 35 12 26z" fill="url(#bg)" stroke="#d9a514" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M27 18c-2 4-5 10-5 15" stroke="#b38300" stroke-width="3" stroke-linecap="round"/>
+        <path d="M94 78c-14 7-36 5-49-9" stroke="#fff6bf" stroke-width="4" opacity=".6" stroke-linecap="round"/>
+        <path d="M28 14c0-4 3-9 5-10 2-1 4 0 4 2 1 3-2 7-9 8z" fill="#6b4226"/>
+      </g>
+    `;
+    return svgBase(inner);
+  }
+  function svgBread(){
+    const inner = `
+      <defs>
+        <linearGradient id="brg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#e4a851"/>
+          <stop offset="100%" stop-color="#c6863b"/>
+        </linearGradient>
+      </defs>
+      <g transform="translate(6,18)">
+        <rect x="6" y="18" rx="26" ry="26" width="110" height="70" fill="url(#brg)" stroke="#9a5d2e" stroke-width="2"/>
+        <path d="M26 34c6 2 6 10 0 14M46 34c6 2 6 10 0 14M66 34c6 2 6 10 0 14M86 34c6 2 6 10 0 14" stroke="#f4d4a7" stroke-width="5" stroke-linecap="round" opacity=".8"/>
+        <ellipse cx="24" cy="54" rx="6" ry="3" fill="#c47c37" opacity=".4"/>
+      </g>
+    `;
+    return svgBase(inner);
+  }
+  function svgMilk(){
+    const inner = `
+      <defs>
+        <linearGradient id="mg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#e8f4ff"/>
+          <stop offset="100%" stop-color="#ffffff"/>
+        </linearGradient>
+      </defs>
+      <g transform="translate(25,6)">
+        <path d="M12 18l12-12h28l12 12v82H12V18z" fill="url(#mg)" stroke="#98c7ff" stroke-width="2" />
+        <path d="M24 6l6 12h22l6-12" fill="#bfe0ff"/>
+        <rect x="12" y="42" width="52" height="16" rx="4" fill="#58a9ff" opacity=".9"/>
+        <circle cx="26" cy="50" r="3" fill="#fff"/>
+        <path d="M20 86h36" stroke="#cfe9ff" stroke-width="4" stroke-linecap="round"/>
+      </g>
+    `;
+    return svgBase(inner);
+  }
+
+  // Initialize start state
+  loadVoices();
+})();
+</script>
+</body>
+</html>

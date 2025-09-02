@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aprende el Cuerpo en Español</title>
+<style>
+  :root{
+    --bg1:#f6f9ff;
+    --bg2:#eef6ff;
+    --primary:#4b7bec;
+    --accent:#20bf6b;
+    --danger:#ff4d4f;
+    --ink:#243447;
+    --sub:#5b7083;
+    --skin:#f9c99a;
+    --skin2:#f7b87e;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    color:var(--ink);
+    background: radial-gradient(1200px 600px at 50% -20%, var(--bg2), var(--bg1));
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  #app{
+    width:min(100%, 1000px);
+    padding:clamp(10px, 3vw, 20px);
+  }
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:10px;
+  }
+  .title{
+    display:flex; align-items:center; gap:10px;
+  }
+  .logo{
+    width:40px; height:40px; border-radius:12px;
+    background: linear-gradient(135deg, #ffd27a, #ff8a80);
+    display:grid; place-items:center; color:white; font-weight:800;
+    box-shadow: 0 6px 16px rgba(0,0,0,.12);
+  }
+  h1{
+    margin:0; font-size: clamp(18px, 3vw, 26px);
+  }
+  .scoreboard{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  .chip{
+    background:white;
+    border:1px solid #e5ecff;
+    color:var(--sub);
+    padding:6px 10px;
+    border-radius:10px;
+    font-size:14px;
+    box-shadow: 0 4px 10px rgba(0,0,0,.05);
+  }
+  .bar{
+    width:160px; height:10px; background:#e8eefc; border-radius:20px; overflow:hidden;
+  }
+  .bar>span{display:block; height:100%; width:0%; background:linear-gradient(90deg, #73a1ff, #4b7bec); transition:width .35s ease}
+  main.game{
+    background:white;
+    border-radius:18px;
+    box-shadow: 0 20px 50px rgba(75,123,236,.15), 0 6px 18px rgba(0,0,0,.06);
+    padding:clamp(12px, 2.5vw, 24px);
+    display:grid;
+    grid-template-columns: 1fr;
+    gap: clamp(10px, 3vw, 18px);
+  }
+  .prompt{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background: linear-gradient(180deg, #f7fbff, #f0f6ff);
+    border:1px solid #e6efff;
+    padding:12px 14px; border-radius:12px;
+  }
+  .prompt .text{
+    font-size: clamp(16px, 2.4vw, 20px);
+    font-weight:600; color:#234;
+  }
+  .prompt .sub{color:var(--sub); font-size:13px}
+  .controls{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  button{
+    appearance:none; border:none; background:var(--primary); color:white;
+    padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer;
+    box-shadow: 0 10px 24px rgba(75,123,236,.25), 0 3px 10px rgba(0,0,0,.06);
+    transition: transform .08s ease, filter .2s ease;
+  }
+  button.secondary{
+    background:#ffffff; color:var(--ink); border:1px solid #e8eefc; box-shadow:none;
+  }
+  button:active{ transform: translateY(1px) scale(.99) }
+  .board{
+    display:grid; place-items:center;
+    min-height: clamp(320px, 52vw, 560px);
+    position:relative;
+  }
+  #figureWrap{
+    width:min(82vw, 540px);
+    max-width:660px;
+    aspect-ratio: 3/4;
+  }
+  svg{width:100%; height:100%;}
+  .torso{fill:#9ad0ff}
+  .part .fill{ fill: var(--skin) }
+  .part .fill2{ fill: var(--skin2) }
+  .part{ cursor:pointer; transition: transform .18s ease, filter .2s ease; }
+  .part:active{ transform: scale(0.98) }
+  .part:hover{ filter: brightness(1.04) }
+  .glow{ filter: drop-shadow(0 6px 10px rgba(0,0,0,.08)); }
+  .face{ pointer-events:none }
+  .highlight-correct{ animation: flashGreen .65s ease }
+  .highlight-wrong{ animation: flashRed .55s ease }
+  .pulse{ animation:pulse 1.2s ease infinite }
+  @keyframes flashGreen{
+    0%{ filter: drop-shadow(0 0 0 rgba(32,191,107,0)); transform:scale(1)}
+    40%{ filter: drop-shadow(0 0 18px rgba(32,191,107,.6)); transform:scale(1.03)}
+    100%{ filter: drop-shadow(0 0 0 rgba(32,191,107,0)); transform:scale(1)}
+  }
+  @keyframes flashRed{
+    0%{ filter: drop-shadow(0 0 0 rgba(255,77,79,0)); transform:translateX(0)}
+    20%{ filter: drop-shadow(0 0 12px rgba(255,77,79,.6)); transform:translateX(-4px)}
+    40%{ transform:translateX(4px)}
+    60%{ transform:translateX(-2px)}
+    80%{ transform:translateX(2px)}
+    100%{ filter: drop-shadow(0 0 0 rgba(255,77,79,0)); transform:translateX(0)}
+  }
+  @keyframes pulse{
+    0%,100%{ transform:translateY(0) }
+    50%{ transform:translateY(-2px) }
+  }
+  .help{
+    color:var(--sub);
+    font-size:13px;
+  }
+  .footerNote{
+    text-align:center; color:var(--sub); font-size:12px; margin-top:2px;
+  }
+  .modal{
+    position:fixed; inset:0; background:rgba(18,31,55,.45);
+    display:grid; place-items:center; padding:18px;
+    opacity:0; pointer-events:none; transition:opacity .25s ease;
+  }
+  .modal.show{ opacity:1; pointer-events:auto }
+  .card{
+    width:min(92vw, 640px);
+    background:white; border-radius:16px; padding:18px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.25);
+  }
+  .card h2{margin:0 0 6px 0}
+  .card p{margin:.2em 0; color:var(--sub)}
+  .gridBtns{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
+  .results{
+    display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-top:8px;
+  }
+  .bigScore{font-size:40px; font-weight:800; color:var(--primary)}
+  .sr-only{
+    position:absolute !important; left:-9999px; width:1px; height:1px; overflow:hidden;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="title">
+      <div class="logo">ABC</div>
+      <div>
+        <h1>Aprende el cuerpo en español</h1>
+        <div style="color:var(--sub); font-size:13px">Escucha y toca la parte correcta</div>
+      </div>
+    </div>
+    <div class="scoreboard">
+      <div class="chip">Ronda <b id="round">0</b>/<span id="total">0</span></div>
+      <div class="chip">Puntos <b id="score">0</b></div>
+      <div class="bar"><span id="progress"></span></div>
+    </div>
+  </header>
+
+  <main class="game" aria-live="polite">
+    <div class="prompt">
+      <div>
+        <div class="text">Escucha: <span id="targetText">—</span></div>
+        <div class="sub">Toca la parte del cuerpo que escuches</div>
+      </div>
+      <div class="controls">
+        <button id="speakBtn" title="Repetir voz (Espacio)">🔊 Repetir</button>
+        <button id="nextBtn" class="secondary" title="Nueva palabra">↻ Nueva palabra</button>
+      </div>
+    </div>
+
+    <div class="board">
+      <div id="figureWrap" aria-label="Figura de cuerpo con cabeza, brazos y piernas." role="img">
+        <svg viewBox="0 0 220 300">
+          <defs>
+            <linearGradient id="torsoGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#9ad0ff"/>
+              <stop offset="100%" stop-color="#66b8ff"/>
+            </linearGradient>
+            <linearGradient id="skinGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#f9c99a"/>
+              <stop offset="100%" stop-color="#f7b87e"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Shadow -->
+          <ellipse cx="110" cy="288" rx="60" ry="8" fill="rgba(0,0,0,.08)"/>
+
+          <!-- Arms -->
+          <g id="arms" class="part glow" tabindex="0" role="button" aria-label="brazos">
+            <rect class="fill" x="20" y="110" rx="12" ry="12" width="40" height="85"/>
+            <rect class="fill2" x="160" y="110" rx="12" ry="12" width="40" height="85"/>
+            <circle class="fill" cx="22" cy="197" r="12"/>
+            <circle class="fill" cx="198" cy="197" r="12"/>
+          </g>
+
+          <!-- Legs -->
+          <g id="legs" class="part glow" tabindex="0" role="button" aria-label="piernas">
+            <rect class="fill" x="78" y="190" rx="12" ry="12" width="28" height="86"/>
+            <rect class="fill2" x="114" y="190" rx="12" ry="12" width="28" height="86"/>
+            <ellipse class="fill" cx="91" cy="280" rx="18" ry="8"/>
+            <ellipse class="fill2" cx="127" cy="280" rx="18" ry="8"/>
+          </g>
+
+          <!-- Torso -->
+          <g class="torso glow face">
+            <rect x="70" y="90" width="80" height="110" rx="18" fill="url(#torsoGrad)"/>
+            <rect x="77" y="98" width="66" height="22" rx="8" fill="#ffffff" opacity=".25"/>
+          </g>
+
+          <!-- Head -->
+          <g id="head" class="part glow" tabindex="0" role="button" aria-label="cabeza">
+            <circle cx="110" cy="56" r="34" fill="url(#skinGrad)"/>
+            <!-- Face details -->
+            <g class="face">
+              <circle cx="98" cy="52" r="4" fill="#2f2f2f"/>
+              <circle cx="122" cy="52" r="4" fill="#2f2f2f"/>
+              <path d="M98 66 Q110 74 122 66" stroke="#2f2f2f" stroke-width="3" fill="none" stroke-linecap="round"/>
+              <circle cx="110" cy="12" r="8" fill="#ffd27a"/>
+              <path d="M102 21 q8 6 16 0" stroke="#ffb86b" stroke-width="3" fill="none" stroke-linecap="round"/>
+            </g>
+          </g>
+
+        </svg>
+      </div>
+    </div>
+
+    <div class="help">
+      Instrucciones: pulsa "Comenzar" y escucha la palabra. Toca la parte correcta. Móvil: toca la figura. Teclado: 1 = cabeza, 2 = brazos, 3 = piernas, Espacio = repetir.
+    </div>
+    <div class="footerNote">Consejo: pulsa el botón de altavoz si necesitas escuchar otra vez.</div>
+  </main>
+</div>
+
+<div id="overlay" class="modal show" aria-modal="true" role="dialog">
+  <div class="card">
+    <h2>¿Listo para jugar?</h2>
+    <p>Escucha una palabra en español y toca esa parte del cuerpo en la figura.</p>
+    <ul style="margin-top:8px; margin-bottom:8px; padding-left:18px; line-height:1.5">
+      <li>La voz dice: la cabeza, los brazos o las piernas.</li>
+      <li>Toca la parte correcta para ganar un punto.</li>
+      <li>Botón 🔊 o Espacio para repetir la palabra.</li>
+      <li>Teclado: 1 = cabeza, 2 = brazos, 3 = piernas.</li>
+    </ul>
+    <div class="gridBtns">
+      <button id="startBtn">▶️ Comenzar</button>
+      <button id="howBtn" class="secondary">🔊 Probar voz</button>
+    </div>
+  </div>
+</div>
+
+<div id="endModal" class="modal" aria-modal="true" role="dialog">
+  <div class="card">
+    <h2>¡Buen trabajo!</h2>
+    <div class="results">
+      <div class="bigScore" id="finalScore">0/0</div>
+      <div id="resultMsg" style="font-size:16px"></div>
+    </div>
+    <div class="gridBtns">
+      <button id="againBtn">🔁 Jugar de nuevo</button>
+      <button id="closeBtn" class="secondary">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<span class="sr-only" aria-live="assertive" id="live"></span>
+
+<script>
+(function(){
+  const parts = [
+    { id:'head',   article:'la',  label:'cabeza',  key:'1' },
+    { id:'arms',   article:'los', label:'brazos',  key:'2' },
+    { id:'legs',   article:'las', label:'piernas', key:'3' },
+  ];
+  const idToPart = Object.fromEntries(parts.map(p=>[p.id,p]));
+  const totalRounds = 9;
+
+  const el = {
+    round: document.getElementById('round'),
+    total: document.getElementById('total'),
+    score: document.getElementById('score'),
+    progress: document.getElementById('progress'),
+    targetText: document.getElementById('targetText'),
+    speakBtn: document.getElementById('speakBtn'),
+    nextBtn: document.getElementById('nextBtn'),
+    overlay: document.getElementById('overlay'),
+    startBtn: document.getElementById('startBtn'),
+    howBtn: document.getElementById('howBtn'),
+    endModal: document.getElementById('endModal'),
+    againBtn: document.getElementById('againBtn'),
+    closeBtn: document.getElementById('closeBtn'),
+    finalScore: document.getElementById('finalScore'),
+    resultMsg: document.getElementById('resultMsg'),
+    live: document.getElementById('live'),
+  };
+  el.total.textContent = totalRounds;
+
+  const figure = {
+    head: document.getElementById('head'),
+    arms: document.getElementById('arms'),
+    legs: document.getElementById('legs'),
+  };
+
+  let round = 0;
+  let score = 0;
+  let target = null;
+  let canPick = false;
+  let attemptedWrong = false;
+
+  // Web Speech
+  let voice = null;
+  let speechReady = false;
+  function pickSpanishVoice() {
+    const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+    if (!voices || !voices.length) return null;
+    let es = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('es'));
+    es.sort((a,b)=> a.name.includes('ES') ? -1 : 1);
+    return es[0] || voices.find(v=>/spanish/i.test(v.name)) || voices[0];
+  }
+  function initVoice(){
+    voice = pickSpanishVoice();
+    speechReady = !!voice || (window.speechSynthesis && speechSynthesis.getVoices().length>0);
+  }
+  function speak(text){
+    if (!window.speechSynthesis) return;
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.lang = (voice && voice.lang) || 'es-ES';
+    u.rate = 0.95;
+    u.pitch = 1.0;
+    u.volume = 1.0;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }
+  if (window.speechSynthesis) {
+    speechSynthesis.onvoiceschanged = () => {
+      initVoice();
+    };
+  }
+  initVoice();
+
+  // Web Audio for feedback
+  let audioReady = false;
+  let actx, masterGain;
+  function initAudio(){
+    if (audioReady) return;
+    try{
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = actx.createGain();
+      masterGain.gain.value = 0.15;
+      masterGain.connect(actx.destination);
+      audioReady = true;
+    }catch(e){ audioReady = false; }
+  }
+  function beep(freq=660, time=0.18){
+    if(!audioReady) return;
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, actx.currentTime);
+    g.gain.setValueAtTime(0, actx.currentTime);
+    g.gain.linearRampToValueAtTime(1, actx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+time);
+    o.connect(g); g.connect(masterGain);
+    o.start();
+    o.stop(actx.currentTime + time + 0.02);
+  }
+  function successTone(){
+    beep(784, .12);
+    setTimeout(()=>beep(988,.14), 120);
+  }
+  function errorTone(){
+    beep(220,.14);
+    setTimeout(()=>beep(196,.14), 120);
+  }
+
+  // Game logic
+  function phrase(p){ return `${p.article} ${p.label}`; }
+
+  function updateHUD(){
+    el.round.textContent = round;
+    el.score.textContent = score;
+    el.progress.style.width = `${Math.round((round/totalRounds)*100)}%`;
+  }
+  function clearHighlights(){
+    Object.values(figure).forEach(g=>{
+      g.classList.remove('highlight-correct','highlight-wrong','pulse');
+    });
+  }
+  function setTarget(p){
+    target = p;
+    el.targetText.textContent = phrase(target);
+    el.live.textContent = `Nueva palabra: ${phrase(target)}`;
+  }
+  function randomPart(){
+    return parts[Math.floor(Math.random()*parts.length)];
+  }
+
+  function startGame(){
+    round = 0; score = 0;
+    updateHUD();
+    nextRound(true);
+  }
+
+  function nextRound(first=false){
+    if (round >= totalRounds && !first) {
+      finishGame();
+      return;
+    }
+    attemptedWrong = false;
+    round++;
+    updateHUD();
+    clearHighlights();
+    setTarget(randomPart());
+    canPick = true;
+    figure[target.id].classList.add('pulse');
+    if (speechReady) speak(phrase(target));
+  }
+
+  function finishGame(){
+    canPick = false;
+    clearHighlights();
+    el.finalScore.textContent = `${score}/${totalRounds}`;
+    let msg = '¡Súper!';
+    const ratio = score/totalRounds;
+    if (ratio === 1) msg = '¡Perfecto! ¡Eres un/a experto/a!';
+    else if (ratio >= .75) msg = '¡Muy bien! Sigue practicando.';
+    else if (ratio >= .5) msg = '¡Bien hecho! Vamos por más.';
+    else msg = '¡Buen intento! Practiquemos de nuevo.';
+    el.resultMsg.textContent = msg;
+    el.endModal.classList.add('show');
+  }
+
+  function pick(id){
+    if (!canPick) return;
+    if (!idToPart[id]) return;
+    // Highlight on tap (always)
+    const tapped = figure[id];
+    tapped.classList.remove('highlight-correct','highlight-wrong');
+    void tapped.offsetWidth;
+    if (id === target.id) {
+      tapped.classList.add('highlight-correct');
+    } else {
+      tapped.classList.add('highlight-wrong');
+    }
+    // Check correctness
+    if (id === target.id){
+      canPick = false;
+      figure[target.id].classList.remove('pulse');
+      if (!attemptedWrong) { score++; updateHUD(); }
+      successTone();
+      setTimeout(()=> nextRound(), 650);
+    }else{
+      attemptedWrong = true;
+      errorTone();
+      if (speechReady) setTimeout(()=>speak(phrase(target)), 350);
+    }
+  }
+
+  // Events for parts
+  Object.values(figure).forEach(g=>{
+    g.addEventListener('pointerdown', e=>{
+      e.preventDefault();
+      if (!audioReady) initAudio();
+      pick(g.id);
+    });
+    g.addEventListener('keydown', e=>{
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        pick(g.id);
+      }
+    });
+  });
+
+  // Controls
+  el.speakBtn.addEventListener('click', ()=>{
+    if (!audioReady) initAudio();
+    if (target && speechReady) speak(phrase(target));
+  });
+  el.nextBtn.addEventListener('click', ()=>{
+    if (!audioReady) initAudio();
+    nextRound();
+  });
+
+  // Overlay buttons
+  el.startBtn.addEventListener('click', ()=>{
+    initAudio();
+    initVoice();
+    el.overlay.classList.remove('show');
+    setTimeout(()=> startGame(), 80);
+  });
+  el.howBtn.addEventListener('click', ()=>{
+    initAudio();
+    initVoice();
+    speak('la cabeza, los brazos, las piernas');
+  });
+
+  el.againBtn.addEventListener('click', ()=>{
+    el.endModal.classList.remove('show');
+    setTimeout(()=> startGame(), 120);
+  });
+  el.closeBtn.addEventListener('click', ()=>{
+    el.endModal.classList.remove('show');
+  });
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e)=>{
+    if (e.repeat) return;
+    const k = e.key.toLowerCase();
+    if (k === ' ') {
+      e.preventDefault();
+      if (target && speechReady) speak(phrase(target));
+      return;
+    }
+    if (k === 'r') { if (target && speechReady) speak(phrase(target)); return; }
+    if (k === 'n') { nextRound(); return; }
+    if (k === '1') pick('head');
+    if (k === '2') pick('arms');
+    if (k === '3') pick('legs');
+  });
+
+  // Accessibility focus order
+  function focusTargetSoon(){
+    try{
+      figure[target.id].focus({preventScroll:true});
+    }catch(e){}
+  }
+
+  // Start in overlay
+  updateHUD();
+
+  // iOS: resume audio on visibility change
+  document.addEventListener('visibilitychange', ()=>{
+    if (audioReady && actx && actx.state === 'suspended') actx.resume();
+  });
+
+})();
+</script>
+</body>
+</html>

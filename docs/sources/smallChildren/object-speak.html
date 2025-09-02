@@ -2,33 +2,428 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Name the Object</title>
   <style>
-    :root{--bg:#0a1224;--fg:#f1f5f9;--accent:#60a5fa;--pill:#0f1b34}
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif}
-    canvas{width:100%;height:100%;display:block;touch-action:none}
-    .hud{position:fixed;top:10px;left:12px;right:12px;display:flex;justify-content:center;z-index:2}
-    .pill{background:var(--pill);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:8px 12px;font-weight:800;letter-spacing:.3px}
-    .pill .outline{color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.6), 0 0 0.01px #fff}
+    :root{
+      --fg:#17324d;
+      --glass: rgba(255,255,255,.7);
+      --glass-border: rgba(79,157,253,.35);
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Helvetica, Arial, sans-serif;
+      color: var(--fg);
+      background:#dff3ff;
+      overflow:hidden;
+      -webkit-text-size-adjust: 100%;
+    }
+    *{ -webkit-tap-highlight-color: transparent; }
+    canvas{
+      width:100%;
+      height:100%;
+      display:block;
+      touch-action: manipulation;
+      user-select: none;
+    }
+    .hud{
+      position:fixed;
+      top:12px;
+      left:12px;
+      right:12px;
+      display:flex;
+      justify-content:center;
+      z-index:2;
+      pointer-events:none;
+    }
+    .pill{
+      pointer-events:auto;
+      display:inline-flex;
+      align-items:center;
+      gap:.5rem;
+      padding:.6rem .9rem;
+      border-radius:999px;
+      background: var(--glass);
+      border:1px solid var(--glass-border);
+      box-shadow: 0 6px 18px rgba(0,0,0,.08);
+      font-weight:800;
+      font-size: clamp(14px, 2.6vw, 18px);
+      letter-spacing:.3px;
+      backdrop-filter: blur(8px);
+    }
+    .pill .icon{ font-size:1.2em }
   </style>
 </head>
 <body>
-  <div class="hud"><div class="pill"><span class="outline">Tap a token to hear its name</span></div></div>
-  <canvas id="c"></canvas>
+  <div class="hud">
+    <div class="pill"><span class="icon">🔊</span><span>Tap a picture to hear the word</span></div>
+  </div>
+  <canvas id="c" aria-label="Name the Object game"></canvas>
   <script>
-    var c=document.getElementById('c'),x=c.getContext('2d');var W,H;function R(){W=c.width=c.clientWidth;H=c.height=c.clientHeight}addEventListener('resize',R,{passive:true});R();
-    function speak(t){ try{ if(!('speechSynthesis' in window))return; speechSynthesis.cancel(); var u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.speak(u);}catch(_){}}
-    var BASE=['APPLE','STAR','CAR','HOUSE','TREE','SUN','BALL','BOAT','PLANE','CAT','DOG','BIRD','CHAIR','TABLE','BOOK','PENCIL','SHOE','HAT','BAG','CLOCK','PHONE','LAMP','FLOWER','CAKE','CUP','FISH','HORSE','SHEEP','TRAIN','BUS','BIKE','TRUCK','KEY','RING','BRUSH','BOTTLE','SPOON','FORK','PLATE','COOKIE','BREAD','CHEESE','MILK','JUICE','WATER','ORANGE','BANANA','GRAPE','PEAR'];
-    var NAMES=[]; for(var i=0;i<6;i++){ for(var j=0;j<BASE.length;j++){ NAMES.push(BASE[j]+(i?(' '+(i+1)):'')); } }
-    var idx=0, items=[], heard=0;
-    function nextFive(){ var out=[]; for(var k=0;k<5;k++){ out.push(NAMES[(idx++)%NAMES.length]); } return out; }
-    function drawToken(name,cx,cy){ x.save(); x.shadowColor='rgba(0,0,0,.6)'; x.shadowBlur=12; x.fillStyle='#10203a'; x.beginPath(); x.arc(cx,cy,34,0,Math.PI*2); x.fill(); x.shadowBlur=0; x.strokeStyle='rgba(96,165,250,.9)'; x.lineWidth=2; x.stroke(); x.fillStyle='#f8fafc'; x.font='800 11px system-ui'; x.textAlign='center'; x.textBaseline='middle'; x.fillText(name,cx,cy); x.restore(); }
-    function layout(){ items=[]; heard=0; var cols=5, gapX=W/(cols+1), cy=H*0.54; var names=nextFive(); for(var c0=1;c0<=cols;c0++){ var cx=Math.floor(gapX*c0); items.push({name:names[c0-1], cx:cx, cy:cy}); } draw(); }
-    function draw(){ x.clearRect(0,0,W,H); for(var i=0;i<items.length;i++){ var it=items[i]; drawToken(it.name,it.cx,it.cy); } }
-    function hit(mx,my){ for(var i=0;i<items.length;i++){ var it=items[i]; if(Math.hypot(mx-it.cx,my-it.cy)<38) return i; } return -1; }
-    c.addEventListener('pointerdown',function(e){ var r=c.getBoundingClientRect(); var mx=(e.clientX-r.left)*c.width/r.width; var my=(e.clientY-r.top)*c.height/r.height; var i=hit(mx,my); if(i>=0){ var it=items[i]; speak(it.name); items.splice(i,1); heard++; draw(); if(heard>=5){ setTimeout(layout,600); } } });
-    layout();
+    "use strict";
+    (()=>{
+      const c = document.getElementById('c');
+      const x = c.getContext('2d');
+      let W=0,H=0,dpr=1,lastTime=0;
+
+      const BASE = [
+        {name:'APPLE',emoji:'🍎'},{name:'STAR',emoji:'⭐'},{name:'CAR',emoji:'🚗'},{name:'HOUSE',emoji:'🏠'},
+        {name:'TREE',emoji:'🌳'},{name:'SUN',emoji:'☀️'},{name:'BALL',emoji:'⚽'},{name:'BOAT',emoji:'⛵'},
+        {name:'PLANE',emoji:'✈️'},{name:'CAT',emoji:'🐱'},{name:'DOG',emoji:'🐶'},{name:'BIRD',emoji:'🐦'},
+        {name:'CHAIR',emoji:'🪑'},{name:'TABLE',emoji:'🛋️'},{name:'BOOK',emoji:'📚'},{name:'PENCIL',emoji:'✏️'},
+        {name:'SHOE',emoji:'👟'},{name:'HAT',emoji:'🎩'},{name:'BAG',emoji:'🎒'},{name:'CLOCK',emoji:'🕒'},
+        {name:'PHONE',emoji:'📱'},{name:'LAMP',emoji:'💡'},{name:'FLOWER',emoji:'🌸'},{name:'CAKE',emoji:'🎂'},
+        {name:'CUP',emoji:'☕'},{name:'FISH',emoji:'🐟'},{name:'HORSE',emoji:'🐴'},{name:'SHEEP',emoji:'🐑'},
+        {name:'TRAIN',emoji:'🚂'},{name:'BUS',emoji:'🚌'},{name:'BIKE',emoji:'🚲'},{name:'TRUCK',emoji:'🚚'},
+        {name:'KEY',emoji:'🔑'},{name:'RING',emoji:'💍'},{name:'BRUSH',emoji:'🖌️'},{name:'BOTTLE',emoji:'🍼'},
+        {name:'SPOON',emoji:'🥄'},{name:'FORK',emoji:'🍴'},{name:'PLATE',emoji:'🍽️'},{name:'COOKIE',emoji:'🍪'},
+        {name:'BREAD',emoji:'🍞'},{name:'CHEESE',emoji:'🧀'},{name:'MILK',emoji:'🥛'},{name:'JUICE',emoji:'🧃'},
+        {name:'WATER',emoji:'💧'},{name:'ORANGE',emoji:'🍊'},{name:'BANANA',emoji:'🍌'},{name:'GRAPE',emoji:'🍇'},
+        {name:'PEAR',emoji:'🍐'}
+      ];
+
+      // shuffle-bag for non-repeating sets
+      let bag=[];
+      function refillBag(){
+        bag = BASE.map((_,i)=>i);
+        for(let i=bag.length-1;i>0;i--){
+          const j=(Math.random()*(i+1))|0; [bag[i],bag[j]]=[bag[j],bag[i]];
+        }
+      }
+      function nextSet(n=5){
+        if(bag.length < n) refillBag();
+        const ids = bag.splice(0,n);
+        return ids.map(i => ({ ...BASE[i] }));
+      }
+
+      // gentle colors and visuals
+      const COLORS = {
+        ring: '#4f9dfd',
+        ring2: '#9cd1ff',
+        token1: '#ffffff',
+        text: '#17324d',
+        shadow: 'rgba(0,0,0,0.25)'
+      };
+      const confettiColors = ['#ff6b6b','#ffd166','#06d6a0','#4ecdc4','#9c6bff'];
+
+      // tokens state
+      let items=[];
+      let removingCount=0;
+      let tokenR=56;
+
+      function toNice(s){ return s.charAt(0) + s.slice(1).toLowerCase(); }
+
+      // speech
+      function speak(word){
+        try{
+          if('speechSynthesis' in window){
+            speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance(word.toLowerCase());
+            u.lang='en-US';
+            u.rate=0.95; u.pitch=1.1;
+            speechSynthesis.speak(u);
+          } else {
+            beep();
+          }
+        }catch(e){}
+      }
+      let ac;
+      function beep(){
+        try{
+          ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+          const o=ac.createOscillator(), g=ac.createGain();
+          o.type='sine'; o.frequency.value=660;
+          g.gain.value=0.0001;
+          o.connect(g); g.connect(ac.destination);
+          const t=ac.currentTime;
+          g.gain.setValueAtTime(0.0001,t);
+          g.gain.exponentialRampToValueAtTime(0.05,t+0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001,t+0.15);
+          o.start(t); o.stop(t+0.2);
+        }catch(e){}
+      }
+      function vib(ms=18){ if('vibrate' in navigator) try{ navigator.vibrate(ms); }catch(e){} }
+
+      // clouds
+      const clouds=[];
+      function makeClouds(){
+        clouds.length=0;
+        const count = Math.max(4, Math.floor(W/240));
+        for(let i=0;i<count;i++){
+          clouds.push({ x: Math.random()*W, y: Math.random()*H*0.35 + 10, s: 0.7+Math.random()*1, v: 0.15 + Math.random()*0.25, phase: Math.random()*1000 });
+        }
+      }
+
+      // particles
+      const parts=[];
+      function burst(x0,y0,colors){
+        const n=14;
+        for(let i=0;i<n;i++){
+          const a = Math.random()*Math.PI*2;
+          const sp = 1+Math.random()*2.2;
+          parts.push({ x:x0, y:y0, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-0.6, life:1, color:colors[i%colors.length], size:2+Math.random()*3 });
+        }
+      }
+      function drawParticles(dt){
+        for(let i=parts.length-1;i>=0;i--){
+          const p=parts[i];
+          p.life -= dt*1.7;
+          p.x += p.vx*(60*dt*0.5);
+          p.y += p.vy*(60*dt*0.5);
+          p.vy += 0.02*(60*dt*0.5);
+          if(p.life<=0){ parts.splice(i,1); continue; }
+          x.globalAlpha = Math.max(0,p.life);
+          x.fillStyle = p.color;
+          x.beginPath();
+          x.arc(p.x,p.y,p.size,0,Math.PI*2);
+          x.fill();
+          x.globalAlpha = 1;
+        }
+      }
+
+      // rounded rect helper
+      function roundRect(ctx, x0, y0, w, h, r){
+        const rr = Math.min(r, w/2, h/2);
+        ctx.beginPath();
+        ctx.moveTo(x0+rr,y0);
+        ctx.arcTo(x0+w,y0,x0+w,y0+h,rr);
+        ctx.arcTo(x0+w,y0+h,x0,y0+h,rr);
+        ctx.arcTo(x0,y0+h,x0,y0,rr);
+        ctx.arcTo(x0,y0,x0+w,y0,rr);
+        ctx.closePath();
+      }
+
+      function layoutNewSet(){
+        removingCount=0;
+        const set = nextSet(5);
+        computeLayout(set);
+      }
+
+      function computeLayout(set){
+        items=[];
+        const count = set.length;
+        tokenR = Math.max(44, Math.min(72, Math.min(W,H)/8));
+        const columns = Math.min(count, Math.max(2, Math.floor(W / (tokenR*2.4))));
+        const rows = Math.ceil(count/columns);
+        const gapX = tokenR*0.8, gapY = tokenR*0.9;
+        const totalW = columns*tokenR*2 + (columns-1)*gapX;
+        const totalH = rows*tokenR*2 + (rows-1)*gapY;
+        const startX = Math.max(tokenR+12, (W-totalW)/2 + tokenR);
+        const startY = Math.max(120 + tokenR*0.2, H*0.52 - totalH/2 + tokenR);
+        for(let i=0;i<count;i++){
+          const col = i % columns;
+          const row = (i/columns)|0;
+          const cx = startX + col*(tokenR*2+gapX);
+          const cy = startY + row*(tokenR*2+gapY);
+          items.push({
+            name:set[i].name, emoji:set[i].emoji,
+            x:cx, y:cy, r:tokenR,
+            scale:0.001, targetScale:1, alpha:0,
+            phase:Math.random()*Math.PI*2,
+            removing:false, gone:false
+          });
+        }
+      }
+
+      function drawToken(it, t){
+        const bob = Math.sin(t*0.0015 + it.phase)*0.8;
+        const scale = it.scale;
+        const r = it.r * scale;
+        const cx = it.x;
+        const cy = it.y + bob;
+
+        // soft shadow + base
+        x.save();
+        x.globalAlpha = 0.9*scale;
+        x.shadowColor = COLORS.shadow;
+        x.shadowBlur = 12;
+        x.shadowOffsetY = 4;
+        x.fillStyle = COLORS.token1;
+        x.beginPath(); x.arc(cx, cy, r, 0, Math.PI*2); x.fill();
+        x.restore();
+
+        // ring glow
+        const pulse = (Math.sin(t*0.003 + it.phase)+1)/2;
+        x.lineWidth = Math.max(2, r*0.08);
+        const grad = x.createRadialGradient(cx,cy,r*0.6,cx,cy,r);
+        grad.addColorStop(0, `rgba(156,209,255,${0.25*scale})`);
+        grad.addColorStop(1, `rgba(79,157,253,${0.8*scale*(0.5+0.5*pulse)})`);
+        x.strokeStyle = grad;
+        x.beginPath(); x.arc(cx, cy, r, 0, Math.PI*2); x.stroke();
+
+        // glossy inner
+        const g2 = x.createLinearGradient(cx, cy-r, cx, cy+r);
+        g2.addColorStop(0,'#ffffff'); g2.addColorStop(1,'#e9f3ff');
+        x.fillStyle = g2;
+        x.beginPath(); x.arc(cx, cy, r*0.92, 0, Math.PI*2); x.fill();
+
+        // highlight
+        x.fillStyle = 'rgba(255,255,255,0.7)';
+        x.beginPath(); x.ellipse(cx - r*0.25, cy - r*0.45, r*0.46, r*0.22, -0.6, 0, Math.PI*2); x.fill();
+
+        // emoji icon
+        x.font = `bold ${Math.floor(r*1.05)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",system-ui,sans-serif`;
+        x.textAlign='center'; x.textBaseline='middle';
+        x.fillText(it.emoji, cx, cy);
+
+        // label
+        const label = toNice(it.name);
+        x.save();
+        x.globalAlpha = 0.95*scale;
+        const lh = Math.max(20, r*0.38);
+        x.font = `700 ${Math.floor(lh*0.55)}px system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, sans-serif`;
+        const lw = x.measureText(label).width + 24;
+        const ly = cy + r + lh*0.8;
+        const lx = cx - lw/2;
+        roundRect(x, lx, ly-lh/2, lw, lh, lh/2);
+        x.fillStyle = 'rgba(255,255,255,0.9)'; x.fill();
+        x.lineWidth = 1; x.strokeStyle = 'rgba(79,157,253,0.6)'; x.stroke();
+        x.fillStyle = COLORS.text;
+        x.fillText(label, cx, ly+0.5);
+        x.restore();
+      }
+
+      function hit(mx,my){
+        for(let i=items.length-1;i>=0;i--){
+          const it=items[i];
+          if(it.gone) continue;
+          const r = it.r * it.scale;
+          const dx = mx - it.x, dy = my - it.y;
+          if(Math.hypot(dx,dy) <= r + 12) return it;
+        }
+        return null;
+      }
+
+      function handleTap(mx,my){
+        const it = hit(mx,my);
+        if(!it || it.removing) return;
+        vib(18);
+        speak(toNice(it.name));
+        burst(it.x, it.y, confettiColors);
+        it.removing = true;
+        it.targetScale = 0.001;
+        removingCount++;
+        if(removingCount >= 5){
+          celebrate();
+          setTimeout(()=>layoutNewSet(), 1000);
+        }
+      }
+
+      // celebration text
+      let celebrateTime = 0;
+      function celebrate(){ celebrateTime = performance.now();
+        for(let i=0;i<60;i++){
+          const a = Math.random()*Math.PI*2;
+          const r = 40 + Math.random()*120;
+          parts.push({ x:W/2, y:H*0.3, vx:Math.cos(a)*r*0.02, vy:Math.sin(a)*r*0.02 - 0.5, life:1, color:confettiColors[i%confettiColors.length], size:2+Math.random()*3 });
+        }
+      }
+      function drawCelebrate(t){
+        if(!celebrateTime) return;
+        const age = (t - celebrateTime)/1000;
+        if(age>1.2){ celebrateTime=0; return; }
+        const alpha = Math.max(0, 1 - age/1.2);
+        const y = H*0.24 - age*20;
+        x.save();
+        x.globalAlpha = alpha;
+        x.font = `800 ${Math.floor(Math.min(W,H)*0.08)}px system-ui, sans-serif`;
+        x.textAlign='center';
+        x.fillStyle = '#1b4b7a';
+        x.fillText('Great job! ⭐', W/2, y);
+        x.restore();
+      }
+
+      function drawBackground(t){
+        // sky gradient
+        const g = x.createLinearGradient(0,0,0,H);
+        g.addColorStop(0,'#c6ebff');
+        g.addColorStop(1,'#fdfcff');
+        x.fillStyle = g; x.fillRect(0,0,W,H);
+        // sun
+        const sunX = W - 100, sunY = 80, sunR = 40;
+        const sgrad = x.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR*2.2);
+        sgrad.addColorStop(0,'rgba(255,230,120,1)'); sgrad.addColorStop(1,'rgba(255,230,120,0)');
+        x.fillStyle = sgrad; x.beginPath(); x.arc(sunX, sunY, sunR*2.2, 0, Math.PI*2); x.fill();
+        x.fillStyle = '#ffe680'; x.beginPath(); x.arc(sunX, sunY, sunR, 0, Math.PI*2); x.fill();
+        // clouds
+        x.fillStyle = 'rgba(255,255,255,0.92)';
+        for(const cl of clouds){
+          const cx = (cl.x + (t*cl.v*0.02 + cl.phase) % (W+200)) - 100;
+          const cy = cl.y;
+          x.beginPath();
+          x.arc(cx, cy, 18*cl.s, 0, Math.PI*2);
+          x.arc(cx+20*cl.s, cy+6*cl.s, 22*cl.s, 0, Math.PI*2);
+          x.arc(cx+42*cl.s, cy, 26*cl.s, 0, Math.PI*2);
+          x.arc(cx+66*cl.s, cy+8*cl.s, 20*cl.s, 0, Math.PI*2);
+          x.closePath(); x.fill();
+        }
+      }
+
+      function tick(t){
+        if(!lastTime) lastTime = t;
+        const dt = Math.min(0.05, (t-lastTime)/1000);
+        lastTime = t;
+
+        drawBackground(t);
+
+        // update tokens animation
+        for(let i=items.length-1;i>=0;i--){
+          const it=items[i];
+          const spd = it.removing ? 10 : 6;
+          it.scale += (it.targetScale - it.scale) * Math.min(1, dt*spd);
+          it.alpha = it.scale;
+          if(it.removing && it.scale < 0.02){ it.gone = true; items.splice(i,1); }
+        }
+
+        // draw tokens
+        for(const it of items){ drawToken(it, t); }
+
+        drawParticles(dt);
+        drawCelebrate(t);
+
+        requestAnimationFrame(tick);
+      }
+
+      function resize(){
+        const DPR_LIMIT = 2;
+        dpr = Math.min(DPR_LIMIT, window.devicePixelRatio||1);
+        const w = c.clientWidth, h = c.clientHeight;
+        c.width = Math.floor(w*dpr); c.height = Math.floor(h*dpr);
+        x.setTransform(1,0,0,1,0,0);
+        x.scale(dpr,dpr);
+        W=w; H=h;
+        makeClouds();
+        if(items.length){
+          const set = items.map(it=>({name:it.name,emoji:it.emoji}));
+          computeLayout(set);
+        }
+      }
+
+      function getPos(e){
+        const r = c.getBoundingClientRect();
+        return { mx: e.clientX - r.left, my: e.clientY - r.top };
+      }
+
+      c.addEventListener('pointerdown', (e)=>{
+        if(e.pointerType === 'mouse' && e.button !== 0) return;
+        const {mx,my} = getPos(e);
+        handleTap(mx,my);
+      }, {passive:true});
+
+      window.addEventListener('resize', resize, {passive:true});
+      window.addEventListener('orientationchange', resize, {passive:true});
+      window.addEventListener('contextmenu', e=>e.preventDefault());
+
+      function init(){
+        resize();
+        layoutNewSet();
+        requestAnimationFrame(tick);
+      }
+      if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', init, {once:true});
+      } else init();
+    })();
   </script>
 </body>
 </html>

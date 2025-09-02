@@ -66,13 +66,13 @@ export class HamburgerMenu {
         this.toggle();
     }
 
-    async navigateToSettings() {
-        await window.webSkel.changeToDynamicPage("settings-page", "app");
-        this.toggle();
-    }
-    
     async navigateToFavorites() {
         await window.webSkel.changeToDynamicPage("favorites-page", "app");
+        this.toggle();
+    }
+
+    async navigateToAddGame() {
+        window.location.href = "/addgame.html";
         this.toggle();
     }
 

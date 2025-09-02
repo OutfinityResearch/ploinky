@@ -1,39 +1,5 @@
 [
   {
-    "id": "microgame:classicArcade:snake",
-    "type": "microgame",
-    "title": "Snake",
-    "source": "/sources/classicArcade/snake.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #classicArcade",
-    "author": "Classic Arcade Collection",
-    "category": "Game",
-    "essence": "Control the snake to eat food and grow longer. Don't hit the walls or yourself! Inspired by the classic arcade game.",
-    "reactions": [
-      "Classic gameplay that never gets old.",
-      "Simple controls: arrow keys or on-screen buttons.",
-      "Increasing difficulty as the snake grows.",
-      "Source: https://gist.github.com/straker/ff00b4b49669ad3dec890306d348adc4"
-    ]
-  },
-  {
-    "id": "microgame:classicArcade:pong",
-    "type": "microgame",
-    "title": "Pong",
-    "source": "/sources/classicArcade/pong.html",
-    "generatedAt": "2025-09-01T00:00:00.000Z",
-    "feedName": "Ploynky #classicArcade",
-    "author": "Classic Arcade Collection",
-    "category": "Game",
-    "essence": "The original arcade tennis game. Control your paddle to hit the ball past the AI opponent.",
-    "reactions": [
-      "The game that started it all.",
-      "Mouse or touch controls for smooth gameplay.",
-      "AI opponent with adaptive difficulty.",
-      "Source: https://gist.github.com/straker/ff00b4b49669ad3dec890306d348adc4"
-    ]
-  },
-  {
     "id": "microgame:classicArcade:breakout",
     "type": "microgame",
     "title": "Breakout",
@@ -44,10 +10,8 @@
     "category": "Game",
     "essence": "Break all the bricks with your ball and paddle. Don't let the ball fall!",
     "reactions": [
-      "Addictive brick-breaking action.",
-      "Multiple colored brick rows for varied scoring.",
-      "Lives system and progressive difficulty.",
-      "Source: https://gist.github.com/straker/ff00b4b49669ad3dec890306d348adc4"
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -59,12 +23,10 @@
     "feedName": "Ploynky #classicArcade",
     "author": "Classic Arcade Collection",
     "category": "Game",
-    "essence": "Help the frog cross busy roads and treacherous rivers to reach safety.",
+    "essence": "Help the frog cross busy roads and treacherous rivers to reach safety",
     "reactions": [
-      "Navigate through traffic and floating logs.",
-      "Multiple levels with increasing difficulty.",
-      "Classic arcade challenge reimagined.",
-      "Source: https://gist.github.com/straker/ff00b4b49669ad3dec890306d348adc4"
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   },
   {
@@ -76,12 +38,40 @@
     "feedName": "Ploynky #classicArcade",
     "author": "Classic Arcade Collection",
     "category": "Game",
-    "essence": "Defend your cities from incoming missiles by launching interceptors.",
+    "essence": "Defend your cities from incoming missiles by launching interceptors",
     "reactions": [
-      "Strategic defense gameplay.",
-      "Limited ammo adds tactical depth.",
-      "Wave-based progression system.",
-      "Source: https://gist.github.com/straker/ff00b4b49669ad3dec890306d348adc4"
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:classicArcade:pong",
+    "type": "microgame",
+    "title": "Pong",
+    "source": "/sources/classicArcade/pong.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #classicArcade",
+    "author": "Classic Arcade Collection",
+    "category": "Game",
+    "essence": "The original arcade tennis game. Control your paddle to hit the ball past the AI opponent",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
+    ]
+  },
+  {
+    "id": "microgame:classicArcade:snake",
+    "type": "microgame",
+    "title": "Snake",
+    "source": "/sources/classicArcade/snake.html",
+    "generatedAt": "2025-09-01T00:00:00.000Z",
+    "feedName": "Ploynky #classicArcade",
+    "author": "Classic Arcade Collection",
+    "category": "Game",
+    "essence": "Control the snake to eat food and grow longer. Don't hit the walls or yourself! Inspired by the classic arcade game",
+    "reactions": [
+      "This game is licensed as public domain by Axiologic Research, and a gift to Albert-David Alboaie by the founder of Axiologic Research.",
+      "Feel free to copy and improve this game. Contact us on https://ploinky.com/addgame to review and include your games in our public suite. Make nice games for your children!"
     ]
   }
 ]

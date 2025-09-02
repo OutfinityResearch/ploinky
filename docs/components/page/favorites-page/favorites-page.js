@@ -24,23 +24,11 @@ export class FavoritesPage {
         const list = this.element.querySelector('.favorites-list');
         const empty = this.element.querySelector('.favorites-empty');
         const back = this.element.querySelector('#fav-back-button');
-        const clear = this.element.querySelector('#fav-clear-button');
         const title = this.element.querySelector('.favorites-title');
         if (!list) return;
 
-        // Wire header buttons
+        // Wire back button
         if (back) back.addEventListener('click', () => window.webSkel.changeToDynamicPage('news-feed-page','app'));
-        if (clear) clear.addEventListener('click', async () => {
-            const ok = confirm('Clear all favorites?');
-            if (!ok) return;
-            try {
-                await window.LocalStorage.set('favoritePostIds', []);
-                await window.LocalStorage.set('favoritePostsById', {});
-            } catch (_) {}
-            list.innerHTML = '';
-            if (empty) empty.hidden = false;
-            if (title) title.textContent = 'Favorites (0)';
-        });
 
         // Render list
         list.innerHTML = '';

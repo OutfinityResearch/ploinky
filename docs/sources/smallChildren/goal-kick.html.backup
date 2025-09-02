@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Goal Kick</title>
+  <style>
+    :root { --bg:#06101a; --fg:#fff; }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    canvas{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+    .hud{position:fixed;top:10px;left:12px;right:12px;display:flex;gap:8px;justify-content:space-between;pointer-events:none}
+    .pill{pointer-events:auto;background:#0b1b2a;border:1px solid #12314d;border-radius:999px;padding:6px 10px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+    .overlay{position:fixed;left:0;right:0;bottom:0;height:96px;display:none;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.45));backdrop-filter:saturate(1.2)}
+    .num{font-size:42px;font-weight:900}
+  </style>
+</head>
+<body>
+  <div class="hud"><div class="pill">Goals: <span id="g">0</span></div><div class="pill" id="msg">Swipe to shoot</div></div>
+  <div class="overlay" id="ov"><div class="num" id="num">3</div></div>
+  <canvas id="c" aria-label="Goal Kick game"></canvas>
+  <script>
+    (function(){
+      const c = document.getElementById('c'), x = c.getContext('2d');
+      let W, H;
+      function R(){ W = c.width = c.clientWidth; H = c.height = c.clientHeight; }
+      addEventListener('resize', R, {passive:true}); R();
+
+      function speak(t){ try{ if(!('speechSynthesis' in window)) return; const u=new SpeechSynthesisUtterance(String(t)); u.lang='en-US'; speechSynthesis.cancel(); speechSynthesis.speak(u);}catch(_){} }
+
+      let goals=0; const gEl=document.getElementById('g'), mEl=document.getElementById('msg'), ov=document.getElementById('ov'), num=document.getElementById('num');
+
+      let ball, target, shot=false, start=false, resolved=false;
+      let isAiming=false, sX=0, sY=0, aimX=0, aimY=0;
+      const ballR=10;
+
+      function reset(){
+        const rx = W*(0.1 + Math.random()*0.3);
+        const ry = H*(0.65 + Math.random()*0.25);
+        ball={x:rx, y:ry, vx:0, vy:0};
+        target={y:H*0.5, h:Math.max(60, H*0.18), dir:(Math.random()<0.5?-1:1)*(1.5+Math.random()*1.5)};
+        shot=false; start=true; resolved=false; isAiming=false; mEl.textContent='Swipe to shoot';
+      }
+
+      function loop(){ update(); draw(); requestAnimationFrame(loop); }
+
+      function update(){
+        if(!start) return;
+        target.y += target.dir;
+        const topLimit = H*0.2 + target.h/2, botLimit = H*0.8 - target.h/2;
+        if(target.y < topLimit || target.y > botLimit) target.dir *= -1;
+        if(shot){ ball.x += ball.vx; ball.y += ball.vy; }
+      }
+
+      function draw(){
+        x.clearRect(0,0,W,H);
+        const grad = x.createLinearGradient(0,0,0,H);
+        grad.addColorStop(0,'#0b3b2a'); grad.addColorStop(1,'#0a2f22');
+        x.fillStyle=grad; x.fillRect(0,0,W,H);
+
+        x.fillStyle='#0c2a1f'; x.fillRect(W*0.65,0,W*0.35,H);
+        x.fillStyle='#fff'; const postX=W*0.95, postTop=H*0.25, postH=H*0.5; x.fillRect(postX, postTop, 6, postH);
+
+        x.fillStyle='#22c55e'; x.globalAlpha=0.5; x.fillRect(W*0.94, target.y - target.h/2, 12, target.h); x.globalAlpha=1;
+
+        if(isAiming && !shot && start){
+          x.strokeStyle='rgba(255,255,255,.8)'; x.lineWidth=2;
+          x.beginPath(); x.moveTo(ball.x, ball.y); x.lineTo(aimX, aimY); x.stroke();
+        }
+
+        x.fillStyle='#f1f5f9'; x.beginPath(); x.arc(ball.x,ball.y,ballR,0,Math.PI*2); x.fill();
+
+        if(shot && !resolved){
+          const goalPlaneX = W*0.945;
+          if(ball.x >= goalPlaneX){
+            if(ball.y>target.y-target.h/2 && ball.y<target.y+target.h/2){ scored(); resolved=true; }
+            else { missed(); resolved=true; }
+          } else if(ball.x>W+20 || ball.y<-20 || ball.y>H+20){
+            missed(); resolved=true;
+          }
+        }
+      }
+
+      function fire(tx,ty){ if(!start || shot) return; const dx=tx-ball.x, dy=ty-ball.y; const dist=Math.hypot(dx,dy)||1; const k=1/Math.max(60, dist); ball.vx=dx*k*8; ball.vy=dy*k*8; shot=true; mEl.textContent='Shooting...'; }
+      function scored(){ mEl.textContent='Goal!'; speak('Goal'); goals++; gEl.textContent=goals; restartCountdown(); }
+      function missed(){ mEl.textContent='Miss!'; speak('Miss'); restartCountdown(); }
+
+      function restartCountdown(){
+        start=false; shot=false; isAiming=false; resolved=true;
+        let k=3; num.textContent=k; ov.style.display='flex';
+        (function tick(){ k--; if(k<=0){ ov.style.display='none'; reset(); return;} num.textContent=k; setTimeout(tick,1000); })();
+      }
+
+      function toCanvas(e){
+        const r=c.getBoundingClientRect();
+        return { tx:(e.clientX-r.left)*c.width/r.width, ty:(e.clientY-r.top)*c.height/r.height };
+      }
+
+      c.addEventListener('pointerdown', e=>{
+        if(!start || shot) return;
+        c.setPointerCapture(e.pointerId);
+        const {tx,ty}=toCanvas(e);
+        sX=tx; sY=ty; isAiming=true;
+        aimX = ball.x + (tx - sX);
+        aimY = ball.y + (ty - sY);
+      });
+
+      c.addEventListener('pointermove', e=>{
+        if(!isAiming || !start || shot) return;
+        const {tx,ty}=toCanvas(e);
+        aimX = ball.x + (tx - sX);
+        aimY = ball.y + (ty - sY);
+      }, {passive:true});
+
+      function endAim(e){
+        if(!isAiming || !start || shot) return;
+        const {tx,ty}=toCanvas(e);
+        aimX = ball.x + (tx - sX);
+        aimY = ball.y + (ty - sY);
+        isAiming=false;
+        fire(aimX, aimY);
+      }
+      c.addEventListener('pointerup', endAim);
+      c.addEventListener('pointercancel', ()=>{ isAiming=false; });
+
+      c.addEventListener('dblclick', e=>{
+        if(!start || shot) return;
+        const {tx,ty}=toCanvas(e);
+        fire(tx, ty);
+      });
+
+      reset(); loop();
+    })();
+  </script>
+</body>
+</html>

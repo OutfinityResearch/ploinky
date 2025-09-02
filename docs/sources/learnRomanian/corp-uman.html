@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corpul Uman - Learn Romanian Body Parts</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    html, body { height: 100%; }
+    body {
+      min-height: 100vh;
+      font-family: 'Baloo 2', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 100%);
+      background-size: 400% 400%;
+      animation: gradientAnimation 15s ease infinite;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      position: relative;
+    }
+    
+    @keyframes gradientAnimation {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    
+    .sparkles {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    
+    .sparkle {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: white;
+      border-radius: 50%;
+      animation: sparkleFloat 10s linear infinite;
+      opacity: 0;
+    }
+    
+    @keyframes sparkleFloat {
+      0% {
+        transform: translateY(100vh) rotate(0deg);
+        opacity: 0;
+      }
+      10% {
+        opacity: 1;
+      }
+      90% {
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(-100vh) rotate(720deg);
+        opacity: 0;
+      }
+    }
+    
+    .game-container {
+      max-width: 640px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(20px);
+      border-radius: 28px;
+      padding: 22px 18px;
+      box-shadow: 
+        0 50px 100px rgba(0, 0, 0, 0.25),
+        inset 0 2px 10px rgba(255, 255, 255, 0.9);
+      position: relative;
+      z-index: 1;
+      max-height: calc(100vh - 24px);
+      overflow: auto;
+    }
+    
+    .title {
+      text-align: center;
+      margin-bottom: 35px;
+    }
+    
+    .title h1 {
+      font-size: 30px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+    }
+    
+    .subtitle { color: #666; font-size: 16px; font-weight: 500; }
+    
+    .body-display { text-align: center; margin: 20px 0 12px; position: relative; }
+    
+    .person-figure {
+      font-size: 160px;
+      margin-bottom: 16px;
+      position: relative;
+      display: inline-block;
+      animation: breathe 4s ease-in-out infinite;
+      cursor: pointer;
+    }
+    
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    
+    .body-part-indicator {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background: #ff6b6b;
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 4px 12px rgba(255, 107, 107, 0.5);
+      animation: pulse 2s ease-in-out infinite;
+      cursor: pointer;
+      z-index: 2;
+    }
+    
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 4px 12px rgba(255, 107, 107, 0.5);
+      }
+      50% {
+        transform: scale(1.2);
+        box-shadow: 0 6px 20px rgba(255, 107, 107, 0.7);
+      }
+    }
+    
+    .part-label {
+      position: absolute;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s ease;
+      pointer-events: none;
+    }
+    
+    .body-part-indicator:hover .part-label {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    
+    .body-part-name {
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+    
+    .pronunciation { color: #888; font-size: 14px; font-style: italic; margin-bottom: 16px; }
+    
+    .listen-btn {
+      background: linear-gradient(135deg, #f093fb, #f5576c);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 40px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 6px 20px rgba(240, 147, 251, 0.4);
+    }
+    
+    .listen-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(240, 147, 251, 0.5);
+    }
+    
+    .body-parts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 10px; margin: 16px 0 10px; }
+    
+    .mini-part {
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(240, 147, 251, 0.1));
+      border-radius: 14px;
+      padding: 12px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 2px solid transparent;
+    }
+    
+    .mini-part:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      border-color: #667eea;
+    }
+    
+    .mini-part.active {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      transform: scale(1.05);
+    }
+    
+    .mini-part-emoji { font-size: 28px; margin-bottom: 4px; }
+    
+    .mini-part-text { font-size: 13px; font-weight: 600; }
+    
+    .options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 14px; }
+    
+    .option-btn { background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 14px; border-radius: 18px; font-size: 18px; font-weight: 700; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3); position: relative; overflow: hidden; }
+    
+    .option-btn::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.3);
+      transform: translate(-50%, -50%);
+      transition: width 0.6s, height 0.6s;
+    }
+    
+    .option-btn:hover::before {
+      width: 400px;
+      height: 400px;
+    }
+    
+    .option-btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    .option-btn.correct {
+      background: linear-gradient(135deg, #00b894, #00cec9);
+      animation: successBounce 0.6s ease;
+    }
+    
+    .option-btn.wrong {
+      background: linear-gradient(135deg, #d63031, #e17055);
+      animation: errorWiggle 0.5s ease;
+    }
+    
+    @keyframes successBounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+    
+    @keyframes errorWiggle {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-5deg); }
+      75% { transform: rotate(5deg); }
+    }
+    
+    .health-bar { margin-top: 16px; padding: 14px;
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(240, 147, 251, 0.1));
+      border-radius: 20px;
+      text-align: center;
+    }
+    
+    .hearts { font-size: 28px; margin-bottom: 6px; }
+    
+    .health-text { font-size: 16px; font-weight: 600; color: #666; }
+    
+    .achievement {
+      position: fixed;
+      top: 20px;
+      right: -400px;
+      background: white;
+      padding: 14px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: right 0.5s ease;
+      z-index: 1000;
+    }
+    
+    .achievement.show {
+      right: 20px;
+    }
+    
+    .achievement-icon { font-size: 36px; }
+    
+    .achievement-text { font-size: 16px; font-weight: 600; color: #333; }
+
+    @media (max-width: 480px) {
+      .person-figure { font-size: 140px; }
+      .body-part-name { font-size: 28px; }
+      .option-btn { padding: 12px; font-size: 16px; }
+    }
+    @media (max-width: 360px) {
+      .options { grid-template-columns: 1fr; }
+      .person-figure { font-size: 120px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sparkles">
+    <div class="sparkle" style="left: 10%; animation-delay: 0s;"></div>
+    <div class="sparkle" style="left: 20%; animation-delay: 1s;"></div>
+    <div class="sparkle" style="left: 30%; animation-delay: 2s;"></div>
+    <div class="sparkle" style="left: 40%; animation-delay: 3s;"></div>
+    <div class="sparkle" style="left: 50%; animation-delay: 4s;"></div>
+    <div class="sparkle" style="left: 60%; animation-delay: 5s;"></div>
+    <div class="sparkle" style="left: 70%; animation-delay: 6s;"></div>
+    <div class="sparkle" style="left: 80%; animation-delay: 7s;"></div>
+    <div class="sparkle" style="left: 90%; animation-delay: 8s;"></div>
+  </div>
+  
+  <div class="game-container">
+    <div class="title">
+      <h1>👤 Corpul Uman 👤</h1>
+      <div class="subtitle">Învață părțile corpului în română!</div>
+    </div>
+    
+    <div class="body-display">
+      <div class="person-figure" onclick="playSound()">🧍</div>
+      <div class="body-part-name" id="bodyPartName">Cap</div>
+      <div class="pronunciation" id="pronunciation">[kap]</div>
+      <button class="listen-btn" onclick="playSound()">🔊 Ascultă Pronunția</button>
+    </div>
+    
+    <div class="body-parts-grid" id="bodyPartsGrid"></div>
+    
+    <div class="options" id="options">
+      <button class="option-btn">Head</button>
+      <button class="option-btn">Hand</button>
+      <button class="option-btn">Foot</button>
+      <button class="option-btn">Eye</button>
+    </div>
+    
+    <div class="health-bar">
+      <div class="hearts" id="hearts">❤️❤️❤️❤️❤️</div>
+      <div class="health-text">Sănătate: <span id="health">100</span>%</div>
+    </div>
+  </div>
+  
+  <div class="achievement" id="achievement">
+    <div class="achievement-icon">🏆</div>
+    <div class="achievement-text" id="achievementText">Ai învățat 5 părți ale corpului!</div>
+  </div>
+  
+  <script>
+    const bodyParts = [
+      { emoji: '👤', ro: 'Cap', en: 'Head', sound: 'kap' },
+      { emoji: '👁️', ro: 'Ochi', en: 'Eye', sound: 'o-ki' },
+      { emoji: '👃', ro: 'Nas', en: 'Nose', sound: 'nas' },
+      { emoji: '👄', ro: 'Gură', en: 'Mouth', sound: 'gu-rə' },
+      { emoji: '👂', ro: 'Ureche', en: 'Ear', sound: 'u-re-ke' },
+      { emoji: '✋', ro: 'Mână', en: 'Hand', sound: 'mɨ-nə' },
+      { emoji: '💪', ro: 'Braț', en: 'Arm', sound: 'brats' },
+      { emoji: '🦵', ro: 'Picior', en: 'Leg', sound: 'pi-chor' },
+      { emoji: '🦶', ro: 'Labă picior', en: 'Foot', sound: 'la-bə pi-chor' },
+      { emoji: '👆', ro: 'Deget', en: 'Finger', sound: 'de-get' },
+      { emoji: '🫀', ro: 'Inimă', en: 'Heart', sound: 'i-ni-mə' },
+      { emoji: '🧠', ro: 'Creier', en: 'Brain', sound: 'kre-yer' },
+      { emoji: '🦷', ro: 'Dinte', en: 'Tooth', sound: 'din-te' },
+      { emoji: '🦴', ro: 'Os', en: 'Bone', sound: 'os' },
+      { emoji: '👅', ro: 'Limbă', en: 'Tongue', sound: 'lim-bə' }
+    ];
+    
+    let currentPart = null;
+    let health = 100;
+    let correct = 0;
+    let total = 0;
+    let learned = [];
+    
+    // Improved Romanian TTS: choose good ro-RO voice and reuse
+    let roVoice = null;
+    function pickRomanianVoice() {
+      const voices = window.speechSynthesis?.getVoices?.() || [];
+      const ro = voices.filter(v => (v.lang||'').toLowerCase().startsWith('ro'));
+      roVoice = ro.find(v => /google|microsoft/i.test(v.name)) || ro[0] || null;
+      return roVoice;
+    }
+    if (typeof speechSynthesis !== 'undefined') {
+      speechSynthesis.onvoiceschanged = () => { if (!roVoice) pickRomanianVoice(); };
+      pickRomanianVoice();
+    }
+    function speakRO(text, { rate = 0.9, pitch = 1.0, vol = 1.0 } = {}) {
+      if (!text) return;
+      try { speechSynthesis.cancel(); } catch(_) {}
+      const u = new SpeechSynthesisUtterance(String(text));
+      u.lang = (roVoice && roVoice.lang) ? roVoice.lang : 'ro-RO';
+      u.voice = roVoice || null;
+      u.rate = rate; u.pitch = pitch; u.volume = vol;
+      speechSynthesis.speak(u);
+    }
+
+    function playSound() {
+      if (!currentPart) return;
+      speakRO((currentPart.ro || '').toLowerCase(), { rate: 0.9, pitch: 1.0 });
+      
+      // Animate figure
+      const figure = document.querySelector('.person-figure');
+      figure.style.animation = 'none';
+      setTimeout(() => {
+        figure.style.animation = 'breathe 4s ease-in-out infinite';
+      }, 10);
+    }
+    
+    function createBodyPartsGrid() {
+      const grid = document.getElementById('bodyPartsGrid');
+      grid.innerHTML = '';
+      
+      const displayParts = bodyParts.slice(0, 10);
+      displayParts.forEach(part => {
+        const partDiv = document.createElement('div');
+        partDiv.className = 'mini-part';
+        if (part === currentPart) {
+          partDiv.classList.add('active');
+        }
+        
+        partDiv.innerHTML = `
+          <div class="mini-part-emoji">${part.emoji}</div>
+          <div class="mini-part-text">${part.ro}</div>
+        `;
+        
+        partDiv.onclick = () => selectBodyPart(part);
+        grid.appendChild(partDiv);
+      });
+    }
+    
+    function selectBodyPart(part) {
+      currentPart = part;
+      document.getElementById('bodyPartName').textContent = part.ro;
+      document.getElementById('pronunciation').textContent = `[${part.sound}]`;
+      
+      createBodyPartsGrid();
+      loadOptions();
+      playSound();
+    }
+    
+    function getRandomOptions(correct, count = 4) {
+      const options = [correct];
+      const available = bodyParts.filter(p => p.en !== correct.en);
+      
+      while (options.length < count) {
+        const random = available[Math.floor(Math.random() * available.length)];
+        if (!options.some(o => o.en === random.en)) {
+          options.push(random);
+        }
+      }
+      
+      return options.sort(() => Math.random() - 0.5);
+    }
+    
+    function loadOptions() {
+      const options = getRandomOptions(currentPart);
+      const container = document.getElementById('options');
+      container.innerHTML = '';
+      
+      options.forEach((option, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.textContent = option.en;
+        btn.onclick = function() { checkAnswer(this, option.en === currentPart.en); };
+        btn.style.animationDelay = `${index * 0.1}s`;
+        container.appendChild(btn);
+      });
+    }
+    
+    function loadNewPart() {
+      const randomIndex = Math.floor(Math.random() * bodyParts.length);
+      currentPart = bodyParts[randomIndex];
+      
+      document.getElementById('bodyPartName').textContent = currentPart.ro;
+      document.getElementById('pronunciation').textContent = `[${currentPart.sound}]`;
+      
+      createBodyPartsGrid();
+      loadOptions();
+      
+      // Auto-play sound
+      setTimeout(playSound, 500);
+    }
+    
+    function updateHealth() {
+      const hearts = document.getElementById('hearts');
+      const healthText = document.getElementById('health');
+      
+      let heartDisplay = '';
+      const heartCount = Math.ceil(health / 20);
+      for (let i = 0; i < 5; i++) {
+        if (i < heartCount) {
+          heartDisplay += '❤️';
+        } else {
+          heartDisplay += '🤍';
+        }
+      }
+      
+      hearts.textContent = heartDisplay;
+      healthText.textContent = health;
+    }
+    
+    function showAchievement(text) {
+      const achievement = document.getElementById('achievement');
+      const achievementText = document.getElementById('achievementText');
+      
+      achievementText.textContent = text;
+      achievement.classList.add('show');
+      
+      setTimeout(() => {
+        achievement.classList.remove('show');
+      }, 3000);
+    }
+    
+    function checkAnswer(button, isCorrect) {
+      const buttons = document.querySelectorAll('.option-btn');
+      buttons.forEach(btn => btn.disabled = true);
+      
+      total++;
+      
+      if (isCorrect) {
+        correct++;
+        button.classList.add('correct');
+        
+        // Add to learned
+        if (!learned.includes(currentPart.ro)) {
+          learned.push(currentPart.ro);
+          
+          if (learned.length === 5) {
+            showAchievement('Ai învățat 5 părți ale corpului! 🎉');
+          } else if (learned.length === 10) {
+            showAchievement('Expert în anatomie! 10 părți învățate! 🏆');
+          }
+        }
+        
+        // Heal
+        health = Math.min(100, health + 5);
+      } else {
+        button.classList.add('wrong');
+        
+        // Take damage
+        health = Math.max(0, health - 10);
+        
+        // Show correct answer
+        buttons.forEach(btn => {
+          if (btn.textContent === currentPart.en) {
+            btn.classList.add('correct');
+          }
+        });
+      }
+      
+      updateHealth();
+      
+      // Load next part
+      setTimeout(() => {
+        buttons.forEach(btn => {
+          btn.classList.remove('correct', 'wrong');
+          btn.disabled = false;
+        });
+        loadNewPart();
+      }, 1400);
+    }
+    
+    // Initialize
+    loadNewPart();
+    updateHealth();
+    
+    // Keyboard support
+    document.addEventListener('keydown', (e) => {
+      if (e.key >= '1' && e.key <= '4') {
+        const buttons = document.querySelectorAll('.option-btn:not([disabled])');
+        const index = parseInt(e.key) - 1;
+        if (buttons[index]) {
+          buttons[index].click();
+        }
+      } else if (e.key === ' ') {
+        e.preventDefault();
+        playSound();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -416,4 +416,35 @@ async function generateFixReport(gamePath, issues, fixedIssues) {
   return report;
 }
 
-module.exports = { fix, generateFixReport };
+async function improve(gamePath, improvementPrompt) {
+  console.log(`Attempting to improve: ${path.basename(gamePath)}`);
+
+  const aiHelper = getAIHelper();
+  if (!aiHelper.enabled) {
+    console.log('❌ AI is not configured. Cannot improve game.');
+    return false;
+  }
+
+  try {
+    const code = await fs.readFile(gamePath, 'utf8');
+
+    console.log('🤖 Using AI to improve the code...');
+    const improvedCode = await aiHelper.improveCode(code, improvementPrompt);
+
+    if (improvedCode && improvedCode.trim() !== '' && improvedCode.trim() !== code.trim()) {
+      console.log('📦 AI returned improved code, writing to file...');
+      // The backup is handled by the main script (improveGame.js)
+      await fs.writeFile(gamePath, improvedCode);
+      console.log('✅ AI-improved code written to file.');
+      return true;
+    } else {
+      console.log('❌ AI improvement failed or returned empty/same code. No changes were made.');
+      return false;
+    }
+  } catch (error) {
+    console.error('Error during code improvement:', error);
+    return false;
+  }
+}
+
+module.exports = { fix, generateFixReport, improve };
