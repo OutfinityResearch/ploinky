@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Get the directory where the script is located
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+
+# Construct the path to the Node.js script
+NODE_SCRIPT="$SCRIPT_DIR/../src/index.js"
+
+# Execute the Node.js script with all passed arguments
+node "$NODE_SCRIPT" "$@"
