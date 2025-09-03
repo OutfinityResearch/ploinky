@@ -1,13 +1,11 @@
 #!/bin/bash
 set -e
 
-
-
 echo "--- Running Test: env commands ---"
 
-# 1. Setup: Add repo and new agent
-$PLOINKY_CMD add repo standard https://github.com/ploinky/ploinky-agents-standard.git
-$PLOINKY_CMD new agent standard my-env-agent ubuntu:latest
+# 1. Setup: Create a local repo and a new agent inside it
+mkdir -p .ploinky/repos/local-test-repo
+$PLOINKY_CMD new agent local-test-repo my-env-agent ubuntu:latest
 
 # 2. Run the 'add env' command
 $PLOINKY_CMD add env MY_SECRET_KEY "12345abcdef"
@@ -23,7 +21,7 @@ fi
 $PLOINKY_CMD enable env my-env-agent MY_SECRET_KEY
 
 # 5. Verify the manifest was updated with the env var
-MANIFEST_PATH=".ploinky/repos/standard/my-env-agent/manifest.json"
+MANIFEST_PATH=".ploinky/repos/local-test-repo/my-env-agent/manifest.json"
 if ! grep -q '"env": \[
   "MY_SECRET_KEY"
 \]' "$MANIFEST_PATH"; then

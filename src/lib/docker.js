@@ -4,6 +4,26 @@ const path = require('path');
 const { AGENTS_FILE, SECRETS_FILE } = require('./config');
 const { debugLog } = require('./utils');
 
+function getContainerRuntime() {
+    try {
+        execSync('command -v docker', { stdio: 'ignore' });
+        debugLog('Using docker as container runtime.');
+        return 'docker';
+    } catch (e) {
+        try {
+            execSync('command -v podman', { stdio: 'ignore' });
+            debugLog('Using podman as container runtime.');
+            return 'podman';
+        } catch (e2) {
+            console.error('Neither docker nor podman found in PATH. Please install one of them.');
+            process.exit(1);
+        }
+    }
+}
+
+const containerRuntime = getContainerRuntime();
+
+
 function getAgentContainerName(agentName, repoName) {
     const safeAgentName = agentName.replace(/[^a-zA-Z0-9_.-]/g, '_');
     const safeRepoName = repoName.replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -13,7 +33,7 @@ function getAgentContainerName(agentName, repoName) {
 }
 
 function isContainerRunning(containerName) {
-    const command = `docker ps -q -f name=^${containerName}$`;
+    const command = `${containerRuntime} ps -q -f name=^${containerName}$`;
     debugLog(`Checking if container is running with command: ${command}`);
     try {
         const result = execSync(command).toString();
@@ -24,7 +44,7 @@ function isContainerRunning(containerName) {
 }
 
 function containerExists(containerName) {
-    const command = `docker ps -a -q -f name=^${containerName}$`;
+    const command = `${containerRuntime} ps -a -q -f name=^${containerName}$`;
     debugLog(`Checking if container exists with command: ${command}`);
     try {
         const result = execSync(command).toString();
@@ -50,7 +70,7 @@ function getSecretsForAgent(manifest) {
             envVars.push(`-e ${secretLine}`);
         }
     }
-    debugLog(`Formatted env vars for docker command: ${envVars.join(' ')}`);
+    debugLog(`Formatted env vars for ${containerRuntime} command: ${envVars.join(' ')}`);
     return envVars;
 }
 
@@ -62,7 +82,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     if (!containerExists(containerName)) {
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
         const envVars = getSecretsForAgent(manifest).join(' ');
-        const createCommand = `docker create -it --name ${containerName} -v "${process.cwd()}:${process.cwd()}" ${envVars} ${manifest.container} /bin/bash`;
+        const createCommand = `${containerRuntime} create -it --name ${containerName} -v "${process.cwd()}:${process.cwd()}" ${envVars} ${manifest.container} /bin/bash`;
         debugLog(`Executing create command: ${createCommand}`);
         execSync(createCommand, { stdio: 'inherit' });
         agents[containerName] = { agentName, repoName };
@@ -72,25 +92,25 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     }
 
     if (!isContainerRunning(containerName)) {
-        const startCommand = `docker start ${containerName}`;
+        const startCommand = `${containerRuntime} start ${containerName}`;
         debugLog(`Executing start command: ${startCommand}`);
         execSync(startCommand, { stdio: 'inherit' });
     }
 
     if (firstRun && manifest.install) {
         console.log(`Running install command for '${agentName}'...`);
-        const installCommand = `docker exec ${interactive ? '-it' : ''} ${containerName} bash -c "cd ${process.cwd()} && ${manifest.install}"`;
+        const installCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} bash -c "cd ${process.cwd()} && ${manifest.install}"`;
         debugLog(`Executing install command: ${installCommand}`);
         execSync(installCommand, { stdio: 'inherit' });
     }
 
     console.log(`Running command in '${agentName}': ${command}`);
-    const execCommand = `docker exec ${interactive ? '-it' : ''} ${containerName} bash -c "cd ${process.cwd()} && ${command}"`;
+    const execCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} bash -c "cd ${process.cwd()} && ${command}"`;
     debugLog(`Executing run command: ${execCommand}`);
     try {
         execSync(execCommand, { stdio: 'inherit' });
     } catch (error) {
-        debugLog(`Caught error during docker exec. This is often expected if the command exits with a non-zero code.`);
+        debugLog(`Caught error during ${containerRuntime} exec. This is often expected if the command exits with a non-zero code.`);
     }
 }
 

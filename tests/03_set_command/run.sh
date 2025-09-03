@@ -3,15 +3,15 @@ set -e
 
 echo "--- Running Test: set command ---"
 
-# 1. Setup: Add repo and new agent
-$PLOINKY_CMD add repo standard https://github.com/ploinky/ploinky-agents-standard.git
-$PLOINKY_CMD new agent standard my-setter-agent ubuntu:latest
+# 1. Setup: Create a local repo and a new agent inside it
+mkdir -p .ploinky/repos/local-test-repo
+$PLOINKY_CMD new agent local-test-repo my-setter-agent ubuntu:latest
 
 # 2. Run the 'set' command for 'run'
 $PLOINKY_CMD set run my-setter-agent "echo 'Hello from the agent'"
 
 # 3. Verify the manifest was updated
-MANIFEST_PATH=".ploinky/repos/standard/my-setter-agent/manifest.json"
+MANIFEST_PATH=".ploinky/repos/local-test-repo/my-setter-agent/manifest.json"
 if ! grep -q "Hello from the agent" "$MANIFEST_PATH"; then
     echo "FAIL: Manifest content was not updated correctly for the 'run' command."
     exit 1

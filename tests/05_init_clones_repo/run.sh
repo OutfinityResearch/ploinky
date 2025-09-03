@@ -7,7 +7,7 @@ echo "--- Running Test: Init automatically clones the default repo ---"
 $PLOINKY_CMD help > /dev/null
 
 # Verify that the repository was cloned
-REPO_PATH=".ploinky/repos/standard"
+REPO_PATH=".ploinky/repos/plonkyAgents"
 if [ ! -d "$REPO_PATH" ]; then
     echo "FAIL: Repository directory was not created at ${REPO_PATH}"
     exit 1
@@ -19,5 +19,5 @@ if [ ! -d "$REPO_PATH/.git" ]; then
     exit 1
 fi
 
-echo "PASS: Ploinky initialization correctly cloned the default 'standard' repository."
+echo "PASS: Ploinky initialization correctly cloned the default 'plonkyAgents' repository."
 exit 0

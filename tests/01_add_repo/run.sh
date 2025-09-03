@@ -1,17 +1,13 @@
 #!/bin/bash
-
-# Exit immediately if a command exits with a non-zero status.
 set -e
-
-
 
 echo "--- Running Test: add repo ---"
 
-# 1. Run the 'add repo' command
-$PLOINKY_CMD add repo standard https://github.com/ploinky/ploinky-agents-standard.git
+# 1. Run the 'add repo' command with a different repository
+$PLOINKY_CMD add repo example-repo https://github.com/git-fixtures/basic.git
 
 # 2. Verify that the repository was cloned
-REPO_PATH=".ploinky/repos/standard"
+REPO_PATH=".ploinky/repos/example-repo"
 if [ ! -d "$REPO_PATH" ]; then
     echo "FAIL: Repository directory was not created at ${REPO_PATH}"
     exit 1

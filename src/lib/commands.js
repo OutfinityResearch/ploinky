@@ -25,6 +25,8 @@ Commands:
   run agent <AgentName> [...args]              Runs an agent's start command.
   run bash <AgentName>                         Starts a bash session in an agent's container.
   run update <AgentName>                       Runs an agent's update command.
+  list agents                                  Lists all available agents.
+  list repos                                   Lists all available repositories.
   test <test_name>                             Runs a specific integration test.
   help                                         Displays this help message.
 
@@ -125,7 +127,7 @@ function addEnv(varName, varValue) {
         throw new Error('Missing arguments for add env. Usage: add env <VarName> <VarValue>');
     }
 
-    const secret = `\n${varName}=\"${varValue}\"`;
+    const secret = '\n' + varName + '="' + varValue + '"';
     try {
         fs.appendFileSync(SECRETS_FILE, secret);
         console.log(`Secret '${varName}' added successfully.`);
@@ -260,6 +262,39 @@ function runTests(testName) {
     }
 }
 
+function listAgents() {
+    console.log('Available agents:');
+    const repos = fs.readdirSync(REPOS_DIR);
+    for (const repo of repos) {
+        const repoPath = path.join(REPOS_DIR, repo);
+        if (fs.statSync(repoPath).isDirectory()) {
+            console.log(`
+Repository: ${repo}`);
+            const agents = fs.readdirSync(repoPath).filter(file => {
+                const agentPath = path.join(repoPath, file);
+                return fs.statSync(agentPath).isDirectory() && fs.existsSync(path.join(agentPath, 'manifest.json'));
+            });
+            if (agents.length > 0) {
+                agents.forEach(agent => console.log(`  - ${agent}`));
+            } else {
+                console.log('  (No agents found)');
+            }
+        }
+    }
+}
+
+function listRepos() {
+    console.log('Available repositories:');
+    const repos = fs.readdirSync(REPOS_DIR)
+        .filter(file => fs.statSync(path.join(REPOS_DIR, file)).isDirectory());
+    
+    if (repos.length > 0) {
+        repos.forEach(repo => console.log(`  - ${repo}`));
+    } else {
+        console.log('  (No repositories found)');
+    }
+}
+
 
 function handleCommand(args) {
     const [command, ...options] = args;
@@ -303,12 +338,21 @@ function handleCommand(args) {
                 showHelp();
             }
             break;
+        case 'list':
+            if (options[0] === 'agents') {
+                listAgents();
+            } else if (options[0] === 'repos') {
+                listRepos();
+            } else {
+                showHelp();
+            }
+            break;
         case 'test':
             try {
                 runTests(options[0]);
             } catch (e) {
                 // The error is already logged by runTests, but we need to exit
-                // with a failure code for the external script to detect it.
+                // with a failure code for the external test runner script.
                 process.exit(1);
             }
             break;
