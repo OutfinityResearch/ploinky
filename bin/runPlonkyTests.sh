@@ -37,7 +37,31 @@ TEST_RUN_DIR=$(mktemp -d)
 echo "Running tests in temporary directory: ${TEST_RUN_DIR}"
 
 # Ensure cleanup happens on script exit
-trap 'echo "Cleaning up..."; rm -rf "${TEST_RUN_DIR}"' EXIT
+cleanup() {
+    echo "Cleaning up..."
+    
+    # Determine container runtime
+    if command -v podman &> /dev/null; then
+        RUNTIME="podman"
+    elif command -v docker &> /dev/null; then
+        RUNTIME="docker"
+    else
+        RUNTIME=""
+    fi
+
+    # Stop and remove any containers created by the tests
+    if [ -n "$RUNTIME" ]; then
+        CONTAINERS=$($RUNTIME ps -a --filter "name=^ploinky_" --format "{{.ID}}")
+        if [ -n "$CONTAINERS" ]; then
+            echo "Stopping and removing test containers..."
+            $RUNTIME stop $CONTAINERS > /dev/null
+            $RUNTIME rm $CONTAINERS > /dev/null
+        fi
+    fi
+    
+    rm -rf "${TEST_RUN_DIR}"
+}
+trap cleanup EXIT
 
 # ---
 

@@ -27,7 +27,6 @@ Commands:
   run update <AgentName>                       Runs an agent's update command.
   list agents                                  Lists all available agents.
   list repos                                   Lists all available repositories.
-  test <test_name>                             Runs a specific integration test.
   help                                         Displays this help message.
 
 Options:
@@ -36,6 +35,28 @@ Options:
 Run 'help' to see this list again.
     `);
 }
+
+function getRepoNames() {
+    if (!fs.existsSync(REPOS_DIR)) return [];
+    return fs.readdirSync(REPOS_DIR)
+        .filter(file => fs.statSync(path.join(REPOS_DIR, file)).isDirectory());
+}
+
+function getAgentNames() {
+    if (!fs.existsSync(REPOS_DIR)) return [];
+    const agentNames = [];
+    const repos = getRepoNames();
+    for (const repo of repos) {
+        const repoPath = path.join(REPOS_DIR, repo);
+        const agents = fs.readdirSync(repoPath).filter(file => {
+            const agentPath = path.join(repoPath, file);
+            return fs.statSync(agentPath).isDirectory() && fs.existsSync(path.join(agentPath, 'manifest.json'));
+        });
+        agents.forEach(agent => agentNames.push(agent));
+    }
+    return [...new Set(agentNames)]; // Return unique agent names
+}
+
 
 function addRepo(repoName, repoUrl) {
     if (!repoName || !repoUrl) {
@@ -212,82 +233,71 @@ function runUpdate(agentName) {
 }
 
 
-function runTests(testName) {
-    // The project root is two levels above the current file (src/lib/commands.js)
-    const projectRoot = path.resolve(__dirname, '..', '..');
-    const testsDir = path.join(projectRoot, 'tests');
-    debugLog(`Resolved tests directory to: ${testsDir}`);
-
-    if (!fs.existsSync(testsDir)) {
-        console.error('Error: "tests" directory not found.');
-        return;
-    }
-
-    const availableTests = fs.readdirSync(testsDir).filter(f => fs.statSync(path.join(testsDir, f)).isDirectory());
-
-    if (!testName) {
-        console.log('Available tests:');
-        availableTests.forEach(t => console.log(`  ${t}`));
-        console.log("\nRun 'ploinky test <test_name>' to execute a specific test.");
-        return;
-    }
-
-    if (!availableTests.includes(testName)) {
-        console.error(`Error: Test '${testName}' not found in ${testsDir}.`);
-        return;
-    }
-
-    const testPath = path.join(testsDir, testName);
-    const runScriptPath = path.join(testPath, 'run.sh');
-    if (!fs.existsSync(runScriptPath)) {
-        console.log(`SKIPPING: No run.sh found for test '${testName}'.`);
-        return;
-    }
-
-    const ploinkyExecutable = `node ${path.join(projectRoot, 'src', 'index.js')}`;
-    const cmd = `bash ${runScriptPath}`;
-    
-    debugLog(`Executing test script: ${cmd}`);
-    try {
-        execSync(cmd, { 
-            stdio: 'inherit',
-            env: { ...process.env, PLOINKY_CMD: ploinkyExecutable }
-        });
-        console.log(`✅ PASS: ${testName}`);
-    } catch (error) {
-        console.error(`❌ FAIL: ${testName} exited with an error.`);
-        // Re-throw the error to ensure the process exits with a non-zero code,
-        // which is important for the external test runner script.
-        throw error;
-    }
-}
 
 function listAgents() {
     console.log('Available agents:');
-    const repos = fs.readdirSync(REPOS_DIR);
+    
+    // Load the agents file to see which ones have been run
+    let runningAgents = {};
+    try {
+        if (fs.existsSync(AGENTS_FILE)) {
+            runningAgents = JSON.parse(fs.readFileSync(AGENTS_FILE, 'utf-8'));
+        }
+    } catch (e) {
+        debugLog('Could not read agents file:', e.message);
+    }
+    
+    const repos = getRepoNames();
     for (const repo of repos) {
         const repoPath = path.join(REPOS_DIR, repo);
-        if (fs.statSync(repoPath).isDirectory()) {
-            console.log(`
-Repository: ${repo}`);
-            const agents = fs.readdirSync(repoPath).filter(file => {
-                const agentPath = path.join(repoPath, file);
-                return fs.statSync(agentPath).isDirectory() && fs.existsSync(path.join(agentPath, 'manifest.json'));
+        console.log(`\nRepository: ${repo}`);
+        const agents = fs.readdirSync(repoPath).filter(file => {
+            const agentPath = path.join(repoPath, file);
+            return fs.statSync(agentPath).isDirectory() && fs.existsSync(path.join(agentPath, 'manifest.json'));
+        });
+        
+        if (agents.length > 0) {
+            agents.forEach(agent => {
+                // Read the manifest to get the 'about' field
+                const manifestPath = path.join(repoPath, agent, 'manifest.json');
+                let manifest = {};
+                try {
+                    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+                } catch (e) {
+                    debugLog(`Could not read manifest for ${agent}:`, e.message);
+                }
+                
+                // Check if this agent has been run (has a container)
+                const containerName = `ploinky_${repo.replace(/[^a-zA-Z0-9_.-]/g, '_')}_${agent.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+                const hasBeenRun = Object.keys(runningAgents).some(key => key.startsWith(containerName));
+                
+                // Format the output
+                let output = `  - ${agent}`;
+                if (hasBeenRun) {
+                    output += ' [*]';  // Mark agents that have been run
+                }
+                if (manifest.about) {
+                    output += ` - ${manifest.about}`;
+                }
+                if (manifest.container) {
+                    output += ` (${manifest.container})`;
+                }
+                console.log(output);
             });
-            if (agents.length > 0) {
-                agents.forEach(agent => console.log(`  - ${agent}`));
-            } else {
-                console.log('  (No agents found)');
-            }
+        } else {
+            console.log('  (No agents found)');
         }
+    }
+    
+    // Show legend if there are any running agents
+    if (Object.keys(runningAgents).length > 0) {
+        console.log('\n[*] = Agent has been run (container exists)');
     }
 }
 
 function listRepos() {
     console.log('Available repositories:');
-    const repos = fs.readdirSync(REPOS_DIR)
-        .filter(file => fs.statSync(path.join(REPOS_DIR, file)).isDirectory());
-    
+    const repos = getRepoNames();
     if (repos.length > 0) {
         repos.forEach(repo => console.log(`  - ${repo}`));
     } else {
@@ -347,15 +357,6 @@ function handleCommand(args) {
                 showHelp();
             }
             break;
-        case 'test':
-            try {
-                runTests(options[0]);
-            } catch (e) {
-                // The error is already logged by runTests, but we need to exit
-                // with a failure code for the external test runner script.
-                process.exit(1);
-            }
-            break;
         default:
             console.log(`Unknown command: ${command}`);
             showHelp();
@@ -365,4 +366,6 @@ function handleCommand(args) {
 module.exports = {
     showHelp,
     handleCommand,
+    getAgentNames,
+    getRepoNames,
 };
