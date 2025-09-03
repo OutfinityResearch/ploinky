@@ -29,6 +29,8 @@ Commands:
   list repos                                   Lists all available repositories.
   help                                         Displays this help message.
 
+Common bash commands are also available: ls, cd, pwd, cat, grep, find, ps, df, mkdir, rm, cp, mv, and more.
+
 Options:
   --debug, -d                                  Enables debug mode for detailed logging.
 
@@ -306,6 +308,42 @@ function listRepos() {
 }
 
 
+function executeBashCommand(command, args) {
+    const { execSync } = require('child_process');
+    
+    // Special handling for cd command
+    if (command === 'cd') {
+        const targetDir = args[0] || process.env.HOME;
+        try {
+            process.chdir(targetDir);
+            debugLog(`Changed directory to: ${process.cwd()}`);
+        } catch (error) {
+            console.error(`cd: ${error.message}`);
+        }
+        return;
+    }
+    
+    // Special handling for clear command
+    if (command === 'clear') {
+        console.clear();
+        return;
+    }
+    
+    // Execute other commands
+    const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+    debugLog(`Executing bash command: ${fullCommand}`);
+    
+    try {
+        const output = execSync(fullCommand, { 
+            stdio: 'inherit',
+            cwd: process.cwd()
+        });
+    } catch (error) {
+        // Error is already displayed by stdio: 'inherit'
+        debugLog(`Command failed: ${error.message}`);
+    }
+}
+
 function handleCommand(args) {
     const [command, ...options] = args;
     debugLog(`Handling command: '${command}' with options: [${options.join(', ')}]`);
@@ -358,8 +396,21 @@ function handleCommand(args) {
             }
             break;
         default:
-            console.log(`Unknown command: ${command}`);
-            showHelp();
+            // Check if it's a common bash command
+            const bashCommands = [
+                'ls', 'cd', 'pwd', 'cat', 'grep', 'find', 'ps', 'df', 'du',
+                'mkdir', 'rm', 'cp', 'mv', 'touch', 'chmod', 'tail', 'head',
+                'clear', 'which', 'echo', 'tree', 'less', 'more', 'wc', 'sort',
+                'uniq', 'cut', 'sed', 'awk', 'tar', 'zip', 'unzip', 'curl', 'wget'
+            ];
+            
+            if (bashCommands.includes(command)) {
+                // Execute bash command locally
+                executeBashCommand(command, options);
+            } else {
+                console.log(`Unknown command: ${command}`);
+                showHelp();
+            }
     }
 }
 

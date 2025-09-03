@@ -73,6 +73,32 @@ function completer(line) {
 }
 
 
+function getRelativePath() {
+    const home = process.env.HOME || process.env.USERPROFILE;
+    const cwd = process.cwd();
+    
+    if (cwd === home) {
+        return '~';
+    } else if (cwd.startsWith(home)) {
+        return '~' + cwd.slice(home.length);
+    } else {
+        return cwd;
+    }
+}
+
+function getColoredPrompt() {
+    // ANSI color codes
+    const reset = '\x1b[0m';
+    const bold = '\x1b[1m';
+    const cyan = '\x1b[36m';
+    const blue = '\x1b[34m';
+    const green = '\x1b[32m';
+    const magenta = '\x1b[35m';
+    
+    // Bold magenta for "ploinky", cyan for path, green for ">"
+    return `${bold}${magenta}ploinky${reset} ${cyan}${getRelativePath()}${reset}${green}>${reset} `;
+}
+
 function startInteractiveMode() {
     const historyPath = path.join(PLOINKY_DIR, '.history');
     let history = [];
@@ -87,7 +113,7 @@ function startInteractiveMode() {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
-        prompt: 'ploinky> ',
+        prompt: getColoredPrompt(),
         history: history,
         historySize: 1000,
         completer: process.stdin.isTTY ? completer : undefined // Only use completer in TTY mode
@@ -102,10 +128,16 @@ function startInteractiveMode() {
             }
             // Only add to history if it's not a duplicate of the last command
             if (history[0] !== trimmedLine) {
-                 fs.appendFileSync(historyPath, trimmedLine + '\n');
+                try {
+                    fs.appendFileSync(historyPath, trimmedLine + '\n');
+                } catch (e) {
+                    debugLog('Could not write to history file:', e.message);
+                }
             }
             const args = trimmedLine.split(/\s+/);
             handleCommand(args);
+            // Update prompt with new path after cd command
+            rl.setPrompt(getColoredPrompt());
         }
         if (process.stdin.isTTY) {
             rl.prompt();
