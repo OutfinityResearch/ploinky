@@ -452,6 +452,12 @@ function handleCommand(args) {
                 showHelp();
             }
             break;
+        case 'help':
+            showHelp();
+            break;
+        case 'test':
+            runTest(options[0]);
+            break;
         default:
             // Try to execute as a system command
             // First check if it's a special built-in that needs custom handling
@@ -475,6 +481,7 @@ function handleCommand(args) {
                     console.log(`Command not found: ${command}`);
                     console.log(`Try 'help' to see available Ploinky commands.`);
                 }
+            }
     }
 }
 
@@ -483,4 +490,4 @@ module.exports = {
     handleCommand,
     getAgentNames,
     getRepoNames,
-};
+}

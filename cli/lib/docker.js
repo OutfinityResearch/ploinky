@@ -239,39 +239,22 @@ set enable-mouse off
     debugLog(`Executing run command: ${execCommand}`);
     
     if (interactive) {
-        // Use spawn for interactive sessions to properly handle TTY and signals
-        const { spawn } = require('child_process');
+        // Use spawnSync for interactive sessions to properly handle TTY and signals
+        const { spawnSync } = require('child_process');
         const args = ['exec'];
         if (interactive) args.push('-it');
         if (envVars) args.push(...envVars.split(' '));
         args.push(containerName, 'bash', '-c', bashCommand);
         
-        const child = spawn(containerRuntime, args, {
+        debugLog(`Running interactive session with args: ${args.join(' ')}`);
+        
+        // Run the interactive session synchronously
+        const result = spawnSync(containerRuntime, args, {
             stdio: 'inherit',
             shell: false
         });
         
-        // Handle process termination
-        child.on('exit', (code, signal) => {
-            debugLog(`Container session ended with code ${code} and signal ${signal}`);
-        });
-        
-        // Wait for the child process to finish
-        child.on('close', () => {
-            debugLog('Interactive session closed');
-        });
-        
-        // Pass through signals to the container
-        process.on('SIGINT', () => {
-            // Don't kill the child process, let the container handle Ctrl-C
-            debugLog('SIGINT received, passing to container');
-        });
-        
-        // This is a synchronous wait
-        require('child_process').spawnSync('node', ['-e', ''], {stdio: 'inherit'});
-        while (child.exitCode === null) {
-            require('child_process').spawnSync('sleep', ['0.1'], {stdio: 'pipe'});
-        }
+        debugLog(`Container session ended with code ${result.status}`);
     } else {
         // Non-interactive commands can use execSync
         try {
@@ -284,17 +267,22 @@ set enable-mouse off
     // Stop the container after interactive sessions to prevent it from staying up
     // Only stop if it was an interactive bash session
     if (interactive && (command === '/bin/bash' || command.includes('bash'))) {
-        console.log(`Stopping container ${containerName} in background...`);
+        console.log(`Container will be stopped in background...`);
         try {
-            // Run stop command in background using & for shell execution
-            // This returns control immediately to the user
-            const { spawn } = require('child_process');
-            const stopProcess = spawn(containerRuntime, ['stop', containerName], {
-                detached: true,
-                stdio: 'ignore'
+            // Use exec to run the stop command truly in background with nohup
+            const { exec } = require('child_process');
+            const stopCommand = `(sleep 1 && ${containerRuntime} stop ${containerName}) > /dev/null 2>&1 &`;
+            
+            exec(stopCommand, (error) => {
+                if (error) {
+                    debugLog(`Background stop error: ${error.message}`);
+                }
             });
-            stopProcess.unref();  // Allow the parent process to exit independently
+            
             debugLog(`Container stop command launched in background for ${containerName}`);
+            
+            // Give a moment for the background process to start, but don't wait
+            setTimeout(() => {}, 10);
         } catch (e) {
             console.error(`Warning: Could not stop container ${containerName}: ${e.message}`);
             debugLog(`Stop container error details: ${e.toString()}`);
