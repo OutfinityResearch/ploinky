@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# p-cli is an alias to ploinky command
 # Get the directory where the script is located
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 

@@ -1,0 +1,31 @@
+{
+  "name": "ploinky-cloud",
+  "version": "1.0.0",
+  "description": "Lightweight Node.js-based container orchestration platform",
+  "main": "cloud/core/server.js",
+  "bin": {
+    "p-cloud": "./bin/p-cloud"
+  },
+  "scripts": {
+    "start": "cd test_run_dir node bin/p-cloud",
+    "clean": "rm -rf test_run_dir",
+    "test": "./tests/run-all.sh"
+  },
+  "keywords": [
+    "ploinky",
+    "cloud",
+    "container",
+    "orchestration",
+    "microservices",
+    "agent"
+  ],
+  "author": "Ploinky Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PloinkyCloud/ploinky.git"
+  }
+}

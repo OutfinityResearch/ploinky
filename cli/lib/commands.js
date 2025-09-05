@@ -4,6 +4,7 @@ const { execSync } = require('child_process');
 const { REPOS_DIR, SECRETS_FILE } = require('./config');
 const { findAgent, debugLog } = require('./utils');
 const { runCommandInContainer } = require('./docker');
+const { CloudCommands } = require('./cloudCommands');
 
 const DEFAULT_CONTAINER_IMAGE = 'mcr.microsoft.com/devcontainers/base:debian';
 
@@ -29,25 +30,86 @@ const PREDEFINED_REPOS = {
 
 function showHelp() {
     console.log(`
-Ploinky Agent Manager
+Ploinky - Container-Based Development & Cloud Platform
 
 Usage: ploinky <command> [options]
 
-Commands:
-  add repo <RepoName> [GitHubURL]              Clones a repository containing agent configurations.
-                                                Predefined repos: cloud, vibe, security, extra
-  new agent <RepoName> <AgentName> [Container]   Creates a new agent configuration in a repository.
-                                                 (Default container: ${DEFAULT_CONTAINER_IMAGE})
-  set install <AgentName> "[command]"          Sets the installation command for an agent.
-  set update <AgentName> "[command]"           Sets the update command for an agent.
-  set run <AgentName> "[command]"              Sets the run command for an agent.
-  add env <VarName> <VarValue>                 Adds a secret environment variable.
-  enable env <AgentName> <VarName>             Enables a secret for an agent.
-  run agent <AgentName> [...args]              Runs an agent's start command.
-  run bash <AgentName>                         Starts a bash session in an agent's container.
-  run update <AgentName>                       Runs an agent's update command.
-  list agents                                  Lists all available agents.
-  list repos                                   Lists all available repositories.
+═══ LOCAL DEVELOPMENT ═══
+Agent Management:
+  add repo <name> [url]                Add agent repository (predefined: cloud, vibe, security, extra)
+  new agent <repo> <name> [image]      Create new agent in repository
+  list agents                          List all available agents
+  list repos                           List all repositories
+  
+Agent Configuration:
+  set install <agent> "<command>"      Set installation command
+  set update <agent> "<command>"       Set update command  
+  set run <agent> "<command>"          Set run command
+  
+Agent Execution:
+  run agent <name> [args...]           Run agent's start command
+  run bash <name>                      Start bash session in container
+  run update <name>                    Run agent's update command
+  
+Environment:
+  add env <name> <value>               Add secret environment variable
+  enable env <agent> <var>             Enable secret for agent
+
+═══ CLOUD ADMINISTRATION ═══
+Connect & Status:
+  cloud connect [url]                  Connect to cloud server (default: localhost:8000)
+  cloud status                         Show connection and deployment status
+  
+Authentication:
+  cloud login [username]               Login to cloud server
+  cloud logout                         Logout from server
+  cloud admin add <username>           Create admin user
+  cloud admin password [user]          Change admin password
+  cloud admin list                     List admin users
+  
+Host & Domain Management:
+  cloud host add <hostname>            Register new host/domain
+  cloud host remove <hostname>         Remove host/domain
+  cloud host list                      List configured hosts
+  cloud host enable <hostname>         Enable host
+  cloud host disable <hostname>        Disable host
+  
+Repository Management:
+  cloud repo add <name> <url>          Add agent repository
+  cloud repo remove <name>             Remove repository
+  cloud repo update <name>             Update repository
+  cloud repo list                      List repositories
+  
+Agent Deployment:
+  cloud deploy <host> <path> <agent>   Deploy agent to URL path
+  cloud undeploy <host> <path>         Remove deployment
+  cloud deployments                    List all deployments
+  cloud agent list                     List available cloud agents
+  cloud agent info <name>              Show agent details
+  cloud agent start <name>             Start deployed agent
+  cloud agent stop <name>              Stop deployed agent
+  cloud agent restart <name>           Restart agent
+  cloud agent logs <name> [lines]      View agent logs
+  
+Task Execution:
+  cloud call <path> <cmd> [args...]    Execute command on deployed agent
+  cloud batch <file.json>              Execute batch commands from file
+  
+Monitoring & Metrics:
+  cloud metrics [range]                Show performance metrics (1h/24h/7d)
+  cloud health                         Check system health
+  cloud logs [component] [lines]       View system logs
+  
+Configuration:
+  cloud config show                    Display current configuration
+  cloud config set <key> <value>       Update configuration
+  cloud config export <file>           Export configuration
+  cloud config import <file>           Import configuration
+
+═══ INTERACTIVE MODE ═══
+  ploinky                              Start interactive shell
+  help                                 Show this help message
+  exit/quit                            Exit interactive mode
   help                                         Displays this help message.
 
 Common bash commands are also available: ls, cd, pwd, cat, grep, find, ps, df, mkdir, rm, cp, mv, and more.
@@ -457,6 +519,10 @@ function handleCommand(args) {
             break;
         case 'test':
             runTest(options[0]);
+            break;
+        case 'cloud':
+            const cloudCommands = new CloudCommands();
+            cloudCommands.handleCloudCommand(options);
             break;
         default:
             // Try to execute as a system command
