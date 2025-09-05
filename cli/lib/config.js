@@ -34,9 +34,9 @@ function initEnvironment() {
         fs.writeFileSync(AGENTS_FILE, JSON.stringify({}, null, 2));
     }
 
-    const defaultRepoPath = path.join(REPOS_DIR, 'plonkyAgents');
+    const defaultRepoPath = path.join(REPOS_DIR, 'PloinkyAgents');
     if (!fs.existsSync(defaultRepoPath)) {
-        console.log(`Default 'plonkyAgents' repository not found. Cloning...`);
+        console.log(`Default 'PloinkyAgents' repository not found. Cloning...`);
         try {
             execSync(`git clone ${DEFAULT_REPO_URL} ${defaultRepoPath}`, { stdio: 'inherit' });
             console.log('Default repository cloned successfully.');

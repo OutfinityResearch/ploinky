@@ -4,7 +4,7 @@ set -e
 echo "--- Running Test: Verify bash agent from default repo ---"
 
 # 1. Trigger initialization by running a simple command.
-# The default plonkyAgents repo should be cloned automatically.
+# The default PloinkyAgents repo should be cloned automatically.
 $PLOINKY_CMD help > /dev/null
 
 # 2. Verify that the bash agent can be found and executed.
@@ -13,7 +13,7 @@ $PLOINKY_CMD help > /dev/null
 $PLOINKY_CMD run agent bash -- bash -c "echo 'Bash agent is runnable'"
 
 # 3. Check the manifest exists as a final verification
-MANIFEST_PATH=".ploinky/repos/plonkyAgents/bash/manifest.json"
+MANIFEST_PATH=".ploinky/repos/PloinkyAgents/bash/manifest.json"
 if [ ! -f "$MANIFEST_PATH" ]; then
     echo "FAIL: bash agent manifest was not found at ${MANIFEST_PATH}"
     exit 1

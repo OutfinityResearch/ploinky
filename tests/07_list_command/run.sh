@@ -32,7 +32,7 @@ info "Using ploinky command: $PLOINKY_CMD"
 # --- Test Execution ---
 info "--- Running Test: list command ---"
 
-# 1. Initialize Ploinky (this will also clone the default 'plonkyAgents' repo)
+# 1. Initialize Ploinky (this will also clone the default 'PloinkyAgents' repo)
 $PLOINKY_CMD > /dev/null 2>&1 || true # Run once to init
 
 # 2. Add a new local repository for testing
@@ -47,8 +47,8 @@ info "Testing 'list repos'..."
 LIST_REPOS_OUTPUT=$($PLOINKY_CMD list repos)
 echo "$LIST_REPOS_OUTPUT"
 
-if ! echo "$LIST_REPOS_OUTPUT" | grep -q "plonkyAgents"; then
-    fail "'list repos' output did not contain the default 'plonkyAgents' repository."
+if ! echo "$LIST_REPOS_OUTPUT" | grep -q "PloinkyAgents"; then
+    fail "'list repos' output did not contain the default 'PloinkyAgents' repository."
 fi
 
 if ! echo "$LIST_REPOS_OUTPUT" | grep -q "local-test-repo"; then
@@ -62,8 +62,8 @@ LIST_AGENTS_OUTPUT=$($PLOINKY_CMD list agents)
 echo "$LIST_AGENTS_OUTPUT"
 
 # Check for the default repo and its agent
-if ! echo "$LIST_AGENTS_OUTPUT" | grep -q "Repository: plonkyAgents"; then
-    fail "'list agents' output did not contain the 'plonkyAgents' repository header."
+if ! echo "$LIST_AGENTS_OUTPUT" | grep -q "Repository: PloinkyAgents"; then
+    fail "'list agents' output did not contain the 'PloinkyAgents' repository header."
 fi
 if ! echo "$LIST_AGENTS_OUTPUT" | grep -q -- "- bash"; then
     fail "'list agents' output did not contain the 'bash' agent."

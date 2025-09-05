@@ -341,7 +341,7 @@ function listRepos() {
     if (installedRepos.length > 0) {
         installedRepos.forEach(repo => {
             // Check if it's the default repo
-            if (repo === 'plonkyAgents') {
+            if (repo === 'PloinkyAgents') {
                 console.log(`  - ${repo} (default Basic repository)`);
             } else {
                 console.log(`  - ${repo}`);
