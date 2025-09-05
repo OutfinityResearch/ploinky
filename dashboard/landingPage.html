@@ -16,10 +16,24 @@
             <a href="metrics.html" class="nav-btn">Metrics</a>
             <a href="config.html" class="nav-btn">Configuration</a>
             <button class="nav-btn logout-btn" id="logoutBtn">Logout</button>
+            <button id="themeToggle" class="theme-toggle" type="button"></button>
         </nav>
     </header>
 
     <main class="main-content">
+        <section class="hero">
+            <div>
+                <h2>Welcome to Ploinky Cloud</h2>
+                <p>Deploy microservices to URL paths, monitor, and manage with ease.</p>
+                <div class="hero-actions">
+                    <a href="deployments.html" class="hero-cta primary">Deploy Agent</a>
+                    <a href="metrics.html" class="hero-cta secondary">View Metrics</a>
+                </div>
+            </div>
+            <div class="hero-illustration" aria-hidden="true">
+                <div class="card-icon">☁️</div>
+            </div>
+        </section>
         <div id="password-notification" class="notification is-warning" style="display: none;">
             <button class="delete-notification"></button>
             <strong>Heads up!</strong> It looks like you're using the default administrator password. For security, you should change it.
@@ -84,6 +98,7 @@
         </div>
     </main>
 
+    <script src="/management/common.js"></script>
     <script src="/client/ploinkyClient.js"></script>
     <script src="/management/auth.js"></script>
     <script src="/management/landingPage.js"></script>

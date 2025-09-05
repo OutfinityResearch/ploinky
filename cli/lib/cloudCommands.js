@@ -634,22 +634,32 @@ class CloudCommands {
             // Print prompt and read without echo
             process.stdout.write(prompt);
 
-            const wasRaw = !!process.stdin.isRaw;
             let password = '';
+            
+            // Store original state
+            const wasRaw = process.stdin.isRaw;
+            const oldEncoding = process.stdin.readableEncoding;
 
+            // Enable raw mode to hide input
             if (process.stdin.setRawMode) {
                 process.stdin.setRawMode(true);
             }
-            process.stdin.resume();
             process.stdin.setEncoding('utf8');
 
             const cleanup = () => {
-                if (process.stdin.setRawMode) {
-                    // Restore previous raw state (default false in REPL)
-                    process.stdin.setRawMode(false);
-                }
-                process.stdin.pause();
+                // Remove only our listener, don't pause stdin
                 process.stdin.removeListener('data', onData);
+                
+                // Restore original raw mode state
+                if (process.stdin.setRawMode) {
+                    process.stdin.setRawMode(wasRaw || false);
+                }
+                
+                // Restore original encoding if it existed
+                if (oldEncoding) {
+                    process.stdin.setEncoding(oldEncoding);
+                }
+                
                 inputState.resume();
             };
 
@@ -673,7 +683,7 @@ class CloudCommands {
                         process.stdout.write('\b \b');
                     }
                 } else if (char.charCodeAt(0) >= 32) {
-                    // Regular character
+                    // Regular character - don't echo it
                     password += char;
                     process.stdout.write('*');
                 }

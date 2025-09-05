@@ -84,4 +84,26 @@ document.addEventListener('DOMContentLoaded', () => {
     checkDefaultPassword();
     loadOverviewStats();
     setupEventListeners();
+    // Animate stat values
+    const animate = (el, to) => {
+        const target = Number(String(to).replace(/[^\d]/g, '')) || 0;
+        let current = 0;
+        const step = Math.max(1, Math.floor(target / 40));
+        const interval = setInterval(() => {
+            current += step;
+            if (current >= target) { current = target; clearInterval(interval); }
+            if (el.id === 'statErrors') el.textContent = String(to);
+            else el.textContent = current;
+        }, 20);
+    };
+    setTimeout(() => {
+        const a = document.getElementById('statAgents');
+        const r = document.getElementById('statRequests');
+        const e = document.getElementById('statErrors');
+        const u = document.getElementById('statUptime');
+        if (a && r && e && u) {
+            animate(a, a.textContent);
+            animate(r, r.textContent);
+        }
+    }, 300);
 });
