@@ -4,7 +4,7 @@
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 # Construct the path to the Node.js script
-NODE_SCRIPT="$SCRIPT_DIR/../src/index.js"
+NODE_SCRIPT="$SCRIPT_DIR/../cli/index.js"
 
 # Execute the Node.js script with all passed arguments
 node "$NODE_SCRIPT" "$@"

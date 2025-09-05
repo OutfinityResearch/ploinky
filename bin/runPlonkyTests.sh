@@ -19,7 +19,7 @@ SCRIPT_DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 # The project root is one level up from the 'bin' directory
 PROJECT_ROOT=$(realpath "${SCRIPT_DIR}/..")
 
-PLOINKY_EXECUTABLE="${PROJECT_ROOT}/src/index.js"
+PLOINKY_EXECUTABLE="${PROJECT_ROOT}/cli/index.js"
 TESTS_DIR="${PROJECT_ROOT}/tests"
 
 # Check if the main script and tests directory exist

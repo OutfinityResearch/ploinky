@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ploinky CLI Documentation</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>Ploinky</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="ploinky-cli.html" class="active">CLI Documentation</a></li>
+                <li><a href="ploinky-cloud.html">Cloud Platform</a></li>
+                <li><a href="https://github.com/PlonkyRepos/ploinky" target="_blank">GitHub</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container docs-container">
+        <aside class="docs-sidebar">
+            <h3>Contents</h3>
+            <ul>
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#installation">Installation</a></li>
+                <li><a href="#commands">Commands</a></li>
+                <li><a href="#repositories">Repository Management</a></li>
+                <li><a href="#agents">Working with Agents</a></li>
+                <li><a href="#interactive">Interactive Mode</a></li>
+                <li><a href="#examples">Examples</a></li>
+            </ul>
+        </aside>
+
+        <article class="docs-content">
+            <h1>Ploinky CLI Documentation</h1>
+
+            <section id="overview">
+                <h2>Overview</h2>
+                <p>Ploinky CLI is a powerful command-line tool that simplifies working with containerized environments. It provides an intuitive interface for managing agents (containerized tools) without the complexity of direct Docker/Podman commands.</p>
+                
+                <h3>Key Features</h3>
+                <ul>
+                    <li><strong>Interactive Shell</strong> - Built-in REPL with command history and auto-completion</li>
+                    <li><strong>Container Abstraction</strong> - Work with agents without Docker/Podman knowledge</li>
+                    <li><strong>Project Isolation</strong> - Each directory maintains its own configuration</li>
+                    <li><strong>Repository System</strong> - Install agent collections from GitHub</li>
+                    <li><strong>Cross-Platform</strong> - Works with both Docker and Podman</li>
+                </ul>
+            </section>
+
+            <section id="installation">
+                <h2>Installation</h2>
+                
+                <h3>Prerequisites</h3>
+                <ul>
+                    <li>Node.js 18.0 or higher</li>
+                    <li>Docker or Podman installed and running</li>
+                    <li>Git for repository management</li>
+                </ul>
+
+                <h3>Setup</h3>
+                <pre><code># Clone the Ploinky repository
+git clone https://github.com/PlonkyRepos/ploinky.git
+cd ploinky
+
+# Option 1: Add to PATH (temporary)
+export PATH="$PATH:$(pwd)/bin"
+
+# Option 2: Create system-wide links
+sudo ln -s $(pwd)/bin/ploinky /usr/local/bin/ploinky
+sudo ln -s $(pwd)/bin/p-cli /usr/local/bin/p-cli
+
+# Option 3: Add to .bashrc/.zshrc for permanent PATH
+echo 'export PATH="$PATH:/path/to/ploinky/bin"' >> ~/.bashrc</code></pre>
+
+                <h3>First Run</h3>
+                <p>When you run Ploinky for the first time, it will:</p>
+                <ol>
+                    <li>Create a <code>.ploinky</code> directory in your current location</li>
+                    <li>Clone the default Basic repository with essential agents</li>
+                    <li>Initialize the configuration files</li>
+                </ol>
+            </section>
+
+            <section id="commands">
+                <h2>Commands Reference</h2>
+
+                <h3>Repository Commands</h3>
+                <table class="command-table">
+                    <tr>
+                        <th>Command</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                    <tr>
+                        <td><code>add repo &lt;name&gt; [url]</code></td>
+                        <td>Add a new repository. Can use predefined names: cloud, vibe, security, extra</td>
+                        <td><code>add repo cloud</code><br><code>add repo custom https://github.com/user/repo.git</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>list repos</code></td>
+                        <td>List installed and available repositories</td>
+                        <td><code>list repos</code></td>
+                    </tr>
+                </table>
+
+                <h3>Agent Commands</h3>
+                <table class="command-table">
+                    <tr>
+                        <th>Command</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                    <tr>
+                        <td><code>list agents</code></td>
+                        <td>List all available agents</td>
+                        <td><code>list agents</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>run agent &lt;name&gt; [args]</code></td>
+                        <td>Run an agent with optional arguments</td>
+                        <td><code>run agent bash -c "echo hello"</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>run bash &lt;name&gt;</code></td>
+                        <td>Start interactive bash session in agent</td>
+                        <td><code>run bash python-dev</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>run update &lt;name&gt;</code></td>
+                        <td>Run agent's update command</td>
+                        <td><code>run update node-dev</code></td>
+                    </tr>
+                </table>
+
+                <h3>Configuration Commands</h3>
+                <table class="command-table">
+                    <tr>
+                        <th>Command</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                    <tr>
+                        <td><code>new agent &lt;repo&gt; &lt;name&gt; [container]</code></td>
+                        <td>Create a new agent in a repository</td>
+                        <td><code>new agent myrepo myagent debian:stable-slim</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>set install &lt;name&gt; "command"</code></td>
+                        <td>Set agent's installation command</td>
+                        <td><code>set install myagent "apt-get update && apt-get install -y curl"</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>set update &lt;name&gt; "command"</code></td>
+                        <td>Set agent's update command</td>
+                        <td><code>set update myagent "apt-get upgrade"</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>set run &lt;name&gt; "command"</code></td>
+                        <td>Set agent's run command</td>
+                        <td><code>set run myagent "/usr/bin/myapp"</code></td>
+                    </tr>
+                </table>
+
+                <h3>Environment Variables</h3>
+                <table class="command-table">
+                    <tr>
+                        <th>Command</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                    <tr>
+                        <td><code>add env &lt;name&gt; &lt;value&gt;</code></td>
+                        <td>Add a secret environment variable</td>
+                        <td><code>add env API_KEY sk-1234567890</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>enable env &lt;agent&gt; &lt;var&gt;</code></td>
+                        <td>Enable environment variable for agent</td>
+                        <td><code>enable env myagent API_KEY</code></td>
+                    </tr>
+                </table>
+
+                <h3>Utility Commands</h3>
+                <table class="command-table">
+                    <tr>
+                        <th>Command</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                    <tr>
+                        <td><code>help</code></td>
+                        <td>Display help message</td>
+                        <td><code>help</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>exit</code> / <code>quit</code></td>
+                        <td>Exit interactive mode</td>
+                        <td><code>exit</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>test &lt;name&gt;</code></td>
+                        <td>Run test suite</td>
+                        <td><code>test integration</code></td>
+                    </tr>
+                </table>
+            </section>
+
+            <section id="repositories">
+                <h2>Repository Management</h2>
+                
+                <h3>Predefined Repositories</h3>
+                <p>Ploinky comes with several predefined repository collections that can be installed with a simple name:</p>
+                
+                <div class="repo-list">
+                    <div class="repo-card">
+                        <h4>🌥️ cloud</h4>
+                        <p>Cloud and infrastructure agents (AWS, Azure, GCP, Kubernetes, Terraform)</p>
+                        <code>add repo cloud</code>
+                    </div>
+                    <div class="repo-card">
+                        <h4>✨ vibe</h4>
+                        <p>Development and productivity agents (Node, Python, Go, Rust, databases)</p>
+                        <code>add repo vibe</code>
+                    </div>
+                    <div class="repo-card">
+                        <h4>🔒 security</h4>
+                        <p>Security scanning and testing tools (vulnerability scanners, penetration testing)</p>
+                        <code>add repo security</code>
+                    </div>
+                    <div class="repo-card">
+                        <h4>🔧 extra</h4>
+                        <p>Additional utility agents (media processing, data tools, automation)</p>
+                        <code>add repo extra</code>
+                    </div>
+                </div>
+
+                <h3>Custom Repositories</h3>
+                <p>You can also add custom repositories from any GitHub URL:</p>
+                <pre><code>add repo mytools https://github.com/myorg/mytools.git</code></pre>
+                
+                <h3>Repository Structure</h3>
+                <p>Each repository should follow this structure:</p>
+                <pre><code>repository/
+├── agent-name/
+│   └── manifest.json
+├── another-agent/
+│   └── manifest.json
+└── README.md</code></pre>
+
+                <h3>Manifest Format</h3>
+                <pre><code>{
+  "container": "debian:stable-slim",
+  "install": "apt-get update && apt-get install -y tools",
+  "update": "apt-get upgrade",
+  "run": "bash",
+  "about": "Description of the agent",
+  "env": ["API_KEY", "SECRET"]  // Optional
+}</code></pre>
+            </section>
+
+            <section id="agents">
+                <h2>Working with Agents</h2>
+                
+                <h3>Running Agents</h3>
+                <p>Agents can be run in different modes:</p>
+                
+                <h4>Command Mode</h4>
+                <p>Execute a specific command within an agent:</p>
+                <pre><code>run agent python-dev -c "print('Hello from Python')"
+run agent node-dev index.js
+run agent bash -c "ls -la"</code></pre>
+
+                <h4>Interactive Mode</h4>
+                <p>Start an interactive session within an agent:</p>
+                <pre><code>run bash python-dev
+run bash node-dev</code></pre>
+
+                <h3>Container Management</h3>
+                <ul>
+                    <li>Containers are created on first run and reused for subsequent commands</li>
+                    <li>Each project directory has its own set of containers</li>
+                    <li>Containers are named as: <code>ploinky_&lt;repo&gt;_&lt;agent&gt;_&lt;hash&gt;</code></li>
+                    <li>Containers stop automatically in the background after interactive sessions</li>
+                </ul>
+
+                <h3>Project Isolation</h3>
+                <p>Ploinky maintains separate configurations per directory:</p>
+                <ul>
+                    <li><code>.ploinky/</code> - Configuration directory</li>
+                    <li><code>.ploinky_history</code> - Command history for the current directory</li>
+                    <li>Each project can have different agents and configurations</li>
+                </ul>
+            </section>
+
+            <section id="interactive">
+                <h2>Interactive Mode Features</h2>
+                
+                <h3>Command History</h3>
+                <ul>
+                    <li>Use ↑/↓ arrows to navigate through previous commands</li>
+                    <li>History is saved in <code>.ploinky_history</code> in the current directory</li>
+                    <li>Each directory maintains its own command history</li>
+                </ul>
+
+                <h3>Auto-completion</h3>
+                <ul>
+                    <li>Press Tab to auto-complete commands and agent names</li>
+                    <li>Works for commands, subcommands, and agent names</li>
+                </ul>
+
+                <h3>Bash Commands</h3>
+                <p>Common bash commands are available directly in Ploinky:</p>
+                <pre><code>ls        # List files
+cd dir    # Change directory
+pwd       # Print working directory
+cat file  # Display file contents
+clear     # Clear screen</code></pre>
+
+                <h3>Debug Mode</h3>
+                <p>Enable debug mode for detailed logging:</p>
+                <pre><code>ploinky --debug
+ploinky -d</code></pre>
+            </section>
+
+            <section id="examples">
+                <h2>Examples</h2>
+                
+                <h3>Development Workflow</h3>
+                <pre><code># Start a new project
+mkdir myproject && cd myproject
+ploinky
+
+# Add development tools repository
+ploinky> add repo vibe
+
+# Start Python development environment
+ploinky> run bash python-dev
+
+# In another terminal, run Node.js
+ploinky> run agent node-dev server.js</code></pre>
+
+                <h3>CI/CD Pipeline</h3>
+                <pre><code># Run tests in isolated environment
+ploinky run agent python-dev pytest tests/
+
+# Build application
+ploinky run agent node-dev npm run build
+
+# Run security scan
+ploinky add repo security
+ploinky run agent trivy-scanner .</code></pre>
+
+                <h3>Creating Custom Agent</h3>
+                <pre><code># Create custom repository
+ploinky> add repo custom https://github.com/myorg/agents.git
+
+# Create new agent
+ploinky> new agent custom mytool alpine:latest
+
+# Configure the agent
+ploinky> set install mytool "apk add --no-cache curl jq"
+ploinky> set run mytool "sh"
+
+# Use the agent
+ploinky> run bash mytool</code></pre>
+
+                <h3>Working with Secrets</h3>
+                <pre><code># Add API key
+ploinky> add env OPENAI_KEY sk-...
+
+# Enable for specific agent
+ploinky> enable env ai-agent OPENAI_KEY
+
+# Run agent with environment variable
+ploinky> run agent ai-agent</code></pre>
+            </section>
+
+            <section class="next-steps">
+                <h2>Next Steps</h2>
+                <div class="cta-cards">
+                    <div class="cta-card">
+                        <h3>🚀 Explore Agents</h3>
+                        <p>Browse available agent collections</p>
+                        <a href="https://github.com/PlonkyRepos" class="btn btn-secondary">PlonkyRepos</a>
+                    </div>
+                    <div class="cta-card">
+                        <h3>☁️ Learn About Cloud</h3>
+                        <p>Deploy agents as serverless functions</p>
+                        <a href="ploinky-cloud.html" class="btn btn-secondary">Cloud Docs</a>
+                    </div>
+                    <div class="cta-card">
+                        <h3>💡 Create Agents</h3>
+                        <p>Build and share your own agents</p>
+                        <a href="https://github.com/PlonkyRepos/ploinky/wiki" class="btn btn-secondary">Developer Guide</a>
+                    </div>
+                </div>
+            </section>
+        </article>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 Ploinky Project. Open source under MIT License.</p>
+            <p><a href="https://github.com/PlonkyRepos/ploinky">GitHub</a> | 
+               <a href="https://github.com/PlonkyRepos/ploinky/issues">Issues</a> | 
+               <a href="https://github.com/PlonkyRepos/ploinky/discussions">Discussions</a></p>
+        </div>
+    </footer>
+</body>
+</html>

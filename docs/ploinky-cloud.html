@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ploinky Cloud - Serverless Platform</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-brand">
+                <h1>Ploinky</h1>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="ploinky-cli.html">CLI Documentation</a></li>
+                <li><a href="ploinky-cloud.html" class="active">Cloud Platform</a></li>
+                <li><a href="https://github.com/PlonkyRepos/ploinky" target="_blank">GitHub</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container docs-container">
+        <article class="docs-content full-width">
+            <div class="status-banner">
+                <h3>🚧 In Development</h3>
+                <p>Ploinky Cloud is currently under active development. Features and APIs are subject to change.</p>
+            </div>
+
+            <h1>Ploinky Cloud Documentation</h1>
+
+            <section id="overview">
+                <h2>Overview</h2>
+                <p>Ploinky Cloud is an upcoming serverless runtime platform that enables you to deploy Ploinky agents as Lambda-style functions. It provides a self-hosted, open-source alternative to commercial serverless platforms, giving you complete control over your infrastructure while reducing costs.</p>
+                
+                <h3>Key Benefits</h3>
+                <div class="benefits-grid">
+                    <div class="benefit-card">
+                        <h4>💰 Cost Efficient</h4>
+                        <p>Pay only for actual compute time. No idle costs, no vendor markup.</p>
+                    </div>
+                    <div class="benefit-card">
+                        <h4>🔓 No Vendor Lock-in</h4>
+                        <p>Fully open-source. Deploy on any infrastructure, migrate anytime.</p>
+                    </div>
+                    <div class="benefit-card">
+                        <h4>🚀 Auto-scaling</h4>
+                        <p>Automatically scales from zero to thousands of concurrent executions.</p>
+                    </div>
+                    <div class="benefit-card">
+                        <h4>🔄 CLI Compatibility</h4>
+                        <p>Same agent definitions work both locally and in the cloud.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="architecture">
+                <h2>Architecture</h2>
+                <p>Ploinky Cloud transforms your containerized agents into serverless functions accessible via HTTP endpoints.</p>
+                
+                <h3>Components</h3>
+                <div class="architecture-diagram">
+                    <div class="arch-component">
+                        <h4>API Gateway</h4>
+                        <p>HTTP endpoint routing and request handling</p>
+                    </div>
+                    <div class="arch-component">
+                        <h4>Function Runtime</h4>
+                        <p>Container orchestration and execution</p>
+                    </div>
+                    <div class="arch-component">
+                        <h4>Agent Registry</h4>
+                        <p>GitHub-based agent repository system</p>
+                    </div>
+                    <div class="arch-component">
+                        <h4>Scaling Engine</h4>
+                        <p>Automatic scaling based on demand</p>
+                    </div>
+                </div>
+
+                <h3>Execution Flow</h3>
+                <ol>
+                    <li>HTTP request arrives at endpoint</li>
+                    <li>Request routed to appropriate agent</li>
+                    <li>Container spun up if not warm</li>
+                    <li>Agent executes with request data</li>
+                    <li>Response returned to client</li>
+                    <li>Container kept warm or scaled down</li>
+                </ol>
+            </section>
+
+            <section id="use-cases">
+                <h2>Use Cases</h2>
+                
+                <div class="use-case-grid">
+                    <div class="use-case">
+                        <h3>🌐 API Endpoints</h3>
+                        <p>Deploy REST APIs and microservices without managing servers</p>
+                        <ul>
+                            <li>Data processing endpoints</li>
+                            <li>AI model inference</li>
+                            <li>Image/video processing</li>
+                            <li>Authentication services</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="use-case">
+                        <h3>🔗 Webhooks</h3>
+                        <p>Handle webhook events from external services</p>
+                        <ul>
+                            <li>GitHub/GitLab webhooks</li>
+                            <li>Payment processing callbacks</li>
+                            <li>IoT device events</li>
+                            <li>Chat bot integrations</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="use-case">
+                        <h3>⏰ Scheduled Tasks</h3>
+                        <p>Run periodic jobs without maintaining servers</p>
+                        <ul>
+                            <li>Data synchronization</li>
+                            <li>Report generation</li>
+                            <li>Backup operations</li>
+                            <li>Health checks</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="use-case">
+                        <h3>🔄 Event Processing</h3>
+                        <p>React to events in real-time</p>
+                        <ul>
+                            <li>Message queue processing</li>
+                            <li>Stream processing</li>
+                            <li>File upload handling</li>
+                            <li>Database triggers</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="deployment">
+                <h2>Deployment Options</h2>
+                
+                <h3>Self-Hosted</h3>
+                <p>Deploy Ploinky Cloud on your own infrastructure for maximum control:</p>
+                
+                <div class="deployment-options">
+                    <div class="deploy-option">
+                        <h4>Kubernetes</h4>
+                        <p>Deploy on any Kubernetes cluster (EKS, GKE, AKS, or self-managed)</p>
+                        <pre><code># Coming soon
+kubectl apply -f ploinky-cloud.yaml</code></pre>
+                    </div>
+                    
+                    <div class="deploy-option">
+                        <h4>Docker Compose</h4>
+                        <p>Simple deployment for small to medium workloads</p>
+                        <pre><code># Coming soon
+docker-compose up -d</code></pre>
+                    </div>
+                    
+                    <div class="deploy-option">
+                        <h4>Bare Metal</h4>
+                        <p>Direct installation on Linux servers</p>
+                        <pre><code># Coming soon
+curl -sSL https://ploinky.com/install | bash</code></pre>
+                    </div>
+                </div>
+
+                <h3>Managed Service</h3>
+                <p>In the future, we plan to offer a fully managed Ploinky Cloud service for teams who prefer not to manage infrastructure.</p>
+            </section>
+
+            <section id="features">
+                <h2>Planned Features</h2>
+                
+                <div class="feature-list">
+                    <h3>Core Features</h3>
+                    <ul>
+                        <li>✅ HTTP trigger endpoints</li>
+                        <li>✅ Automatic scaling from 0 to N</li>
+                        <li>✅ Cold start optimization</li>
+                        <li>✅ Request/response logging</li>
+                        <li>⏳ Scheduled triggers (cron)</li>
+                        <li>⏳ Event-driven triggers</li>
+                        <li>⏳ WebSocket support</li>
+                    </ul>
+                    
+                    <h3>Developer Experience</h3>
+                    <ul>
+                        <li>✅ CLI deployment tool</li>
+                        <li>✅ Local testing environment</li>
+                        <li>⏳ Web-based dashboard</li>
+                        <li>⏳ Real-time logs and metrics</li>
+                        <li>⏳ Version management</li>
+                        <li>⏳ A/B testing support</li>
+                    </ul>
+                    
+                    <h3>Enterprise Features</h3>
+                    <ul>
+                        <li>⏳ Multi-tenancy support</li>
+                        <li>⏳ Custom domains</li>
+                        <li>⏳ API rate limiting</li>
+                        <li>⏳ Authentication/authorization</li>
+                        <li>⏳ VPC/private networking</li>
+                        <li>⏳ Compliance logging</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section id="comparison">
+                <h2>Comparison with Other Platforms</h2>
+                
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th>Ploinky Cloud</th>
+                            <th>AWS Lambda</th>
+                            <th>Google Cloud Functions</th>
+                            <th>Vercel</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Open Source</td>
+                            <td>✅ Yes</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                        </tr>
+                        <tr>
+                            <td>Self-Hosted Option</td>
+                            <td>✅ Yes</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                        </tr>
+                        <tr>
+                            <td>Container Support</td>
+                            <td>✅ Full</td>
+                            <td>⚠️ Limited</td>
+                            <td>⚠️ Limited</td>
+                            <td>❌ No</td>
+                        </tr>
+                        <tr>
+                            <td>No Vendor Lock-in</td>
+                            <td>✅ Yes</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                            <td>❌ No</td>
+                        </tr>
+                        <tr>
+                            <td>Cost Control</td>
+                            <td>✅ Full</td>
+                            <td>⚠️ Limited</td>
+                            <td>⚠️ Limited</td>
+                            <td>⚠️ Limited</td>
+                        </tr>
+                        <tr>
+                            <td>Language Support</td>
+                            <td>✅ Any</td>
+                            <td>⚠️ Selected</td>
+                            <td>⚠️ Selected</td>
+                            <td>⚠️ Selected</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="roadmap">
+                <h2>Development Roadmap</h2>
+                
+                <div class="roadmap">
+                    <div class="roadmap-phase">
+                        <h3>Phase 1: Core Runtime (Q1 2025)</h3>
+                        <ul>
+                            <li>Basic HTTP trigger support</li>
+                            <li>Container orchestration</li>
+                            <li>Simple scaling engine</li>
+                            <li>CLI deployment tool</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="roadmap-phase">
+                        <h3>Phase 2: Production Ready (Q2 2025)</h3>
+                        <ul>
+                            <li>Advanced scaling strategies</li>
+                            <li>Monitoring and logging</li>
+                            <li>Web dashboard</li>
+                            <li>Scheduled triggers</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="roadmap-phase">
+                        <h3>Phase 3: Enterprise Features (Q3 2025)</h3>
+                        <ul>
+                            <li>Multi-tenancy</li>
+                            <li>Advanced security features</li>
+                            <li>Custom domains</li>
+                            <li>SLA guarantees</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="roadmap-phase">
+                        <h3>Phase 4: Ecosystem (Q4 2025)</h3>
+                        <ul>
+                            <li>Marketplace for agents</li>
+                            <li>Third-party integrations</li>
+                            <li>Managed cloud offering</li>
+                            <li>Enterprise support</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section id="getting-started">
+                <h2>Getting Started (Preview)</h2>
+                
+                <div class="info-box">
+                    <p><strong>Note:</strong> These instructions are for the upcoming release. The platform is not yet available.</p>
+                </div>
+                
+                <h3>Expected Workflow</h3>
+                <pre><code># Install Ploinky Cloud CLI
+npm install -g ploinky-cloud
+
+# Initialize a new function
+ploinky-cloud init my-function
+
+# Deploy an agent as a function
+ploinky-cloud deploy --agent python-dev --trigger http
+
+# Get the endpoint URL
+ploinky-cloud status my-function
+# → https://my-function.ploinky.app
+
+# Test the function
+curl https://my-function.ploinky.app \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello from Ploinky Cloud!"}'</code></pre>
+            </section>
+
+            <section id="contribute">
+                <h2>Contributing</h2>
+                <p>Ploinky Cloud is being developed as an open-source project. We welcome contributions!</p>
+                
+                <div class="contribute-cards">
+                    <div class="contribute-card">
+                        <h3>💻 Code Contributions</h3>
+                        <p>Help build the serverless runtime</p>
+                        <a href="https://github.com/PlonkyRepos/ploinky-cloud" class="btn btn-secondary">GitHub Repo</a>
+                    </div>
+                    <div class="contribute-card">
+                        <h3>📝 Documentation</h3>
+                        <p>Improve guides and examples</p>
+                        <a href="https://github.com/PlonkyRepos/ploinky/tree/main/docs" class="btn btn-secondary">Docs Repo</a>
+                    </div>
+                    <div class="contribute-card">
+                        <h3>🧪 Testing</h3>
+                        <p>Try early releases and report issues</p>
+                        <a href="https://github.com/PlonkyRepos/ploinky-cloud/issues" class="btn btn-secondary">Issue Tracker</a>
+                    </div>
+                </div>
+            </section>
+
+            <section class="next-steps">
+                <h2>Stay Updated</h2>
+                <div class="cta-cards">
+                    <div class="cta-card">
+                        <h3>📧 Join Waitlist</h3>
+                        <p>Be first to know when Ploinky Cloud launches</p>
+                        <a href="https://github.com/PlonkyRepos/ploinky-cloud" class="btn btn-secondary">Watch on GitHub</a>
+                    </div>
+                    <div class="cta-card">
+                        <h3>💬 Join Discussion</h3>
+                        <p>Share ideas and feedback</p>
+                        <a href="https://github.com/PlonkyRepos/ploinky/discussions" class="btn btn-secondary">Discussions</a>
+                    </div>
+                    <div class="cta-card">
+                        <h3>🖥️ Try CLI Now</h3>
+                        <p>Start with Ploinky CLI while Cloud is in development</p>
+                        <a href="ploinky-cli.html" class="btn btn-secondary">CLI Docs</a>
+                    </div>
+                </div>
+            </section>
+        </article>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2024 Ploinky Project. Open source under MIT License.</p>
+            <p><a href="https://github.com/PlonkyRepos/ploinky">GitHub</a> | 
+               <a href="https://github.com/PlonkyRepos/ploinky/issues">Issues</a> | 
+               <a href="https://github.com/PlonkyRepos/ploinky/discussions">Discussions</a></p>
+        </div>
+    </footer>
+</body>
+</html>

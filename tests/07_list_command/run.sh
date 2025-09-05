@@ -65,8 +65,8 @@ echo "$LIST_AGENTS_OUTPUT"
 if ! echo "$LIST_AGENTS_OUTPUT" | grep -q "Repository: plonkyAgents"; then
     fail "'list agents' output did not contain the 'plonkyAgents' repository header."
 fi
-if ! echo "$LIST_AGENTS_OUTPUT" | grep -q -- "- simpleBash"; then
-    fail "'list agents' output did not contain the 'simpleBash' agent."
+if ! echo "$LIST_AGENTS_OUTPUT" | grep -q -- "- bash"; then
+    fail "'list agents' output did not contain the 'bash' agent."
 fi
 
 # Check for the new local repo and its agent
