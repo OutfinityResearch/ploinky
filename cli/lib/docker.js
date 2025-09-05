@@ -111,11 +111,50 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
         const mountOption = containerRuntime === 'podman' 
             ? `--mount type=bind,source="${currentDir}",destination="${currentDir}",relabel=shared` 
             : `-v "${currentDir}:${currentDir}"`;
-        const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${manifest.container} /bin/bash`;
         
-        debugLog(`Executing create command: ${createCommand}`);
-        const createOutput = execSync(createCommand, { stdio: 'pipe' }).toString().trim();
-        const containerId = createOutput; // The create command returns the container ID
+        // Try to create container, with fallback to docker.io prefix for Podman
+        let containerImage = manifest.container;
+        let createOutput;
+        let containerId;
+        
+        try {
+            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/bash`;
+            debugLog(`Executing create command: ${createCommand}`);
+            // Use pipe to capture container ID but also show any pulling progress
+            createOutput = execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] }).toString().trim();
+            containerId = createOutput;
+        } catch (error) {
+            // If Podman fails with short-name error, try with docker.io prefix
+            if (containerRuntime === 'podman' && error.message.includes('short-name')) {
+                debugLog(`Short-name resolution failed, trying with docker.io prefix...`);
+                
+                // Add docker.io/library/ prefix if not already present
+                if (!containerImage.includes('/')) {
+                    // Simple name like 'debian:latest' -> 'docker.io/library/debian:latest'
+                    containerImage = `docker.io/library/${containerImage}`;
+                } else if (!containerImage.startsWith('docker.io/') && !containerImage.includes('.')) {
+                    // User image like 'user/image:tag' -> 'docker.io/user/image:tag'
+                    containerImage = `docker.io/${containerImage}`;
+                }
+                
+                console.log(`Retrying with full registry name: ${containerImage}`);
+                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/bash`;
+                debugLog(`Executing retry command: ${retryCommand}`);
+                
+                try {
+                    createOutput = execSync(retryCommand, { stdio: ['pipe', 'pipe', 'inherit'] }).toString().trim();
+                    containerId = createOutput;
+                    
+                    // Update manifest with the working image name for future use
+                    manifest.container = containerImage;
+                } catch (retryError) {
+                    console.error(`Failed to create container even with full registry name.`);
+                    throw retryError;
+                }
+            } else {
+                throw error;
+            }
+        }
         
         agents[containerName] = { 
             agentName, 
@@ -198,10 +237,48 @@ set enable-mouse off
     
     const execCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${envVars} ${containerName} bash -c "${bashCommand}"`;
     debugLog(`Executing run command: ${execCommand}`);
-    try {
-        execSync(execCommand, { stdio: 'inherit' });
-    } catch (error) {
-        debugLog(`Caught error during ${containerRuntime} exec. This is often expected if the command exits with a non-zero code.`);
+    
+    if (interactive) {
+        // Use spawn for interactive sessions to properly handle TTY and signals
+        const { spawn } = require('child_process');
+        const args = ['exec'];
+        if (interactive) args.push('-it');
+        if (envVars) args.push(...envVars.split(' '));
+        args.push(containerName, 'bash', '-c', bashCommand);
+        
+        const child = spawn(containerRuntime, args, {
+            stdio: 'inherit',
+            shell: false
+        });
+        
+        // Handle process termination
+        child.on('exit', (code, signal) => {
+            debugLog(`Container session ended with code ${code} and signal ${signal}`);
+        });
+        
+        // Wait for the child process to finish
+        child.on('close', () => {
+            debugLog('Interactive session closed');
+        });
+        
+        // Pass through signals to the container
+        process.on('SIGINT', () => {
+            // Don't kill the child process, let the container handle Ctrl-C
+            debugLog('SIGINT received, passing to container');
+        });
+        
+        // This is a synchronous wait
+        require('child_process').spawnSync('node', ['-e', ''], {stdio: 'inherit'});
+        while (child.exitCode === null) {
+            require('child_process').spawnSync('sleep', ['0.1'], {stdio: 'pipe'});
+        }
+    } else {
+        // Non-interactive commands can use execSync
+        try {
+            execSync(execCommand, { stdio: 'inherit' });
+        } catch (error) {
+            debugLog(`Caught error during ${containerRuntime} exec. This is often expected if the command exits with a non-zero code.`);
+        }
     }
     
     // Stop the container after interactive sessions to prevent it from staying up

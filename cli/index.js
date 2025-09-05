@@ -22,12 +22,15 @@ const COMMANDS = {
 };
 
 function completer(line) {
+    const fs = require('fs');
+    const path = require('path');
     const words = line.split(/\s+/).filter(Boolean);
     const lineFragment = line.endsWith(' ') ? '' : (words[words.length - 1] || '');
     
     let completions = [];
     let context = 'commands';
 
+    // Check if it's a known Ploinky command
     if (words.length > 0 && COMMANDS.hasOwnProperty(words[0])) {
         const command = words[0];
         const subcommands = COMMANDS[command];
@@ -36,10 +39,11 @@ function completer(line) {
         if (line.endsWith(' ')) {
             if (words.length === 1 && subcommands.length > 0) context = 'subcommands';
             else if (words.length === 2) context = 'args';
+            else context = 'files'; // Default to file completion for additional args
         } else {
             if (words.length === 1) context = 'commands';
             else if (words.length === 2 && subcommands.length > 0) context = 'subcommands';
-            else context = 'args';
+            else context = 'files'; // Default to file completion
         }
 
         // Get potential completions based on context
@@ -53,19 +57,73 @@ function completer(line) {
                 completions = getAgentNames();
             } else if (command === 'new' && subcommand === 'agent') {
                 completions = getRepoNames();
+            } else {
+                context = 'files'; // Fall back to file completion
             }
-        } else {
-             completions = Object.keys(COMMANDS);
+        }
+        
+        if (context === 'commands') {
+            completions = Object.keys(COMMANDS);
         }
     } else {
-        completions = Object.keys(COMMANDS);
+        // Not a known Ploinky command, could be a system command or need file completion
+        if (words.length === 0 || (words.length === 1 && !line.endsWith(' '))) {
+            // First word - could be a command
+            completions = Object.keys(COMMANDS);
+        } else {
+            // Treat as file path for unknown commands
+            context = 'files';
+        }
+    }
+
+    // File path completion
+    if (context === 'files' || completions.length === 0) {
+        try {
+            // Parse the path to complete
+            let pathToComplete = lineFragment;
+            let dirPath = '.';
+            let filePrefix = '';
+            
+            if (pathToComplete.includes('/')) {
+                const lastSlash = pathToComplete.lastIndexOf('/');
+                dirPath = pathToComplete.substring(0, lastSlash) || '.';
+                filePrefix = pathToComplete.substring(lastSlash + 1);
+            } else {
+                filePrefix = pathToComplete;
+            }
+            
+            // Resolve ~ to home directory
+            if (dirPath.startsWith('~')) {
+                dirPath = dirPath.replace('~', process.env.HOME || process.env.USERPROFILE);
+            }
+            
+            // Read directory contents
+            if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+                const files = fs.readdirSync(dirPath);
+                const matchingFiles = files
+                    .filter(f => f.startsWith(filePrefix))
+                    .map(f => {
+                        const fullPath = path.join(dirPath, f);
+                        const isDir = fs.statSync(fullPath).isDirectory();
+                        // Reconstruct the path as it should appear in completion
+                        if (pathToComplete.includes('/')) {
+                            const prefix = pathToComplete.substring(0, pathToComplete.lastIndexOf('/') + 1);
+                            return prefix + f + (isDir ? '/' : '');
+                        }
+                        return f + (isDir ? '/' : '');
+                    });
+                completions = matchingFiles;
+            }
+        } catch (err) {
+            // If file reading fails, fall back to no completions
+            debugLog('File completion error:', err.message);
+        }
     }
 
     const hits = completions.filter((c) => c.startsWith(lineFragment));
 
-    // If there's a single, exact match, add a space to suggest the next argument
-    if (hits.length === 1 && hits[0] === lineFragment) {
-        // This tells readline to show the next level of completions on the next tab press
+    // If there's a single, exact match, add a space only if it's not a directory
+    if (hits.length === 1 && hits[0] === lineFragment && !lineFragment.endsWith('/')) {
         return [[hits[0] + ' '], lineFragment];
     }
 

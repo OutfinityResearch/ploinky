@@ -453,21 +453,28 @@ function handleCommand(args) {
             }
             break;
         default:
-            // Check if it's a common bash command
-            const bashCommands = [
-                'ls', 'cd', 'pwd', 'cat', 'grep', 'find', 'ps', 'df', 'du',
-                'mkdir', 'rm', 'cp', 'mv', 'touch', 'chmod', 'tail', 'head',
-                'clear', 'which', 'echo', 'tree', 'less', 'more', 'wc', 'sort',
-                'uniq', 'cut', 'sed', 'awk', 'tar', 'zip', 'unzip', 'curl', 'wget'
-            ];
+            // Try to execute as a system command
+            // First check if it's a special built-in that needs custom handling
+            const specialCommands = ['cd', 'clear'];
             
-            if (bashCommands.includes(command)) {
-                // Execute bash command locally
+            if (specialCommands.includes(command)) {
+                // Execute with our special handling
                 executeBashCommand(command, options);
             } else {
-                console.log(`Unknown command: ${command}`);
-                showHelp();
-            }
+                // Try to execute any command that exists in the system
+                const { execSync } = require('child_process');
+                try {
+                    // Check if command exists using 'which' (Unix) or 'where' (Windows)
+                    const checkCommand = process.platform === 'win32' ? 'where' : 'which';
+                    execSync(`${checkCommand} ${command}`, { stdio: 'pipe' });
+                    
+                    // Command exists, execute it
+                    executeBashCommand(command, options);
+                } catch (error) {
+                    // Command doesn't exist or which/where failed
+                    console.log(`Command not found: ${command}`);
+                    console.log(`Try 'help' to see available Ploinky commands.`);
+                }
     }
 }
 
