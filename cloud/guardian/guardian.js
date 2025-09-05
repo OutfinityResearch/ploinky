@@ -233,6 +233,25 @@ class Guardian {
     }
 
     /**
+     * Check if the admin password is the default 'admin'
+     */
+    async isDefaultPassword() {
+        try {
+            const adminData = await fs.readFile(this.adminFilePath, 'utf-8');
+            const admins = JSON.parse(adminData);
+            const admin = admins.find(a => a.username === 'admin');
+            if (!admin) {
+                return false; // No admin user
+            }
+            // Check if the password is 'admin'
+            return this.verifyPassword('admin', admin.passwordHash, admin.salt);
+        } catch (err) {
+            console.error('Error checking default password:', err);
+            return false;
+        }
+    }
+
+    /**
      * Change admin password
      */
     async changeAdminPassword(oldPassword, newPassword, username = 'admin') {

@@ -138,7 +138,7 @@ class RequestRouter {
         
         let filePath;
         if (pathname === '/management' || pathname === '/management/') {
-            filePath = path.join(dashboardPath, 'index.html');
+            filePath = path.join(dashboardPath, 'login.html');
         } else {
             const requestedFile = pathname.replace('/management/', '');
             filePath = path.join(dashboardPath, requestedFile);
@@ -153,9 +153,9 @@ class RequestRouter {
             res.setHeader('Content-Type', contentType);
             res.end(content);
         } catch (err) {
-            // File not found, serve index.html as fallback
+            // File not found, serve login.html as fallback
             try {
-                const indexContent = await fs.readFile(path.join(dashboardPath, 'index.html'));
+                const indexContent = await fs.readFile(path.join(dashboardPath, 'login.html'));
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'text/html');
                 res.end(indexContent);
@@ -168,7 +168,7 @@ class RequestRouter {
     
     async serveLoginPage(res) {
         const fs = require('fs').promises;
-        const loginPath = path.join(__dirname, '../../dashboard/index.html');
+        const loginPath = path.join(__dirname, '../../dashboard/login.html');
         
         try {
             const content = await fs.readFile(loginPath);
@@ -475,7 +475,7 @@ class RequestRouter {
     async handleManagementAPI(req, res, endpoint) {
         // Check admin auth for API
         const isAdmin = await this.guardian.checkAdminAuth(req);
-        if (!isAdmin && endpoint !== 'check-auth') {
+        if (!isAdmin && endpoint !== 'check-auth' && endpoint !== 'is-default-password') { // Allow checking default password without full auth
             res.statusCode = 401;
             res.end(JSON.stringify({ error: 'Unauthorized' }));
             return;
@@ -485,6 +485,35 @@ class RequestRouter {
         switch (endpoint) {
             case 'check-auth':
                 res.end(JSON.stringify({ authenticated: isAdmin }));
+                break;
+            case 'is-default-password':
+                const isDefault = await this.guardian.isDefaultPassword();
+                res.end(JSON.stringify({ isDefault }));
+                break;
+            case 'change-password':
+                if (req.method === 'POST') {
+                    let body = '';
+                    req.on('data', chunk => body += chunk);
+                    req.on('end', async () => {
+                        try {
+                            const { currentPassword, newPassword } = JSON.parse(body);
+                            const success = await this.guardian.changeAdminPassword(currentPassword, newPassword);
+                            if (success) {
+                                res.statusCode = 200;
+                                res.end(JSON.stringify({ success: true }));
+                            } else {
+                                res.statusCode = 400;
+                                res.end(JSON.stringify({ error: 'Failed to change password. Incorrect current password?' }));
+                            }
+                        } catch (e) {
+                            res.statusCode = 400;
+                            res.end(JSON.stringify({ error: 'Invalid request body.' }));
+                        }
+                    });
+                } else {
+                    res.statusCode = 405;
+                    res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+                }
                 break;
             case 'overview':
                 const overview = {
@@ -514,30 +543,59 @@ class RequestRouter {
     }
 
     async handleAuthAgent(req, res) {
-        // Route to the security agent
-        const deployment = {
-            name: 'SecurityAgent',
-            path: '/auth',
-            agentPath: path.join(this.workingDir, 'agents', 'auth')
-        };
-
-        const securityContext = { userId: 'anonymous' };
-        
-        const task = await this.orchestrator.createTask({
-            deployment,
-            request: req,
-            securityContext
-        });
-
-        const result = await this.orchestrator.executeTask(task);
-        
-        // Handle login response
-        if (result.success && result.data.authorizationToken) {
-            res.setHeader('Set-Cookie', 
-                `authorizationToken=${result.data.authorizationToken}; Path=/; HttpOnly`);
+        // Handle authentication directly without external agent
+        if (req.method !== 'POST') {
+            res.writeHead(405, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Method not allowed' }));
+            return;
         }
-        
-        this.sendResponse(res, result);
+
+        // Read request body
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', async () => {
+            try {
+                const body = Buffer.concat(chunks).toString();
+                const data = JSON.parse(body);
+                const { command, params } = data;
+                
+                if (command === 'login' && params && params.length >= 2) {
+                    const [username, password] = params;
+                    
+                    // Authenticate with Guardian (for now only admin auth is supported)
+                    const authToken = await this.guardian.authenticateAdmin(password);
+                    
+                    if (authToken) {
+                        res.setHeader('Set-Cookie', 
+                            `authorizationToken=${authToken}; Path=/; HttpOnly`);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({
+                            success: true,
+                            authorizationToken: authToken,
+                            userId: username
+                        }));
+                    } else {
+                        res.writeHead(401, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ 
+                            success: false,
+                            error: 'Invalid credentials' 
+                        }));
+                    }
+                } else {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ 
+                        error: 'Invalid request format' 
+                    }));
+                }
+            } catch (err) {
+                console.error('[Auth] Error parsing request:', err.message, 'Body:', chunks.toString());
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ 
+                    error: 'Invalid JSON',
+                    details: err.message
+                }));
+            }
+        });
     }
 
     async serveClientLibrary(req, res, pathname) {
@@ -576,8 +634,8 @@ class RequestRouter {
                 res.setHeader('Content-Type', contentType);
                 res.end(content);
             } else if (stats.isDirectory()) {
-                // Try index.html
-                const indexPath = path.join(filePath, 'index.html');
+                // Try login.html
+                const indexPath = path.join(filePath, 'login.html');
                 const indexContent = await fs.readFile(indexPath);
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'text/html');

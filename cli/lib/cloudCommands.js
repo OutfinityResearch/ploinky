@@ -3,6 +3,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const readline = require('readline');
+const inputState = require('./inputState');
 const { debugLog } = require('./utils');
 
 class CloudCommands {
@@ -97,6 +98,11 @@ class CloudCommands {
         
         const username = args[0] || 'admin';
         const password = await this.promptPassword('Password: ');
+        
+        if (!password) {
+            console.log('Login cancelled');
+            return;
+        }
 
         try {
             const response = await this.apiCall('/auth', {
@@ -622,16 +628,58 @@ class CloudCommands {
     }
 
     promptPassword(prompt) {
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout
-        });
-
         return new Promise((resolve) => {
-            rl.question(prompt, (password) => {
-                rl.close();
-                resolve(password);
-            });
+            inputState.suspend();
+
+            // Print prompt and read without echo
+            process.stdout.write(prompt);
+
+            const wasRaw = !!process.stdin.isRaw;
+            let password = '';
+
+            if (process.stdin.setRawMode) {
+                process.stdin.setRawMode(true);
+            }
+            process.stdin.resume();
+            process.stdin.setEncoding('utf8');
+
+            const cleanup = () => {
+                if (process.stdin.setRawMode) {
+                    // Restore previous raw state (default false in REPL)
+                    process.stdin.setRawMode(false);
+                }
+                process.stdin.pause();
+                process.stdin.removeListener('data', onData);
+                inputState.resume();
+            };
+
+            const onData = (char) => {
+                char = char.toString('utf8');
+
+                if (char === '\n' || char === '\r' || char === '\u0004') {
+                    // Enter pressed
+                    process.stdout.write('\n');
+                    cleanup();
+                    resolve(password);
+                } else if (char === '\u0003') {
+                    // Ctrl+C - cancel the password prompt
+                    process.stdout.write('\n');
+                    cleanup();
+                    resolve(null);
+                } else if (char === '\u007f' || char === '\b') {
+                    // Backspace
+                    if (password.length > 0) {
+                        password = password.slice(0, -1);
+                        process.stdout.write('\b \b');
+                    }
+                } else if (char.charCodeAt(0) >= 32) {
+                    // Regular character
+                    password += char;
+                    process.stdout.write('*');
+                }
+            };
+
+            process.stdin.on('data', onData);
         });
     }
 
@@ -672,4 +720,4 @@ Operations:
     }
 }
 
-module.exports = { CloudCommands };
+module.exports = CloudCommands;

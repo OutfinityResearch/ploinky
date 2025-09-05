@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ploinky Cloud - Login</title>
+    <link rel="stylesheet" href="/management/styles.css">
+</head>
+<body>
+    <div id="app">
+        <div id="loginView" class="view">
+            <div class="login-wrapper">
+                <div class="login-box">
+                    <div class="login-header">
+                        <h2>Ploinky Cloud</h2>
+                        <p>Admin Dashboard Login</p>
+                    </div>
+                    <form id="loginForm" class="login-form">
+                        <div class="input-group">
+                            <input type="password" id="adminPassword" placeholder="Enter Admin Password" required>
+                        </div>
+                        <button type="submit" class="login-btn">Login</button>
+                        <div id="loginError" class="error-message"></div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('adminPassword').value;
+            const errorDiv = document.getElementById('loginError');
+            errorDiv.textContent = '';
+
+            try {
+                // Server expects x-www-form-urlencoded (URLSearchParams)
+                const params = new URLSearchParams();
+                params.set('username', 'admin');
+                params.set('password', password);
+
+                const response = await fetch('/management/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params.toString(),
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    // Always go to the dashboard landing with absolute path
+                    window.location.href = '/management/landingPage.html';
+                } else {
+                    errorDiv.textContent = 'Invalid password';
+                }
+            } catch (err) {
+                errorDiv.textContent = 'Login failed. Is the server running?';
+            }
+        });
+    </script>
+</body>
+</html>

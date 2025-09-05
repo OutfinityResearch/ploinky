@@ -1,0 +1,637 @@
+function showHelp(args = []) {
+    // Parse help arguments
+    const topic = args[0];
+    const subtopic = args[1];
+    const subsubtopic = args[2];
+    
+    // Detailed help for specific commands
+    if (topic) {
+        return showDetailedHelp(topic, subtopic, subsubtopic);
+    }
+    
+    // Main help overview
+    console.log(`
+╔═══ PLOINKY ═══╗ Container Development & Cloud Platform
+
+▶ LOCAL DEVELOPMENT
+  add repo <name> [url]          Add repository (cloud/vibe/security/extra)
+  new agent <repo> <name>        Create agent  | list agents/repos
+  set install/update/run <agent> Set commands for agent
+  run agent/bash/update <name>   Execute agent operations
+  add env <name> <val>           Add secret | enable env <agent> <var>
+
+▶ CLOUD OPERATIONS  
+  cloud connect [url]            Connect to server (default: localhost:8000)
+  cloud login/logout/status      Authentication and status
+  cloud host add/remove/list     Manage hosts/domains
+  cloud repo add/remove/list     Manage repositories  
+  cloud agent list/info/start    Control deployed agents
+  cloud deploy/undeploy          Manage deployments
+  cloud admin add/password       Admin management
+
+▶ CLIENT OPERATIONS
+  client call <agent> <method>   Call agent method with params
+  client methods <agent>         List available agent methods
+  client status <agent>          Get agent runtime status
+  client task <agent> <desc>     Send task to agent
+
+  help | clear | exit            Utilities & shell control
+
+▶ FOR DETAILED HELP
+  help <command>                 Show detailed help for a command
+  help cloud                     Show all cloud commands
+  help cloud <subcommand>        Show specific cloud command help
+  
+  Examples: help add | help cloud host | help run agent
+
+Config stored in .ploinky/ • Type 'help' for commands
+╚═══════════════════════════════════════════════════════╝
+`);
+}
+
+function showDetailedHelp(topic, subtopic, subsubtopic) {
+    const helpContent = {
+        // Local development commands
+        'add': {
+            description: 'Add repositories or environment variables',
+            subcommands: {
+                'repo': {
+                    syntax: 'add repo <name> [url]',
+                    description: 'Add an agent repository to your local environment',
+                    params: {
+                        '<name>': 'Repository name (cloud/vibe/security/extra for predefined, or custom name)',
+                        '[url]': 'Git URL for custom repositories (optional for predefined repos)'
+                    },
+                    examples: [
+                        'add repo cloud           # Add predefined cloud repository',
+                        'add repo myrepo https://github.com/user/repo.git  # Add custom repo'
+                    ],
+                    notes: 'Predefined repos: cloud (AWS/Azure/GCP), vibe (social), security (auth/crypto), extra (utilities)'
+                },
+                'env': {
+                    syntax: 'add env <name> <value>',
+                    description: 'Add a secret environment variable',
+                    params: {
+                        '<name>': 'Variable name',
+                        '<value>': 'Secret value (will be encrypted)'
+                    },
+                    examples: [
+                        'add env API_KEY sk-1234567890',
+                        'add env DB_PASSWORD mySecretPass123'
+                    ],
+                    notes: 'Secrets are stored encrypted and must be explicitly enabled per agent'
+                }
+            }
+        },
+        
+        'new': {
+            description: 'Create new agents',
+            subcommands: {
+                'agent': {
+                    syntax: 'new agent <repo> <name> [image]',
+                    description: 'Create a new agent in a repository',
+                    params: {
+                        '<repo>': 'Repository name where agent will be created',
+                        '<name>': 'Agent name (must be unique)',
+                        '[image]': 'Container image (default: node:18-alpine)'
+                    },
+                    examples: [
+                        'new agent cloud MyAPI             # Node.js agent',
+                        'new agent cloud PyBot python:3.11 # Python agent',
+                        'new agent vibe WebApp nginx:alpine # Nginx agent'
+                    ],
+                    notes: 'Creates manifest.json and basic structure in .ploinky/repos/<repo>/<name>/'
+                }
+            }
+        },
+        
+        'set': {
+            description: 'Configure agent commands',
+            syntax: 'set <command-type> <agent> "<command>"',
+            params: {
+                '<command-type>': 'install, update, or run',
+                '<agent>': 'Agent name',
+                '<command>': 'Command to execute (use quotes for multi-word commands)'
+            },
+            examples: [
+                'set install MyAPI "npm install"',
+                'set update MyAPI "git pull && npm install"',
+                'set run MyAPI "npm start"'
+            ],
+            notes: 'Commands run inside the agent\'s container with /workspace mounted'
+        },
+        
+        'run': {
+            description: 'Execute agent operations',
+            subcommands: {
+                'agent': {
+                    syntax: 'run agent <name> [args...]',
+                    description: 'Run agent\'s configured start command',
+                    params: {
+                        '<name>': 'Agent name',
+                        '[args...]': 'Additional arguments passed to the command'
+                    },
+                    examples: [
+                        'run agent MyAPI',
+                        'run agent MyAPI --debug --port 3000'
+                    ]
+                },
+                'bash': {
+                    syntax: 'run bash <name>',
+                    description: 'Open interactive bash shell in agent container',
+                    params: {
+                        '<name>': 'Agent name'
+                    },
+                    examples: [
+                        'run bash MyAPI  # Opens shell with /workspace mounted'
+                    ],
+                    notes: 'Useful for debugging and manual operations inside container'
+                },
+                'update': {
+                    syntax: 'run update <name>',
+                    description: 'Run agent\'s configured update command',
+                    params: {
+                        '<name>': 'Agent name'
+                    },
+                    examples: [
+                        'run update MyAPI  # Runs the update command'
+                    ]
+                }
+            }
+        },
+        
+        'enable': {
+            description: 'Enable features for agents',
+            subcommands: {
+                'env': {
+                    syntax: 'enable env <agent> <variable>',
+                    description: 'Enable a secret environment variable for an agent',
+                    params: {
+                        '<agent>': 'Agent name',
+                        '<variable>': 'Environment variable name'
+                    },
+                    examples: [
+                        'enable env MyAPI API_KEY',
+                        'enable env Database DB_PASSWORD'
+                    ],
+                    notes: 'Variable must be added with "add env" first'
+                }
+            }
+        },
+        
+        'list': {
+            description: 'List resources',
+            subcommands: {
+                'agents': {
+                    syntax: 'list agents',
+                    description: 'List all available agents across all repositories',
+                    examples: ['list agents']
+                },
+                'repos': {
+                    syntax: 'list repos',
+                    description: 'List all configured repositories',
+                    examples: ['list repos']
+                }
+            }
+        },
+        
+        // Cloud commands
+        'cloud': {
+            description: 'Cloud platform operations',
+            subcommands: {
+                'connect': {
+                    syntax: 'cloud connect [url]',
+                    description: 'Connect to a Ploinky Cloud server',
+                    params: {
+                        '[url]': 'Server URL (default: localhost:8000)'
+                    },
+                    examples: [
+                        'cloud connect                    # Connect to localhost:8000',
+                        'cloud connect api.example.com    # Connect to remote server',
+                        'cloud connect 192.168.1.100:8080 # Connect with custom port'
+                    ],
+                    notes: 'Connection info saved in .ploinky/cloud.json'
+                },
+                
+                'login': {
+                    syntax: 'cloud login [username]',
+                    description: 'Login to connected cloud server',
+                    params: {
+                        '[username]': 'Username (default: admin)'
+                    },
+                    examples: [
+                        'cloud login          # Login as admin',
+                        'cloud login john     # Login as john'
+                    ],
+                    notes: 'Password will be prompted securely with asterisks'
+                },
+                
+                'logout': {
+                    syntax: 'cloud logout',
+                    description: 'Logout from cloud server',
+                    examples: ['cloud logout']
+                },
+                
+                'status': {
+                    syntax: 'cloud status',
+                    description: 'Show connection and authentication status',
+                    examples: ['cloud status'],
+                    notes: 'Shows server URL, login status, and deployment info'
+                },
+                
+                'host': {
+                    syntax: 'cloud host <action>',
+                    description: 'Manage hosts and domains',
+                    subcommands: {
+                        'add': {
+                            syntax: 'cloud host add <hostname>',
+                            description: 'Register a new host or domain',
+                            examples: [
+                                'cloud host add example.com',
+                                'cloud host add api.myapp.io'
+                            ]
+                        },
+                        'remove': {
+                            syntax: 'cloud host remove <hostname>',
+                            description: 'Remove a registered host',
+                            examples: ['cloud host remove example.com']
+                        },
+                        'list': {
+                            syntax: 'cloud host list',
+                            description: 'List all registered hosts',
+                            examples: ['cloud host list']
+                        }
+                    }
+                },
+                
+                'repo': {
+                    syntax: 'cloud repo <action>',
+                    description: 'Manage cloud repositories',
+                    subcommands: {
+                        'add': {
+                            syntax: 'cloud repo add <name> <url>',
+                            description: 'Add repository to cloud',
+                            examples: [
+                                'cloud repo add MyAgents https://github.com/user/agents.git'
+                            ]
+                        },
+                        'remove': {
+                            syntax: 'cloud repo remove <name>',
+                            description: 'Remove repository from cloud',
+                            examples: ['cloud repo remove MyAgents']
+                        },
+                        'list': {
+                            syntax: 'cloud repo list',
+                            description: 'List cloud repositories',
+                            examples: ['cloud repo list']
+                        }
+                    }
+                },
+                
+                'agent': {
+                    syntax: 'cloud agent <action>',
+                    description: 'Manage deployed agents',
+                    subcommands: {
+                        'list': {
+                            syntax: 'cloud agent list',
+                            description: 'List available cloud agents',
+                            examples: ['cloud agent list']
+                        },
+                        'info': {
+                            syntax: 'cloud agent info <name>',
+                            description: 'Show agent details',
+                            examples: ['cloud agent info MyAPI']
+                        },
+                        'start': {
+                            syntax: 'cloud agent start <name>',
+                            description: 'Start a deployed agent',
+                            examples: ['cloud agent start MyAPI']
+                        },
+                        'stop': {
+                            syntax: 'cloud agent stop <name>',
+                            description: 'Stop a running agent',
+                            examples: ['cloud agent stop MyAPI']
+                        },
+                        'restart': {
+                            syntax: 'cloud agent restart <name>',
+                            description: 'Restart an agent',
+                            examples: ['cloud agent restart MyAPI']
+                        }
+                    }
+                },
+                
+                'deploy': {
+                    syntax: 'cloud deploy <host> <path> <agent>',
+                    description: 'Deploy agent to URL path',
+                    params: {
+                        '<host>': 'Target hostname',
+                        '<path>': 'URL path (e.g., /api)',
+                        '<agent>': 'Agent name to deploy'
+                    },
+                    examples: [
+                        'cloud deploy example.com /api MyAPI',
+                        'cloud deploy localhost /admin AdminPanel'
+                    ],
+                    notes: 'Agent will be accessible at http://host/path'
+                },
+                
+                'undeploy': {
+                    syntax: 'cloud undeploy <host> <path>',
+                    description: 'Remove deployment',
+                    params: {
+                        '<host>': 'Hostname',
+                        '<path>': 'URL path'
+                    },
+                    examples: ['cloud undeploy example.com /api']
+                },
+                
+                'deployments': {
+                    syntax: 'cloud deployments',
+                    description: 'List all active deployments',
+                    examples: ['cloud deployments']
+                },
+                
+                'admin': {
+                    syntax: 'cloud admin <action>',
+                    description: 'Admin user management',
+                    subcommands: {
+                        'add': {
+                            syntax: 'cloud admin add <username>',
+                            description: 'Create new admin user',
+                            examples: ['cloud admin add john']
+                        },
+                        'password': {
+                            syntax: 'cloud admin password [username]',
+                            description: 'Change admin password',
+                            examples: [
+                                'cloud admin password       # Change your password',
+                                'cloud admin password john  # Change john\'s password'
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        
+        'client': {
+            description: 'Client operations for interacting with deployed agents',
+            subcommands: {
+                'call': {
+                    syntax: 'client call <agent> <method> [param1] [param2] ...',
+                    description: 'Call a method on an agent with parameters',
+                    params: {
+                        '<agent>': 'Agent name',
+                        '<method>': 'Method name to call',
+                        '[params]': 'Optional parameters for the method'
+                    },
+                    examples: [
+                        'client call MyAPI processData input.json output.json',
+                        'client call DataProcessor analyze "SELECT * FROM users"'
+                    ]
+                },
+                'methods': {
+                    syntax: 'client methods <agent>',
+                    description: 'List available methods for an agent',
+                    params: {
+                        '<agent>': 'Agent name'
+                    },
+                    examples: [
+                        'client methods MyAPI',
+                        'client methods DataProcessor'
+                    ]
+                },
+                'status': {
+                    syntax: 'client status <agent>',
+                    description: 'Get runtime status of an agent',
+                    params: {
+                        '<agent>': 'Agent name'
+                    },
+                    examples: [
+                        'client status MyAPI'
+                    ],
+                    notes: 'Shows state, uptime, resource usage, and recent activity'
+                },
+                'list': {
+                    syntax: 'client list',
+                    description: 'List all available agents',
+                    examples: [
+                        'client list'
+                    ]
+                },
+                'task': {
+                    syntax: 'client task <agent> <task-description>',
+                    description: 'Send a task to an agent for async processing',
+                    params: {
+                        '<agent>': 'Agent name',
+                        '<task-description>': 'Description of the task to execute'
+                    },
+                    examples: [
+                        'client task MyAPI "Process all pending orders"',
+                        'client task DataProcessor "Generate monthly report"'
+                    ]
+                },
+                'task-status': {
+                    syntax: 'client task-status <agent> <task-id>',
+                    description: 'Check the status of a submitted task',
+                    params: {
+                        '<agent>': 'Agent name',
+                        '<task-id>': 'Task ID returned when task was submitted'
+                    },
+                    examples: [
+                        'client task-status MyAPI task-123'
+                    ]
+                }
+            }
+        }
+    };
+    
+    // Display help based on requested topic (removed - not needed since we're already inside showDetailedHelp)
+    
+    // Handle cloud subcommands specially
+    if (topic === 'cloud' && subtopic) {
+        const cloudCmd = helpContent.cloud.subcommands[subtopic];
+        if (!cloudCmd) {
+            console.log(`Unknown cloud command: ${subtopic}`);
+            console.log('Available cloud commands: ' + Object.keys(helpContent.cloud.subcommands).join(', '));
+            return;
+        }
+        
+        // Check for sub-subcommands
+        if (subsubtopic && cloudCmd.subcommands && cloudCmd.subcommands[subsubtopic]) {
+            const subCmd = cloudCmd.subcommands[subsubtopic];
+            console.log(`\n╔═══ HELP: cloud ${subtopic} ${subsubtopic} ═══╗\n`);
+            console.log(`SYNTAX:  ${subCmd.syntax}`);
+            console.log(`\nDESCRIPTION:\n  ${subCmd.description}`);
+            if (subCmd.examples) {
+                console.log(`\nEXAMPLES:`);
+                subCmd.examples.forEach(ex => console.log(`  ${ex}`));
+            }
+            console.log();
+            return;
+        }
+        
+        // Show cloud subcommand help
+        console.log(`\n╔═══ HELP: cloud ${subtopic} ═══╗\n`);
+        console.log(`SYNTAX:  ${cloudCmd.syntax}`);
+        console.log(`\nDESCRIPTION:\n  ${cloudCmd.description}`);
+        
+        if (cloudCmd.params) {
+            console.log(`\nPARAMETERS:`);
+            for (const [param, desc] of Object.entries(cloudCmd.params)) {
+                console.log(`  ${param.padEnd(12)} ${desc}`);
+            }
+        }
+        
+        if (cloudCmd.subcommands) {
+            console.log(`\nSUBCOMMANDS:`);
+            for (const [sub, data] of Object.entries(cloudCmd.subcommands)) {
+                console.log(`  ${sub.padEnd(10)} ${data.description}`);
+            }
+            console.log(`\nFor more help: help cloud ${subtopic} <subcommand>`);
+        }
+        
+        if (cloudCmd.examples) {
+            console.log(`\nEXAMPLES:`);
+            cloudCmd.examples.forEach(ex => console.log(`  ${ex}`));
+        }
+        
+        if (cloudCmd.notes) {
+            console.log(`\nNOTES:\n  ${cloudCmd.notes}`);
+        }
+        console.log();
+        return;
+    }
+    
+    // Show cloud overview
+    if (topic === 'cloud' && !subtopic) {
+        console.log(`\n╔═══ HELP: cloud ═══╗\n`);
+        console.log('Cloud platform operations for managing remote deployments\n');
+        console.log('SUBCOMMANDS:');
+        for (const [cmd, data] of Object.entries(helpContent.cloud.subcommands)) {
+            console.log(`  ${cmd.padEnd(12)} ${data.description}`);
+        }
+        console.log('\nFor detailed help: help cloud <subcommand>');
+        console.log('Example: help cloud deploy');
+        console.log();
+        return;
+    }
+    
+    // Handle client subcommands specially
+    if (topic === 'client' && subtopic) {
+        const clientCmd = helpContent.client.subcommands[subtopic];
+        if (!clientCmd) {
+            console.log(`Unknown client command: ${subtopic}`);
+            console.log('Available client commands: ' + Object.keys(helpContent.client.subcommands).join(', '));
+            return;
+        }
+        
+        console.log(`\n╔═══ HELP: client ${subtopic} ═══╗\n`);
+        console.log(`SYNTAX:  ${clientCmd.syntax}`);
+        console.log(`\nDESCRIPTION:\n  ${clientCmd.description}`);
+        
+        if (clientCmd.params) {
+            console.log(`\nPARAMETERS:`);
+            for (const [param, desc] of Object.entries(clientCmd.params)) {
+                console.log(`  ${param.padEnd(20)} ${desc}`);
+            }
+        }
+        
+        if (clientCmd.examples) {
+            console.log(`\nEXAMPLES:`);
+            clientCmd.examples.forEach(ex => console.log(`  ${ex}`));
+        }
+        
+        if (clientCmd.notes) {
+            console.log(`\nNOTES:\n  ${clientCmd.notes}`);
+        }
+        console.log();
+        return;
+    }
+    
+    // Show client overview
+    if (topic === 'client' && !subtopic) {
+        console.log(`\n╔═══ HELP: client ═══╗\n`);
+        console.log('Client operations for interacting with deployed agents\n');
+        console.log('SUBCOMMANDS:');
+        for (const [cmd, data] of Object.entries(helpContent.client.subcommands)) {
+            console.log(`  ${cmd.padEnd(12)} ${data.description}`);
+        }
+        console.log('\nFor detailed help: help client <subcommand>');
+        console.log('Example: help client call');
+        console.log();
+        return;
+    }
+    
+    // Handle other top-level commands
+    const cmd = helpContent[topic];
+    if (!cmd) {
+        console.log(`Unknown command: ${topic}`);
+        console.log('Type "help" for available commands');
+        return;
+    }
+    
+    // Check for subcommands
+    if (subtopic && cmd.subcommands && cmd.subcommands[subtopic]) {
+        const subCmd = cmd.subcommands[subtopic];
+        console.log(`\n╔═══ HELP: ${topic} ${subtopic} ═══╗\n`);
+        console.log(`SYNTAX:  ${subCmd.syntax}`);
+        console.log(`\nDESCRIPTION:\n  ${subCmd.description}`);
+        
+        if (subCmd.params) {
+            console.log(`\nPARAMETERS:`);
+            for (const [param, desc] of Object.entries(subCmd.params)) {
+                console.log(`  ${param.padEnd(12)} ${desc}`);
+            }
+        }
+        
+        if (subCmd.examples) {
+            console.log(`\nEXAMPLES:`);
+            subCmd.examples.forEach(ex => console.log(`  ${ex}`));
+        }
+        
+        if (subCmd.notes) {
+            console.log(`\nNOTES:\n  ${subCmd.notes}`);
+        }
+        console.log();
+        return;
+    }
+    
+    // Show command help
+    console.log(`\n╔═══ HELP: ${topic} ═══╗\n`);
+    
+    if (cmd.syntax) {
+        console.log(`SYNTAX:  ${cmd.syntax}`);
+    }
+    
+    console.log(`\nDESCRIPTION:\n  ${cmd.description}`);
+    
+    if (cmd.params) {
+        console.log(`\nPARAMETERS:`);
+        for (const [param, desc] of Object.entries(cmd.params)) {
+            console.log(`  ${param.padEnd(20)} ${desc}`);
+        }
+    }
+    
+    if (cmd.subcommands) {
+        console.log(`\nSUBCOMMANDS:`);
+        for (const [sub, data] of Object.entries(cmd.subcommands)) {
+            console.log(`  ${sub.padEnd(10)} ${data.description}`);
+        }
+        console.log(`\nFor more help: help ${topic} <subcommand>`);
+    }
+    
+    if (cmd.examples) {
+        console.log(`\nEXAMPLES:`);
+        cmd.examples.forEach(ex => console.log(`  ${ex}`));
+    }
+    
+    if (cmd.notes) {
+        console.log(`\nNOTES:\n  ${cmd.notes}`);
+    }
+    
+    console.log();
+}
+
+module.exports = {
+    showHelp
+};

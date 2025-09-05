@@ -154,6 +154,11 @@ class CloudCommand {
         const username = args[0] || 'admin';
         const password = await this.promptPassword('Password: ');
 
+        if (password === null) {
+            console.log('Login cancelled.');
+            return;
+        }
+
         try {
             const response = await this.apiCall('/auth', {
                 method: 'POST',
@@ -169,7 +174,7 @@ class CloudCommand {
                 await this.saveConfig();
                 console.log(`Logged in as ${response.userId}`);
             } else {
-                console.error('Login failed');
+                console.error('✗ Login failed');
             }
         } catch (err) {
             console.error('Login error:', err.message);
@@ -262,7 +267,15 @@ class CloudCommand {
         }
 
         const password = await this.promptPassword('Password: ');
+        if (password === null) {
+            console.log('Operation cancelled.');
+            return;
+        }
         const confirmPassword = await this.promptPassword('Confirm Password: ');
+        if (confirmPassword === null) {
+            console.log('Operation cancelled.');
+            return;
+        }
 
         if (password !== confirmPassword) {
             console.error('Passwords do not match');
@@ -540,17 +553,65 @@ class CloudCommand {
     }
 
     promptPassword(prompt) {
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout
+        const inputState = require('../inputState');
+        inputState.suspend();
+
+        const promise = new Promise(resolve => {
+            process.stdout.write(prompt);
+
+            const stdin = process.stdin;
+            let password = '';
+
+            const cleanup = () => {
+                stdin.removeListener('data', onData);
+                if (stdin.isTTY) {
+                    try { stdin.setRawMode(false); } catch(e) {}
+                }
+                inputState.resume();
+            };
+
+            const onData = (chunk) => {
+                const char = chunk.toString();
+
+                switch (char) {
+                    case '\r': // Enter
+                    case '\n':
+                    case '\u0004': // Ctrl-D
+                        cleanup();
+                        process.stdout.write('\n');
+                        resolve(password);
+                        break;
+                    case '\u0003': // Ctrl-C
+                        cleanup();
+                        process.stdout.write('\n');
+                        resolve(null); // Indicate cancellation
+                        break;
+                    case '\x7f': // Backspace
+                    case '\b':
+                        if (password.length > 0) {
+                            password = password.slice(0, -1);
+                            process.stdout.write('\b \b');
+                        }
+                        break;
+                    default:
+                        if (char >= ' ' && char <= '~') {
+                            password += char;
+                            process.stdout.write('\b*');
+                        }
+                        break;
+                }
+            };
+
+            if (stdin.isTTY) {
+                try { 
+                    stdin.setRawMode(true);
+                 } catch(e) {}
+            }
+            stdin.resume();
+            stdin.on('data', onData);
         });
 
-        return new Promise((resolve) => {
-            rl.question(prompt, (password) => {
-                rl.close();
-                resolve(password);
-            });
-        });
+        return promise;
     }
 
     formatUptime(ms) {

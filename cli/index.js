@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 const { initEnvironment, setDebugMode, PLOINKY_DIR } = require('./lib/config');
-const { showHelp, handleCommand, getAgentNames, getRepoNames } = require('./lib/commands');
+const { handleCommand, getAgentNames, getRepoNames } = require('./lib/commands/cli');
+const { showHelp } = require('./lib/help');
 const { debugLog } = require('./lib/utils');
+const inputState = require('./lib/inputState');
 const readline = require('readline');
 const fs = require('fs');
 const os = require('os');
@@ -15,10 +17,12 @@ const COMMANDS = {
     'enable': ['env'],
     'run': ['agent', 'bash', 'update'],
     'list': ['agents', 'repos'],
-    'test': [],
+    'cloud': ['connect', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin'],
+    'client': ['call', 'methods', 'status', 'list', 'task', 'task-status'],
     'help': [],
     'exit': [],
-    'quit': []
+    'quit': [],
+    'clear': []
 };
 
 function completer(line) {
@@ -37,28 +41,105 @@ function completer(line) {
 
         // Determine the context for completion
         if (line.endsWith(' ')) {
-            if (words.length === 1 && subcommands.length > 0) context = 'subcommands';
-            else if (words.length === 2) context = 'args';
-            else context = 'files'; // Default to file completion for additional args
+            if (words.length === 1 && subcommands.length > 0) {
+                context = 'subcommands';
+            } else if (command === 'help' && words.length === 1) {
+                // For help command, show all available commands
+                context = 'help-topics';
+            } else if (command === 'cloud' && words.length === 2) {
+                // For cloud commands, show sub-subcommands
+                const cloudSubcommand = words[1];
+                if (['host', 'repo', 'agent', 'admin'].includes(cloudSubcommand)) {
+                    context = 'cloud-sub';
+                } else {
+                    context = 'args';
+                }
+            } else if (command === 'client' && words.length === 2) {
+                // For client commands, show agent names where appropriate
+                const clientSubcommand = words[1];
+                if (['call', 'methods', 'status', 'task', 'task-status'].includes(clientSubcommand)) {
+                    context = 'args'; // Will show agent names
+                } else {
+                    context = 'none';
+                }
+            } else if (command === 'list' && words.length === 2) {
+                // After list agents/repos, don't show anything
+                context = 'none';
+            } else if (words.length === 2) {
+                context = 'args';
+            } else {
+                // Only show files for commands that actually need them
+                // Most internal commands don't need file completion
+                const fileCommands = ['cd', 'cat', 'ls', 'rm', 'cp', 'mv', 'mkdir', 'touch'];
+                if (fileCommands.includes(command)) {
+                    context = 'files';
+                } else {
+                    context = 'none';
+                }
+            }
         } else {
             if (words.length === 1) context = 'commands';
             else if (words.length === 2 && subcommands.length > 0) context = 'subcommands';
-            else context = 'files'; // Default to file completion
+            else if (command === 'help' && words.length === 2) {
+                // Completing help topics
+                context = 'help-topics';
+            } else if (command === 'cloud' && words.length === 3) {
+                const cloudSubcommand = words[1];
+                if (['host', 'repo', 'agent', 'admin'].includes(cloudSubcommand)) {
+                    context = 'cloud-sub';
+                }
+            } else if (command === 'client' && words.length === 3) {
+                const clientSubcommand = words[1];
+                if (['call', 'methods', 'status', 'task', 'task-status'].includes(clientSubcommand)) {
+                    context = 'args'; // Will show agent names
+                }
+            } else {
+                // Only show files for commands that actually need them
+                const fileCommands = ['cd', 'cat', 'ls', 'rm', 'cp', 'mv', 'mkdir', 'touch'];
+                if (fileCommands.includes(command)) {
+                    context = 'files';
+                } else {
+                    context = 'none';
+                }
+            }
         }
 
         // Get potential completions based on context
         if (context === 'subcommands') {
             completions = subcommands;
+        } else if (context === 'help-topics') {
+            // For help command, suggest all available commands
+            completions = Object.keys(COMMANDS).filter(cmd => cmd !== 'help' && cmd !== 'exit' && cmd !== 'quit' && cmd !== 'clear');
+        } else if (context === 'cloud-sub') {
+            // Cloud sub-subcommands
+            const cloudSubcommand = words[1];
+            const cloudSubSubcommands = {
+                'host': ['add', 'remove', 'list'],
+                'repo': ['add', 'remove', 'list'],
+                'agent': ['list', 'info', 'start', 'stop', 'restart'],
+                'admin': ['add', 'password']
+            };
+            completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
             if ((command === 'run' && ['agent', 'bash', 'update'].includes(subcommand)) ||
                 (command === 'set') ||
-                (command === 'enable' && subcommand === 'env')) {
+                (command === 'enable' && subcommand === 'env') ||
+                (command === 'client' && ['call', 'methods', 'status', 'task', 'task-status'].includes(subcommand))) {
                 completions = getAgentNames();
             } else if (command === 'new' && subcommand === 'agent') {
                 completions = getRepoNames();
+            } else if (command === 'add' && subcommand === 'repo') {
+                // For add repo, show predefined repo names
+                completions = ['cloud', 'vibe', 'security', 'extra'];
+            } else if (command === 'help' && subcommand) {
+                // For help <command>, show subcommands of that command
+                if (COMMANDS[subcommand]) {
+                    completions = COMMANDS[subcommand];
+                }
             } else {
-                context = 'files'; // Fall back to file completion
+                // Don't show files for most internal commands
+                completions = [];
             }
         }
         
@@ -77,7 +158,7 @@ function completer(line) {
     }
 
     // File path completion
-    if (context === 'files' || completions.length === 0) {
+    if (context === 'files') {
         try {
             // Parse the path to complete
             let pathToComplete = lineFragment;
@@ -158,6 +239,10 @@ function getColoredPrompt() {
 }
 
 function startInteractiveMode() {
+    // Ensure clean TTY state when entering interactive mode
+    if (process.stdin.isTTY && typeof process.stdin.setRawMode === 'function') {
+        try { process.stdin.setRawMode(false); } catch (_) {}
+    }
     // Use .ploinky_history in the current directory
     const historyPath = path.join(process.cwd(), '.ploinky_history');
     let history = [];
@@ -182,6 +267,14 @@ function startInteractiveMode() {
     });
 
     rl.on('line', (line) => {
+        // If input is suspended (e.g., password prompt), ignore this line
+        if (inputState.isSuspended()) {
+            if (process.stdin.isTTY) {
+                rl.setPrompt(getColoredPrompt());
+                rl.prompt();
+            }
+            return;
+        }
         const trimmedLine = line.trim();
         if (trimmedLine) {
             if (trimmedLine === 'exit' || trimmedLine === 'quit') {
