@@ -214,16 +214,27 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 
                 'login': {
-                    syntax: 'cloud login [username]',
-                    description: 'Login to connected cloud server',
+                    syntax: 'cloud login <API_KEY>',
+                    description: 'Login to connected cloud server using API Key',
                     params: {
-                        '[username]': 'Username (default: admin)'
+                        '<API_KEY>': 'Admin API Key (generated with cloud init)'
                     },
                     examples: [
-                        'cloud login          # Login as admin',
-                        'cloud login john     # Login as john'
+                        'cloud login ABCDEF123456',
+                        'cloud login 7b9d... (hex key)'
                     ],
-                    notes: 'Password will be prompted securely with asterisks'
+                    notes: 'Use cloud init first to generate an API Key'
+                },
+                'init': {
+                    syntax: 'cloud init',
+                    description: 'Initialize server and generate Admin API Key',
+                    examples: ['cloud init'],
+                    notes: 'Stores URL and API Key in ~/.plionky/remotes.json'
+                },
+                'show': {
+                    syntax: 'cloud show',
+                    description: 'Show current cloud URL and API Key',
+                    examples: ['cloud show']
                 },
                 
                 'logout': {
@@ -286,6 +297,34 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                             examples: ['cloud repo list']
                         }
                     }
+                },
+                'destroy': {
+                    syntax: 'cloud destroy <agents|server-agents>',
+                    description: 'Stop and remove agent containers',
+                    examples: [
+                        'cloud destroy agents            # Local .ploinky/.agents',
+                        'cloud destroy server-agents     # On connected server'
+                    ]
+                },
+
+                'logs': {
+                    syntax: 'cloud logs [lines|list|download <date>]',
+                    description: 'Inspect server logs',
+                    examples: [
+                        'cloud logs 200',
+                        'cloud logs list',
+                        'cloud logs download 2025-09-01'
+                    ]
+                },
+
+                'settings': {
+                    syntax: 'cloud settings <show|set>',
+                    description: 'Show or update server settings',
+                    examples: [
+                        'cloud settings show',
+                        'cloud settings set logLevel debug',
+                        'cloud settings set metricsRetention 365'
+                    ]
                 },
                 
                 'agent': {

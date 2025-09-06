@@ -11,10 +11,10 @@
         <h1>Ploinky Cloud Management</h1>
         <nav class="nav-menu">
             <a href="landingPage.html" class="nav-btn active">Overview</a>
-            <a href="deployments.html" class="nav-btn">Deployments</a>
-            <a href="agents.html" class="nav-btn">Agents</a>
-            <a href="metrics.html" class="nav-btn">Metrics</a>
-            <a href="config.html" class="nav-btn">Configuration</a>
+            <a href="virtualHosts.html" class="nav-btn">Virtual Hosts</a>
+            <a href="repositories.html" class="nav-btn">Repositories</a>
+            <a href="observability.html" class="nav-btn">Observability</a>
+            <a href="configurations.html" class="nav-btn">Configurations</a>
             <button class="nav-btn logout-btn" id="logoutBtn">Logout</button>
             <button id="themeToggle" class="theme-toggle" type="button"></button>
         </nav>
@@ -25,10 +25,6 @@
             <div>
                 <h2>Welcome to Ploinky Cloud</h2>
                 <p>Deploy microservices to URL paths, monitor, and manage with ease.</p>
-                <div class="hero-actions">
-                    <a href="deployments.html" class="hero-cta primary">Deploy Agent</a>
-                    <a href="metrics.html" class="hero-cta secondary">View Metrics</a>
-                </div>
             </div>
             <div class="hero-illustration" aria-hidden="true">
                 <div class="card-icon">☁️</div>
@@ -57,30 +53,38 @@
                 <div class="stat-label">Uptime</div>
                 <div class="stat-value" id="statUptime">-</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">Unauthorized Requests</div>
+                <div class="stat-value" id="statUnauthorized">-</div>
+            </div>
         </section>
 
         <div class="card-grid">
-            <a href="deployments.html" class="card">
+            <a href="virtualHosts.html" class="card">
                 <div class="card-icon">🚀</div>
-                <h3>Deployments</h3>
+                <h3>Virtual Hosts</h3>
                 <p>Manage your deployed agents and services.</p>
             </a>
-            <a href="agents.html" class="card">
+            <a href="repositories.html" class="card">
                 <div class="card-icon">📦</div>
-                <h3>Agents</h3>
-                <p>Browse and manage agent repositories.</p>
+                <h3>Repositories</h3>
+                <p>Manage agent repositories.</p>
             </a>
-            <a href="metrics.html" class="card">
+            <a href="observability.html" class="card">
                 <div class="card-icon">📊</div>
-                <h3>Metrics</h3>
+                <h3>Observability</h3>
                 <p>View performance and usage metrics.</p>
             </a>
-            <a href="config.html" class="card">
+            <a href="configurations.html" class="card">
                 <div class="card-icon">⚙️</div>
-                <h3>Configuration</h3>
+                <h3>Configurations</h3>
                 <p>Configure system settings and domains.</p>
             </a>
         </div>
+
+        <footer class="footer">
+            <p>(c) Axiologic Research</p>
+        </footer>
 
         <!-- Change Password Modal -->
         <div id="passwordModal" class="modal" style="display: none;">

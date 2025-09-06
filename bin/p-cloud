@@ -76,8 +76,8 @@ function initializeEnvironment(workingDir) {
             ],
             repositories: [
                 { 
-                    name: 'PloinkyDemo',
-                    url: 'https://github.com/PloinkyRepos/PloinkyDemo.git',
+                    name: 'PoinkyDemo',
+                    url: 'https://github.com/PloinkyRepos/PoinkyDemo.git',
                     enabled: true
                 }
             ],
@@ -93,25 +93,7 @@ function initializeEnvironment(workingDir) {
         fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
         console.log('[p-cloud] Created default configuration');
         
-        // Create .admin file with default password
-        const crypto = require('crypto');
-        const salt = crypto.randomBytes(32).toString('hex');
-        const hash = crypto.pbkdf2Sync('admin', salt, 100000, 64, 'sha512').toString('hex');
-        
-        const adminData = [{
-            username: 'admin',
-            passwordHash: hash,
-            salt: salt,
-            createdAt: new Date().toISOString(),
-            mustChangePassword: true
-        }];
-        
-        fs.writeFileSync(
-            path.join(workingDir, '.admin'),
-            JSON.stringify(adminData, null, 2)
-        );
-        console.log('[p-cloud] Created admin account (username: admin, password: admin)');
-        console.log('[p-cloud] IMPORTANT: Change the default password after first login!');
+        console.log('[p-cloud] Authentication will be initialized via API Key (cloud init)');
         console.log('[p-cloud] Environment initialization complete.\n');
     }
 }

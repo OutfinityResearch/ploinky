@@ -2,16 +2,21 @@ const path = require('path');
 const url = require('url');
 const { Guardian } = require('../guardian/guardian');
 const { TaskOrchestrator } = require('./taskOrchestrator');
+const { cleanupAllAgents } = require('./containerCleaner');
 
 class RequestRouter {
     constructor(options) {
         this.workingDir = options.workingDir;
+        this.baseDir = options.baseDir;
         this.config = options.config;
         this.metrics = options.metrics;
+        this.logger = options.logger;
+        this.supervisor = options.supervisor;
         
         this.guardian = new Guardian({
             config: this.config,
-            workingDir: this.workingDir
+            workingDir: this.workingDir,
+            baseDir: this.baseDir
         });
         
         this.orchestrator = new TaskOrchestrator({
@@ -71,22 +76,76 @@ class RequestRouter {
             return this.handleStaticAgent(req, res, hostname, pathname);
         }
 
-        // Process through Guardian for security
-        const securityContext = await this.guardian.processRequest(req);
-        
-        // Convert HTTP request to task
-        const task = await this.orchestrator.createTask({
-            deployment,
-            request: req,
-            securityContext,
-            query: parsedUrl.query
-        });
+        // Try forward to agent container
+        const forwarded = await this.tryForwardToAgent(req, res, deployment);
+        if (forwarded) {
+            this.logger?.log('info', 'Forwarded to agent', { url: req.url });
+            return;
+        }
 
-        // Execute task and wait for response
+        // Legacy queue fallback
+        const securityContext = await this.guardian.processRequest(req);
+        const task = await this.orchestrator.createTask({ deployment, request: req, securityContext, query: parsedUrl.query });
         const result = await this.orchestrator.executeTask(task);
-        
-        // Send response
         this.sendResponse(res, result);
+    }
+
+    async tryForwardToAgent(req, res, deployment) {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            const runtimeFile = path.join(this.workingDir, '.ploinky', 'agents', `${deployment.name}.runtime.json`);
+            if (!fs.existsSync(runtimeFile)) {
+                try { await this.supervisor?.startAgent(deployment); } catch (e) { this.logger?.log('warn', 'startAgent failed', { error: e.message }); return false; }
+                const start = Date.now();
+                const settings = (this.config.getSettings && this.config.getSettings()) || {};
+                const timeoutMs = settings.agentStartTimeoutMs || 15000;
+                while (!fs.existsSync(runtimeFile) && Date.now() - start < timeoutMs) {
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                if (!fs.existsSync(runtimeFile)) return false;
+            }
+            const runtime = JSON.parse(fs.readFileSync(runtimeFile, 'utf-8'));
+            const hostPort = runtime.hostPort;
+            if (!hostPort) return false;
+
+            // Read request body
+            const chunks = [];
+            await new Promise((resolve) => {
+                req.on('data', c => chunks.push(c));
+                req.on('end', resolve);
+            });
+            const body = Buffer.concat(chunks);
+
+            // Forward POST to /task
+            const http = require('http');
+            const options = {
+                hostname: '127.0.0.1',
+                port: hostPort,
+                path: '/task',
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            };
+            await new Promise((resolve) => {
+                const f = http.request(options, (r) => {
+                    let data = '';
+                    r.on('data', d => data += d.toString());
+                    r.on('end', () => {
+                        res.statusCode = r.statusCode;
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(data);
+                        resolve();
+                    });
+                });
+                f.on('error', (err) => { this.logger?.log('warn', 'Forward HTTP error', { error: err.message }); resolve(); });
+                f.write(body);
+                f.end();
+            });
+            return true;
+        } catch (e) {
+            this.logger?.log('warn', 'Forward to agent failed', { error: e.message });
+            return false;
+        }
     }
 
     findDeployment(hostname, pathname) {
@@ -373,22 +432,14 @@ class RequestRouter {
                             
                             <div class="password-notice">
                                 <strong>⚠️ First Time Setup</strong>
-                                Default password is pre-filled. Please change it after login!
+                                Use an Admin API Key generated via 'p-cli cloud init'.
                             </div>
                             
                             <form action="/management/login" method="POST" onsubmit="handleLogin(event)">
                                 <div class="form-group">
-                                    <label for="username">Username</label>
-                                    <input type="text" id="username" name="username" 
-                                           value="admin" readonly 
-                                           style="background: #f0f0f0; cursor: not-allowed;">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="password">Password</label>
-                                    <input type="password" id="password" name="password" 
-                                           value="admin" 
-                                           placeholder="Enter password">
+                                    <label for="apiKey">API Key</label>
+                                    <input type="text" id="apiKey" name="apiKey" 
+                                           placeholder="Enter Admin API Key">
                                 </div>
                                 
                                 <button type="submit">Sign In</button>
@@ -425,24 +476,8 @@ class RequestRouter {
                     </div>
                     
                     <script>
-                        function handleLogin(e) {
-                            // Auto-clear the password field if it's still default
-                            const passwordField = document.getElementById('password');
-                            if (passwordField.value === 'admin') {
-                                // Show a reminder
-                                if (!sessionStorage.getItem('passwordWarningShown')) {
-                                    sessionStorage.setItem('passwordWarningShown', 'true');
-                                }
-                            }
-                        }
-                        
-                        // Focus on password field if it's default
-                        window.onload = function() {
-                            const passwordField = document.getElementById('password');
-                            if (passwordField.value === 'admin') {
-                                passwordField.select();
-                            }
-                        }
+                        function handleLogin(e) { /* handled by server */ }
+                        window.onload = function() { var el = document.getElementById('apiKey'); if (el) el.focus(); }
                     </script>
                 </body>
                 </html>
@@ -456,15 +491,13 @@ class RequestRouter {
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             const params = new URLSearchParams(body);
-            const username = params.get('username') || 'admin';
-            const password = params.get('password');
-            
-            const token = await this.guardian.authenticateAdmin(password);
+            const apiKey = params.get('apiKey');
+            const token = apiKey ? await this.guardian.authenticateAdminApiKey(apiKey) : null;
             
             if (token) {
                 res.statusCode = 302;
                 res.setHeader('Set-Cookie', `authorizationToken=${token}; Path=/; HttpOnly`);
-                res.setHeader('Location', '/management');
+                res.setHeader('Location', '/management/landingPage.html');
                 res.end();
             } else {
                 this.serveLoginPage(res);
@@ -473,68 +506,237 @@ class RequestRouter {
     }
     
     async handleManagementAPI(req, res, endpoint) {
-        // Check admin auth for API
+        // Normalize endpoint base and suffix (support path-parameter variants)
+        const qIndex = endpoint.indexOf('?');
+        const epNoQuery = qIndex >= 0 ? endpoint.slice(0, qIndex) : endpoint;
+        const segments = epNoQuery.split('/');
+        const base = segments[0];
+        const suffix = segments.slice(1).join('/');
+        // Special: allow init only when not initialized
+        if (endpoint === 'init') {
+            if (req.method !== 'POST') {
+                res.statusCode = 405;
+                return res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+            }
+            const initialized = await this.guardian.isInitialized();
+            if (initialized) {
+                res.statusCode = 409;
+                return res.end(JSON.stringify({ error: 'Already initialized' }));
+            }
+            const apiKey = await this.guardian.generateAdminApiKey();
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, apiKey }));
+        }
+
+        // Check admin auth for all other management APIs
         const isAdmin = await this.guardian.checkAdminAuth(req);
-        if (!isAdmin && endpoint !== 'check-auth' && endpoint !== 'is-default-password') { // Allow checking default password without full auth
+        if (!isAdmin && endpoint !== 'check-auth') {
             res.statusCode = 401;
             res.end(JSON.stringify({ error: 'Unauthorized' }));
+            this.metrics.recordUnauthorized(req.url);
+            this.logger?.log('warn', 'Unauthorized management API access', { url: req.url, ip: req.socket.remoteAddress });
             return;
         }
         
         // Handle API endpoints
-        switch (endpoint) {
+        switch (base) {
             case 'check-auth':
                 res.end(JSON.stringify({ authenticated: isAdmin }));
                 break;
-            case 'is-default-password':
-                const isDefault = await this.guardian.isDefaultPassword();
-                res.end(JSON.stringify({ isDefault }));
-                break;
-            case 'change-password':
-                if (req.method === 'POST') {
+            case 'settings': {
+                if (req.method === 'GET') {
+                    const config = await this.config.load();
+                    res.end(JSON.stringify(config.settings || {}));
+                } else if (req.method === 'POST') {
                     let body = '';
-                    req.on('data', chunk => body += chunk);
+                    req.on('data', c => body += c);
                     req.on('end', async () => {
                         try {
-                            const { currentPassword, newPassword } = JSON.parse(body);
-                            const success = await this.guardian.changeAdminPassword(currentPassword, newPassword);
-                            if (success) {
-                                res.statusCode = 200;
-                                res.end(JSON.stringify({ success: true }));
-                            } else {
-                                res.statusCode = 400;
-                                res.end(JSON.stringify({ error: 'Failed to change password. Incorrect current password?' }));
-                            }
+                            const data = JSON.parse(body);
+                            await this.config.updateSettings(data);
+                            res.end(JSON.stringify({ success: true }));
                         } catch (e) {
-                            res.statusCode = 400;
-                            res.end(JSON.stringify({ error: 'Invalid request body.' }));
+                            res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid request body' }));
                         }
                     });
                 } else {
-                    res.statusCode = 405;
-                    res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+                    res.statusCode = 405; res.end(JSON.stringify({ error: 'Method Not Allowed' }));
                 }
-                break;
+                break; }
+            case 'health': {
+                res.end(JSON.stringify({ status: 'ok', server: true, agents: 0 }));
+                break; }
+            case 'logs': {
+                const q = url.parse(req.url, true).query;
+                const lines = parseInt(q.lines || '200', 10);
+                const text = await this.logger.tail(Math.max(1, Math.min(lines, 5000)));
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'text/plain');
+                res.end(text);
+                break; }
+            case 'logs/list': {
+                const dates = await this.logger.listDates();
+                res.end(JSON.stringify({ dates }));
+                break; }
+            case 'logs/download': {
+                const q = url.parse(req.url, true).query;
+                const date = q.date;
+                if (!date) { res.statusCode = 400; return res.end(JSON.stringify({ error: 'date required' })); }
+                const text = await this.logger.readByDate(date);
+                const zlib = require('zlib');
+                const gz = zlib.gzipSync(Buffer.from(text || '', 'utf-8'));
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/gzip');
+                res.setHeader('Content-Disposition', `attachment; filename="p-cloud-${date}.log.gz"`);
+                res.end(gz);
+                break; }
             case 'overview':
                 const overview = {
                     totalRequests: this.metrics.totalRequests,
                     activeAgents: 0, // TODO: get from supervisor
-                    errorRate: this.metrics.errorRate || '0%',
+                    errorRate: this.metrics.getSummary().errorRate,
+                    unauthorizedRequests: this.metrics.unauthorizedRequests,
                     uptime: Date.now() - this.metrics.startTime
                 };
                 res.end(JSON.stringify(overview));
                 break;
+            case 'stopAndDeleteAll': {
+                if (req.method !== 'POST') { res.statusCode = 405; return res.end(JSON.stringify({ error: 'Method Not Allowed' })); }
+                const result = await cleanupAllAgents(this.workingDir, this.logger);
+                res.end(JSON.stringify({ success: true, ...result }));
+                break; }
+            case 'metrics': {
+                const q = url.parse(req.url, true).query;
+                const range = String(q.range || '7d');
+                const days = range.endsWith('d') ? parseInt(range) : (range === '24h' ? 1 : 7);
+                const summary = this.metrics.getSummary();
+                const series = await this.metrics.getHistoricalMetrics(days);
+                res.end(JSON.stringify({ ...summary, series }));
+                break; }
             case 'config':
                 const config = await this.config.load();
                 res.end(JSON.stringify(config));
                 break;
             case 'domains':
-                const domains = this.config.getDomains();
-                res.end(JSON.stringify({ domains }));
+                if (req.method === 'GET') {
+                    const domains = this.config.getDomains();
+                    res.end(JSON.stringify({ domains }));
+                } else if (req.method === 'POST') {
+                    let body = '';
+                    req.on('data', c => body += c);
+                    req.on('end', async () => {
+                        try {
+                            const data = JSON.parse(body);
+                            await this.config.addDomain({ name: data.name, enabled: data.enabled !== false });
+                            res.end(JSON.stringify({ success: true }));
+                        } catch (e) {
+                            res.statusCode = 400;
+                            res.end(JSON.stringify({ error: 'Invalid request body' }));
+                        }
+                    });
+                } else if (req.method === 'DELETE') {
+                    const parsed = url.parse(req.url);
+                    const parts = parsed.pathname.split('/');
+                    const name = parts[parts.length - 1];
+                    await this.config.removeDomain(name);
+                    res.end(JSON.stringify({ success: true }));
+                } else {
+                    res.statusCode = 405; res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+                }
+                break;
+            case 'repositories':
+                if (req.method === 'GET') {
+                    const repos = this.config.getRepositories();
+                    res.end(JSON.stringify({ repositories: repos }));
+                } else if (req.method === 'POST') {
+                    let body = '';
+                    req.on('data', c => body += c);
+                    req.on('end', async () => {
+                        try {
+                            const data = JSON.parse(body);
+                            await this.config.addRepository({ name: data.name, url: data.url, enabled: data.enabled !== false });
+                            res.end(JSON.stringify({ success: true }));
+                        } catch (e) {
+                            res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid request body' }));
+                        }
+                    });
+                } else if (req.method === 'DELETE') {
+                    const parsed = url.parse(req.url);
+                    const parts = parsed.pathname.split('/');
+                    const maybeName = parts[parts.length - 1];
+                    if (maybeName && maybeName !== 'repositories') {
+                        await this.config.removeRepository(maybeName);
+                        res.end(JSON.stringify({ success: true }));
+                    } else {
+                        let body = '';
+                        req.on('data', c => body += c);
+                        req.on('end', async () => {
+                            try { const data = JSON.parse(body); await this.config.removeRepository(data.url || data.name || data.id); res.end(JSON.stringify({ success: true })); }
+                            catch (e) { res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid request' })); }
+                        });
+                    }
+                } else {
+                    res.statusCode = 405; res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+                }
                 break;
             case 'deployments':
-                const deployments = this.config.getDeployments();
-                res.end(JSON.stringify({ deployments }));
+                if (req.method === 'GET') {
+                    const deployments = this.config.getDeployments();
+                    res.end(JSON.stringify({ deployments }));
+                } else if (req.method === 'POST') {
+                    let body = '';
+                    req.on('data', c => body += c);
+                    req.on('end', async () => {
+                        try {
+                            const data = JSON.parse(body);
+                            this.logger?.log('info', 'Add deployment', { domain: data.domain, path: data.path, agent: data.agent });
+                            const dep = { domain: data.domain, path: data.path, agent: data.agent, status: 'active' };
+                            await this.config.addDeployment(dep);
+                            // Update router cache
+                            await this.loadDeployments();
+                            // Try start agent container if supervisor available
+                            try { await this.supervisor?.startAgent(dep); } catch (e) { this.logger?.log('warn', 'Supervisor start failed', { error: e.message }); }
+                            res.end(JSON.stringify({ success: true }));
+                        } catch (e) {
+                            res.statusCode = 400; res.end(JSON.stringify({ error: e.message || 'Invalid request body' }));
+                        }
+                    });
+                } else if (req.method === 'DELETE') {
+                    // Support both body JSON and path params
+                    let domain = null, dpath = null;
+                    if (suffix && suffix.length > 0) {
+                        const parts = suffix.split('/');
+                        domain = parts[0];
+                        const remainder = parts.slice(1).join('/');
+                        if (remainder) dpath = '/' + decodeURIComponent(remainder);
+                    }
+                    if (domain && dpath) {
+                        this.logger?.log('info', 'Remove deployment (path)', { domain, path: dpath });
+                        await this.config.removeDeployment(domain, dpath);
+                        await this.loadDeployments();
+                        res.end(JSON.stringify({ success: true }));
+                    } else {
+                        let body = '';
+                        req.on('data', c => body += c);
+                        req.on('end', async () => {
+                            try {
+                                const data = JSON.parse(body);
+                                this.logger?.log('info', 'Remove deployment (body)', { domain: data.domain, path: data.path });
+                                await this.config.removeDeployment(data.domain, data.path);
+                                await this.loadDeployments();
+                                res.end(JSON.stringify({ success: true }));
+                            } catch (e) {
+                                res.statusCode = 400; res.end(JSON.stringify({ error: 'Invalid request body' }));
+                            }
+                        });
+                    }
+                } else {
+                    res.statusCode = 405; res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+                }
+                break;
+            case 'agents':
+                // For now, list agents from config repositories folder structure is not available here
+                res.end(JSON.stringify({ agents: [] }));
                 break;
             default:
                 res.statusCode = 404;
@@ -559,11 +761,10 @@ class RequestRouter {
                 const data = JSON.parse(body);
                 const { command, params } = data;
                 
-                if (command === 'login' && params && params.length >= 2) {
-                    const [username, password] = params;
-                    
-                    // Authenticate with Guardian (for now only admin auth is supported)
-                    const authToken = await this.guardian.authenticateAdmin(password);
+                if (command === 'login' && params && params.length >= 1) {
+                    const apiKey = params[0];
+                    // Authenticate with Guardian using API key
+                    const authToken = await this.guardian.authenticateAdminApiKey(apiKey);
                     
                     if (authToken) {
                         res.setHeader('Set-Cookie', 
@@ -572,13 +773,13 @@ class RequestRouter {
                         res.end(JSON.stringify({
                             success: true,
                             authorizationToken: authToken,
-                            userId: username
+                            userId: 'admin'
                         }));
                     } else {
                         res.writeHead(401, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ 
                             success: false,
-                            error: 'Invalid credentials' 
+                            error: 'Invalid API key' 
                         }));
                     }
                 } else {

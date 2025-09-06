@@ -340,7 +340,7 @@ a:hover {
 }
 
 /* --- Buttons --- */
-.btn-primary, .btn-danger, .btn-success {
+.btn-primary, .btn-danger, .btn-success, .btn-secondary {
     border: none;
     padding: 0.7rem 1.4rem;
     border-radius: 6px;
@@ -359,6 +359,13 @@ a:hover {
 
 .btn-success { background-color: var(--success-color); }
 .btn-success:hover { background-color: var(--success-hover); }
+
+.btn-secondary {
+    background-color: var(--text-light);
+}
+.btn-secondary:hover {
+    background-color: var(--text-color);
+}
 
 /* --- Modal --- */
 .modal {
@@ -400,6 +407,21 @@ a:hover {
     border: 1px solid var(--border-color);
     border-radius: 6px;
     font-size: 1rem;
+}
+
+.modal-content select option:first-child,
+select option[value=""] {
+    color: var(--text-light);
+}
+
+/* Style select when placeholder option is selected */
+select:has(option[value=""]:checked),
+select:invalid {
+    color: var(--text-light);
+}
+
+select:valid:not(:has(option[value=""]:checked)) {
+    color: var(--text-color);
 }
 
 .modal-content form button {
@@ -557,4 +579,118 @@ a:hover {
     box-shadow: var(--shadow);
     padding: 1rem;
     margin-bottom: 1.5rem;
+}
+
+/* --- Tabs --- */
+.tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.tab-btn {
+    background: transparent;
+    border: none;
+    padding: 0.8rem 1.5rem;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-light);
+    transition: all 0.2s;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+}
+
+.tab-btn:hover {
+    color: var(--text-color);
+}
+
+.tab-btn.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* --- Logs --- */
+.logs-controls {
+    background: var(--white);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.logs-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.log-viewer {
+    background: var(--white);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    height: 500px;
+    overflow: auto;
+}
+
+.log-viewer pre {
+    margin: 0;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-color);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* --- Performance Charts --- */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.chart-card, .stats-card {
+    background: var(--white);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+.chart-card h3, .stats-card h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    color: var(--text-color);
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.stat-item:last-child {
+    border-bottom: none;
+}
+
+.stat-label {
+    color: var(--text-light);
+}
+
+.stat-value {
+    font-weight: 600;
+    color: var(--text-color);
 }

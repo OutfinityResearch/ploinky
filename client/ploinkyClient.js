@@ -90,30 +90,18 @@ class PloinkyClient {
     }
 
     /**
-     * Login to the system
+     * Login to the system using API Key
      */
-    async login(username, password) {
+    async login(apiKey) {
         try {
-            const response = await this.call('/auth', 'login', username, password);
-            
+            const response = await this.call('/auth', 'login', apiKey);
             if (response.authorizationToken) {
                 this.authToken = response.authorizationToken;
-                return {
-                    success: true,
-                    userId: response.userId,
-                    token: response.authorizationToken
-                };
+                return { success: true, userId: response.userId, token: response.authorizationToken };
             }
-            
-            return {
-                success: false,
-                error: 'Login failed'
-            };
+            return { success: false, error: 'Login failed' };
         } catch (err) {
-            return {
-                success: false,
-                error: err.message
-            };
+            return { success: false, error: err.message };
         }
     }
 

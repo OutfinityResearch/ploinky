@@ -6,7 +6,7 @@ const PLOINKY_DIR = '.ploinky';
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 const AGENTS_FILE = path.join(PLOINKY_DIR, '.agents');
 const SECRETS_FILE = path.join(PLOINKY_DIR, '.secrets');
-const DEFAULT_REPO_URL = 'https://github.com/PlonkyRepos/Basic.git';
+const DEFAULT_REPO_URL = 'https://github.com/PloinkyRepos/PoinkyDemo.git';
 
 let DEBUG_MODE = process.env.PLOINKY_DEBUG === '1';
 

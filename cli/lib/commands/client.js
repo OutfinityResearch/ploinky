@@ -81,15 +81,37 @@ class ClientCommands {
         console.log('Not supported by default. Use management command: cloud agent list');
     }
 
-    async sendTask(agentName, task) {
-        if (!agentName || !task) {
-            console.log('Usage: client task <agent> <task-description>');
-            console.log('Example: client task myAgent "Process all pending orders"');
+    async sendTask(agentPath, command, ...params) {
+        if (!agentPath || !command) {
+            console.log('Usage: client task <agent-path> <command> [params...]');
+            console.log('Example: client task /demo hello world');
+            console.log('Example: client task /api/users list');
             return;
         }
 
-        console.log('Not standardized. If your agent supports tasks, use a specific command via:');
-        console.log("  client call <path-or-agent> '<command>' [params...]");
+        try {
+            const path = agentPath.startsWith('/') ? agentPath : `/${agentPath}`;
+            console.log(`Sending task to ${path}: ${command}(${params.join(', ')})...`);
+
+            const client = this.getClient();
+            const result = await client.call(path, command, ...params);
+
+            console.log('\n--- Task Result ---');
+            if (result && result.success !== undefined) {
+                console.log(`Status: ${result.success ? 'SUCCESS' : 'FAILED'}`);
+                if (result.data) {
+                    console.log('Data:', JSON.stringify(result.data, null, 2));
+                }
+                if (result.error) {
+                    console.log('Error:', JSON.stringify(result.error, null, 2));
+                }
+            } else {
+                console.log(JSON.stringify(result, null, 2));
+            }
+            console.log('-------------------\n');
+        } catch (error) {
+            console.error('Error sending task:', error.message);
+        }
     }
 
     async getTaskStatus(agentName, taskId) {
@@ -122,9 +144,10 @@ class ClientCommands {
                 break;
             case 'task':
                 if (options.length >= 2) {
-                    this.sendTask(options[0], options.slice(1).join(' '));
+                    // Pass all parameters properly: agent-path, command, and params
+                    this.sendTask(options[0], options[1], ...options.slice(2));
                 } else {
-                    console.log('Usage: client task <agent> <task-description>');
+                    console.log('Usage: client task <agent-path> <command> [params...]');
                 }
                 break;
             case 'task-status':

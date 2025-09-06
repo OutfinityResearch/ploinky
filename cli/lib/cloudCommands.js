@@ -5,11 +5,15 @@ const crypto = require('crypto');
 const readline = require('readline');
 const inputState = require('./inputState');
 const { debugLog } = require('./utils');
+const PloinkyClient = require('../../client/ploinkyClient');
 
 class CloudCommands {
     constructor() {
         this.configFile = path.join(process.cwd(), '.ploinky', 'cloud.json');
         this.config = null;
+        const home = process.env.HOME || process.env.USERPROFILE || process.cwd();
+        this.remotesFile = path.join(home, '.plionky', 'remotes.json');
+        this.client = null;
     }
 
     async loadConfig() {
@@ -20,6 +24,13 @@ class CloudCommands {
             this.config = {
                 serverUrl: 'http://localhost:8000'
             };
+        }
+        
+        // Initialize PloinkyClient with config
+        if (!this.client) {
+            this.client = new PloinkyClient(this.config.serverUrl, {
+                authToken: this.config.authToken
+            });
         }
     }
 
@@ -37,10 +48,14 @@ class CloudCommands {
         switch (subcommand) {
             case 'connect':
                 return this.connect(subArgs);
+            case 'init':
+                return this.init(subArgs);
             case 'login':
                 return this.login(subArgs);
             case 'logout':
                 return this.logout();
+            case 'show':
+                return this.showRemote();
             case 'admin':
                 return this.handleAdmin(subArgs);
             case 'host':
@@ -66,7 +81,13 @@ class CloudCommands {
             case 'health':
                 return this.checkHealth();
             case 'logs':
+                if (subArgs[0] === 'list') return this.listLogs();
+                if (subArgs[0] === 'download') return this.downloadLog(subArgs.slice(1));
                 return this.showLogs(subArgs);
+            case 'destroy':
+                return this.handleDestroy(subArgs);
+            case 'settings':
+                return this.settings(subArgs);
             case 'batch':
                 return this.executeBatch(subArgs);
             default:
@@ -87,7 +108,49 @@ class CloudCommands {
         await this.saveConfig();
         
         console.log(`✓ Connected to ${serverUrl}`);
-        console.log('Now you can login with: ploinky cloud login');
+        console.log('You can initialize auth with: ploinky cloud init');
+    }
+    
+    async init(args) {
+        if (!this.config.serverUrl) {
+            console.log('Not connected to any server. Use: ploinky cloud connect [url]');
+            return;
+        }
+        const resp = await this.apiCall('/management/api/init', { method: 'POST' });
+        if (resp && resp.success && resp.apiKey) {
+            await this.saveRemote(this.config.serverUrl, resp.apiKey);
+            console.log('✓ Server initialized. Admin API Key generated.');
+            console.log(`API Key: ${resp.apiKey}`);
+            console.log('Saved to ~/.plionky/remotes.json');
+        } else if (resp && resp.error === 'Already initialized') {
+            console.log('Server already initialized. If you lost the key, rotate it manually on the server.');
+        } else {
+            console.error('✗ Initialization failed');
+        }
+    }
+
+    async showRemote() {
+        const remote = await this.readRemote();
+        if (!remote) {
+            console.log('No remote configured in ~/.plionky/remotes.json');
+            return;
+        }
+        console.log('Current Cloud Remote:');
+        console.log(`  URL: ${remote.url}`);
+        console.log(`  API Key: ${remote.apiKey}`);
+    }
+
+    async saveRemote(url, apiKey) {
+        await fs.mkdir(path.dirname(this.remotesFile), { recursive: true });
+        const payload = { url, apiKey };
+        await fs.writeFile(this.remotesFile, JSON.stringify(payload, null, 2));
+    }
+
+    async readRemote() {
+        try {
+            const data = await fs.readFile(this.remotesFile, 'utf-8');
+            return JSON.parse(data);
+        } catch (_) { return null; }
     }
     
     async login(args) {
@@ -95,31 +158,26 @@ class CloudCommands {
             console.log('Not connected to any server. Use: ploinky cloud connect [url]');
             return;
         }
-        
-        const username = args[0] || 'admin';
-        const password = await this.promptPassword('Password: ');
-        
-        if (!password) {
-            console.log('Login cancelled');
+        const apiKey = args[0];
+        if (!apiKey) {
+            console.log('Usage: cloud login <API_KEY>');
             return;
         }
-
         try {
-            const response = await this.apiCall('/auth', {
-                method: 'POST',
-                body: JSON.stringify({
-                    command: 'login',
-                    params: [username, password]
-                })
-            });
-
-            if (response && response.authorizationToken) {
-                this.config.authToken = response.authorizationToken;
-                this.config.userId = response.userId;
+            // Use PloinkyClient to login
+            const response = await this.client.login(apiKey);
+            
+            if (response && response.success) {
+                this.config.authToken = response.token;
+                this.config.userId = response.userId || 'admin';
                 await this.saveConfig();
-                console.log(`✓ Logged in as ${response.userId}`);
+                
+                // Update client with new auth token
+                this.client.setAuthToken(response.token);
+                
+                console.log(`✓ Logged in using API Key`);
             } else {
-                console.error('✗ Login failed');
+                console.error('✗ Login failed:', response?.error || 'Unknown error');
             }
         } catch (err) {
             console.error('✗ Login error:', err.message);
@@ -330,16 +388,20 @@ class CloudCommands {
             console.log('Usage: cloud undeploy <hostname> <path>');
             return;
         }
-
-        const response = await this.apiCall('/management/api/deployments', {
+        // Try body-based delete first
+        let response = await this.apiCall('/management/api/deployments', {
             method: 'DELETE',
             body: JSON.stringify({ domain: hostname, path })
         });
-
+        if (!(response && response.success)) {
+            // Fallback to path-based delete
+            const encPath = encodeURIComponent(path.replace(/^\/+/, ''));
+            response = await this.apiCall(`/management/api/deployments/${hostname}/${encPath}`, { method: 'DELETE' });
+        }
         if (response && response.success) {
             console.log(`✓ Undeployed from ${hostname}${path}`);
         } else {
-            console.error('✗ Undeploy failed');
+            console.error('✗ Undeploy failed', response?.error ? `- ${response.error}` : '');
         }
     }
 
@@ -353,15 +415,17 @@ class CloudCommands {
             return;
         }
 
-        const response = await this.apiCall(agentPath, {
-            method: 'POST',
-            body: JSON.stringify({ command, params })
-        });
-
-        if (response) {
-            console.log(JSON.stringify(response, null, 2));
-        } else {
-            console.error('✗ Call failed');
+        try {
+            // Use PloinkyClient to make the call
+            const response = await this.client.call(agentPath, command, ...params);
+            
+            if (response) {
+                console.log(JSON.stringify(response, null, 2));
+            } else {
+                console.error('✗ Call failed - no response');
+            }
+        } catch (err) {
+            console.error('✗ Call failed:', err.message);
         }
     }
 
@@ -499,6 +563,7 @@ class CloudCommands {
             console.log(`System Metrics (${range}):`);
             console.log(`  Total Requests: ${response.totalRequests || 0}`);
             console.log(`  Error Rate: ${response.errorRate || '0%'}`);
+            console.log(`  Unauthorized Requests: ${response.unauthorizedRequests || 0}`);
             console.log(`  Uptime: ${this.formatUptime(response.uptime)}`);
             
             if (response.agents) {
@@ -527,13 +592,105 @@ class CloudCommands {
     }
     
     async showLogs(args) {
-        const component = args[0] || 'system';
-        const lines = args[1] || 100;
-        
-        const response = await this.apiCall(`/management/api/logs?component=${component}&lines=${lines}`);
-        if (response && response.logs) {
-            console.log(`Logs (${component}, last ${lines} lines):`);
-            response.logs.forEach(log => console.log(log));
+        const lines = parseInt(args[0] || '200', 10);
+        const url = `/management/api/logs?lines=${lines}`;
+        const content = await this.apiCall(url);
+        if (typeof content === 'string') {
+            console.log(content);
+        } else if (content) {
+            console.log(JSON.stringify(content, null, 2));
+        } else {
+            console.log('No logs');
+        }
+    }
+
+    async listLogs() {
+        const res = await this.apiCall('/management/api/logs/list');
+        if (res && res.dates) {
+            console.log('Available log days:');
+            res.dates.forEach(d => console.log('  ' + d));
+        } else {
+            console.log('No logs');
+        }
+    }
+
+    async downloadLog(args) {
+        const date = args[0];
+        if (!date) { console.log('Usage: cloud logs download <YYYY-MM-DD>'); return; }
+        const http = require('http');
+        const url = new URL(`/management/api/logs/download?date=${date}`, this.config.serverUrl);
+        const requestOptions = { method: 'GET', headers: { ...(this.config.authToken ? { 'Cookie': `authorizationToken=${this.config.authToken}` } : {}) } };
+        await new Promise((resolve) => {
+            const req = http.request(url, requestOptions, (res) => {
+                const chunks = [];
+                res.on('data', c => chunks.push(c));
+                res.on('end', () => {
+                    const buf = Buffer.concat(chunks);
+                    const fs = require('fs');
+                    const path = require('path');
+                    const fname = path.join(process.cwd(), `p-cloud-${date}.log.gz`);
+                    fs.writeFileSync(fname, buf);
+                    console.log('Saved', fname);
+                    resolve();
+                });
+            });
+            req.on('error', () => resolve());
+            req.end();
+        });
+    }
+
+    async handleDestroy(args) {
+        const what = args[0];
+        if (what === 'agents') {
+            return this.destroyLocalAgents();
+        }
+        if (what === 'server-agents' || what === 'all') {
+            const res = await this.apiCall('/management/api/stopAndDeleteAll', { method: 'POST' });
+            if (res && res.success) {
+                console.log(`Server agents cleanup completed using ${res.runtime}. Removed: ${(res.removed||[]).length}`);
+            } else {
+                console.log('Server cleanup failed');
+            }
+            return;
+        }
+        console.log('Usage: cloud destroy agents | cloud destroy server-agents');
+    }
+
+    async destroyLocalAgents() {
+        const fsSync = require('fs');
+        const path = require('path');
+        const { execSync } = require('child_process');
+        const agentsFile = path.join(process.cwd(), '.ploinky', '.agents');
+        if (!fsSync.existsSync(agentsFile)) { console.log('No local agents file found.'); return; }
+        let agents = {};
+        try { agents = JSON.parse(fsSync.readFileSync(agentsFile, 'utf-8')); } catch { agents = {}; }
+        const names = Object.keys(agents || {});
+        if (names.length === 0) { console.log('No containers to remove.'); return; }
+        let runtime = 'docker';
+        try { execSync('command -v docker', { stdio: 'ignore' }); }
+        catch { try { execSync('command -v podman', { stdio: 'ignore' }); runtime = 'podman'; } catch { console.log('No container runtime found.'); return; } }
+        names.forEach(name => {
+            try { execSync(`${runtime} stop ${name}`, { stdio: 'ignore' }); } catch {}
+            try { execSync(`${runtime} rm ${name}`, { stdio: 'ignore' }); } catch {}
+            console.log('Removed', name);
+        });
+        try { fsSync.writeFileSync(agentsFile, JSON.stringify({}, null, 2)); } catch {}
+        console.log('Local agents destroyed.');
+    }
+
+    async settings(args) {
+        const sub = args[0] || 'show';
+        if (sub === 'show') {
+            const s = await this.apiCall('/management/api/settings');
+            console.log(JSON.stringify(s || {}, null, 2));
+            return;
+        }
+        if (sub === 'set') {
+            const key = args[1]; const value = args[2];
+            if (!key || value === undefined) { console.log('Usage: cloud settings set <key> <value>'); return; }
+            const body = {}; body[key] = isNaN(Number(value)) ? value : Number(value);
+            const res = await this.apiCall('/management/api/settings', { method: 'POST', body: JSON.stringify(body) });
+            if (res && res.success) console.log('✓ Updated'); else console.log('✗ Failed');
         }
     }
     
@@ -700,9 +857,15 @@ Ploinky Cloud Client Commands
 Connection:
   cloud connect [url]               Connect to cloud server (default: localhost:8000)
   cloud status                      Show connection and server status
+  cloud init                        Initialize server and generate Admin API Key
+  cloud show                        Show current remote and API Key
+  cloud logs [lines]                Show last N log lines
+  cloud logs list                   List available log days
+  cloud logs download <date>        Download logs (gz) for day
+  cloud settings show|set           Show or update settings
   
 Authentication:
-  cloud login [username]            Login to cloud server
+  cloud login <API_KEY>             Login using Admin API Key
   cloud logout                      Logout from cloud server
   
 Administration:

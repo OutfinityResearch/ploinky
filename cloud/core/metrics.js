@@ -16,6 +16,7 @@ class MetricsCollector {
         this.startTime = Date.now();
         this.totalRequests = 0;
         this.totalErrors = 0;
+        this.unauthorizedRequests = 0;
     }
 
     async init() {
@@ -101,6 +102,23 @@ class MetricsCollector {
         });
         
         this.totalErrors++;
+    }
+
+    recordUnauthorized(url) {
+        this.unauthorizedRequests++;
+        const agentPath = this.extractAgentPath(url);
+        if (!this.agentMetrics.has(agentPath)) {
+            this.agentMetrics.set(agentPath, {
+                count: 0,
+                totalDuration: 0,
+                minDuration: Infinity,
+                maxDuration: 0,
+                errors: 0
+            });
+        }
+        const metrics = this.agentMetrics.get(agentPath);
+        metrics.count++;
+        metrics.errors++;
     }
 
     extractAgentPath(url) {
@@ -225,6 +243,7 @@ class MetricsCollector {
             totalErrors: this.totalErrors,
             avgRequestsPerMinute,
             errorRate: ((this.totalErrors / this.totalRequests) * 100).toFixed(2) + '%',
+            unauthorizedRequests: this.unauthorizedRequests,
             agents: agentSummaries,
             commands: commandSummaries
         };

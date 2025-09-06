@@ -17,7 +17,7 @@ const COMMANDS = {
     'enable': ['env'],
     'run': ['agent', 'bash', 'update'],
     'list': ['agents', 'repos'],
-    'cloud': ['connect', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin'],
+    'cloud': ['connect', 'init', 'show', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin', 'logs', 'settings'],
     'client': ['call', 'methods', 'status', 'list', 'task', 'task-status'],
     'help': [],
     'exit': [],
@@ -266,7 +266,7 @@ function startInteractiveMode() {
         completer: process.stdin.isTTY ? completer : undefined // Only use completer in TTY mode
     });
 
-    rl.on('line', (line) => {
+    rl.on('line', async (line) => {
         // If input is suspended (e.g., password prompt), ignore this line
         if (inputState.isSuspended()) {
             if (process.stdin.isTTY) {
@@ -289,7 +289,7 @@ function startInteractiveMode() {
             }
             const args = trimmedLine.split(/\s+/);
             try {
-                handleCommand(args);
+                await handleCommand(args);
             } catch (error) {
                 console.error(`Error: ${error.message}`);
                 debugLog(`Command error details: ${error.stack}`);
@@ -316,6 +316,9 @@ function startInteractiveMode() {
 }
 
 function main() {
+    // This function is intentionally not async because the top-level of a node script
+    // should be synchronous to handle setup. Async logic is handled inside the REPL or
+    // by letting the process run until the promise from handleCommand resolves.
     try {
         let args = process.argv.slice(2);
 
@@ -336,7 +339,11 @@ function main() {
                 showHelp();
                 return;
             }
-            handleCommand(args);
+            // Let the promise resolve on its own. Node will wait.
+            handleCommand(args).catch(error => {
+                console.error(`❌ Error: ${error.message}`);
+                process.exit(1);
+            });
         }
     } catch (error) {
         console.error(`❌ Error: ${error.message}`);

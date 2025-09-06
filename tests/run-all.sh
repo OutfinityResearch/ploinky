@@ -22,7 +22,8 @@ echo -e "${BLUE}       Ploinky Complete Test Suite         ${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════${NC}\n"
 
 # Find all test scripts
-TEST_SCRIPTS=$(find "$TESTS_DIR" -name "test_*.sh" -type f | sort)
+# Find all test scripts in subdirectories, excluding this script itself
+TEST_SCRIPTS=$(find "$TESTS_DIR" -name "test_*.sh" -type f ! -path "$0" | sort)
 
 if [ -z "$TEST_SCRIPTS" ]; then
     echo -e "${YELLOW}No test scripts found${NC}"

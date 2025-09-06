@@ -1,17 +1,4 @@
-async function checkDefaultPassword() {
-    try {
-        // This endpoint needs to be created on the server
-        const response = await fetch('/management/api/is-default-password', { credentials: 'include' });
-        if (response.ok) {
-            const { isDefault } = await response.json();
-            if (isDefault) {
-                document.getElementById('password-notification').style.display = 'block';
-            }
-        }
-    } catch (err) {
-        console.error('Error checking default password:', err);
-    }
-}
+async function checkDefaultPassword() { /* removed in API Key mode */ }
 
 async function loadOverviewStats() {
     try {
@@ -26,6 +13,9 @@ async function loadOverviewStats() {
         const hours = Math.floor(ms / 3600000);
         const minutes = Math.floor((ms % 3600000) / 60000);
         document.getElementById('statUptime').textContent = `${hours}h ${minutes}m`;
+        if (document.getElementById('statUnauthorized')) {
+            document.getElementById('statUnauthorized').textContent = data.unauthorizedRequests ?? 0;
+        }
     } catch (e) {
         console.error('Failed to load overview stats', e);
     }
@@ -45,38 +35,21 @@ function setupEventListeners() {
         document.getElementById('passwordModal').style.display = 'none';
     });
 
-    document.getElementById('passwordForm')?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const currentPassword = document.getElementById('currentPassword').value;
-        const newPassword = document.getElementById('newPassword').value;
-        const confirmPassword = document.getElementById('confirmPassword').value;
-        const errorDiv = document.getElementById('passwordError');
-        errorDiv.textContent = '';
-
-        if (newPassword !== confirmPassword) {
-            errorDiv.textContent = 'New passwords do not match.';
-            return;
-        }
-
-        try {
-            // This endpoint needs to be created on the server
-            const response = await fetch('/management/api/change-password', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ currentPassword, newPassword }),
-                credentials: 'include'
-            });
-
-            if (response.ok) {
-                document.getElementById('passwordModal').style.display = 'none';
-                alert('Password changed successfully!');
-            } else {
-                const { error } = await response.json();
-                errorDiv.textContent = error || 'Failed to change password.';
-            }
-        } catch (err) {
-            errorDiv.textContent = 'An error occurred.';
-        }
+    // Quick logs
+    document.getElementById('showLogsBtn')?.addEventListener('click', async () => {
+        const lines = Number(document.getElementById('lastLines').value || 200);
+        const res = await fetch(`/management/api/logs?lines=${lines}`, { credentials: 'include' });
+        const text = await res.text();
+        document.getElementById('lastLogs').textContent = text || '(no logs)';
+    });
+    document.getElementById('downloadTodayBtn')?.addEventListener('click', async () => {
+        const today = new Date().toISOString().slice(0,10);
+        const res = await fetch(`/management/api/logs/download?date=${today}`, { credentials: 'include' });
+        const blob = new Blob([await res.text()], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `p-cloud-${today}.log`;
+        a.click();
     });
 }
 

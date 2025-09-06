@@ -20,17 +20,19 @@ class ConfigManager {
             const data = await fs.readFile(this.configPath, 'utf-8');
             this.config = JSON.parse(data);
         } catch (err) {
-            // Try alternative path
-            const altPath = path.join(path.dirname(this.configPath), '.ploinky', 'config.json');
-            try {
-                const altData = await fs.readFile(altPath, 'utf-8');
-                this.config = JSON.parse(altData);
-                this.configPath = altPath; // Use the found path
-            } catch (altErr) {
-                // Config doesn't exist, create default
-                await this.createDefault();
-                await this.save();
-            }
+            // Config doesn't exist, create default
+            await this.createDefault();
+            await this.save();
+        }
+        if(!this.config.repositories || this.config.repositories.length === 0) {
+            this.config.repositories = [
+                { 
+                    name: 'PloinkyDemo',
+                    url: 'https://github.com/PloinkyRepos/PloinkyDemo.git',
+                    enabled: true
+                }
+            ];
+            await this.save();
         }
         return this.config;
     }
@@ -55,8 +57,9 @@ class ConfigManager {
             settings: {
                 port: 8000,
                 workersCount: 'auto',
-                metricsRetention: 7, // days
-                logLevel: 'info'
+                metricsRetention: 365, // days
+                logLevel: 'info',
+                lastLogsLines: 200
             }
         };
     }
@@ -80,8 +83,8 @@ class ConfigManager {
         }
     }
 
-    async removeRepository(repoUrl) {
-        this.config.repositories = this.config.repositories.filter(r => r.url !== repoUrl);
+    async removeRepository(identifier) {
+        this.config.repositories = this.config.repositories.filter(r => r.url !== identifier && r.name !== identifier);
         await this.save();
     }
 
@@ -90,6 +93,8 @@ class ConfigManager {
         if (!deployment.domain || !deployment.path || !deployment.agent) {
             throw new Error('Invalid deployment: missing required fields');
         }
+        // Normalize path
+        deployment.path = this.normalizePath(deployment.path);
 
         // Check for conflicts
         const existing = this.config.deployments.find(d => 
@@ -110,9 +115,11 @@ class ConfigManager {
     }
 
     async removeDeployment(domain, path) {
-        this.config.deployments = this.config.deployments.filter(d => 
-            !(d.domain === domain && d.path === path)
-        );
+        const target = this.normalizePath(path);
+        this.config.deployments = this.config.deployments.filter(d => {
+            const dp = this.normalizePath(d.path);
+            return !(d.domain === domain && dp === target);
+        });
         await this.save();
     }
 
@@ -147,6 +154,15 @@ class ConfigManager {
         Object.assign(this.config.settings, settings);
         await this.save();
     }
+}
+
+ConfigManager.prototype.normalizePath = function(p) {
+    if (p == null) return '/';
+    const s = String(p).trim();
+    if (s === '' || s === '/') return '/';
+    const noLead = s.replace(/^\/+/, '');
+    const noTrail = noLead.replace(/\/+$/, '');
+    return '/' + noTrail;
 }
 
 module.exports = { ConfigManager };

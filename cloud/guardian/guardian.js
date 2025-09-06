@@ -9,17 +9,17 @@ const crypto = require('crypto');
 class Guardian {
     constructor(options) {
         this.workingDir = options.workingDir;
+        this.baseDir = options.baseDir || path.dirname(this.workingDir);
         this.config = options.config;
         this.activeUsersDir = path.join(this.workingDir, 'activeUsers');
         this.adminFilePath = path.join(this.workingDir, '.admin');
+        this.adminApiKeysPath = path.join(this.baseDir, '.ploinky', 'admin_api_keys.json');
     }
 
     async init() {
         // Create active users directory
         await fs.mkdir(this.activeUsersDir, { recursive: true });
-        
-        // Create default admin if not exists
-        await this.ensureDefaultAdmin();
+        // Do not create default admin/password anymore; API keys are used
     }
 
     /**
@@ -190,127 +190,55 @@ class Guardian {
      * Check admin authentication
      */
     async checkAdminAuth(req) {
+        // 1) Accept session cookie set during /auth or /management/login
         const token = this.extractToken(req);
-        
-        if (token === 'Admin') {
-            return true;
+        if (token) {
+            const session = await this.getUserSession(token);
+            if (session && session.isAdmin === true) return true;
         }
 
-        const session = await this.getUserSession(token);
-        return session && session.isAdmin === true;
+        // 2) Accept static API key via header for management/API access
+        const headerKey = req.headers['x-api-key'];
+        if (headerKey && await this.isValidAdminApiKey(headerKey)) return true;
+
+        return false;
     }
 
     /**
      * Authenticate admin
      */
     async authenticateAdmin(password) {
-        try {
-            const adminData = await fs.readFile(this.adminFilePath, 'utf-8');
-            const admins = JSON.parse(adminData);
-            
-            // Check against all admin passwords
-            for (const admin of admins) {
-                const match = this.verifyPassword(password, admin.passwordHash, admin.salt);
-                if (match) {
-                    // Create admin session
-                    const token = await this.createUserSession(admin.username || 'admin', ['*'], 24);
-                    
-                    // Mark session as admin
-                    const sessionPath = path.join(this.activeUsersDir, `${token}.json`);
-                    const session = JSON.parse(await fs.readFile(sessionPath, 'utf-8'));
-                    session.isAdmin = true;
-                    await fs.writeFile(sessionPath, JSON.stringify(session, null, 2));
-                    
-                    return token;
-                }
-            }
-            
-            return null;
-        } catch (err) {
-            console.error('Admin authentication error:', err);
-            return null;
-        }
+        // Password auth is deprecated; always fail
+        return null;
+    }
+
+    async authenticateAdminApiKey(apiKey) {
+        const valid = await this.isValidAdminApiKey(apiKey);
+        if (!valid) return null;
+
+        // Create short-lived admin session cookie
+        const token = await this.createUserSession('admin', ['*'], 24);
+        const sessionPath = path.join(this.activeUsersDir, `${token}.json`);
+        const session = JSON.parse(await fs.readFile(sessionPath, 'utf-8'));
+        session.isAdmin = true;
+        await fs.writeFile(sessionPath, JSON.stringify(session, null, 2));
+        return token;
     }
 
     /**
      * Check if the admin password is the default 'admin'
      */
-    async isDefaultPassword() {
-        try {
-            const adminData = await fs.readFile(this.adminFilePath, 'utf-8');
-            const admins = JSON.parse(adminData);
-            const admin = admins.find(a => a.username === 'admin');
-            if (!admin) {
-                return false; // No admin user
-            }
-            // Check if the password is 'admin'
-            return this.verifyPassword('admin', admin.passwordHash, admin.salt);
-        } catch (err) {
-            console.error('Error checking default password:', err);
-            return false;
-        }
-    }
+    async isDefaultPassword() { return false; }
 
     /**
      * Change admin password
      */
-    async changeAdminPassword(oldPassword, newPassword, username = 'admin') {
-        try {
-            const adminData = await fs.readFile(this.adminFilePath, 'utf-8');
-            const admins = JSON.parse(adminData);
-            
-            // Find admin entry
-            const adminIndex = admins.findIndex(a => a.username === username);
-            if (adminIndex === -1) {
-                throw new Error('Admin not found');
-            }
-
-            // Verify old password
-            const match = this.verifyPassword(oldPassword, admins[adminIndex].passwordHash, admins[adminIndex].salt);
-            if (!match) {
-                throw new Error('Invalid old password');
-            }
-
-            // Hash new password
-            const { hash, salt } = this.hashPassword(newPassword);
-            admins[adminIndex].passwordHash = hash;
-            admins[adminIndex].salt = salt;
-            admins[adminIndex].updatedAt = new Date().toISOString();
-            
-            // Save updated admin data
-            await fs.writeFile(this.adminFilePath, JSON.stringify(admins, null, 2));
-            
-            return true;
-        } catch (err) {
-            console.error('Change password error:', err);
-            return false;
-        }
-    }
+    async changeAdminPassword() { return false; }
 
     /**
      * Ensure default admin exists
      */
-    async ensureDefaultAdmin() {
-        try {
-            await fs.access(this.adminFilePath);
-        } catch (err) {
-            // Admin file doesn't exist, create default
-            const defaultPassword = 'admin'; // Should be changed on first login
-            const { hash, salt } = this.hashPassword(defaultPassword);
-            
-            const adminData = [{
-                username: 'admin',
-                passwordHash: hash,
-                salt: salt,
-                createdAt: new Date().toISOString(),
-                mustChangePassword: true
-            }];
-            
-            await fs.writeFile(this.adminFilePath, JSON.stringify(adminData, null, 2));
-            console.log('[Guardian] Default admin created (username: admin, password: admin)');
-            console.log('[Guardian] IMPORTANT: Change the default password immediately!');
-        }
-    }
+    async ensureDefaultAdmin() { /* no-op for API key mode */ }
 
     /**
      * Hash password using PBKDF2
@@ -334,6 +262,39 @@ class Guardian {
      */
     generateToken() {
         return crypto.randomBytes(32).toString('hex');
+    }
+
+    // API Key helpers
+    async isInitialized() {
+        try {
+            const data = await fs.readFile(this.adminApiKeysPath, 'utf-8');
+            const parsed = JSON.parse(data);
+            return Array.isArray(parsed.keys) && parsed.keys.length > 0;
+        } catch (_) {
+            return false;
+        }
+    }
+
+    async generateAdminApiKey() {
+        const key = crypto.randomBytes(32).toString('hex');
+        let store = { keys: [] };
+        try {
+            const data = await fs.readFile(this.adminApiKeysPath, 'utf-8');
+            store = JSON.parse(data);
+        } catch (_) { /* ignore */ }
+        store.keys.push({ key, createdAt: new Date().toISOString(), role: 'admin' });
+        await fs.writeFile(this.adminApiKeysPath, JSON.stringify(store, null, 2));
+        return key;
+    }
+
+    async isValidAdminApiKey(apiKey) {
+        try {
+            const data = await fs.readFile(this.adminApiKeysPath, 'utf-8');
+            const parsed = JSON.parse(data);
+            return Array.isArray(parsed.keys) && parsed.keys.some(k => k.key === apiKey);
+        } catch (_) {
+            return false;
+        }
     }
 
     /**
