@@ -13,16 +13,17 @@ const path = require('path');
 const COMMANDS = {
     'add': ['repo', 'env'],
     'new': ['agent'],
-    'set': ['install', 'update', 'run'],
-    'enable': ['env'],
-    'run': ['task', 'bash', 'webtty'],
+    'update': ['agent'],
+    'refresh': ['agent'],
+    'enable': ['env', 'repo'],
+    'disable': ['repo'],
+    'run': ['task', 'bash', 'webtty', 'cli', 'agent'],
+    'shutdown': [],
+    'destroy': [],
     'list': ['agents', 'repos'],
     'cloud': ['connect', 'init', 'show', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin', 'logs', 'settings'],
     'client': ['call', 'methods', 'status', 'list', 'task', 'task-status'],
-    'help': [],
-    'exit': [],
-    'quit': [],
-    'clear': []
+    'help': []
 };
 
 function completer(line) {
@@ -122,16 +123,21 @@ function completer(line) {
             completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
-            if ((command === 'run' && ['task', 'bash', 'webtty'].includes(subcommand)) ||
-                (command === 'set') ||
+            if ((command === 'run' && ['task', 'bash', 'webtty', 'cli', 'agent'].includes(subcommand)) ||
+                (command === 'update' && subcommand === 'agent') ||
+                (command === 'refresh' && subcommand === 'agent') ||
                 (command === 'enable' && subcommand === 'env') ||
                 (command === 'client' && ['call', 'methods', 'status', 'task', 'task-status'].includes(subcommand))) {
                 completions = getAgentNames();
             } else if (command === 'new' && subcommand === 'agent') {
                 completions = getRepoNames();
+            } else if (command === 'disable' && subcommand === 'repo') {
+                completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
+            } else if (command === 'enable' && subcommand === 'repo') {
+                completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
             } else if (command === 'add' && subcommand === 'repo') {
                 // For add repo, show predefined repo names
-                completions = ['cloud', 'vibe', 'security', 'extra'];
+                completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
             } else if (command === 'help' && subcommand) {
                 // For help <command>, show subcommands of that command
                 if (COMMANDS[subcommand]) {
@@ -276,8 +282,9 @@ function startInteractiveMode() {
             return;
         }
         const trimmedLine = line.trim();
-        if (trimmedLine) {
-            if (trimmedLine === 'exit' || trimmedLine === 'quit') {
+            if (trimmedLine) {
+            if (trimmedLine === 'exit') {
+                try { require('./lib/commands/cli').cleanupSessionContainers(); } catch (_) {}
                 rl.close();
                 return;
             }
@@ -300,9 +307,12 @@ function startInteractiveMode() {
         if (process.stdin.isTTY) {
             rl.prompt();
         }
-    }).on('close', () => {
+    }).on('close', async () => {
+        try {
+            require('./lib/commands/cli').cleanupSessionContainers();
+        } catch (_) {}
         if (process.stdin.isTTY) {
-            console.log('Exiting Ploinky interactive mode.');
+            console.log('Bye.');
         }
         process.exit(0);
     });
@@ -310,7 +320,7 @@ function startInteractiveMode() {
     // If input is not a TTY, we are in script mode. Don't show initial prompt.
     if (process.stdin.isTTY) {
         console.log('Welcome to Ploinky interactive mode.');
-        console.log("Type 'help' for a list of commands, or 'exit' to quit.");
+        console.log("Type 'help' for a list of commands. Use 'exit' to leave, 'shutdown' to close session containers, or 'destroy' to remove all Ploinky containers.");
         rl.prompt();
     }
 }

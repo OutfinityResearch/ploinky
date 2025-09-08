@@ -14,11 +14,22 @@ const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 // --- Start of Original Functions ---
 
 const PREDEFINED_REPOS = {
-    'cloud': { url: 'https://github.com/PlonkyRepos/cloud.git', description: 'Cloud infrastructure agents (AWS, Azure, GCP, etc.)' },
-    'vibe': { url: 'https://github.com/PlonkyRepos/vibe.git', description: 'Social media and communication agents' },
-    'security': { url: 'https://github.com/PlonkyRepos/security.git', description: 'Security and scanning tools' },
-    'extra': { url: 'https://github.com/PlonkyRepos/extra.git', description: 'Additional utility agents' }
+    'basic':   { url: 'https://github.com/PloinkyRepos/Basic.git', description: 'Default base agents' },
+    'cloud':   { url: 'https://github.com/PloinkyRepos/cloud.git', description: 'Cloud infrastructure agents (AWS, Azure, GCP, etc.)' },
+    'vibe':    { url: 'https://github.com/PloinkyRepos/vibe.git', description: 'Vibe coding agents' },
+    'security':{ url: 'https://github.com/PloinkyRepos/security.git', description: 'Security and scanning tools' },
+    'extra':   { url: 'https://github.com/PloinkyRepos/extra.git', description: 'Additional utility agents' },
+    'demo':    { url: 'https://github.com/PloinkyRepos/demo.git', description: 'Demo agents and examples' }
 };
+
+// Track containers started in this CLI session that are not persistent agent containers
+const SESSION_CONTAINERS = new Set();
+function registerSessionContainer(name) { try { SESSION_CONTAINERS.add(name); } catch (_) {} }
+function cleanupSessionContainers() {
+    const { stopAndRemoveMany } = require('../docker');
+    try { stopAndRemoveMany(Array.from(SESSION_CONTAINERS)); } catch (_) {}
+    SESSION_CONTAINERS.clear();
+}
 
 function getRepoNames() {
     if (!fs.existsSync(REPOS_DIR)) return [];
@@ -62,20 +73,61 @@ function newAgent(repoName, agentName, containerImage) {
     const agentPath = path.join(repoPath, agentName);
     if (fs.existsSync(agentPath)) { throw new Error(`Agent '${agentName}' already exists.`); }
     fs.mkdirSync(agentPath, { recursive: true });
-    const manifest = { name: agentName, image: containerImage || 'node:18-alpine', commands: { install: "", update: "", run: "" }, env: [] };
-    fs.writeFileSync(path.join(agentPath, 'manifest.json'), JSON.stringify(manifest, null, 2));
-    console.log(`✓ Agent '${agentName}' created in repository '${repoName}'.`);
+
+    // Interactive prompts for manifest fields
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const ask = (q, def) => new Promise(res => rl.question(`${q} [${def}]: `, ans => res(ans || def)));
+
+    (async () => {
+        const defaults = {
+            container: containerImage || 'node:18-alpine',
+            install: "echo 'No installation needed for buildpack Bash.'",
+            update: "",
+            cli: "bash",
+            agent: "/agent/AgentServer.sh 'node /code/demoApi.js'",
+            about: "Bash shell environment. Run any bash commands and scripts"
+        };
+        const container = await ask('Container image', defaults.container);
+        const install = await ask('Install command', defaults.install);
+        const upd = await ask('Update command', defaults.update);
+        const cli = await ask('CLI command', defaults.cli);
+        const agent = await ask('Agent command (persistent)', defaults.agent);
+        const about = await ask('About/description', defaults.about);
+        rl.close();
+
+        const manifest = { name: agentName, container, install, update: upd, cli, agent, about, env: [] };
+        fs.writeFileSync(path.join(agentPath, 'manifest.json'), JSON.stringify(manifest, null, 2));
+        console.log(`✓ Agent '${agentName}' created in repository '${repoName}'.`);
+    })();
 }
 
-function setCommand(commandType, agentName, command) {
-    if (!commandType || !agentName || !command) { showHelp(); throw new Error('Missing required parameters.'); }
-    const validCommandTypes = ['install', 'update', 'run'];
-    if (!validCommandTypes.includes(commandType)) { throw new Error('Invalid command type.'); }
+async function updateAgent(agentName) {
+    if (!agentName) { showHelp(); throw new Error('Usage: update agent <name>'); }
     const manifestPath = findAgentManifest(agentName);
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    manifest.commands[commandType] = command;
-    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-    console.log(`✓ Set ${commandType} command for '${agentName}'.`);
+    const current = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const get = (k, alt) => (current[k] != null ? current[k] : alt);
+    const defaults = {
+        container: get('container', current.image || 'node:18-alpine'),
+        install: get('install', (current.commands?.install) || "echo 'No installation needed for buildpack Bash.'"),
+        update: get('update', (current.commands?.update) || ""),
+        cli: get('cli', (current.commands?.cli) || "bash"),
+        agent: get('agent', (current.commands?.run) || ""),
+        about: get('about', '-')
+    };
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const ask = (q, def) => new Promise(res => rl.question(`${q} [${def}]: `, ans => res(ans || def)));
+    const container = await ask('Container image', defaults.container);
+    const install = await ask('Install command', defaults.install);
+    const upd = await ask('Update command', defaults.update);
+    const cli = await ask('CLI command', defaults.cli);
+    const agent = await ask('Agent command (persistent)', defaults.agent);
+    const about = await ask('About/description', defaults.about);
+    rl.close();
+    const updated = { name: current.name || agentName, container, install, update: upd, cli, agent, about, env: current.env || [] };
+    fs.writeFileSync(manifestPath, JSON.stringify(updated, null, 2));
+    console.log(`✓ Updated manifest for '${agentName}'.`);
 }
 
 function addEnv(varName, varValue) {
@@ -102,12 +154,69 @@ function enableEnv(agentName, varName) {
     }
 }
 
+const ENABLED_REPOS_FILE = path.join(PLOINKY_DIR, 'enabled_repos.json');
+function loadEnabledRepos() {
+    try {
+        if (fs.existsSync(ENABLED_REPOS_FILE)) {
+            const data = JSON.parse(fs.readFileSync(ENABLED_REPOS_FILE, 'utf8'));
+            return Array.isArray(data) ? data : [];
+        }
+    } catch (_) {}
+    return [];
+}
+function saveEnabledRepos(list) {
+    try { fs.mkdirSync(PLOINKY_DIR, { recursive: true }); fs.writeFileSync(ENABLED_REPOS_FILE, JSON.stringify(list, null, 2)); } catch (_) {}
+}
+function enableRepo(repoName) {
+    if (!repoName) throw new Error('Usage: enable repo <name>');
+    if (!PREDEFINED_REPOS[repoName]) throw new Error(`Unknown repo '${repoName}'. Use 'list repos' to see options.`);
+    const list = loadEnabledRepos();
+    if (!list.includes(repoName)) { list.push(repoName); saveEnabledRepos(list); }
+    console.log(`✓ Repo '${repoName}' enabled. Use 'list agents' to view agents.`);
+}
+function disableRepo(repoName) {
+    if (!repoName) throw new Error('Usage: disable repo <name>');
+    const list = loadEnabledRepos();
+    const filtered = list.filter(r => r !== repoName);
+    saveEnabledRepos(filtered);
+    console.log(`✓ Repo '${repoName}' disabled.`);
+}
+
 function listAgents() {
-    console.log('Listing agents...'); // Simplified for brevity
+    const enabled = loadEnabledRepos();
+    if (enabled.length === 0) {
+        console.log('No repos enabled. Use: enable repo <name>');
+        return;
+    }
+    for (const repo of enabled) {
+        const repoPath = path.join(REPOS_DIR, repo);
+        const installed = fs.existsSync(repoPath);
+        console.log(`\n[Repo] ${repo}${installed ? '' : ' (not installed)'}:`);
+        if (!installed) { console.log('  (install with: add repo ' + repo + ')'); continue; }
+        const entries = fs.readdirSync(repoPath).filter(f => fs.existsSync(path.join(repoPath, f, 'manifest.json')));
+        if (entries.length === 0) { console.log('  (no agents found)'); continue; }
+        for (const agent of entries) {
+            try {
+                const manifest = JSON.parse(fs.readFileSync(path.join(repoPath, agent, 'manifest.json'), 'utf8'));
+                const about = manifest.about || '-';
+                console.log(`  - ${agent}: ${about}`);
+            } catch (_) {
+                console.log(`  - ${agent}`);
+            }
+        }
+    }
+    console.log("\nTip: to see more agents, use 'add repo <name>' or 'enable repo <name>'.");
 }
 
 function listRepos() {
-    console.log('Listing repos...'); // Simplified for brevity
+    const enabled = new Set(loadEnabledRepos());
+    console.log('Available repositories:');
+    for (const [name, info] of Object.entries(PREDEFINED_REPOS)) {
+        const installed = fs.existsSync(path.join(REPOS_DIR, name));
+        const flags = `${installed ? '[installed]' : ''}${enabled.has(name) ? ' [enabled]' : ''}`.trim();
+        console.log(`- ${name}: ${info.url} ${flags ? ' ' + flags : ''}`);
+    }
+    console.log("\nUse 'add repo <name>' to install and 'enable repo <name>' to include in agent listings.");
 }
 
 function executeBashCommand(command, args) {
@@ -132,169 +241,18 @@ function findAgentManifest(agentName) {
 
 // --- Start of New/Refactored Functions ---
 
-function getContainerRuntime() {
-    try {
-        execSync('which podman', { stdio: 'pipe' });
-        return 'podman';
-    } catch {
-        try {
-            execSync('which docker', { stdio: 'pipe' });
-            return 'docker';
-        } catch {
-            throw new Error('No container runtime found. Please install Docker or Podman.');
-        }
-    }
+// Container runtime helpers moved to docker.js
+
+function getImage(manifest) {
+    return manifest.container || manifest.image || 'node:18-alpine';
+}
+function getAgentCmd(manifest) {
+    return (manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '';
+}
+function getCliCmd(manifest) {
+    return (manifest.cli && String(manifest.cli)) || (manifest.commands && manifest.commands.cli) || '';
 }
 
-// Ensure a generic agent container is running for interactive shells/web TTY
-async function ensureAgentContainerRunning(agentName, manifest, agentPath) {
-    const runtime = getContainerRuntime();
-    const containerName = `ploinky_agent_${agentName}`;
-
-    // If running, return
-    try {
-        const running = execSync(`${runtime} ps --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
-        if (running === containerName) return;
-    } catch (_) {}
-
-    // If exists but stopped, start
-    try {
-        const exists = execSync(`${runtime} ps -a --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
-        if (exists === containerName) {
-            execSync(`${runtime} start ${containerName}`);
-            await new Promise(r => setTimeout(r, 800));
-            return;
-        }
-    } catch (_) {}
-
-    // Create new container
-    const image = manifest.image || 'node:18-alpine';
-    const args = [
-        'run', '-d', '--name', containerName,
-        '-w', '/agent',
-        '-v', `${agentPath}:/agent:z`,
-        '-v', `${agentPath}:/code:z`
-    ];
-    // Start process: prefer configured run command; else sleep infinity
-    const runCmd = (manifest.commands && manifest.commands.run) ? manifest.commands.run : '';
-    if (runCmd && runCmd.trim()) {
-        args.push(image, '/bin/sh', '-lc', runCmd);
-    } else {
-        args.push(image, 'sleep', 'infinity');
-    }
-    execFileSync(runtime, args, { stdio: 'inherit' });
-    await new Promise(r => setTimeout(r, 800));
-}
-
-async function ensureContainerRunning(manifest, agentPath) {
-    const runtime = getContainerRuntime();
-    const containerName = `ploinky_agent_${manifest.name}`;
-    const portFilePath = path.join(PLOINKY_DIR, 'running_agents', `${containerName}.port`);
-    const lockDir = path.join(PLOINKY_DIR, 'locks');
-    const lockFile = path.join(lockDir, `container_${containerName}.lock`);
-
-    // Acquire Lock
-    fs.mkdirSync(lockDir, { recursive: true });
-    let retries = 50; // Wait for max 10 seconds
-    while (retries > 0) {
-        try {
-            fs.mkdirSync(lockFile); // Atomic operation
-            debugLog(`Process ${process.pid} acquired lock for ${containerName}`);
-            break; // Lock acquired
-        } catch (e) {
-            if (e.code === 'EEXIST') {
-                debugLog(`Process ${process.pid} waiting for lock on ${containerName}...`);
-                await new Promise(resolve => setTimeout(resolve, 200));
-                retries--;
-            } else {
-                throw e;
-            }
-        }
-    }
-    if (retries === 0) {
-        throw new Error(`Could not acquire lock for container ${containerName}. It might be stuck.`);
-    }
-
-    try {
-        // Check if we have a cached port file first (fast path)
-        if (fs.existsSync(portFilePath)) {
-            const cachedPort = fs.readFileSync(portFilePath, 'utf8').trim();
-            if (cachedPort) {
-                // Verify container is still running with this port
-                try {
-                    const runningContainer = execSync(`${runtime} ps --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
-                    if (runningContainer === containerName) {
-                        debugLog(`Using cached port ${cachedPort} for running container ${containerName}`);
-                        return cachedPort;
-                    }
-                } catch (e) {
-                    // Container might not be running, continue to check
-                }
-            }
-        }
-        
-        // Check if container exists
-        const existingContainer = execSync(`${runtime} ps -a --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
-        if (existingContainer === containerName) {
-            const runningContainer = execSync(`${runtime} ps --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
-            if (runningContainer !== containerName) {
-                debugLog(`Container for agent '${manifest.name}' exists but is stopped. Starting it...`);
-                execSync(`${runtime} start ${containerName}`);
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            
-            // Get port from running container
-            const portMapping = execSync(`${runtime} port ${containerName} 8080/tcp`).toString().trim();
-            const hostPort = portMapping.split(':')[1];
-            if (!hostPort) throw new Error(`Could not determine host port for running container ${containerName}`);
-            
-            // Cache the port for future use
-            fs.mkdirSync(path.dirname(portFilePath), { recursive: true });
-            fs.writeFileSync(portFilePath, hostPort);
-            
-            return hostPort;
-        }
-
-        // Create container if it doesn't exist
-        debugLog(`Creating persistent container for agent '${manifest.name}'...`);
-        const image = manifest.image || 'node:18-alpine';
-        const agentCorePath = path.resolve(__dirname, '../../../agentCore');
-        
-        const containerArgs = [
-            'run',
-            '-d', '-p', '8080', '--name', containerName,
-            '-v', `${agentPath}:/agent:z`,
-            '-v', `${agentCorePath}:/agentCore:z`
-        ];
-        
-        // Add RUN_TASK environment variable if defined in manifest
-        if (manifest.runTask) {
-            containerArgs.push('-e', `RUN_TASK=${manifest.runTask}`);
-            containerArgs.push('-e', 'CODE_DIR=/agent');
-        }
-        
-        // Add PORT environment variable to ensure consistency
-        containerArgs.push('-e', 'PORT=8080');
-        
-        containerArgs.push(image, 'node', '/agentCore/server.js');
-
-        // Use execFileSync to preserve arguments with spaces (e.g., RUN_TASK values)
-        execFileSync(runtime, containerArgs, { stdio: 'inherit' });
-        debugLog(`✓ Container created. Waiting a moment for it to initialize...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        const portMapping = execSync(`${runtime} port ${containerName} 8080/tcp`).toString().trim();
-        const hostPort = portMapping.split(':')[1];
-        if (!hostPort) throw new Error(`Could not determine host port for new container ${containerName}`);
-
-        fs.mkdirSync(path.dirname(portFilePath), { recursive: true });
-        fs.writeFileSync(portFilePath, hostPort);
-        return hostPort;
-    } finally {
-        // Release Lock
-        fs.rmdirSync(lockFile);
-    }
-}
 
 async function runTask(agentName, command, args) {
     const manifestPath = findAgentManifest(agentName);
@@ -303,7 +261,8 @@ async function runTask(agentName, command, args) {
         throw new Error(`Agent '${agentName}' is not configured for HTTP tasks.`);
     }
     const agentPath = path.dirname(manifestPath);
-    const hostPort = await ensureContainerRunning(manifest, agentPath);
+    const { ensureAgentCore } = require('../docker');
+    const { hostPort } = await ensureAgentCore(manifest, agentPath);
     
     console.log(`[Ploinky CLI] Running task on agent '${agentName}' via http://localhost:${hostPort}`);
     const AgentCoreClient = require('../../../agentCoreClient/lib/client');
@@ -329,40 +288,88 @@ async function runBash(agentName) {
     const manifestPath = findAgentManifest(agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
-    const containerName = `ploinky_agent_${agentName}`;
-    await ensureAgentContainerRunning(agentName, manifest, agentPath);
-    const runtime = getContainerRuntime();
-    console.log(`Opening interactive sh shell in '${agentName}' container...`);
-    const execArgs = ['exec', '-it', '-w', '/agent', containerName, 'sh'];
-    spawn(runtime, execArgs, { stdio: 'inherit' });
+    const repoName = path.basename(path.dirname(agentPath));
+    const { runCommandInContainer } = require('../docker');
+    await runCommandInContainer(agentName, repoName, manifest, '/bin/bash', true);
 }
 
-async function runWebTTY(agentName, portArg, passwordArg) {
-    if (!agentName) {
-        throw new Error("Usage: run webtty <agentName> [port]");
+async function runWebTTY(agentName, passwordArg, portArg) {
+    if (!agentName || !passwordArg) {
+        throw new Error("Usage: run webtty <agentName> <password> [port]");
     }
-    // Try node-pty first for a proper interactive TTY (echo, line editing, resize)
-    try { pty = require('node-pty'); } catch (e) { pty = null; }
+    // Require node-pty for a proper interactive TTY (echo, line editing, resize)
+    try { pty = require('node-pty'); } catch (e) { throw new Error("'node-pty' is required for WebTTY. Install it with: (cd cli && npm install node-pty)"); }
 
     const manifestPath = findAgentManifest(agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
-    const containerName = `ploinky_agent_${agentName}`;
-
-    // Ensure container is up
-    await ensureAgentContainerRunning(agentName, manifest, agentPath);
-    const runtime = getContainerRuntime();
+    const repoName = path.basename(path.dirname(agentPath));
+    const { ensureAgentContainer, getRuntime, getAgentContainerName } = require('../docker');
+    // Ensure container is up using docker.js and mount current working dir
+    const containerName = ensureAgentContainer(agentName, repoName, manifest);
+    const runtime = getRuntime();
 
     const numericPort = parseInt(portArg, 10);
     const port = (!isNaN(numericPort) && numericPort > 0) ? numericPort : (parseInt(process.env.WEBTTY_PORT, 10) || 8089);
-    const password = (!isNaN(numericPort) && passwordArg) ? passwordArg : (!isNaN(numericPort) ? passwordArg : portArg);
+    const password = String(passwordArg);
 
     // Use refactored modules for TTY and HTTP server
     const { createTTYSession } = require('../webtty/tty');
     const { startWebTTYServer } = require('../webtty/server');
+    const ttySession = createTTYSession({ runtime, containerName, ptyLib: pty, workdir: process.cwd() });
+    startWebTTYServer({ agentName, runtime, containerName, port, ttySession, password, workdir: process.cwd() });
+}
 
-    const ttySession = createTTYSession({ runtime, containerName, ptyLib: pty });
-    startWebTTYServer({ agentName, runtime, containerName, port, ttySession, password });
+async function runCli(agentName, args) {
+    const manifestPath = findAgentManifest(agentName);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const cliBase = getCliCmd(manifest);
+    if (!cliBase || !cliBase.trim()) {
+        throw new Error(`Manifest for '${agentName}' has no 'cli' command.`);
+    }
+    const agentPath = path.dirname(manifestPath);
+    const repoName = path.basename(path.dirname(agentPath));
+    const { runCommandInContainer } = require('../docker');
+    const cmd = cliBase + (args && args.length ? (' ' + args.join(' ')) : '');
+    console.log(`[run cli] ${agentName}: ${cmd}`);
+    await runCommandInContainer(agentName, repoName, manifest, cmd, false);
+}
+
+async function runAgent(agentName) {
+    const manifestPath = findAgentManifest(agentName);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (!getAgentCmd(manifest).trim()) {
+        throw new Error(`Manifest for '${agentName}' has no 'agent' command.`);
+    }
+    const agentPath = path.dirname(manifestPath);
+    const { startAgentContainer, getRuntime } = require('../docker');
+    const containerName = startAgentContainer(agentName, manifest, agentPath);
+    console.log(`✓ Agent container '${containerName}' is running (persistent).`);
+    try { const runtime = getRuntime(); const logs = execSync(`${runtime} logs --since 10s ${containerName}`).toString(); if (logs) console.log(logs); } catch (_) {}
+}
+
+async function refreshAgent(agentName) {
+    if (!agentName) { showHelp(); throw new Error('Usage: refresh agent <name>'); }
+    const manifestPath = findAgentManifest(agentName);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const agentPath = path.dirname(manifestPath);
+    const { stopAndRemove, startAgentContainer } = require('../docker');
+    const containerName = `ploinky_agent_${agentName}`;
+    stopAndRemove(containerName);
+    const agentCmd = getAgentCmd(manifest).trim();
+    if (agentCmd) { console.log('Restarting agent container...'); startAgentContainer(agentName, manifest, agentPath); console.log('✓ Agent restarted.'); }
+    else { console.log('No agent command configured; container removed if present.'); }
+}
+
+async function shutdownSession() {
+    try { cleanupSessionContainers(); } catch (e) { debugLog('shutdown error:', e.message); }
+    console.log('Shutdown completed for current session containers.');
+}
+
+async function destroyAll() {
+    const { destroyAllPloinky } = require('../docker');
+    try { const n = destroyAllPloinky(); console.log(`Destroyed ${n} Ploinky containers.`); }
+    catch (e) { console.error('Destroy failed:', e.message); }
 }
 
 async function handleCommand(args) {
@@ -377,16 +384,25 @@ async function handleCommand(args) {
             if (options[0] === 'agent') newAgent(options[1], options[2], options[3]);
             else showHelp();
             break;
-        case 'set':
-            setCommand(options[0], options[1], options.slice(2).join(' '));
+        case 'update':
+            if (options[0] === 'agent') await updateAgent(options[1]); else showHelp();
+            break;
+        case 'refresh':
+            if (options[0] === 'agent') await refreshAgent(options[1]); else showHelp();
             break;
         case 'enable':
             if (options[0] === 'env') enableEnv(options[1], options[2]);
+            else if (options[0] === 'repo') enableRepo(options[1]);
             else showHelp();
+            break;
+        case 'disable':
+            if (options[0] === 'repo') disableRepo(options[1]); else showHelp();
             break;
         case 'run':
             if (options[0] === 'task') await runTask(options[1], options[2], options.slice(3));
             else if (options[0] === 'bash') await runBash(options[1]);
+            else if (options[0] === 'cli') await runCli(options[1], options.slice(2));
+            else if (options[0] === 'agent') await runAgent(options[1]);
             else if (options[0] === 'webtty') await runWebTTY(options[1], options[2], options[3]);
             else showHelp();
             break;
@@ -394,6 +410,12 @@ async function handleCommand(args) {
             if (options[0] === 'agents') listAgents();
             else if (options[0] === 'repos') listRepos();
             else showHelp();
+            break;
+        case 'shutdown':
+            await shutdownSession();
+            break;
+        case 'destroy':
+            await destroyAll();
             break;
         case 'help':
             showHelp(options);
@@ -418,9 +440,14 @@ module.exports = {
     findAgentManifest,
     addRepo,
     newAgent,
-    setCommand,
+    updateAgent,
     enableEnv,
+    enableRepo,
+    disableRepo,
     addEnv,
     listAgents,
-    listRepos
+    listRepos,
+    shutdownSession,
+    cleanupSessionContainers,
+    destroyAll
 };

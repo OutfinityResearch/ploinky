@@ -14,10 +14,11 @@ function showHelp(args = []) {
 ╔═══ PLOINKY ═══╗ Container Development & Cloud Platform
 
 ▶ LOCAL DEVELOPMENT
-  add repo <name> [url]          Add repository (cloud/vibe/security/extra)
-  new agent <repo> <name>        Create agent  | list agents/repos
-  set install/update/run <agent> Set commands for agent
-  run agent/bash/update <name>   Execute agent operations
+  add repo <name> [url]          Add repository (basic/cloud/vibe/security/extra/demo)
+  new agent <repo> <name>        Interactive manifest creation
+  update agent <name>            Interactive manifest update
+  refresh agent <name>           Restart/remove agent container
+  run cli/agent/bash <name>      Execute agent operations
   add env <name> <val>           Add secret | enable env <agent> <var>
 
 ▶ CLOUD OPERATIONS  
@@ -35,14 +36,14 @@ function showHelp(args = []) {
   client status <agent>          Get agent runtime status
   client task <agent> <desc>     Send task to agent
 
-  help | clear | exit            Utilities & shell control
+  help | shutdown | destroy      Utilities & shell control
 
 ▶ FOR DETAILED HELP
   help <command>                 Show detailed help for a command
   help cloud                     Show all cloud commands
   help cloud <subcommand>        Show specific cloud command help
   
-  Examples: help add | help cloud host | help run agent
+  Examples: help add | help cloud host | help run cli
 
 Config stored in .ploinky/ • Type 'help' for commands
 ╚═══════════════════════════════════════════════════════╝
@@ -105,36 +106,41 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         
-        'set': {
-            description: 'Configure agent commands',
-            syntax: 'set <command-type> <agent> "<command>"',
-            params: {
-                '<command-type>': 'install, update, or run',
-                '<agent>': 'Agent name',
-                '<command>': 'Command to execute (use quotes for multi-word commands)'
-            },
-            examples: [
-                'set install MyAPI "npm install"',
-                'set update MyAPI "git pull && npm install"',
-                'set run MyAPI "npm start"'
-            ],
-            notes: 'Commands run inside the agent\'s container with /workspace mounted'
+        'update': {
+            description: 'Update agent manifest fields interactively',
+            subcommands: {
+                'agent': {
+                    syntax: 'update agent <name>',
+                    description: 'Modify container, install, update, cli, agent, about',
+                    examples: [ 'update agent MyAPI' ]
+                }
+            }
+        },
+        'refresh': {
+            description: 'Restart or remove agent container',
+            subcommands: {
+                'agent': {
+                    syntax: 'refresh agent <name>',
+                    description: 'If agent command exists, stop/remove/restart container; otherwise stop/remove only',
+                    examples: [ 'refresh agent MyAPI' ]
+                }
+            }
         },
         
         'run': {
             description: 'Execute agent operations',
             subcommands: {
+                'cli': {
+                    syntax: 'run cli <name> [args...]',
+                    description: 'Run manifest "cli" command; container exits after unless agent is configured.',
+                    params: { '<name>': 'Agent name', '[args...]': 'Arguments appended to the cli command' },
+                    examples: [ 'run cli MyAPI --help' ]
+                },
                 'agent': {
-                    syntax: 'run agent <name> [args...]',
-                    description: 'Run agent\'s configured start command',
-                    params: {
-                        '<name>': 'Agent name',
-                        '[args...]': 'Additional arguments passed to the command'
-                    },
-                    examples: [
-                        'run agent MyAPI',
-                        'run agent MyAPI --debug --port 3000'
-                    ]
+                    syntax: 'run agent <name>',
+                    description: 'Start persistent container using manifest "agent". Errors if missing.',
+                    params: { '<name>': 'Agent name' },
+                    examples: [ 'run agent MyAPI' ]
                 },
                 'bash': {
                     syntax: 'run bash <name>',
@@ -148,19 +154,18 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     notes: 'Useful for debugging and manual operations inside container'
                 },
                 'webtty': {
-                    syntax: 'run webtty <name> [port] [password]',
-                    description: 'Pornește un server HTTP cu interfață Console/Chat pentru containerul agentului (Xterm.js + chat)',
+                    syntax: 'run webtty <name> <password> [port]',
+                    description: 'Pornește un server HTTP cu interfață Console/Chat pentru containerul agentului (Xterm.js + chat) — parola este obligatorie.',
                     params: {
                         '<name>': 'Numele agentului',
-                        '[port]': 'Port local pentru UI (implici 8089)',
-                        '[password]': 'Parolă opțională. Dacă este setată, UI-ul cere autentificare și protejează Console/Chat'
+                        '<password>': 'Parolă necesară pentru UI',
+                        '[port]': 'Port local pentru UI (implicit 8089)'
                     },
                     examples: [
-                        'run webtty MyAPI',
-                        'run webtty MyAPI 8090',
-                        'run webtty MyAPI 8090 mySecret'
+                        'run webtty MyAPI mySecret',
+                        'run webtty MyAPI mySecret 8090'
                     ],
-                    notes: 'Moduri: Console (terminal live) și Chat (comenzi individuale). Fără WebSocket: SSE pentru output, HTTP POST pentru input. Dacă node-pty e disponibil, suportă și resize. Parola (dacă e setată) e validată prin cookie de sesiune.'
+                    notes: 'Moduri: Console (terminal live) și Chat (comenzi individuale). Fără WebSocket: SSE pentru output, HTTP POST pentru input. Dacă node-pty e disponibil, suportă și resize. Autentificarea se face prin cookie de sesiune după POST /auth.'
                 },
                 'update': {
                     syntax: 'run update <name>',
@@ -174,9 +179,21 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 }
             }
         },
+        'shutdown': {
+            description: 'Stop and remove containers started in the current CLI session that are not persistent agents',
+            syntax: 'shutdown',
+            examples: ['shutdown'],
+            notes: 'Does not affect containers started with run agent.'
+        },
+        'destroy': {
+            description: 'Stop and remove all Ploinky containers created in this workspace',
+            syntax: 'destroy',
+            examples: ['destroy'],
+            notes: 'Irreversible for running containers; use with care.'
+        },
         
         'enable': {
-            description: 'Enable features for agents',
+            description: 'Enable features for agents and repos',
             subcommands: {
                 'env': {
                     syntax: 'enable env <agent> <variable>',
@@ -190,6 +207,21 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                         'enable env Database DB_PASSWORD'
                     ],
                     notes: 'Variable must be added with "add env" first'
+                },
+                'repo': {
+                    syntax: 'enable repo <name>',
+                    description: 'Enable a repository for agent listings (see list repos)',
+                    examples: [ 'enable repo cloud', 'enable repo basic' ]
+                }
+            }
+        },
+        'disable': {
+            description: 'Disable features',
+            subcommands: {
+                'repo': {
+                    syntax: 'disable repo <name>',
+                    description: 'Disable a repository from agent listings',
+                    examples: [ 'disable repo cloud' ]
                 }
             }
         },
@@ -204,7 +236,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'repos': {
                     syntax: 'list repos',
-                    description: 'List all configured repositories',
+                    description: 'List available repositories with URLs; mark installed and enabled. Use enable repo <name> to include in listings.',
                     examples: ['list repos']
                 }
             }

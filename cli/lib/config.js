@@ -6,7 +6,7 @@ const PLOINKY_DIR = '.ploinky';
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 const AGENTS_FILE = path.join(PLOINKY_DIR, '.agents');
 const SECRETS_FILE = path.join(PLOINKY_DIR, '.secrets');
-const DEFAULT_REPO_URL = 'https://github.com/PloinkyRepos/PoinkyDemo.git';
+const DEFAULT_REPO_URL = 'https://github.com/PloinkyRepos/Basic.git';
 
 let DEBUG_MODE = process.env.PLOINKY_DEBUG === '1';
 
@@ -34,9 +34,9 @@ function initEnvironment() {
         fs.writeFileSync(AGENTS_FILE, JSON.stringify({}, null, 2));
     }
 
-    const defaultRepoPath = path.join(REPOS_DIR, 'PloinkyAgents');
+    const defaultRepoPath = path.join(REPOS_DIR, 'basic');
     if (!fs.existsSync(defaultRepoPath)) {
-        console.log(`Default 'PloinkyAgents' repository not found. Cloning...`);
+        console.log(`Default 'basic' repository not found. Cloning...`);
         try {
             execSync(`git clone ${DEFAULT_REPO_URL} ${defaultRepoPath}`, { stdio: 'inherit' });
             console.log('Default repository cloned successfully.');
