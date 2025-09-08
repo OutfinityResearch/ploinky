@@ -15,7 +15,7 @@ const COMMANDS = {
     'new': ['agent'],
     'set': ['install', 'update', 'run'],
     'enable': ['env'],
-    'run': ['agent', 'bash', 'update'],
+    'run': ['task', 'bash', 'webtty'],
     'list': ['agents', 'repos'],
     'cloud': ['connect', 'init', 'show', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin', 'logs', 'settings'],
     'client': ['call', 'methods', 'status', 'list', 'task', 'task-status'],
@@ -122,7 +122,7 @@ function completer(line) {
             completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
-            if ((command === 'run' && ['agent', 'bash', 'update'].includes(subcommand)) ||
+            if ((command === 'run' && ['task', 'bash', 'webtty'].includes(subcommand)) ||
                 (command === 'set') ||
                 (command === 'enable' && subcommand === 'env') ||
                 (command === 'client' && ['call', 'methods', 'status', 'task', 'task-status'].includes(subcommand))) {

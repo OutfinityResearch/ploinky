@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ploinky WebTTY</title>
+  <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+  <style>
+    /* Theme variables inspired by WhatsApp */
+    body[data-theme='dark'] {
+      --bg: #0b141a;
+      --panel: #111b21;
+      --term-bg: #0b141a;
+      --ink: #e9edef;
+      --muted: #8696a0;
+      --border: rgba(255,255,255,0.08);
+      --accent: #00a884;
+      --accent-weak: rgba(0, 168, 132, 0.25);
+      --incoming: #1f2c34;
+      --outgoing: #005c4b;
+      --outgoing-2: #137a66;
+      --header: #202c33;
+      --btn: #00a884;
+      --btn-ink: #04231e;
+      --btn-hover: #029b7d;
+      --chat-bg: #0b141a;
+    }
+    body[data-theme='light'] {
+      --bg: #ece5dd;
+      --panel: #ffffff;
+      --term-bg: #ffffff;
+      --ink: #111b21;
+      --muted: #54656f;
+      --border: rgba(0,0,0,0.08);
+      --accent: #00a884;
+      --accent-weak: rgba(0, 168, 132, 0.18);
+      --incoming: #ffffff;
+      --outgoing: #d9fdd3;
+      --outgoing-2: #c7f7c2;
+      --header: #00a884;
+      --btn: #00a884;
+      --btn-ink: #052e16;
+      --btn-hover: #029b7d;
+      --chat-bg: #efeae2;
+    }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial; }
+    .bar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: var(--header); color: var(--ink); display: flex; align-items: center; padding: 0 12px; box-shadow: 0 1px 0 rgba(0,0,0,0.2); z-index: 5; }
+    .title { font-weight: 700; letter-spacing: 0.2px; }
+    .status { margin-left: auto; font-size: 12px; opacity: 0.95; padding: 2px 8px; border-radius: 10px; background: rgba(99, 102, 241, 0.18); }
+    .tabs { display: flex; gap: 8px; margin-left: 12px; padding: 2px; background: rgba(148,163,184,0.12); border-radius: 999px; }
+    .tab { padding: 6px 12px; border-radius: 999px; cursor: pointer; font-size: 13px; color: var(--ink); opacity: .8; }
+    .tab.active { background: var(--accent-weak); opacity: 1; }
+    .meta { position: fixed; top: 48px; left: 0; right: 0; height: 32px; display: flex; align-items: center; gap: 16px; padding: 0 16px; color: var(--muted); font-size: 12px; background: rgba(148,163,184,0.07); border-bottom: 1px solid var(--border); z-index: 4; backdrop-filter: blur(4px); }
+    .meta .k { color: #cbd5e1; }
+    .pad { height: 80px; }
+    .outer { height: calc(100% - 80px); padding: 16px; box-sizing: border-box; }
+    .frame { height: 100%; width: 100%; max-width: 1200px; margin: 0 auto; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.35), inset 0 10px 30px rgba(2,6,23,0.6); overflow: hidden; }
+    #console, #chat { height: 100%; display: none; }
+    #console.active, #chat.active { display: block; }
+    #term { height: 100%; width: 100%; }
+    /* Chat styles */
+    .chat-wrap { display: flex; flex-direction: column; height: 100%; background: var(--chat-bg); position: relative; }
+    /* Subtle matrix-like wallpaper */
+    .chat-wrap::before {
+      content: '';
+      position: absolute; inset: 0; pointer-events: none; opacity: 0.06;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><rect width='160' height='160' fill='none'/><g fill='%23ffffff'><text x='10' y='28' font-size='14' opacity='0.8'>01 10 01</text><text x='90' y='56' font-size='12' opacity='0.6'>10 01</text><text x='40' y='98' font-size='10' opacity='0.5'>0 1 0 1</text><text x='120' y='130' font-size='12' opacity='0.6'>01</text><text x='70' y='150' font-size='8' opacity='0.4'>0101</text></g></svg>");
+      background-size: 220px 220px;
+    }
+    .chat-list { flex: 1; overflow-y: auto; padding: 16px; display: flex; gap: 10px; flex-direction: column; position: relative; }
+    .msg { max-width: 78%; padding: 10px 12px; border-radius: 14px; font-size: 14px; line-height: 1.45; word-wrap: break-word; border: 1px solid transparent; }
+    /* Inversat: răspuns server în stânga, comanda utilizator în dreapta */
+    .srv { align-self: flex-start; background: var(--incoming); border-top-left-radius: 4px; border-color: rgba(148,163,184,0.12); }
+    .me { align-self: flex-end; background: linear-gradient(180deg, var(--outgoing-2), var(--outgoing)); border-top-right-radius: 4px; color: #eafff3; }
+    .msg .meta { font-size: 11px; color: #9aa6b2; margin-top: 6px; }
+    .composer { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.05); align-items: flex-end; }
+    .composer textarea { width: 100%; min-height: 44px; max-height: 200px; resize: none; padding: 12px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; color: inherit; outline: none; transition: border .15s ease; white-space: pre-wrap; }
+    .composer textarea:focus { border-color: #7dd3fc; box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.15) inset; }
+    .composer button { padding: 12px 16px; background: var(--btn); border: none; color: var(--btn-ink); border-radius: 999px; cursor: pointer; font-weight: 700; letter-spacing: .2px; transition: background .15s ease, transform .03s ease; }
+    .composer button:hover { background: var(--btn-hover); }
+    .composer button:active { transform: translateY(1px); }
+    .more { margin-top: 8px; font-size: 12px; color: #cbd5e1; opacity: .9; cursor: pointer; text-decoration: underline; }
+    /* Modal */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; align-items: center; justify-content: center; z-index: 20; }
+    .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; max-width: 90vw; max-height: 80vh; overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .modal h3 { margin-top: 0; }
+    .modal pre { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; }
+    /* Auth overlay */
+    .auth-cover { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(2,6,23,0.92); z-index: 30; }
+    .auth-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 20px; width: 320px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+    .auth-card h2 { margin: 0 0 8px 0; }
+    .auth-card input { width: 100%; padding: 12px 14px; background: var(--term-bg); border: 1px solid var(--border); border-radius: 10px; color: inherit; margin-top: 8px; }
+    .auth-card button { margin-top: 12px; width: 100%; padding: 12px; background: var(--btn); color: var(--btn-ink); border: none; border-radius: 10px; cursor: pointer; font-weight: 700; }
+    .auth-card button:hover { background: var(--btn-hover); }
+    .err { color: #fda4af; font-size: 12px; margin-top: 6px; min-height: 16px; }
+    .theme-btn { margin-left: 12px; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.15); border: 1px solid var(--border); color: var(--ink); cursor: pointer; font-size: 12px; }
+  </style>
+  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+  <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script src="https://unpkg.com/xterm-addon-web-links/lib/xterm-addon-web-links.js"></script>
+</head>
+<body>
+  <div class="bar">
+    <span class="title">Ploinky WebTTY — <span id="agentName"></span></span>
+    <div class="tabs">
+      <div class="tab active" id="tabConsole">Console</div>
+      <div class="tab" id="tabChat">Chat</div>
+    </div>
+    <button id="themeToggle" class="theme-btn">Dark</button>
+    <span class="status" id="status">disconnected</span>
+  </div>
+  <div class="meta">
+    <span><span class="k">Container:</span> <span id="containerName"></span></span>
+    <span><span class="k">Runtime:</span> <span id="runtime"></span></span>
+    <span><span class="k">CWD:</span> /agent</span>
+    <span><span class="k">Size:</span> <span id="size">-</span></span>
+    <span style="margin-left:auto; opacity:.8;">Tip: click terminal to focus</span>
+  </div>
+  <div class="pad"></div>
+  <div class="outer">
+    <div class="frame">
+      <div id="console" class="active">
+        <div id="term"></div>
+      </div>
+      <div id="chat">
+        <div class="chat-wrap">
+          <div class="chat-list" id="chatList"></div>
+          <div class="composer">
+            <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+              <textarea id="cmd" rows="2" placeholder="Type command here… (Enter = newline, Ctrl+Enter = send)"></textarea>
+              <label style="display:flex; align-items:center; gap:8px; font-size:12px; color: var(--muted);">
+                <input type="checkbox" id="enterSendToggle" /> Press Enter to send (Shift+Enter = newline)
+              </label>
+            </div>
+            <button id="send">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="moreModal">
+    <div class="modal">
+      <h3>Full response</h3>
+      <pre id="moreContent"></pre>
+    </div>
+  </div>
+
+  <div class="auth-cover" id="authCover">
+    <div class="auth-card">
+      <h2>Authentication</h2>
+      <div>Enter password to continue</div>
+      <input id="authPwd" type="password" placeholder="Password" />
+      <div class="err" id="authErr"></div>
+      <button id="authBtn">Connect</button>
+    </div>
+  </div>
+
+  <script>
+    // Values injected by server-side template replacement
+    const BOOT = {
+      agentName: '__AGENT_NAME__',
+      containerName: '__CONTAINER_NAME__',
+      runtime: '__RUNTIME__',
+      requiresAuth: '__REQUIRES_AUTH__' === 'true'
+    };
+
+    document.getElementById('agentName').textContent = BOOT.agentName;
+    document.getElementById('containerName').textContent = BOOT.containerName;
+    document.getElementById('runtime').textContent = BOOT.runtime;
+
+    const tabs = { console: document.getElementById('console'), chat: document.getElementById('chat') };
+    const tabConsole = document.getElementById('tabConsole');
+    const tabChat = document.getElementById('tabChat');
+
+    function setTab(name) {
+      tabConsole.classList.toggle('active', name==='console');
+      tabChat.classList.toggle('active', name==='chat');
+      tabs.console.classList.toggle('active', name==='console');
+      tabs.chat.classList.toggle('active', name==='chat');
+    }
+    tabConsole.onclick = () => setTab('console');
+    tabChat.onclick = () => setTab('chat');
+
+    const statusEl = document.getElementById('status');
+    const sizeEl = document.getElementById('size');
+    let term, fitAddon;
+    function initConsole() {
+      const termEl = document.getElementById('term');
+      const { Terminal } = window;
+      const FitAddon = window.FitAddon.FitAddon;
+      const WebLinksAddon = window.WebLinksAddon.WebLinksAddon;
+      const termBg = getComputedStyle(document.body).getPropertyValue('--term-bg').trim() || '#111b21';
+      term = new Terminal({ fontFamily: 'Menlo, Monaco, Consolas, monospace', fontSize: 13, theme: { background: termBg }, cursorBlink: true, cursorStyle: 'bar', allowProposedApi: true, convertEol: true, scrollback: 2000, rendererType: 'canvas' });
+      fitAddon = new FitAddon();
+      const links = new WebLinksAddon();
+      term.loadAddon(fitAddon);
+      term.loadAddon(links);
+      term.open(termEl);
+      term.focus();
+      try { fitAddon.fit(); } catch (_) {}
+      sizeEl.textContent = term.rows + ' x ' + term.cols;
+      termEl.addEventListener('mousedown', () => term.focus());
+    }
+
+    function startSSE() {
+      const es = new EventSource('/stream');
+      es.onopen = () => { statusEl.textContent = 'connected'; };
+      es.onerror = () => { statusEl.textContent = 'reconnecting...'; };
+      es.onmessage = (ev) => { term.write(ev.data); };
+    }
+
+    function bindConsoleIO() {
+      window.addEventListener('resize', sendResize);
+      setTimeout(sendResize, 120);
+      term.onData(data => {
+        fetch('/input', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: data }).catch(()=>{});
+      });
+    }
+    function sendResize() {
+      try { fitAddon.fit(); } catch (_) {}
+      const cols = term.cols; const rows = term.rows;
+      sizeEl.textContent = rows + ' x ' + cols;
+      fetch('/resize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cols, rows }) }).catch(()=>{});
+    }
+
+    // Chat
+    const chatList = document.getElementById('chatList');
+    const cmdInput = document.getElementById('cmd');
+    const sendBtn = document.getElementById('send');
+    const enterSendToggle = document.getElementById('enterSendToggle');
+
+    function relTimeString(d) {
+      const now = Date.now();
+      const diffMs = now - d.getTime();
+      const sec = Math.round(diffMs / 1000);
+      const min = Math.round(sec / 60);
+      const hr = Math.round(min / 60);
+      const day = Math.round(hr / 24);
+      if (sec < 45) return 'just now';
+      if (min < 2) return '1 minute ago';
+      if (min < 60) return `${min} minutes ago`;
+      if (hr < 2) return '1 hour ago';
+      if (hr < 24) return `${hr} hours ago`;
+      if (day < 2) return '1 day ago';
+      return `${day} days ago`;
+    }
+
+    function addMsg(text, cls) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + cls;
+      const pre = document.createElement('pre');
+      pre.style.margin = 0; pre.textContent = text;
+      div.appendChild(pre);
+      const meta = document.createElement('div');
+      meta.className = 'meta'; meta.textContent = relTimeString(new Date());
+      div.appendChild(meta);
+      chatList.appendChild(div);
+      chatList.scrollTop = chatList.scrollHeight;
+      return div;
+    }
+    function addServerMsg(fullText) {
+      const lines = (fullText||'').split('\n');
+      const preview = lines.slice(0, 2).join('\n');
+      const hasMore = lines.length > 2;
+      const div = document.createElement('div');
+      div.className = 'msg srv';
+      const pre = document.createElement('pre');
+      pre.textContent = preview;
+      pre.style.margin = 0;
+      div.appendChild(pre);
+      if (hasMore) {
+        const more = document.createElement('div');
+        more.className = 'more';
+         more.textContent = 'View more';
+        more.onclick = () => {
+          document.getElementById('moreContent').textContent = fullText;
+          document.getElementById('moreModal').style.display = 'flex';
+        };
+        div.appendChild(more);
+      }
+      const meta = document.createElement('div');
+      meta.className = 'meta'; meta.textContent = relTimeString(new Date());
+      div.appendChild(meta);
+      chatList.appendChild(div);
+      chatList.scrollTop = chatList.scrollHeight;
+    }
+    document.getElementById('moreModal').onclick = (e) => {
+      if (e.target.id === 'moreModal') e.currentTarget.style.display = 'none';
+    };
+    function autoresize() {
+      cmdInput.style.height = 'auto';
+      cmdInput.style.height = Math.min(200, Math.max(44, cmdInput.scrollHeight)) + 'px';
+    }
+    cmdInput.addEventListener('input', autoresize);
+    setTimeout(autoresize, 0);
+
+    function sendCmd() {
+      const cmd = cmdInput.value.trim();
+      if (!cmd) return;
+      addMsg(cmd, 'me');
+      cmdInput.value = '';
+      autoresize();
+      fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd }) })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error('Auth or server error')))
+        .then(({ output }) => addServerMsg(output))
+        .catch(() => addServerMsg('[error]'));
+    }
+    sendBtn.onclick = sendCmd;
+    cmdInput.addEventListener('keydown', (e) => {
+      const enterSends = enterSendToggle.checked;
+      if (enterSends) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) { e.preventDefault(); sendCmd(); }
+      } else {
+        if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); sendCmd(); }
+      }
+    });
+
+    // Auth
+    function getCookie(name) {
+      const v = document.cookie.split('; ').find(row => row.startsWith(name + '='));
+      return v ? v.split('=')[1] : null;
+    }
+    async function ensureAuth() {
+      if (!BOOT.requiresAuth) return true;
+      const cover = document.getElementById('authCover');
+      const btn = document.getElementById('authBtn');
+      const pwd = document.getElementById('authPwd');
+      const err = document.getElementById('authErr');
+      async function tryAuth(pass) {
+        const res = await fetch('/auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pass }) });
+        if (res.ok) return true; else return false;
+      }
+      if (getCookie('webtty_auth')) return true;
+      cover.style.display = 'flex';
+      return new Promise((resolve) => {
+        btn.onclick = async () => {
+          const ok = await tryAuth(pwd.value);
+          if (ok) { err.textContent = ''; cover.style.display = 'none'; resolve(true); }
+          else { err.textContent = 'Incorrect password'; }
+        };
+      });
+    }
+
+    // Theme handling
+    const themeToggle = document.getElementById('themeToggle');
+    function getTheme(){ return localStorage.getItem('webtty_theme') || 'dark'; }
+    function setTheme(t){ document.body.setAttribute('data-theme', t); localStorage.setItem('webtty_theme', t); updateTermTheme(); updateToggleLabel(); }
+    function updateTermTheme(){ try { const termBg = getComputedStyle(document.body).getPropertyValue('--term-bg').trim(); term?.setOption('theme', { background: termBg }); } catch(_){} }
+    function updateToggleLabel(){ const t = document.body.getAttribute('data-theme'); themeToggle.textContent = t === 'dark' ? 'Dark' : 'Light'; }
+    themeToggle.onclick = () => { const cur = getTheme(); setTheme(cur === 'dark' ? 'light' : 'dark'); };
+
+    (async function boot() {
+      await ensureAuth();
+      setTheme(getTheme());
+      initConsole();
+      startSSE();
+      bindConsoleIO();
+    })();
+  </script>
+</body>
+</html>

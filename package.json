@@ -27,5 +27,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/PloinkyCloud/ploinky.git"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0"
   }
 }

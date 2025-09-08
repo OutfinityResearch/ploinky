@@ -1,12 +1,13 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawn } = require('child_process');
+const http = require('http');
+const { execSync, execFileSync, spawn } = require('child_process');
+let pty; // lazy require to enable TTY resize if available
 const { PLOINKY_DIR } = require('../config');
 const { debugLog } = require('../utils');
-const AgentCoreClient = require('../../../agentCoreClient/lib/client');
+// AgentCoreClient is required lazily only by runTask to avoid hard dependency for other commands
 const { showHelp } = require('../help');
-const CloudCommands = require('../cloudCommands');
-const ClientCommands = require('./client');
+// Cloud and Client command handlers are required lazily inside handleCommand
 
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 
@@ -145,6 +146,46 @@ function getContainerRuntime() {
     }
 }
 
+// Ensure a generic agent container is running for interactive shells/web TTY
+async function ensureAgentContainerRunning(agentName, manifest, agentPath) {
+    const runtime = getContainerRuntime();
+    const containerName = `ploinky_agent_${agentName}`;
+
+    // If running, return
+    try {
+        const running = execSync(`${runtime} ps --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
+        if (running === containerName) return;
+    } catch (_) {}
+
+    // If exists but stopped, start
+    try {
+        const exists = execSync(`${runtime} ps -a --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
+        if (exists === containerName) {
+            execSync(`${runtime} start ${containerName}`);
+            await new Promise(r => setTimeout(r, 800));
+            return;
+        }
+    } catch (_) {}
+
+    // Create new container
+    const image = manifest.image || 'node:18-alpine';
+    const args = [
+        'run', '-d', '--name', containerName,
+        '-w', '/agent',
+        '-v', `${agentPath}:/agent:z`,
+        '-v', `${agentPath}:/code:z`
+    ];
+    // Start process: prefer configured run command; else sleep infinity
+    const runCmd = (manifest.commands && manifest.commands.run) ? manifest.commands.run : '';
+    if (runCmd && runCmd.trim()) {
+        args.push(image, '/bin/sh', '-lc', runCmd);
+    } else {
+        args.push(image, 'sleep', 'infinity');
+    }
+    execFileSync(runtime, args, { stdio: 'inherit' });
+    await new Promise(r => setTimeout(r, 800));
+}
+
 async function ensureContainerRunning(manifest, agentPath) {
     const runtime = getContainerRuntime();
     const containerName = `ploinky_agent_${manifest.name}`;
@@ -237,7 +278,8 @@ async function ensureContainerRunning(manifest, agentPath) {
         
         containerArgs.push(image, 'node', '/agentCore/server.js');
 
-        execSync(`${runtime} ${containerArgs.join(' ')}`);
+        // Use execFileSync to preserve arguments with spaces (e.g., RUN_TASK values)
+        execFileSync(runtime, containerArgs, { stdio: 'inherit' });
         debugLog(`✓ Container created. Waiting a moment for it to initialize...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
 
@@ -264,6 +306,7 @@ async function runTask(agentName, command, args) {
     const hostPort = await ensureContainerRunning(manifest, agentPath);
     
     console.log(`[Ploinky CLI] Running task on agent '${agentName}' via http://localhost:${hostPort}`);
+    const AgentCoreClient = require('../../../agentCoreClient/lib/client');
     const client = new AgentCoreClient();
     try {
         const result = await client.runTask('localhost', hostPort, command, args);
@@ -286,12 +329,40 @@ async function runBash(agentName) {
     const manifestPath = findAgentManifest(agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
-    const containerName = `ploinky_agent_${manifest.name}`;
-    await ensureContainerRunning(manifest, agentPath);
+    const containerName = `ploinky_agent_${agentName}`;
+    await ensureAgentContainerRunning(agentName, manifest, agentPath);
     const runtime = getContainerRuntime();
     console.log(`Opening interactive sh shell in '${agentName}' container...`);
     const execArgs = ['exec', '-it', '-w', '/agent', containerName, 'sh'];
     spawn(runtime, execArgs, { stdio: 'inherit' });
+}
+
+async function runWebTTY(agentName, portArg, passwordArg) {
+    if (!agentName) {
+        throw new Error("Usage: run webtty <agentName> [port]");
+    }
+    // Try node-pty first for a proper interactive TTY (echo, line editing, resize)
+    try { pty = require('node-pty'); } catch (e) { pty = null; }
+
+    const manifestPath = findAgentManifest(agentName);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const agentPath = path.dirname(manifestPath);
+    const containerName = `ploinky_agent_${agentName}`;
+
+    // Ensure container is up
+    await ensureAgentContainerRunning(agentName, manifest, agentPath);
+    const runtime = getContainerRuntime();
+
+    const numericPort = parseInt(portArg, 10);
+    const port = (!isNaN(numericPort) && numericPort > 0) ? numericPort : (parseInt(process.env.WEBTTY_PORT, 10) || 8089);
+    const password = (!isNaN(numericPort) && passwordArg) ? passwordArg : (!isNaN(numericPort) ? passwordArg : portArg);
+
+    // Use refactored modules for TTY and HTTP server
+    const { createTTYSession } = require('../webtty/tty');
+    const { startWebTTYServer } = require('../webtty/server');
+
+    const ttySession = createTTYSession({ runtime, containerName, ptyLib: pty });
+    startWebTTYServer({ agentName, runtime, containerName, port, ttySession, password });
 }
 
 async function handleCommand(args) {
@@ -316,6 +387,7 @@ async function handleCommand(args) {
         case 'run':
             if (options[0] === 'task') await runTask(options[1], options[2], options.slice(3));
             else if (options[0] === 'bash') await runBash(options[1]);
+            else if (options[0] === 'webtty') await runWebTTY(options[1], options[2], options[3]);
             else showHelp();
             break;
         case 'list':
@@ -326,12 +398,14 @@ async function handleCommand(args) {
         case 'help':
             showHelp(options);
             break;
-        case 'cloud':
+        case 'cloud': {
+            const CloudCommands = require('../cloudCommands');
             new CloudCommands().handleCloudCommand(options);
-            break;
-        case 'client':
+            break; }
+        case 'client': {
+            const ClientCommands = require('./client');
             new ClientCommands().handleClientCommand(options);
-            break;
+            break; }
         default:
             executeBashCommand(command, options);
     }

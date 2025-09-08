@@ -147,6 +147,21 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     ],
                     notes: 'Useful for debugging and manual operations inside container'
                 },
+                'webtty': {
+                    syntax: 'run webtty <name> [port] [password]',
+                    description: 'Pornește un server HTTP cu interfață Console/Chat pentru containerul agentului (Xterm.js + chat)',
+                    params: {
+                        '<name>': 'Numele agentului',
+                        '[port]': 'Port local pentru UI (implici 8089)',
+                        '[password]': 'Parolă opțională. Dacă este setată, UI-ul cere autentificare și protejează Console/Chat'
+                    },
+                    examples: [
+                        'run webtty MyAPI',
+                        'run webtty MyAPI 8090',
+                        'run webtty MyAPI 8090 mySecret'
+                    ],
+                    notes: 'Moduri: Console (terminal live) și Chat (comenzi individuale). Fără WebSocket: SSE pentru output, HTTP POST pentru input. Dacă node-pty e disponibil, suportă și resize. Parola (dacă e setată) e validată prin cookie de sesiune.'
+                },
                 'update': {
                     syntax: 'run update <name>',
                     description: 'Run agent\'s configured update command',
