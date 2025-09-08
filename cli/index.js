@@ -20,7 +20,7 @@ const COMMANDS = {
     'run': ['task', 'bash', 'webtty', 'cli', 'agent'],
     'shutdown': [],
     'destroy': [],
-    'list': ['agents', 'repos'],
+    'list': ['agents', 'repos', 'current-agents'],
     'cloud': ['connect', 'init', 'show', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin', 'logs', 'settings'],
     'client': ['call', 'methods', 'status', 'list', 'task', 'task-status'],
     'help': []

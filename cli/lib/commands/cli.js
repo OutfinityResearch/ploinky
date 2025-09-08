@@ -23,13 +23,9 @@ const PREDEFINED_REPOS = {
 };
 
 // Track containers started in this CLI session that are not persistent agent containers
-const SESSION_CONTAINERS = new Set();
-function registerSessionContainer(name) { try { SESSION_CONTAINERS.add(name); } catch (_) {} }
-function cleanupSessionContainers() {
-    const { stopAndRemoveMany } = require('../docker');
-    try { stopAndRemoveMany(Array.from(SESSION_CONTAINERS)); } catch (_) {}
-    SESSION_CONTAINERS.clear();
-}
+// Session tracking moved to docker.js
+function registerSessionContainer(name) { try { require('../docker').addSessionContainer(name); } catch (_) {} }
+function cleanupSessionContainers() { try { require('../docker').cleanupSessionSet(); } catch (_) {} }
 
 function getRepoNames() {
     if (!fs.existsSync(REPOS_DIR)) return [];
@@ -208,6 +204,36 @@ function listAgents() {
     console.log("\nTip: to see more agents, use 'add repo <name>' or 'enable repo <name>'.");
 }
 
+function listCurrentAgents() {
+    try {
+        const { getAgentsRegistry } = require('../docker');
+        const reg = getAgentsRegistry();
+        const names = Object.keys(reg || {});
+        if (!names.length) { console.log('No agents recorded for this workspace yet.'); return; }
+        console.log('Current agents (from .ploinky/.agents):');
+        for (const name of names) {
+            const r = reg[name] || {};
+            const type = r.type || '-';
+            const agent = r.agentName || '-';
+            const repo = r.repoName || '-';
+            const img = r.containerImage || '-';
+            const cwd = r.projectPath || '-';
+            const created = r.createdAt || '-';
+            const binds = (r.config && r.config.binds ? r.config.binds.length : 0);
+            const envs = (r.config && r.config.env ? r.config.env.length : 0);
+            const ports = (r.config && r.config.ports ? r.config.ports.map(p => `${p.containerPort}->${p.hostPort}`).join(', ') : '');
+            console.log(`- ${name}`);
+            console.log(`    type: ${type}  agent: ${agent}  repo: ${repo}`);
+            console.log(`    image: ${img}`);
+            console.log(`    created: ${created}`);
+            console.log(`    cwd: ${cwd}`);
+            console.log(`    binds: ${binds}  env: ${envs}${ports ? `  ports: ${ports}` : ''}`);
+        }
+    } catch (e) {
+        console.error('Failed to list current agents:', e.message);
+    }
+}
+
 function listRepos() {
     const enabled = new Set(loadEnabledRepos());
     console.log('Available repositories:');
@@ -289,7 +315,8 @@ async function runBash(agentName) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
     const repoName = path.basename(path.dirname(agentPath));
-    const { runCommandInContainer } = require('../docker');
+    const { runCommandInContainer, getAgentContainerName } = require('../docker');
+    try { registerSessionContainer(getAgentContainerName(agentName, repoName)); } catch (_) {}
     await runCommandInContainer(agentName, repoName, manifest, '/bin/bash', true);
 }
 
@@ -329,10 +356,12 @@ async function runCli(agentName, args) {
     }
     const agentPath = path.dirname(manifestPath);
     const repoName = path.basename(path.dirname(agentPath));
-    const { runCommandInContainer } = require('../docker');
+    const { runCommandInContainer, getAgentContainerName } = require('../docker');
     const cmd = cliBase + (args && args.length ? (' ' + args.join(' ')) : '');
     console.log(`[run cli] ${agentName}: ${cmd}`);
-    await runCommandInContainer(agentName, repoName, manifest, cmd, false);
+    // Attach interactively for CLI as well
+    try { registerSessionContainer(getAgentContainerName(agentName, repoName)); } catch (_) {}
+    await runCommandInContainer(agentName, repoName, manifest, cmd, true);
 }
 
 async function runAgent(agentName) {
@@ -367,8 +396,8 @@ async function shutdownSession() {
 }
 
 async function destroyAll() {
-    const { destroyAllPloinky } = require('../docker');
-    try { const n = destroyAllPloinky(); console.log(`Destroyed ${n} Ploinky containers.`); }
+    const { destroyWorkspaceContainers } = require('../docker');
+    try { const n = destroyWorkspaceContainers(); console.log(`Destroyed ${n} containers from this workspace.`); }
     catch (e) { console.error('Destroy failed:', e.message); }
 }
 
@@ -409,6 +438,7 @@ async function handleCommand(args) {
         case 'list':
             if (options[0] === 'agents') listAgents();
             else if (options[0] === 'repos') listRepos();
+            else if (options[0] === 'current-agents') listCurrentAgents();
             else showHelp();
             break;
         case 'shutdown':
@@ -447,6 +477,7 @@ module.exports = {
     addEnv,
     listAgents,
     listRepos,
+    listCurrentAgents,
     shutdownSession,
     cleanupSessionContainers,
     destroyAll

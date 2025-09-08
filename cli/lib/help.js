@@ -227,7 +227,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         },
         
         'list': {
-            description: 'List resources',
+            description: 'List resources (agents, repos, current workspace containers)',
             subcommands: {
                 'agents': {
                     syntax: 'list agents',
@@ -238,6 +238,11 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'list repos',
                     description: 'List available repositories with URLs; mark installed and enabled. Use enable repo <name> to include in listings.',
                     examples: ['list repos']
+                },
+                'current-agents': {
+                    syntax: 'list current-agents',
+                    description: 'List current workspace containers from .ploinky/.agents (with ports, binds, env count)',
+                    examples: ['list current-agents']
                 }
             }
         },

@@ -24,6 +24,26 @@ function getContainerRuntime() {
 
 const containerRuntime = getContainerRuntime();
 
+// Agents registry (AGENTS_FILE): JSON map keyed de numele containerului.
+// Folosit pentru a limita operațiile (ex. destroy) la workspace-ul curent.
+// Schema per entry:
+// {
+//   agentName, repoName, containerId?, containerImage,
+//   createdAt, projectPath,
+//   type: 'interactive' | 'agent' | 'agentCore',
+//   config: {
+//     binds: [ { source, target } ],
+//     env: [ { name, value? } ],
+//     ports: [ { containerPort, hostPort } ]
+//   }
+// }
+function loadAgentsMap() {
+  try { return JSON.parse(fs.readFileSync(AGENTS_FILE, 'utf-8') || '{}') || {}; } catch (_) { return {}; }
+}
+function saveAgentsMap(map) {
+  try { fs.writeFileSync(AGENTS_FILE, JSON.stringify(map, null, 2)); } catch (e) { debugLog('saveAgentsMap error: ' + (e?.message||e)); }
+}
+
 
 function getAgentContainerName(agentName, repoName) {
     const safeAgentName = agentName.replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -156,15 +176,21 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             }
         }
         
-        agents[containerName] = { 
-            agentName, 
+        agents[containerName] = {
+            agentName,
             repoName,
             containerId: containerId,
-            containerImage: manifest.container,
+            containerImage: containerImage,
             createdAt: new Date().toISOString(),
-            projectPath: currentDir
+            projectPath: currentDir,
+            type: 'interactive',
+            config: {
+                binds: [ { source: currentDir, target: currentDir } ],
+                env: (manifest.env||[]).map(name => ({ name })),
+                ports: []
+            }
         };
-        fs.writeFileSync(AGENTS_FILE, JSON.stringify(agents, null, 2));
+        saveAgentsMap(agents);
         debugLog(`Updated agents file with container ID: ${containerId}`);
         firstRun = true;
     }
@@ -290,4 +316,235 @@ set enable-mouse off
     }
 }
 
-module.exports = { runCommandInContainer };
+function ensureAgentContainer(agentName, repoName, manifest) {
+    const containerName = getAgentContainerName(agentName, repoName);
+    const currentDir = process.cwd();
+    if (!containerExists(containerName)) {
+        console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
+        const envVars = getSecretsForAgent(manifest).join(' ');
+        const mountOption = containerRuntime === 'podman'
+            ? `--mount type=bind,source="${currentDir}",destination="${currentDir}",relabel=shared`
+            : `-v "${currentDir}:${currentDir}"`;
+        let containerImage = manifest.container;
+        try {
+            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/bash`;
+            debugLog(`Executing create command: ${createCommand}`);
+            execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
+        } catch (error) {
+            if (containerRuntime === 'podman' && String(error.message||'').includes('short-name')) {
+                if (!containerImage.includes('/')) containerImage = `docker.io/library/${containerImage}`;
+                else if (!containerImage.startsWith('docker.io/') && !containerImage.includes('.')) containerImage = `docker.io/${containerImage}`;
+                console.log(`Retrying with full registry name: ${containerImage}`);
+                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/bash`;
+                debugLog(`Executing retry command: ${retryCommand}`);
+                execSync(retryCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
+                manifest.container = containerImage;
+            } else {
+                console.error('[docker.ensureAgentContainer] create failed:', error.message || error);
+                throw error;
+            }
+        }
+        // Registrează în AGENTS_FILE
+        const agents = loadAgentsMap();
+        agents[containerName] = {
+            agentName,
+            repoName,
+            containerImage,
+            createdAt: new Date().toISOString(),
+            projectPath: currentDir,
+            type: 'interactive',
+            config: { binds: [ { source: currentDir, target: currentDir } ], env: (manifest.env||[]).map(name => ({ name })), ports: [] }
+        };
+        saveAgentsMap(agents);
+    }
+    if (!isContainerRunning(containerName)) {
+        const startCommand = `${containerRuntime} start ${containerName}`;
+        debugLog(`Executing start command: ${startCommand}`);
+        try { execSync(startCommand, { stdio: 'inherit' }); }
+        catch (e) { console.error('[docker.ensureAgentContainer] start failed:', e.message || e); throw e; }
+    }
+    return containerName;
+}
+
+function getRuntime() { return containerRuntime; }
+
+async function ensureAgentCore(manifest, agentPath) {
+    const runtime = containerRuntime;
+    const containerName = `ploinky_agent_${manifest.name}`;
+    const fs = require('fs');
+    const path = require('path');
+    const { PLOINKY_DIR } = require('./config');
+    const portFilePath = path.join(PLOINKY_DIR, 'running_agents', `${containerName}.port`);
+    const lockDir = path.join(PLOINKY_DIR, 'locks');
+    const lockFile = path.join(lockDir, `container_${containerName}.lock`);
+
+    // Acquire Lock
+    fs.mkdirSync(lockDir, { recursive: true });
+    let retries = 50; // Wait for max 10 seconds
+    while (retries > 0) {
+        try { fs.mkdirSync(lockFile); break; } catch (e) {
+            if (e.code === 'EEXIST') { await new Promise(r => setTimeout(r, 200)); retries--; } else { throw e; }
+        }
+    }
+    if (retries === 0) throw new Error(`Could not acquire lock for container ${containerName}. It might be stuck.`);
+
+    try {
+        if (fs.existsSync(portFilePath)) {
+            const cachedPort = fs.readFileSync(portFilePath, 'utf8').trim();
+            if (cachedPort) {
+                try {
+                    const runningContainer = execSync(`${runtime} ps --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
+                    if (runningContainer === containerName) { return { containerName, hostPort: cachedPort }; }
+                } catch (_) {}
+            }
+        }
+
+        const existingContainer = execSync(`${runtime} ps -a --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
+        if (existingContainer === containerName) {
+            const runningContainer = execSync(`${runtime} ps --filter name=^/${containerName}$ --format "{{.Names}}"`).toString().trim();
+            if (runningContainer !== containerName) {
+                execSync(`${runtime} start ${containerName}`);
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            const portMapping = execSync(`${runtime} port ${containerName} 8080/tcp`).toString().trim();
+            const hostPort = portMapping.split(':')[1];
+            if (!hostPort) throw new Error(`Could not determine host port for running container ${containerName}`);
+            fs.mkdirSync(path.dirname(portFilePath), { recursive: true });
+            fs.writeFileSync(portFilePath, hostPort);
+            // Asigură înregistrarea în registry dacă lipsea
+            const agents = loadAgentsMap();
+            if (!agents[containerName]) {
+                agents[containerName] = {
+                    agentName: manifest.name,
+                    repoName: path.basename(path.dirname(agentPath)),
+                    containerImage: manifest.container || manifest.image || 'node:18-alpine',
+                    createdAt: new Date().toISOString(),
+                    projectPath: process.cwd(),
+                    type: 'agentCore',
+                    config: { binds: [ { source: agentPath, target: '/agent' } ], env: [{ name: 'PORT', value: '8080' }], ports: [ { containerPort: 8080, hostPort } ] }
+                };
+                saveAgentsMap(agents);
+            }
+            return { containerName, hostPort };
+        }
+
+        const image = manifest.container || manifest.image || 'node:18-alpine';
+        const agentCorePath = path.resolve(__dirname, '../../agentCore');
+        const args = ['run', '-d', '-p', '8080', '--name', containerName,
+            '-v', `${agentPath}:/agent:z`, '-v', `${agentCorePath}:/agentCore:z`];
+        if (manifest.runTask) { args.push('-e', `RUN_TASK=${manifest.runTask}`, '-e', 'CODE_DIR=/agent'); }
+        args.push('-e', 'PORT=8080', image, 'node', '/agentCore/server.js');
+        execSync(`${runtime} ${args.join(' ')}`, { stdio: 'inherit' });
+        await new Promise(r => setTimeout(r, 2000));
+        const portMapping = execSync(`${runtime} port ${containerName} 8080/tcp`).toString().trim();
+        const hostPort = portMapping.split(':')[1];
+        if (!hostPort) throw new Error(`Could not determine host port for new container ${containerName}`);
+        fs.mkdirSync(path.dirname(portFilePath), { recursive: true });
+        fs.writeFileSync(portFilePath, hostPort);
+        // Înregistrează containerul în registry
+        const agents = loadAgentsMap();
+        agents[containerName] = {
+            agentName: manifest.name,
+            repoName: path.basename(path.dirname(agentPath)),
+            containerImage: image,
+            createdAt: new Date().toISOString(),
+            projectPath: process.cwd(),
+            type: 'agentCore',
+            config: {
+                binds: [ { source: agentPath, target: '/agent' }, { source: path.resolve(__dirname, '../../agentCore'), target: '/agentCore' } ],
+                env: [ ...(manifest.runTask ? [{ name: 'RUN_TASK', value: String(manifest.runTask) }, { name: 'CODE_DIR', value: '/agent' }] : []), { name: 'PORT', value: '8080' } ],
+                ports: [ { containerPort: 8080, hostPort } ]
+            }
+        };
+        saveAgentsMap(agents);
+        return { containerName, hostPort };
+    } finally {
+        try { fs.rmdirSync(lockFile); } catch (_) {}
+    }
+}
+
+function startAgentContainer(agentName, manifest, agentPath) {
+    const runtime = containerRuntime;
+    const containerName = `ploinky_agent_${agentName}`;
+    try { execSync(`${runtime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
+    try { execSync(`${runtime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
+    const image = manifest.container || manifest.image || 'node:18-alpine';
+    const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
+    if (!agentCmd) throw new Error(`Manifest for '${agentName}' has no 'agent' command.`);
+    const args = ['run', '-d', '--name', containerName, '-w', '/agent',
+        '-v', `${agentPath}:/agent:z`, '-v', `${agentPath}:/code:z`, image, '/bin/sh', '-lc', agentCmd];
+    execSync(`${runtime} ${args.join(' ')}`, { stdio: 'inherit' });
+    // Înregistrează în registry
+    const agents = loadAgentsMap();
+    agents[containerName] = {
+        agentName,
+        repoName: path.basename(path.dirname(agentPath)),
+        containerImage: image,
+        createdAt: new Date().toISOString(),
+        projectPath: process.cwd(),
+        type: 'agent',
+        config: { binds: [ { source: agentPath, target: '/agent' }, { source: agentPath, target: '/code' } ], env: [], ports: [] }
+    };
+    saveAgentsMap(agents);
+    return containerName;
+}
+
+function stopAndRemove(name) {
+    const runtime = containerRuntime;
+    try {
+        // Most robust: rm -f (forces stop + remove)
+        execSync(`${runtime} rm -f ${name}`, { stdio: 'ignore' });
+    } catch (e) {
+        debugLog(`rm -f ${name} error: ${e.message}`);
+        try { execSync(`${runtime} stop ${name}`, { stdio: 'ignore' }); } catch (e2) { debugLog(`stop ${name} error: ${e2.message}`); }
+        try { execSync(`${runtime} rm ${name}`, { stdio: 'ignore' }); } catch (e3) { debugLog(`rm ${name} error: ${e3.message}`); }
+    }
+}
+
+function stopAndRemoveMany(names) {
+    if (!Array.isArray(names)) return;
+    for (const n of names) {
+        try { stopAndRemove(n); } catch (e) { debugLog(`stopAndRemoveMany ${n} error: ${e?.message||e}`); }
+    }
+}
+
+function listAllContainerNames() {
+    const runtime = containerRuntime;
+    try {
+        const out = execSync(`${runtime} ps -a --format "{{.Names}}"`, { stdio: 'pipe' }).toString().trim();
+        return out ? out.split(/\n+/).filter(Boolean) : [];
+    } catch (e) {
+        debugLog(`listAllContainerNames error: ${e?.message||e}`);
+        return [];
+    }
+}
+
+function destroyAllPloinky() {
+    const names = listAllContainerNames().filter(n => n.startsWith('ploinky_'));
+    stopAndRemoveMany(names);
+    return names.length;
+}
+
+// Distruge DOAR containerele asociate workspace-ului curent (după AGENTS_FILE)
+function destroyWorkspaceContainers() {
+    const cwd = process.cwd();
+    const agents = loadAgentsMap();
+    let removed = 0;
+    for (const [name, rec] of Object.entries(agents)) {
+        if (rec && rec.projectPath === cwd) {
+            try { stopAndRemove(name); delete agents[name]; removed++; }
+            catch (e) { debugLog(`destroyWorkspaceContainers ${name} error: ${e?.message||e}`); }
+        }
+    }
+    saveAgentsMap(agents);
+    return removed;
+}
+
+// Session container tracking (optional helpers)
+const SESSION = new Set();
+function addSessionContainer(name) { if (name) try { SESSION.add(name); } catch (_) {} }
+function cleanupSessionSet() { const list = Array.from(SESSION); stopAndRemoveMany(list); SESSION.clear(); return list.length; }
+
+function getAgentsRegistry() { return loadAgentsMap(); }
+
+module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry };
