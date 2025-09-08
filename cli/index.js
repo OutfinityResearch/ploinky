@@ -17,12 +17,13 @@ const COMMANDS = {
     'refresh': ['agent'],
     'enable': ['env', 'repo'],
     'disable': ['repo'],
-    'run': ['task', 'bash', 'webtty', 'cli', 'agent', 'web'],
+    'run': ['task', 'bash', 'webtty', 'cli', 'agent'],
+    'start': [],
     'shutdown': [],
     'destroy': [],
     'list': ['agents', 'repos', 'current-agents', 'routes'],
     'delete': ['route'],
-    'route': ['add', 'list', 'delete'],
+    'route': ['add', 'list', 'delete', 'static'],
     'probe': ['route'],
     'cloud': ['connect', 'init', 'show', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin', 'logs', 'settings'],
     'client': ['methods', 'status', 'list', 'task', 'task-status'],
@@ -69,7 +70,7 @@ function completer(line) {
             } else if (command === 'list' && words.length === 2) {
                 // After list agents/repos, don't show anything
                 context = 'none';
-            } else if ((command === 'route' || command === 'probe') && words.length === 2) {
+            } else if ((command === 'route' || command === 'probe' || command === 'start') && words.length === 2) {
                 context = 'subcommands';
             } else if (words.length === 2) {
                 context = 'args';
@@ -130,7 +131,7 @@ function completer(line) {
             completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
-            if ((command === 'run' && ['task', 'bash', 'webtty', 'cli', 'agent', 'web'].includes(subcommand)) ||
+            if ((command === 'run' && ['task', 'bash', 'webtty', 'cli', 'agent'].includes(subcommand)) ||
                 (command === 'update' && subcommand === 'agent') ||
                 (command === 'refresh' && subcommand === 'agent') ||
                 (command === 'enable' && subcommand === 'env') ||

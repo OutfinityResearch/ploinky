@@ -601,12 +601,15 @@ async function handleCommand(args) {
             else if (options[0] === 'cli') await runCli(options[1], options.slice(2));
             else if (options[0] === 'agent') await runAgent(options[1]);
             else if (options[0] === 'webtty') await runWebTTY(options[1], options[2], options[3]);
-            else if (options[0] === 'web') await runWeb(options[1], options[2]);
             else showHelp();
+            break;
+        case 'start':
+            await runAll();
             break;
         case 'route':
             if (options[0] === 'list') listRoutes();
             else if (options[0] === 'delete') deleteRoute(options[1]);
+            else if (options[0] === 'static') await runWeb(options[1], options[2]);
             else if (options[0] === 'add') await addRoute(options[1]);
             else await addRoute(options[0]);
             break;

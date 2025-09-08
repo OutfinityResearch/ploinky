@@ -18,11 +18,11 @@ function showHelp(args = []) {
   new agent <repo> <name>        Interactive manifest creation
   update agent <name>            Interactive manifest update
   refresh agent <name>           Restart/remove agent container
-  run                            Start containers for configured routes (.ploinky/routing.json)
+  start                          Start containers for configured routes (.ploinky/routing.json)
   run bash <name>                Open interactive bash in container (attached TTY)
   run cli <name> [args...]       Run manifest "cli" command (attached TTY)
   run webtty <name> <pwd> [port] Start WebTTY (Console/Chat) for an agent
-  run web <name> [port]          Start RoutingServer; serve static from agent's /code
+  route static <name> [port]     Start RoutingServer; serve static from agent's /code
   route add <name>               Ensure agent service + register /apis/<name>
   route list | delete <name>     List or delete routes (alias: list routes | delete route)
   list agents | repos            List agents (manifests) or predefined repos
@@ -197,6 +197,12 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'route': {
             description: 'RoutingServer route management',
             subcommands: {
+                'static': {
+                    syntax: 'route static <name> [port]',
+                    description: 'Start RoutingServer and serve static files from the agent\'s /code (host path)',
+                    examples: ['route static MyWeb 8088'],
+                    notes: 'Writes .ploinky/routing.json with static configuration and ensures the static agent container is running.'
+                },
                 'list': {
                     syntax: 'route list',
                     description: 'List current routes (same as: list routes)',
