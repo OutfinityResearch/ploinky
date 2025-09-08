@@ -168,6 +168,20 @@ function enableRepo(repoName) {
     if (!PREDEFINED_REPOS[repoName]) throw new Error(`Unknown repo '${repoName}'. Use 'list repos' to see options.`);
     const list = loadEnabledRepos();
     if (!list.includes(repoName)) { list.push(repoName); saveEnabledRepos(list); }
+    // If repo not installed locally, clone it now (same as add repo)
+    const repoPath = path.join(REPOS_DIR, repoName);
+    if (!fs.existsSync(repoPath)) {
+        console.log(`Repository '${repoName}' is not installed. Cloning now...`);
+        try {
+            const predefined = PREDEFINED_REPOS[repoName];
+            const url = predefined && predefined.url ? predefined.url : null;
+            if (!url) throw new Error('No URL configured for repo');
+            execSync(`git clone ${url} ${repoPath}`, { stdio: 'inherit' });
+            console.log(`✓ Repository '${repoName}' installed.`);
+        } catch (e) {
+            console.error(`Failed to clone repository '${repoName}':`, e.message);
+        }
+    }
     console.log(`✓ Repo '${repoName}' enabled. Use 'list agents' to view agents.`);
 }
 function disableRepo(repoName) {
@@ -232,6 +246,48 @@ function listCurrentAgents() {
     } catch (e) {
         console.error('Failed to list current agents:', e.message);
     }
+}
+
+function listRoutes() {
+    try {
+        const routingFile = path.resolve('.ploinky/routing.json');
+        let cfg = {};
+        try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
+        const routes = cfg.routes || {};
+        const keys = Object.keys(routes);
+        console.log('RoutingServer configuration:');
+        console.log(`- port: ${cfg.port || '(default 8088 or env PORT)'}`);
+        if (cfg.static && cfg.static.hostPath) {
+            console.log(`- static.hostPath: ${cfg.static.hostPath}`);
+        }
+        if (!keys.length) {
+            console.log('- routes: (none)');
+            console.log("Tip: add one with 'route add <agent>' then test with 'probe route <agent>'");
+            return;
+        }
+        console.log('- routes:');
+        for (const k of keys) {
+            const r = routes[k];
+            console.log(`  /apis/${k} -> http://127.0.0.1:${r.hostPort || '?'} /api  (container: ${r.container || '?'})`);
+        }
+        console.log("Tip: probe a route with 'probe route <agent>'");
+    } catch (e) {
+        console.error('Failed to list routes:', e.message);
+    }
+}
+
+function deleteRoute(agentName) {
+    if (!agentName) { throw new Error('Usage: delete route <agentName>'); }
+    const routingFile = path.resolve('.ploinky/routing.json');
+    let cfg = {};
+    try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
+    cfg.routes = cfg.routes || {};
+    if (!cfg.routes[agentName]) { console.log(`No route found for '${agentName}'.`); return; }
+    delete cfg.routes[agentName];
+    fs.mkdirSync(path.dirname(routingFile), { recursive: true });
+    fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+    console.log(`Deleted route for '${agentName}'.`);
+    console.log("Tip: run 'route list' to verify remaining routes.");
 }
 
 function listRepos() {
@@ -347,6 +403,117 @@ async function runWebTTY(agentName, passwordArg, portArg) {
     startWebTTYServer({ agentName, runtime, containerName, port, ttySession, password, workdir: process.cwd() });
 }
 
+async function runWeb(agentName, portArg) {
+    if (!agentName) { throw new Error('Usage: run web <agentName> [port]'); }
+    const manifestPath = findAgentManifest(agentName);
+    const agentPath = path.dirname(manifestPath);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const port = parseInt(portArg, 10) || 8088;
+    const routingFile = path.resolve('.ploinky/routing.json');
+    let cfg = {};
+    try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
+    cfg.port = port;
+    cfg.static = { agent: agentName, container: `ploinky_agent_${agentName}`, hostPath: agentPath };
+    cfg.routes = cfg.routes || {};
+    fs.mkdirSync(path.dirname(routingFile), { recursive: true });
+    fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+    // Ensure the static agent's container is up as well
+    try {
+        const repoName = path.basename(path.dirname(agentPath));
+        const { ensureAgentContainer } = require('../docker');
+        ensureAgentContainer(agentName, repoName, manifest);
+        console.log(`✓ Ensured container for static agent '${agentName}'.`);
+    } catch (e) { console.error('Warning: could not ensure static container:', e.message); }
+    console.log(`[Ploinky] Starting RoutingServer on port ${port}, serving static from ${agentPath}`);
+    const serverPath = path.resolve(__dirname, '../../../cloud/RoutingServer.js');
+    const child = require('child_process').spawn('node', [serverPath], { stdio: 'inherit', env: { ...process.env, PORT: String(port) } });
+    // Wait for child to run; do not exit main process
+    await new Promise((resolve) => { child.on('exit', () => resolve()); });
+}
+
+async function addRoute(agentName) {
+    if (!agentName) { throw new Error('Usage: route <agentName>'); }
+    const manifestPath = findAgentManifest(agentName);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const agentPath = path.dirname(manifestPath);
+    const { ensureAgentService } = require('../docker');
+    const { containerName, hostPort } = ensureAgentService(agentName, manifest, agentPath);
+    const routingFile = path.resolve('.ploinky/routing.json');
+    let cfg = {};
+    try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
+    cfg.routes = cfg.routes || {};
+    cfg.routes[agentName] = { container: containerName, hostPort };
+    fs.mkdirSync(path.dirname(routingFile), { recursive: true });
+    fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+    console.log(`[Ploinky] Route registered: /apis/${agentName} -> http://127.0.0.1:${hostPort}/api`);
+    console.log(`Tip: test it with: probe route ${agentName}`);
+}
+
+async function runAll() {
+    try {
+        const configPath = path.resolve('.ploinky/routing.json');
+        if (!fs.existsSync(configPath)) { console.log('No routing config found at .ploinky/routing.json'); return; }
+        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8') || '{}');
+        // Start static container if configured
+        if (cfg.static && cfg.static.agent) {
+            try {
+                const agentName = cfg.static.agent;
+                const manifestPath = findAgentManifest(agentName);
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                const repoName = path.basename(path.dirname(path.dirname(manifestPath)));
+                const { ensureAgentContainer } = require('../docker');
+                ensureAgentContainer(agentName, repoName, manifest);
+                console.log(`✓ Static agent container started: ${agentName}`);
+            } catch (e) {
+                console.error('Static container start failed:', e.message);
+            }
+        }
+        // Start API routes containers
+        const routes = (cfg.routes && typeof cfg.routes === 'object') ? cfg.routes : {};
+        const { ensureAgentService } = require('../docker');
+        for (const agentName of Object.keys(routes)) {
+            try {
+                const manifestPath = findAgentManifest(agentName);
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                const agentPath = path.dirname(manifestPath);
+                const preferred = (routes[agentName] && routes[agentName].hostPort) ? routes[agentName].hostPort : undefined;
+                const { hostPort } = ensureAgentService(agentName, manifest, agentPath, preferred);
+                console.log(`✓ API route container started: ${agentName} (hostPort ${hostPort})`);
+            } catch (e) {
+                console.error(`API route start failed for '${agentName}':`, e.message);
+            }
+        }
+        console.log('Done. Start RoutingServer with: run web <agent> [port] (for static), and routes are ready.');
+    } catch (e) {
+        console.error('run (all) failed:', e.message);
+    }
+}
+
+async function probeRoute(agentName, payloadStr) {
+    if (!agentName) { throw new Error('Usage: probe route <agentName> [jsonPayload]'); }
+    const routingFile = path.resolve('.ploinky/routing.json');
+    let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
+    const port = cfg.port || 8088;
+    let payload;
+    if (payloadStr) {
+        try { payload = JSON.parse(payloadStr); } catch (_) { payload = { command: 'probe', args: payloadStr }; }
+    } else {
+        payload = { command: 'probe' };
+    }
+    console.log(`[Ploinky] Probing route: POST http://127.0.0.1:${port}/apis/${agentName}`);
+    const http = require('http');
+    await new Promise((resolve) => {
+        const req = http.request({ hostname: '127.0.0.1', port, path: `/apis/${agentName}`, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (r) => {
+            let buf = [];
+            r.on('data', d => buf.push(d));
+            r.on('end', () => { try { console.log(JSON.stringify(JSON.parse(Buffer.concat(buf).toString('utf8') || '{}'), null, 2)); } catch (_) { console.log(Buffer.concat(buf).toString('utf8')); } resolve(); });
+        });
+        req.on('error', (e) => { console.error('Probe failed:', e.message); resolve(); });
+        req.write(JSON.stringify(payload));
+        req.end();
+    });
+}
+
 async function runCli(agentName, args) {
     const manifestPath = findAgentManifest(agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -428,17 +595,34 @@ async function handleCommand(args) {
             if (options[0] === 'repo') disableRepo(options[1]); else showHelp();
             break;
         case 'run':
+            if (options.length === 0) { await runAll(); break; }
             if (options[0] === 'task') await runTask(options[1], options[2], options.slice(3));
             else if (options[0] === 'bash') await runBash(options[1]);
             else if (options[0] === 'cli') await runCli(options[1], options.slice(2));
             else if (options[0] === 'agent') await runAgent(options[1]);
             else if (options[0] === 'webtty') await runWebTTY(options[1], options[2], options[3]);
+            else if (options[0] === 'web') await runWeb(options[1], options[2]);
+            else showHelp();
+            break;
+        case 'route':
+            if (options[0] === 'list') listRoutes();
+            else if (options[0] === 'delete') deleteRoute(options[1]);
+            else if (options[0] === 'add') await addRoute(options[1]);
+            else await addRoute(options[0]);
+            break;
+        case 'probe':
+            if (options[0] === 'route') await probeRoute(options[1], options.slice(2).join(' '));
             else showHelp();
             break;
         case 'list':
             if (options[0] === 'agents') listAgents();
             else if (options[0] === 'repos') listRepos();
             else if (options[0] === 'current-agents') listCurrentAgents();
+            else if (options[0] === 'routes') listRoutes();
+            else showHelp();
+            break;
+        case 'delete':
+            if (options[0] === 'route') deleteRoute(options[1]);
             else showHelp();
             break;
         case 'shutdown':

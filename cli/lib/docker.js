@@ -266,6 +266,9 @@ set enable-mouse off
     
     if (interactive) {
         // Use spawnSync for interactive sessions to properly handle TTY and signals
+        console.log(`[Ploinky] Attaching to container '${containerName}' (interactive TTY).`);
+        console.log(`[Ploinky] Working directory in container: ${currentDir}`);
+        console.log(`[Ploinky] Exit the program or shell to return to the Ploinky prompt.`);
         const { spawnSync } = require('child_process');
         const args = ['exec'];
         if (interactive) args.push('-it');
@@ -281,12 +284,19 @@ set enable-mouse off
         });
         
         debugLog(`Container session ended with code ${result.status}`);
+        console.log(`[Ploinky] Detached from container '${containerName}'. Exit code: ${result.status ?? 'unknown'}`);
     } else {
         // Non-interactive commands can use execSync
+        const t0 = Date.now();
+        let code = 0;
         try {
             execSync(execCommand, { stdio: 'inherit' });
         } catch (error) {
-            debugLog(`Caught error during ${containerRuntime} exec. This is often expected if the command exits with a non-zero code.`);
+            code = (error && typeof error.status === 'number') ? error.status : 1;
+            debugLog(`Caught error during ${containerRuntime} exec. Exit code: ${code}`);
+        } finally {
+            const dt = Date.now() - t0;
+            console.log(`[Ploinky] Command finished in ${dt} ms with exit code ${code}.`);
         }
     }
     
@@ -548,3 +558,65 @@ function cleanupSessionSet() { const list = Array.from(SESSION); stopAndRemoveMa
 function getAgentsRegistry() { return loadAgentsMap(); }
 
 module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry };
+
+// Ensure an agent service is running on container port 7000 mapped to random host port (>10000)
+function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
+    const runtime = containerRuntime;
+    const containerName = `ploinky_agent_${agentName}`;
+    const image = manifest.container || manifest.image || 'node:18-alpine';
+    const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
+    const cwd = process.cwd();
+    const agentLibPath = path.resolve(__dirname, '../../Agent');
+
+    // If container exists, ensure it's running and return current mapped port.
+    if (containerExists(containerName)) {
+        if (!isContainerRunning(containerName)) {
+            try { execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
+        }
+        try {
+            const portMap = execSync(`${runtime} port ${containerName} 7000/tcp`, { stdio: 'pipe' }).toString().trim();
+            const hostPort = parseInt(portMap.split(':')[1] || '0', 10) || preferredHostPort || 0;
+            return { containerName, hostPort };
+        } catch (_) {
+            // Fall through to recreate if mapping cannot be determined
+        }
+    }
+
+    const hostPort = preferredHostPort || (10000 + Math.floor(Math.random() * 50000));
+    // Build run args with mounts:
+    // - Mount current directory RW at same path (workdir = cwd)
+    // - Mount Agent library RO at /agent
+    // - Mount agentPath RO at /code (for apps expecting /code)
+    const args = ['run', '-d', '-p', `${hostPort}:7000`, '--name', containerName,
+        '-w', cwd,
+        '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
+        '-v', `${agentLibPath}:/agent:ro${runtime==='podman'?',z':''}`,
+        '-v', `${agentPath}:/code:ro${runtime==='podman'?',z':''}`
+    ];
+    const cmd = agentCmd || 'sh /agent/AgentServer.sh';
+    args.push(image, '/bin/sh', '-lc', cmd);
+    execSync(`${runtime} ${args.join(' ')}`, { stdio: 'inherit' });
+
+    // Save to registry
+    const agents = loadAgentsMap();
+    agents[containerName] = {
+        agentName,
+        repoName: path.basename(path.dirname(agentPath)),
+        containerImage: image,
+        createdAt: new Date().toISOString(),
+        projectPath: cwd,
+        type: 'agent',
+        config: {
+            binds: [
+                { source: cwd, target: cwd },
+                { source: agentLibPath, target: '/agent', ro: true },
+                { source: agentPath, target: '/code', ro: true }
+            ],
+            env: [],
+            ports: [ { containerPort: 7000, hostPort } ]
+        }
+    };
+    saveAgentsMap(agents);
+    return { containerName, hostPort };
+}
+module.exports.ensureAgentService = ensureAgentService;

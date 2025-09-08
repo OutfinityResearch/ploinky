@@ -18,7 +18,15 @@ function showHelp(args = []) {
   new agent <repo> <name>        Interactive manifest creation
   update agent <name>            Interactive manifest update
   refresh agent <name>           Restart/remove agent container
-  run cli/agent/bash <name>      Execute agent operations
+  run                            Start containers for configured routes (.ploinky/routing.json)
+  run bash <name>                Open interactive bash in container (attached TTY)
+  run cli <name> [args...]       Run manifest "cli" command (attached TTY)
+  run webtty <name> <pwd> [port] Start WebTTY (Console/Chat) for an agent
+  run web <name> [port]          Start RoutingServer; serve static from agent's /code
+  route add <name>               Ensure agent service + register /apis/<name>
+  route list | delete <name>     List or delete routes (alias: list routes | delete route)
+  list agents | repos            List agents (manifests) or predefined repos
+  list current-agents | routes   List workspace containers or RoutingServer routes
   add env <name> <val>           Add secret | enable env <agent> <var>
 
 ▶ CLOUD OPERATIONS  
@@ -31,10 +39,9 @@ function showHelp(args = []) {
   cloud admin add/password       Admin management
 
 ▶ CLIENT OPERATIONS
-  client call <agent> <method>   Call agent method with params
-  client methods <agent>         List available agent methods
-  client status <agent>          Get agent runtime status
-  client task <agent> <desc>     Send task to agent
+  client task <agent>            Interactive: type command, then params; sends via RoutingServer
+  client methods <agent>         If supported by your agent (via RoutingServer)
+  client status <agent>          If supported by your agent
 
   help | shutdown | destroy      Utilities & shell control
 
@@ -132,9 +139,10 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             subcommands: {
                 'cli': {
                     syntax: 'run cli <name> [args...]',
-                    description: 'Run manifest "cli" command; container exits after unless agent is configured.',
+                    description: 'Run manifest "cli" command interactively (attached TTY). Prompt returns when the command exits.',
                     params: { '<name>': 'Agent name', '[args...]': 'Arguments appended to the cli command' },
-                    examples: [ 'run cli MyAPI --help' ]
+                    examples: [ 'run cli MyAPI --help' ],
+                    notes: 'Always attaches to container TTY. If the cli is a REPL (e.g., node/python), stay attached until you exit.'
                 },
                 'agent': {
                     syntax: 'run agent <name>',
@@ -144,14 +152,14 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'bash': {
                     syntax: 'run bash <name>',
-                    description: 'Open interactive bash shell in agent container',
+                    description: 'Open interactive bash shell (attached TTY) in the agent container',
                     params: {
                         '<name>': 'Agent name'
                     },
                     examples: [
                         'run bash MyAPI  # Opens shell with /workspace mounted'
                     ],
-                    notes: 'Useful for debugging and manual operations inside container'
+                    notes: 'Always attaches to container TTY and waits until you exit the shell.'
                 },
                 'webtty': {
                     syntax: 'run webtty <name> <password> [port]',
@@ -176,6 +184,41 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     examples: [
                         'run update MyAPI  # Runs the update command'
                     ]
+                },
+                'web': {
+                    syntax: 'run web <name> [port]',
+                    description: 'Start local RoutingServer and serve static files from the agent\'s /code (host path).',
+                    params: { '<name>': 'Agent name', '[port]': 'RoutingServer port (default 8088)' },
+                    examples: [ 'run web MyWeb 8088' ],
+                    notes: 'Writes .ploinky/routing.json with static configuration and keeps the server attached.'
+                }
+            }
+        },
+        'route': {
+            description: 'RoutingServer route management',
+            subcommands: {
+                'list': {
+                    syntax: 'route list',
+                    description: 'List current routes (same as: list routes)',
+                    examples: [ 'route list' ]
+                },
+                'delete': {
+                    syntax: 'route delete <name>',
+                    description: 'Delete a route from RoutingServer config (same as: delete route <name>)',
+                    examples: [ 'route delete MyAPI' ]
+                }
+            },
+            syntax: 'route <name>',
+            notes: 'Ensures the agent service listens on port 7000 in the container, mapped to a random host port (>10000). Registers /apis/<name> -> http://127.0.0.1:<hostPort>/api.',
+            examples: [ 'route MyAPI' ]
+        },
+        'probe': {
+            description: 'Send test payloads to RoutingServer endpoints',
+            subcommands: {
+                'route': {
+                    syntax: 'probe route <name> [jsonPayload] ',
+                    description: 'POSTs JSON to /apis/<name>; if no payload provided, uses {"command":"probe"}',
+                    examples: [ 'probe route MyAPI', "probe route MyAPI '{\"command\":\"hello\",\"args\":{}}'" ]
                 }
             }
         },
@@ -227,7 +270,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         },
         
         'list': {
-            description: 'List resources (agents, repos, current workspace containers)',
+            description: 'List resources (agents, repos, current workspace containers, routes)',
             subcommands: {
                 'agents': {
                     syntax: 'list agents',
@@ -243,6 +286,21 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'list current-agents',
                     description: 'List current workspace containers from .ploinky/.agents (with ports, binds, env count)',
                     examples: ['list current-agents']
+                },
+                'routes': {
+                    syntax: 'list routes',
+                    description: 'List configured routes from .ploinky/routing.json',
+                    examples: ['list routes']
+                }
+            }
+        },
+        'delete': {
+            description: 'Delete things',
+            subcommands: {
+                'route': {
+                    syntax: 'delete route <name>',
+                    description: 'Delete a route for an agent from the RoutingServer configuration',
+                    examples: ['delete route MyAPI']
                 }
             }
         },
@@ -467,8 +525,9 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'client': {
             description: 'Client operations for interacting with deployed agents',
             subcommands: {
-                'call': {
-                    syntax: 'client call <agent> <method> [param1] [param2] ...',
+                // 'call' removed; prefer interacting via RoutingServer endpoints
+                'call_removed': {
+                    syntax: '(removed)',
                     description: 'Call a method on an agent with parameters',
                     params: {
                         '<agent>': 'Agent name',
@@ -482,7 +541,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'methods': {
                     syntax: 'client methods <agent>',
-                    description: 'List available methods for an agent',
+                    description: 'List available methods for an agent (if implemented by agent)' ,
                     params: {
                         '<agent>': 'Agent name'
                     },
@@ -493,7 +552,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'status': {
                     syntax: 'client status <agent>',
-                    description: 'Get runtime status of an agent',
+                    description: 'Get runtime status of an agent (if implemented by agent)' ,
                     params: {
                         '<agent>': 'Agent name'
                     },
@@ -511,14 +570,12 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'task': {
                     syntax: 'client task <agent> <task-description>',
-                    description: 'Send a task to an agent for async processing',
+                    description: 'Interactive: asks for command type and parameters (multiline until "end"), then POSTs JSON to /apis/<agent> on RoutingServer' ,
                     params: {
-                        '<agent>': 'Agent name',
-                        '<task-description>': 'Description of the task to execute'
+                        '<agent>': 'Agent name'
                     },
                     examples: [
-                        'client task MyAPI "Process all pending orders"',
-                        'client task DataProcessor "Generate monthly report"'
+                        'client task MyAPI'
                     ]
                 },
                 'task-status': {

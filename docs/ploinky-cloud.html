@@ -5,6 +5,120 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ploinky Cloud - Serverless Platform</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .command-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .command-section h3 {
+            color: #2563eb;
+            margin-bottom: 15px;
+        }
+        .command-syntax {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+        }
+        .command-description {
+            margin: 10px 0;
+            color: #555;
+        }
+        .command-params {
+            margin: 15px 0;
+        }
+        .command-params dt {
+            font-weight: bold;
+            color: #333;
+            margin-top: 10px;
+        }
+        .command-params dd {
+            margin-left: 20px;
+            color: #666;
+        }
+        .command-examples {
+            background: #e8f4f8;
+            border-left: 4px solid #2563eb;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .command-examples code {
+            display: block;
+            margin: 5px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .command-notes {
+            background: #fff9e6;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .architecture-diagram {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        .architecture-diagram pre {
+            margin: 0;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .benefit-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .benefit-card h4 {
+            color: #2563eb;
+            margin-top: 0;
+        }
+        .toc-section {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .toc-section ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .toc-section li {
+            padding: 5px 0;
+        }
+        .toc-section a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        .toc-section a:hover {
+            text-decoration: underline;
+        }
+        .status-banner {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 30px;
+        }
+        .status-banner h3 {
+            margin: 0 0 10px 0;
+            color: #92400e;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -16,386 +130,793 @@
                 <li><a href="index.html">Home</a></li>
                 <li><a href="ploinky-cli.html">CLI Documentation</a></li>
                 <li><a href="ploinky-cloud.html" class="active">Cloud Platform</a></li>
+                <li><a href="architecture.html">Architecture</a></li>
                 <li><a href="https://github.com/PlonkyRepos/ploinky" target="_blank">GitHub</a></li>
             </ul>
         </div>
     </nav>
 
-    <main class="container docs-container">
-        <article class="docs-content full-width">
-            <div class="status-banner">
-                <h3>🚧 In Development</h3>
-                <p>Ploinky Cloud is currently under active development. Features and APIs are subject to change.</p>
+    <main class="container">
+        <div class="status-banner">
+            <h3>🚧 In Active Development</h3>
+            <p>Ploinky Cloud is currently under active development. The server component is functional and ready for testing. Features and APIs may evolve based on user feedback.</p>
+        </div>
+
+        <section class="content-section">
+            <h1>Ploinky Cloud Documentation</h1>
+            <p class="lead">Complete reference for deploying and managing agents in the Ploinky Cloud platform.</p>
+
+            <div class="toc-section">
+                <h3>Quick Navigation</h3>
+                <ul>
+                    <li><a href="#overview">Overview</a></li>
+                    <li><a href="#architecture">Architecture</a></li>
+                    <li><a href="#quick-start">Quick Start</a></li>
+                    <li><a href="#connection">Connection & Authentication</a></li>
+                    <li><a href="#host-management">Host Management</a></li>
+                    <li><a href="#repo-management">Repository Management</a></li>
+                    <li><a href="#agent-management">Agent Management</a></li>
+                    <li><a href="#deployment">Deployment</a></li>
+                    <li><a href="#admin">Admin Management</a></li>
+                    <li><a href="#server-management">Server Management</a></li>
+                    <li><a href="#api-reference">API Reference</a></li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="overview" class="content-section">
+            <h2>Overview</h2>
+            <p>Ploinky Cloud is a self-hosted serverless runtime platform that enables you to deploy Ploinky agents as Lambda-style functions. It provides an open-source alternative to commercial serverless platforms, giving you complete control over your infrastructure while maintaining simplicity.</p>
+            
+            <h3>Key Benefits</h3>
+            <div class="benefits-grid">
+                <div class="benefit-card">
+                    <h4>💰 Cost Efficient</h4>
+                    <p>Pay only for actual compute time. No idle costs, no vendor markup.</p>
+                </div>
+                <div class="benefit-card">
+                    <h4>🔓 No Vendor Lock-in</h4>
+                    <p>Fully open-source. Deploy on any infrastructure, migrate anytime.</p>
+                </div>
+                <div class="benefit-card">
+                    <h4>🚀 Auto-scaling</h4>
+                    <p>Automatically scales from zero to thousands of concurrent executions.</p>
+                </div>
+                <div class="benefit-card">
+                    <h4>🛡️ Security First</h4>
+                    <p>Built-in authentication, container isolation, and secure secrets management.</p>
+                </div>
+                <div class="benefit-card">
+                    <h4>🔧 Easy Integration</h4>
+                    <p>RESTful API, JavaScript SDK, and CLI for seamless integration.</p>
+                </div>
+                <div class="benefit-card">
+                    <h4>📊 Monitoring</h4>
+                    <p>Built-in logging, metrics, and performance monitoring.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="architecture" class="content-section">
+            <h2>Architecture</h2>
+            <p>Ploinky Cloud implements a lightweight container orchestration system optimized for serverless workloads.</p>
+            
+            <div class="architecture-diagram">
+                <pre>
+┌─────────────────────────────────────────────────────────────────┐
+│                         External Clients                         │
+│  (Browser, p-cli, PloinkyClient, curl, 3rd-party integrations)  │
+└────────────────────────────┬────────────────────────────────────┘
+                             │ HTTP/HTTPS
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     Ploinky Cloud Server                         │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                    Request Router                         │  │
+│  │  - Path-based routing (/management, /auth, /agents/*)    │  │
+│  │  - Domain/host routing for multi-tenancy                 │  │
+│  └──────────────────┬───────────────────────────────────────┘  │
+│                     │                                           │
+│  ┌──────────────────▼───────────────────────────────────────┐  │
+│  │                  Task Orchestrator                        │  │
+│  │  - Task creation and scheduling                          │  │
+│  │  - Deployment management                                 │  │
+│  │  - Container lifecycle control                           │  │
+│  └──────────────────┬───────────────────────────────────────┘  │
+│                     │                                           │
+│  ┌──────────────────▼───────────────────────────────────────┐  │
+│  │              AgentCore Task Executor                      │  │
+│  │  - Task queue management                                 │  │
+│  │  - Result polling and retrieval                          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                </pre>
             </div>
 
-            <h1>Ploinky Cloud Documentation</h1>
+            <h3>Components</h3>
+            <ul>
+                <li><strong>Request Router:</strong> Handles incoming HTTP requests and routes them to appropriate handlers</li>
+                <li><strong>Task Orchestrator:</strong> Manages task lifecycle, deployment, and container operations</li>
+                <li><strong>AgentCore:</strong> Runtime engine executing inside containers</li>
+                <li><strong>Container Manager:</strong> Abstracts Docker/Podman operations</li>
+                <li><strong>Guardian:</strong> Authentication and authorization layer</li>
+            </ul>
+        </section>
 
-            <section id="overview">
-                <h2>Overview</h2>
-                <p>Ploinky Cloud is an upcoming serverless runtime platform that enables you to deploy Ploinky agents as Lambda-style functions. It provides a self-hosted, open-source alternative to commercial serverless platforms, giving you complete control over your infrastructure while reducing costs.</p>
-                
-                <h3>Key Benefits</h3>
-                <div class="benefits-grid">
-                    <div class="benefit-card">
-                        <h4>💰 Cost Efficient</h4>
-                        <p>Pay only for actual compute time. No idle costs, no vendor markup.</p>
-                    </div>
-                    <div class="benefit-card">
-                        <h4>🔓 No Vendor Lock-in</h4>
-                        <p>Fully open-source. Deploy on any infrastructure, migrate anytime.</p>
-                    </div>
-                    <div class="benefit-card">
-                        <h4>🚀 Auto-scaling</h4>
-                        <p>Automatically scales from zero to thousands of concurrent executions.</p>
-                    </div>
-                    <div class="benefit-card">
-                        <h4>🔄 CLI Compatibility</h4>
-                        <p>Same agent definitions work both locally and in the cloud.</p>
-                    </div>
+        <section id="quick-start" class="content-section">
+            <h2>Quick Start</h2>
+            
+            <div class="command-section">
+                <h3>1. Start the Cloud Server</h3>
+                <div class="command-syntax">
+# Start Ploinky Cloud server (from ploinky directory)
+node cloud/index.js
+
+# Or with environment variables
+PORT=8000 NODE_ENV=production node cloud/index.js
                 </div>
-            </section>
+            </div>
 
-            <section id="architecture">
-                <h2>Architecture</h2>
-                <p>Ploinky Cloud transforms your containerized agents into serverless functions accessible via HTTP endpoints.</p>
-                
-                <h3>Components</h3>
-                <div class="architecture-diagram">
-                    <div class="arch-component">
-                        <h4>API Gateway</h4>
-                        <p>HTTP endpoint routing and request handling</p>
-                    </div>
-                    <div class="arch-component">
-                        <h4>Function Runtime</h4>
-                        <p>Container orchestration and execution</p>
-                    </div>
-                    <div class="arch-component">
-                        <h4>Agent Registry</h4>
-                        <p>GitHub-based agent repository system</p>
-                    </div>
-                    <div class="arch-component">
-                        <h4>Scaling Engine</h4>
-                        <p>Automatic scaling based on demand</p>
-                    </div>
+            <div class="command-section">
+                <h3>2. Connect from CLI</h3>
+                <div class="command-syntax">
+# Connect to the server
+p-cli cloud connect localhost:8000
+
+# Initialize and get API key
+p-cli cloud init
+
+# Login with API key
+p-cli cloud login YOUR_API_KEY
                 </div>
+            </div>
 
-                <h3>Execution Flow</h3>
-                <ol>
-                    <li>HTTP request arrives at endpoint</li>
-                    <li>Request routed to appropriate agent</li>
-                    <li>Container spun up if not warm</li>
-                    <li>Agent executes with request data</li>
-                    <li>Response returned to client</li>
-                    <li>Container kept warm or scaled down</li>
-                </ol>
-            </section>
+            <div class="command-section">
+                <h3>3. Deploy Your First Agent</h3>
+                <div class="command-syntax">
+# Add a repository
+p-cli cloud repo add demo https://github.com/PloinkyRepos/PloinkyDemo.git
 
-            <section id="use-cases">
-                <h2>Use Cases</h2>
-                
-                <div class="use-case-grid">
-                    <div class="use-case">
-                        <h3>🌐 API Endpoints</h3>
-                        <p>Deploy REST APIs and microservices without managing servers</p>
-                        <ul>
-                            <li>Data processing endpoints</li>
-                            <li>AI model inference</li>
-                            <li>Image/video processing</li>
-                            <li>Authentication services</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="use-case">
-                        <h3>🔗 Webhooks</h3>
-                        <p>Handle webhook events from external services</p>
-                        <ul>
-                            <li>GitHub/GitLab webhooks</li>
-                            <li>Payment processing callbacks</li>
-                            <li>IoT device events</li>
-                            <li>Chat bot integrations</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="use-case">
-                        <h3>⏰ Scheduled Tasks</h3>
-                        <p>Run periodic jobs without maintaining servers</p>
-                        <ul>
-                            <li>Data synchronization</li>
-                            <li>Report generation</li>
-                            <li>Backup operations</li>
-                            <li>Health checks</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="use-case">
-                        <h3>🔄 Event Processing</h3>
-                        <p>React to events in real-time</p>
-                        <ul>
-                            <li>Message queue processing</li>
-                            <li>Stream processing</li>
-                            <li>File upload handling</li>
-                            <li>Database triggers</li>
-                        </ul>
-                    </div>
+# List available agents
+p-cli cloud agent list
+
+# Deploy an agent
+p-cli cloud deploy localhost /hello hello-world
+
+# Test the deployment
+curl http://localhost:8000/hello
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <section id="deployment">
-                <h2>Deployment Options</h2>
-                
-                <h3>Self-Hosted</h3>
-                <p>Deploy Ploinky Cloud on your own infrastructure for maximum control:</p>
-                
-                <div class="deployment-options">
-                    <div class="deploy-option">
-                        <h4>Kubernetes</h4>
-                        <p>Deploy on any Kubernetes cluster (EKS, GKE, AKS, or self-managed)</p>
-                        <pre><code># Coming soon
-kubectl apply -f ploinky-cloud.yaml</code></pre>
-                    </div>
-                    
-                    <div class="deploy-option">
-                        <h4>Docker Compose</h4>
-                        <p>Simple deployment for small to medium workloads</p>
-                        <pre><code># Coming soon
-docker-compose up -d</code></pre>
-                    </div>
-                    
-                    <div class="deploy-option">
-                        <h4>Bare Metal</h4>
-                        <p>Direct installation on Linux servers</p>
-                        <pre><code># Coming soon
-curl -sSL https://ploinky.com/install | bash</code></pre>
-                    </div>
+        <section id="connection" class="content-section">
+            <h2>Connection & Authentication</h2>
+            
+            <div class="command-section">
+                <h3>cloud connect</h3>
+                <div class="command-syntax">cloud connect [url]</div>
+                <div class="command-description">Connect to a Ploinky Cloud server</div>
+                <dl class="command-params">
+                    <dt>[url]</dt>
+                    <dd>Server URL (default: localhost:8000)</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud connect                    # Connect to localhost:8000</code>
+                    <code>cloud connect api.example.com    # Connect to remote server</code>
+                    <code>cloud connect 192.168.1.100:8080 # Connect with custom port</code>
                 </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> Connection info is saved in .ploinky/cloud.json for future use
+                </div>
+            </div>
 
-                <h3>Managed Service</h3>
-                <p>In the future, we plan to offer a fully managed Ploinky Cloud service for teams who prefer not to manage infrastructure.</p>
-            </section>
+            <div class="command-section">
+                <h3>cloud init</h3>
+                <div class="command-syntax">cloud init</div>
+                <div class="command-description">Initialize the server and generate an Admin API Key for first-time setup</div>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud init
+# Output: Admin API Key: ABCDEF123456
+# Save this key securely!</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> This command can only be run once when the server has no admin users. The generated API key is displayed only once - save it securely!
+                </div>
+            </div>
 
-            <section id="features">
-                <h2>Planned Features</h2>
-                
-                <div class="feature-list">
-                    <h3>Core Features</h3>
+            <div class="command-section">
+                <h3>cloud login</h3>
+                <div class="command-syntax">cloud login &lt;API_KEY&gt;</div>
+                <div class="command-description">Authenticate with the cloud server using an API Key</div>
+                <dl class="command-params">
+                    <dt>&lt;API_KEY&gt;</dt>
+                    <dd>Admin API Key generated during initialization</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud login ABCDEF123456</code>
+                    <code>cloud login 7b9d8e6f5a4c3b2a1d0e9f8g7h6i5j4k</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> The API key is stored locally for future requests. Use 'cloud logout' to remove it.
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud logout</h3>
+                <div class="command-syntax">cloud logout</div>
+                <div class="command-description">Logout from the cloud server and remove stored credentials</div>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud logout</code>
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud status</h3>
+                <div class="command-syntax">cloud status</div>
+                <div class="command-description">Display current connection and authentication status</div>
+                <div class="command-examples">
+                    <strong>Example output:</strong>
+                    <code>Server: http://localhost:8000
+Status: Connected ✓
+Authenticated: Yes
+User: admin
+Deployments: 3 active</code>
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud show</h3>
+                <div class="command-syntax">cloud show</div>
+                <div class="command-description">Display current cloud URL and API Key</div>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud show</code>
+                </div>
+            </div>
+        </section>
+
+        <section id="host-management" class="content-section">
+            <h2>Host Management</h2>
+            
+            <div class="command-section">
+                <h3>cloud host add</h3>
+                <div class="command-syntax">cloud host add &lt;hostname&gt;</div>
+                <div class="command-description">Register a new hostname or domain for routing</div>
+                <dl class="command-params">
+                    <dt>&lt;hostname&gt;</dt>
+                    <dd>The hostname or domain to register (e.g., example.com, api.myapp.io)</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud host add example.com</code>
+                    <code>cloud host add api.myapp.io</code>
+                    <code>cloud host add staging.internal.net</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> The hostname must point to your Ploinky Cloud server's IP address in DNS
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud host remove</h3>
+                <div class="command-syntax">cloud host remove &lt;hostname&gt;</div>
+                <div class="command-description">Remove a registered hostname</div>
+                <dl class="command-params">
+                    <dt>&lt;hostname&gt;</dt>
+                    <dd>The hostname to remove</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud host remove staging.internal.net</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> This will also remove all deployments associated with this hostname
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud host list</h3>
+                <div class="command-syntax">cloud host list</div>
+                <div class="command-description">List all registered hostnames</div>
+                <div class="command-examples">
+                    <strong>Example output:</strong>
+                    <code>Registered hosts:
+- localhost (3 deployments)
+- example.com (5 deployments)
+- api.myapp.io (2 deployments)</code>
+                </div>
+            </div>
+        </section>
+
+        <section id="repo-management" class="content-section">
+            <h2>Repository Management</h2>
+            
+            <div class="command-section">
+                <h3>cloud repo add</h3>
+                <div class="command-syntax">cloud repo add &lt;name&gt; &lt;url&gt;</div>
+                <div class="command-description">Add a Git repository containing Ploinky agents to the cloud</div>
+                <dl class="command-params">
+                    <dt>&lt;name&gt;</dt>
+                    <dd>A unique name for the repository</dd>
+                    <dt>&lt;url&gt;</dt>
+                    <dd>Git URL (HTTPS or SSH) of the repository</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud repo add MyAgents https://github.com/user/my-agents.git</code>
+                    <code>cloud repo add PrivateAgents git@github.com:company/private-agents.git</code>
+                    <code>cloud repo add Demo https://github.com/PloinkyRepos/PloinkyDemo.git</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> The repository will be cloned to the server. For private repos, ensure the server has appropriate SSH keys configured.
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud repo remove</h3>
+                <div class="command-syntax">cloud repo remove &lt;name&gt;</div>
+                <div class="command-description">Remove a repository from the cloud</div>
+                <dl class="command-params">
+                    <dt>&lt;name&gt;</dt>
+                    <dd>The repository name to remove</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud repo remove MyAgents</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Warning:</strong> This will stop all agents from this repository and remove the repository files
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud repo list</h3>
+                <div class="command-syntax">cloud repo list</div>
+                <div class="command-description">List all repositories registered in the cloud</div>
+                <div class="command-examples">
+                    <strong>Example output:</strong>
+                    <code>Cloud repositories:
+- Demo: https://github.com/PloinkyRepos/PloinkyDemo.git (5 agents)
+- MyAgents: https://github.com/user/my-agents.git (3 agents)
+- PrivateAgents: git@github.com:company/private-agents.git (10 agents)</code>
+                </div>
+            </div>
+        </section>
+
+        <section id="agent-management" class="content-section">
+            <h2>Agent Management</h2>
+            
+            <div class="command-section">
+                <h3>cloud agent list</h3>
+                <div class="command-syntax">cloud agent list</div>
+                <div class="command-description">List all available agents from all repositories</div>
+                <div class="command-examples">
+                    <strong>Example output:</strong>
+                    <code>Available agents:
+Demo repository:
+  - hello-world: Simple hello world agent
+  - echo-server: Echo service agent
+  - data-processor: Data processing agent
+  
+MyAgents repository:
+  - api-gateway: API gateway service
+  - auth-service: Authentication service</code>
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud agent info</h3>
+                <div class="command-syntax">cloud agent info &lt;name&gt;</div>
+                <div class="command-description">Display detailed information about a specific agent</div>
+                <dl class="command-params">
+                    <dt>&lt;name&gt;</dt>
+                    <dd>The agent name</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud agent info hello-world
+# Output:
+Agent: hello-world
+Repository: Demo
+Description: Simple hello world agent
+Container: node:18-alpine
+Status: Running
+Deployments: 2
+Memory: 128MB
+CPU: 0.25 cores</code>
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud agent start</h3>
+                <div class="command-syntax">cloud agent start &lt;name&gt;</div>
+                <div class="command-description">Start a deployed agent container</div>
+                <dl class="command-params">
+                    <dt>&lt;name&gt;</dt>
+                    <dd>The agent name to start</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud agent start hello-world</code>
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud agent stop</h3>
+                <div class="command-syntax">cloud agent stop &lt;name&gt;</div>
+                <div class="command-description">Stop a running agent container</div>
+                <dl class="command-params">
+                    <dt>&lt;name&gt;</dt>
+                    <dd>The agent name to stop</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud agent stop hello-world</code>
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud agent restart</h3>
+                <div class="command-syntax">cloud agent restart &lt;name&gt;</div>
+                <div class="command-description">Restart an agent container</div>
+                <dl class="command-params">
+                    <dt>&lt;name&gt;</dt>
+                    <dd>The agent name to restart</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud agent restart hello-world</code>
+                </div>
+            </div>
+        </section>
+
+        <section id="deployment" class="content-section">
+            <h2>Deployment Management</h2>
+            
+            <div class="command-section">
+                <h3>cloud deploy</h3>
+                <div class="command-syntax">cloud deploy &lt;host&gt; &lt;path&gt; &lt;agent&gt;</div>
+                <div class="command-description">Deploy an agent to a specific URL path on a host</div>
+                <dl class="command-params">
+                    <dt>&lt;host&gt;</dt>
+                    <dd>Target hostname (must be registered with 'cloud host add')</dd>
+                    <dt>&lt;path&gt;</dt>
+                    <dd>URL path where the agent will be accessible (e.g., /api, /webhook)</dd>
+                    <dt>&lt;agent&gt;</dt>
+                    <dd>Agent name to deploy</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud deploy localhost /hello hello-world</code>
+                    <code>cloud deploy example.com /api api-gateway</code>
+                    <code>cloud deploy api.myapp.io /v1/auth auth-service</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> After deployment, the agent will be accessible at http://host/path. The agent's container will be started automatically if not already running.
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud undeploy</h3>
+                <div class="command-syntax">cloud undeploy &lt;host&gt; &lt;path&gt;</div>
+                <div class="command-description">Remove a deployment from a specific path</div>
+                <dl class="command-params">
+                    <dt>&lt;host&gt;</dt>
+                    <dd>Hostname where the agent is deployed</dd>
+                    <dt>&lt;path&gt;</dt>
+                    <dd>URL path of the deployment</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud undeploy localhost /hello</code>
+                    <code>cloud undeploy example.com /api</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> This removes the route but doesn't stop the container. Use 'cloud agent stop' to stop the container.
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud deployments</h3>
+                <div class="command-syntax">cloud deployments</div>
+                <div class="command-description">List all active deployments across all hosts</div>
+                <div class="command-examples">
+                    <strong>Example output:</strong>
+                    <code>Active deployments:
+localhost:
+  /hello → hello-world (running)
+  /echo → echo-server (running)
+  
+example.com:
+  /api → api-gateway (running)
+  /webhook → webhook-handler (stopped)
+  
+api.myapp.io:
+  /v1/auth → auth-service (running)
+  /v1/users → user-service (running)</code>
+                </div>
+            </div>
+        </section>
+
+        <section id="admin" class="content-section">
+            <h2>Admin Management</h2>
+            
+            <div class="command-section">
+                <h3>cloud admin add</h3>
+                <div class="command-syntax">cloud admin add &lt;username&gt;</div>
+                <div class="command-description">Create a new admin user</div>
+                <dl class="command-params">
+                    <dt>&lt;username&gt;</dt>
+                    <dd>Username for the new admin</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Example:</strong>
+                    <code>cloud admin add john
+# Enter password: ****
+# Confirm password: ****
+# Admin user 'john' created successfully</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Note:</strong> You'll be prompted to enter and confirm a password. The password is encrypted before storage.
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud admin password</h3>
+                <div class="command-syntax">cloud admin password [username]</div>
+                <div class="command-description">Change an admin user's password</div>
+                <dl class="command-params">
+                    <dt>[username]</dt>
+                    <dd>Username to change password for (optional, defaults to current user)</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud admin password       # Change your own password</code>
+                    <code>cloud admin password john  # Change john's password (requires admin rights)</code>
+                </div>
+            </div>
+        </section>
+
+        <section id="server-management" class="content-section">
+            <h2>Server Management</h2>
+            
+            <div class="command-section">
+                <h3>cloud destroy</h3>
+                <div class="command-syntax">cloud destroy &lt;agents|server-agents&gt;</div>
+                <div class="command-description">Stop and remove agent containers</div>
+                <dl class="command-params">
+                    <dt>agents</dt>
+                    <dd>Remove local containers (.ploinky/.agents)</dd>
+                    <dt>server-agents</dt>
+                    <dd>Remove containers on the connected cloud server</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud destroy agents            # Remove local containers</code>
+                    <code>cloud destroy server-agents     # Remove server containers</code>
+                </div>
+                <div class="command-notes">
+                    <strong>⚠️ Warning:</strong> This is a destructive operation. All containers will be stopped and removed.
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud logs</h3>
+                <div class="command-syntax">cloud logs [lines|list|download &lt;date&gt;]</div>
+                <div class="command-description">View and manage server logs</div>
+                <dl class="command-params">
+                    <dt>[lines]</dt>
+                    <dd>Number of recent log lines to display (default: 100)</dd>
+                    <dt>list</dt>
+                    <dd>List available log files</dd>
+                    <dt>download &lt;date&gt;</dt>
+                    <dd>Download logs for a specific date (YYYY-MM-DD format)</dd>
+                </dl>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud logs                      # Show last 100 lines</code>
+                    <code>cloud logs 500                  # Show last 500 lines</code>
+                    <code>cloud logs list                 # List available log files</code>
+                    <code>cloud logs download 2025-09-01  # Download logs for Sep 1, 2025</code>
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h3>cloud settings</h3>
+                <div class="command-syntax">cloud settings &lt;show|set&gt;</div>
+                <div class="command-description">View or modify server settings</div>
+                <div class="command-examples">
+                    <strong>Examples:</strong>
+                    <code>cloud settings show                        # Display all settings</code>
+                    <code>cloud settings set logLevel debug         # Set log level to debug</code>
+                    <code>cloud settings set metricsRetention 365   # Keep metrics for 365 days</code>
+                    <code>cloud settings set maxConcurrent 100      # Max concurrent tasks</code>
+                </div>
+                <div class="command-notes">
+                    <strong>Available settings:</strong>
                     <ul>
-                        <li>✅ HTTP trigger endpoints</li>
-                        <li>✅ Automatic scaling from 0 to N</li>
-                        <li>✅ Cold start optimization</li>
-                        <li>✅ Request/response logging</li>
-                        <li>⏳ Scheduled triggers (cron)</li>
-                        <li>⏳ Event-driven triggers</li>
-                        <li>⏳ WebSocket support</li>
+                        <li><code>logLevel</code>: error, warn, info, debug</li>
+                        <li><code>metricsRetention</code>: Days to keep metrics (1-365)</li>
+                        <li><code>maxConcurrent</code>: Maximum concurrent tasks (1-1000)</li>
+                        <li><code>enableAuth</code>: Enable/disable authentication (true/false)</li>
                     </ul>
-                    
-                    <h3>Developer Experience</h3>
+                </div>
+            </div>
+        </section>
+
+        <section id="api-reference" class="content-section">
+            <h2>API Reference</h2>
+            
+            <h3>REST API Endpoints</h3>
+            
+            <div class="command-section">
+                <h4>Management API</h4>
+                <div class="command-syntax">
+GET    /management/status              # Server status
+GET    /management/config              # Configuration
+POST   /management/config              # Update configuration
+GET    /management/deployments         # List deployments
+POST   /management/deployments         # Create deployment
+DELETE /management/deployments/{id}    # Remove deployment
+GET    /management/agents              # List agents
+GET    /management/agents/{name}       # Agent details
+POST   /management/agents/{name}/start # Start agent
+POST   /management/agents/{name}/stop  # Stop agent
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h4>Authentication</h4>
+                <div class="command-syntax">
+POST   /auth/login     # Login with API key
+POST   /auth/logout    # Logout
+GET    /auth/status    # Authentication status
+                </div>
+            </div>
+
+            <div class="command-section">
+                <h4>Agent Execution</h4>
+                <div class="command-syntax">
+POST   /{host}/{path}  # Execute agent function
+GET    /{host}/{path}  # Get agent information (if supported)
+                </div>
+            </div>
+
+            <h3>JavaScript SDK</h3>
+            <div class="command-examples">
+                <code>// Initialize client
+const { PloinkyClient } = require('@ploinky/client');
+const client = new PloinkyClient('http://localhost:8000');
+
+// Authenticate
+await client.login('YOUR_API_KEY');
+
+// Execute agent function
+const result = await client.call('/hello', 'greet', { name: 'World' });
+console.log(result); // "Hello, World!"
+
+// Deploy an agent
+await client.deploy('localhost', '/api', 'my-agent');
+
+// List deployments
+const deployments = await client.getDeployments();
+console.log(deployments);</code>
+            </div>
+
+            <h3>Authentication</h3>
+            <p>All management endpoints require authentication via API key. Include the key in the Authorization header:</p>
+            <div class="command-syntax">
+Authorization: Bearer YOUR_API_KEY
+            </div>
+
+            <h3>Error Responses</h3>
+            <div class="command-syntax">
+{
+  "error": true,
+  "code": "DEPLOYMENT_NOT_FOUND",
+  "message": "Deployment not found for localhost:/api",
+  "details": {
+    "domain": "localhost",
+    "path": "/api"
+  },
+  "timestamp": "2024-01-15T10:30:00Z",
+  "requestId": "uuid-v4"
+}
+            </div>
+        </section>
+
+        <section class="content-section">
+            <h2>Best Practices</h2>
+            
+            <div class="benefits-grid">
+                <div class="benefit-card">
+                    <h4>🔐 Security</h4>
                     <ul>
-                        <li>✅ CLI deployment tool</li>
-                        <li>✅ Local testing environment</li>
-                        <li>⏳ Web-based dashboard</li>
-                        <li>⏳ Real-time logs and metrics</li>
-                        <li>⏳ Version management</li>
-                        <li>⏳ A/B testing support</li>
+                        <li>Always use HTTPS in production</li>
+                        <li>Keep API keys secure and rotate regularly</li>
+                        <li>Use environment variables for secrets</li>
+                        <li>Enable authentication for all deployments</li>
                     </ul>
-                    
-                    <h3>Enterprise Features</h3>
+                </div>
+                
+                <div class="benefit-card">
+                    <h4>🚀 Performance</h4>
                     <ul>
-                        <li>⏳ Multi-tenancy support</li>
-                        <li>⏳ Custom domains</li>
-                        <li>⏳ API rate limiting</li>
-                        <li>⏳ Authentication/authorization</li>
-                        <li>⏳ VPC/private networking</li>
-                        <li>⏳ Compliance logging</li>
+                        <li>Keep agents stateless for better scaling</li>
+                        <li>Use appropriate resource limits</li>
+                        <li>Monitor logs and metrics regularly</li>
+                        <li>Cache frequently accessed data</li>
                     </ul>
                 </div>
-            </section>
-
-            <section id="comparison">
-                <h2>Comparison with Other Platforms</h2>
                 
-                <table class="comparison-table">
-                    <thead>
-                        <tr>
-                            <th>Feature</th>
-                            <th>Ploinky Cloud</th>
-                            <th>AWS Lambda</th>
-                            <th>Google Cloud Functions</th>
-                            <th>Vercel</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Open Source</td>
-                            <td>✅ Yes</td>
-                            <td>❌ No</td>
-                            <td>❌ No</td>
-                            <td>❌ No</td>
-                        </tr>
-                        <tr>
-                            <td>Self-Hosted Option</td>
-                            <td>✅ Yes</td>
-                            <td>❌ No</td>
-                            <td>❌ No</td>
-                            <td>❌ No</td>
-                        </tr>
-                        <tr>
-                            <td>Container Support</td>
-                            <td>✅ Full</td>
-                            <td>⚠️ Limited</td>
-                            <td>⚠️ Limited</td>
-                            <td>❌ No</td>
-                        </tr>
-                        <tr>
-                            <td>No Vendor Lock-in</td>
-                            <td>✅ Yes</td>
-                            <td>❌ No</td>
-                            <td>❌ No</td>
-                            <td>❌ No</td>
-                        </tr>
-                        <tr>
-                            <td>Cost Control</td>
-                            <td>✅ Full</td>
-                            <td>⚠️ Limited</td>
-                            <td>⚠️ Limited</td>
-                            <td>⚠️ Limited</td>
-                        </tr>
-                        <tr>
-                            <td>Language Support</td>
-                            <td>✅ Any</td>
-                            <td>⚠️ Selected</td>
-                            <td>⚠️ Selected</td>
-                            <td>⚠️ Selected</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </section>
-
-            <section id="roadmap">
-                <h2>Development Roadmap</h2>
-                
-                <div class="roadmap">
-                    <div class="roadmap-phase">
-                        <h3>Phase 1: Core Runtime (Q1 2025)</h3>
-                        <ul>
-                            <li>Basic HTTP trigger support</li>
-                            <li>Container orchestration</li>
-                            <li>Simple scaling engine</li>
-                            <li>CLI deployment tool</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="roadmap-phase">
-                        <h3>Phase 2: Production Ready (Q2 2025)</h3>
-                        <ul>
-                            <li>Advanced scaling strategies</li>
-                            <li>Monitoring and logging</li>
-                            <li>Web dashboard</li>
-                            <li>Scheduled triggers</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="roadmap-phase">
-                        <h3>Phase 3: Enterprise Features (Q3 2025)</h3>
-                        <ul>
-                            <li>Multi-tenancy</li>
-                            <li>Advanced security features</li>
-                            <li>Custom domains</li>
-                            <li>SLA guarantees</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="roadmap-phase">
-                        <h3>Phase 4: Ecosystem (Q4 2025)</h3>
-                        <ul>
-                            <li>Marketplace for agents</li>
-                            <li>Third-party integrations</li>
-                            <li>Managed cloud offering</li>
-                            <li>Enterprise support</li>
-                        </ul>
-                    </div>
-                </div>
-            </section>
-
-            <section id="getting-started">
-                <h2>Getting Started (Preview)</h2>
-                
-                <div class="info-box">
-                    <p><strong>Note:</strong> These instructions are for the upcoming release. The platform is not yet available.</p>
+                <div class="benefit-card">
+                    <h4>📦 Deployment</h4>
+                    <ul>
+                        <li>Test agents locally before deploying</li>
+                        <li>Use meaningful paths for deployments</li>
+                        <li>Document your API endpoints</li>
+                        <li>Implement health checks</li>
+                    </ul>
                 </div>
                 
-                <h3>Expected Workflow</h3>
-                <pre><code># Install Ploinky Cloud CLI
-npm install -g ploinky-cloud
-
-# Initialize a new function
-ploinky-cloud init my-function
-
-# Deploy an agent as a function
-ploinky-cloud deploy --agent python-dev --trigger http
-
-# Get the endpoint URL
-ploinky-cloud status my-function
-# → https://my-function.ploinky.app
-
-# Test the function
-curl https://my-function.ploinky.app \
-  -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello from Ploinky Cloud!"}'</code></pre>
-            </section>
-
-            <section id="contribute">
-                <h2>Contributing</h2>
-                <p>Ploinky Cloud is being developed as an open-source project. We welcome contributions!</p>
-                
-                <div class="contribute-cards">
-                    <div class="contribute-card">
-                        <h3>💻 Code Contributions</h3>
-                        <p>Help build the serverless runtime</p>
-                        <a href="https://github.com/PlonkyRepos/ploinky-cloud" class="btn btn-secondary">GitHub Repo</a>
-                    </div>
-                    <div class="contribute-card">
-                        <h3>📝 Documentation</h3>
-                        <p>Improve guides and examples</p>
-                        <a href="https://github.com/PlonkyRepos/ploinky/tree/main/docs" class="btn btn-secondary">Docs Repo</a>
-                    </div>
-                    <div class="contribute-card">
-                        <h3>🧪 Testing</h3>
-                        <p>Try early releases and report issues</p>
-                        <a href="https://github.com/PlonkyRepos/ploinky-cloud/issues" class="btn btn-secondary">Issue Tracker</a>
-                    </div>
+                <div class="benefit-card">
+                    <h4>🔧 Maintenance</h4>
+                    <ul>
+                        <li>Regular backups of configuration</li>
+                        <li>Monitor disk space for logs</li>
+                        <li>Update agents and dependencies</li>
+                        <li>Plan for zero-downtime updates</li>
+                    </ul>
                 </div>
-            </section>
+            </div>
+        </section>
 
-            <section class="next-steps">
-                <h2>Stay Updated</h2>
-                <div class="cta-cards">
-                    <div class="cta-card">
-                        <h3>📧 Join Waitlist</h3>
-                        <p>Be first to know when Ploinky Cloud launches</p>
-                        <a href="https://github.com/PlonkyRepos/ploinky-cloud" class="btn btn-secondary">Watch on GitHub</a>
-                    </div>
-                    <div class="cta-card">
-                        <h3>💬 Join Discussion</h3>
-                        <p>Share ideas and feedback</p>
-                        <a href="https://github.com/PlonkyRepos/ploinky/discussions" class="btn btn-secondary">Discussions</a>
-                    </div>
-                    <div class="cta-card">
-                        <h3>🖥️ Try CLI Now</h3>
-                        <p>Start with Ploinky CLI while Cloud is in development</p>
-                        <a href="ploinky-cli.html" class="btn btn-secondary">CLI Docs</a>
-                    </div>
-                </div>
-            </section>
-        </article>
+        <section class="content-section">
+            <h2>Troubleshooting</h2>
+            
+            <h3>Common Issues</h3>
+            
+            <div class="command-section">
+                <h4>Connection refused</h4>
+                <p>If you can't connect to the server:</p>
+                <ul>
+                    <li>Verify the server is running: <code>ps aux | grep "node cloud"</code></li>
+                    <li>Check the port is correct: default is 8000</li>
+                    <li>Ensure firewall allows the port: <code>sudo ufw allow 8000</code></li>
+                    <li>Check server logs: <code>cloud logs 100</code></li>
+                </ul>
+            </div>
+
+            <div class="command-section">
+                <h4>Authentication failed</h4>
+                <p>If authentication fails:</p>
+                <ul>
+                    <li>Verify API key is correct: <code>cloud show</code></li>
+                    <li>Check if authentication is enabled: <code>cloud settings show</code></li>
+                    <li>Try logging out and back in: <code>cloud logout && cloud login API_KEY</code></li>
+                </ul>
+            </div>
+
+            <div class="command-section">
+                <h4>Agent not starting</h4>
+                <p>If an agent won't start:</p>
+                <ul>
+                    <li>Check agent logs: <code>cloud logs | grep agent-name</code></li>
+                    <li>Verify container runtime: <code>docker ps</code> or <code>podman ps</code></li>
+                    <li>Check resource limits: Memory or CPU constraints</li>
+                    <li>Verify repository is cloned: <code>cloud repo list</code></li>
+                </ul>
+            </div>
+        </section>
     </main>
 
-    <footer>
-        <div class="footer-content">
-            <p>&copy; 2024 Ploinky Project. Open source under MIT License.</p>
-            <p><a href="https://github.com/PlonkyRepos/ploinky">GitHub</a> | 
-               <a href="https://github.com/PlonkyRepos/ploinky/issues">Issues</a> | 
-               <a href="https://github.com/PlonkyRepos/ploinky/discussions">Discussions</a></p>
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 Ploinky Project. Open Source under MIT License.</p>
         </div>
     </footer>
 </body>

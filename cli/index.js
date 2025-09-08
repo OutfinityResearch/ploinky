@@ -17,12 +17,15 @@ const COMMANDS = {
     'refresh': ['agent'],
     'enable': ['env', 'repo'],
     'disable': ['repo'],
-    'run': ['task', 'bash', 'webtty', 'cli', 'agent'],
+    'run': ['task', 'bash', 'webtty', 'cli', 'agent', 'web'],
     'shutdown': [],
     'destroy': [],
-    'list': ['agents', 'repos', 'current-agents'],
+    'list': ['agents', 'repos', 'current-agents', 'routes'],
+    'delete': ['route'],
+    'route': ['add', 'list', 'delete'],
+    'probe': ['route'],
     'cloud': ['connect', 'init', 'show', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin', 'logs', 'settings'],
-    'client': ['call', 'methods', 'status', 'list', 'task', 'task-status'],
+    'client': ['methods', 'status', 'list', 'task', 'task-status'],
     'help': []
 };
 
@@ -58,7 +61,7 @@ function completer(line) {
             } else if (command === 'client' && words.length === 2) {
                 // For client commands, show agent names where appropriate
                 const clientSubcommand = words[1];
-                if (['call', 'methods', 'status', 'task', 'task-status'].includes(clientSubcommand)) {
+                if (['methods', 'status', 'task', 'task-status'].includes(clientSubcommand)) {
                     context = 'args'; // Will show agent names
                 } else {
                     context = 'none';
@@ -66,6 +69,8 @@ function completer(line) {
             } else if (command === 'list' && words.length === 2) {
                 // After list agents/repos, don't show anything
                 context = 'none';
+            } else if ((command === 'route' || command === 'probe') && words.length === 2) {
+                context = 'subcommands';
             } else if (words.length === 2) {
                 context = 'args';
             } else {
@@ -89,9 +94,11 @@ function completer(line) {
                 if (['host', 'repo', 'agent', 'admin'].includes(cloudSubcommand)) {
                     context = 'cloud-sub';
                 }
+            } else if ((command === 'route' || command === 'probe') && words.length === 3) {
+                context = 'args';
             } else if (command === 'client' && words.length === 3) {
                 const clientSubcommand = words[1];
-                if (['call', 'methods', 'status', 'task', 'task-status'].includes(clientSubcommand)) {
+                if (['methods', 'status', 'task', 'task-status'].includes(clientSubcommand)) {
                     context = 'args'; // Will show agent names
                 }
             } else {
@@ -123,11 +130,11 @@ function completer(line) {
             completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
-            if ((command === 'run' && ['task', 'bash', 'webtty', 'cli', 'agent'].includes(subcommand)) ||
+            if ((command === 'run' && ['task', 'bash', 'webtty', 'cli', 'agent', 'web'].includes(subcommand)) ||
                 (command === 'update' && subcommand === 'agent') ||
                 (command === 'refresh' && subcommand === 'agent') ||
                 (command === 'enable' && subcommand === 'env') ||
-                (command === 'client' && ['call', 'methods', 'status', 'task', 'task-status'].includes(subcommand))) {
+                (command === 'client' && ['methods', 'status', 'task', 'task-status'].includes(subcommand))) {
                 completions = getAgentNames();
             } else if (command === 'new' && subcommand === 'agent') {
                 completions = getRepoNames();

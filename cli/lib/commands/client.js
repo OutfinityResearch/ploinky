@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const PloinkyClient = require('../../../client/ploinkyClient');
+const http = require('http');
 const { PLOINKY_DIR } = require('../config');
 const { debugLog } = require('../utils');
 const { showHelp } = require('../help');
@@ -20,40 +20,7 @@ class ClientCommands {
         }
     }
 
-    getClient() {
-        // Ensure we have the latest config
-        this.loadConfig();
-        const serverUrl = this.config.serverUrl || 'http://localhost:8000';
-        if (!this._client || this._client.serverUrl !== serverUrl) {
-            this._client = new PloinkyClient(serverUrl);
-        }
-        if (this.config.authToken) {
-            this._client.setAuthToken(this.config.authToken);
-        }
-        return this._client;
-    }
-
-    async callAgent(agentName, method, ...params) {
-        if (!agentName || !method) {
-            console.log('Usage: client call <agent> <method> [param1] [param2] ...');
-            console.log('Example: client call myAgent processData "input.json" "output.json"');
-            return;
-        }
-
-        try {
-            const pathOrAgent = agentName;
-            const agentPath = pathOrAgent.startsWith('/') ? pathOrAgent : `/${pathOrAgent}`;
-            console.log(`Calling ${agentPath} -> ${method}(${params.join(', ')})...`);
-
-            const client = this.getClient();
-            const result = await client.call(agentPath, method, ...params);
-
-            // The server returns arbitrary JSON; print nicely
-            console.log(JSON.stringify(result, null, 2));
-        } catch (error) {
-            console.error('Error calling agent:', error.message);
-        }
-    }
+    // Removed legacy PloinkyClient-based call; using local RoutingServer instead.
 
     async listMethods(agentName) {
         if (!agentName) {
@@ -81,36 +48,53 @@ class ClientCommands {
         console.log('Not supported by default. Use management command: cloud agent list');
     }
 
-    async sendTask(agentPath, command, ...params) {
-        if (!agentPath || !command) {
-            console.log('Usage: client task <agent-path> <command> [params...]');
-            console.log('Example: client task /demo hello world');
-            console.log('Example: client task /api/users list');
+    async interactiveTask(agentName) {
+        if (!agentName) {
+            console.log('Usage: client task <agentName>');
             return;
         }
-
+        const readline = require('readline');
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const ask = (q) => new Promise(res => rl.question(q, ans => res(ans)));
         try {
-            const path = agentPath.startsWith('/') ? agentPath : `/${agentPath}`;
-            console.log(`Sending task to ${path}: ${command}(${params.join(', ')})...`);
-
-            const client = this.getClient();
-            const result = await client.call(path, command, ...params);
-
-            console.log('\n--- Task Result ---');
-            if (result && result.success !== undefined) {
-                console.log(`Status: ${result.success ? 'SUCCESS' : 'FAILED'}`);
-                if (result.data) {
-                    console.log('Data:', JSON.stringify(result.data, null, 2));
-                }
-                if (result.error) {
-                    console.log('Error:', JSON.stringify(result.error, null, 2));
-                }
-            } else {
-                console.log(JSON.stringify(result, null, 2));
+            const cmd = (await ask('Command type: ')).trim();
+            console.log("Enter parameters as JSON or lines; type 'end' on a new line to finish:");
+            const lines = [];
+            rl.setPrompt('> ');
+            rl.prompt();
+            for await (const line of rl) {
+                if (line.trim().toLowerCase() === 'end') break;
+                lines.push(line);
+                rl.prompt();
             }
-            console.log('-------------------\n');
-        } catch (error) {
-            console.error('Error sending task:', error.message);
+            rl.close();
+            let args;
+            const joined = lines.join('\n');
+            try { args = JSON.parse(joined); } catch (_) { args = joined; }
+            const routingFile = path.resolve('.ploinky/routing.json');
+            let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
+            const port = cfg.port || 8088;
+            const payload = { command: cmd, args };
+            console.log(`[client] POST http://127.0.0.1:${port}/apis/${agentName}`);
+            const res = await new Promise((resolve, reject) => {
+                const req = http.request({ hostname: '127.0.0.1', port, path: `/apis/${agentName}`, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (r) => {
+                    let buf = [];
+                    r.on('data', d => buf.push(d));
+                    r.on('end', () => {
+                        try { resolve(JSON.parse(Buffer.concat(buf).toString('utf8') || '{}')); }
+                        catch (e) { resolve({ ok: false, error: 'invalid JSON from agent', raw: Buffer.concat(buf).toString('utf8') }); }
+                    });
+                });
+                req.on('error', reject);
+                req.write(JSON.stringify(payload));
+                req.end();
+            });
+            console.log('--- Result ---');
+            console.log(JSON.stringify(res, null, 2));
+            console.log('--------------');
+        } catch (e) {
+            console.error('Interactive task failed:', e.message);
+            try { rl.close(); } catch (_) {}
         }
     }
 
@@ -131,7 +115,7 @@ class ClientCommands {
 
         switch (subcommand) {
             case 'call':
-                this.callAgent(options[0], options[1], ...options.slice(2));
+                console.log('client call is no longer supported. Use RoutingServer and "client task <agent>" instead.');
                 break;
             case 'methods':
                 this.listMethods(options[0]);
@@ -143,24 +127,18 @@ class ClientCommands {
                 this.listAgents();
                 break;
             case 'task':
-                if (options.length >= 2) {
-                    // Pass all parameters properly: agent-path, command, and params
-                    this.sendTask(options[0], options[1], ...options.slice(2));
-                } else {
-                    console.log('Usage: client task <agent-path> <command> [params...]');
-                }
+                await this.interactiveTask(options[0]);
                 break;
             case 'task-status':
                 this.getTaskStatus(options[0], options[1]);
                 break;
             default:
                 console.log('Client commands:');
-                console.log('  client call <path|agent> <command> [params...]  - Call an agent command');
-                console.log("  tip: use '/auth' 'login' <user> <pass> or other agent commands");
-                console.log('  Other helpers depend on agent support; prefer "client call" or management via "cloud".');
+                console.log('  client task <agent>           - Interactive: enter command type, then params (end to send)');
+                console.log('  client methods <agent>        - If supported by your agent (via RoutingServer)');
+                console.log('  client status <agent>         - If supported by your agent');
         }
     }
 }
 
 module.exports = ClientCommands;
-
