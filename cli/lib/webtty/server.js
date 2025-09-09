@@ -168,12 +168,7 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttySession
   const broadcast = (data) => {
     if (!data) return;
     const str = typeof data === 'string' ? data : data.toString('utf8');
-    const lines = str.split('\n');
-    let chunk = '';
-    for (let i = 0; i < lines.length; i++) {
-      chunk += 'data: ' + lines[i] + '\n';
-    }
-    chunk += '\n';
+    const chunk = 'data: ' + JSON.stringify(str) + '\n\n';
     for (const [res] of clients) { try { res.write(chunk); } catch (_) {} }
     if (DEBUG) log('broadcast', { bytes: Buffer.byteLength(chunk), clients: clients.size });
     appendLog('broadcast', { bytes: Buffer.byteLength(chunk), clients: clients.size, preview: str.slice(0,2000) });

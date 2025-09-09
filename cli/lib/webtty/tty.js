@@ -4,7 +4,7 @@ function createTTYSession({ runtime, containerName, ptyLib, workdir }) {
   const DEBUG = process.env.WEBTTY_DEBUG === '1';
   const log = (...args) => { if (DEBUG) console.log('[webtty][tty]', ...args); };
   const wd = workdir || process.cwd();
-  const execArgs = ['exec', '-it', containerName, 'bash', '-lc', `cd '${wd}' && exec bash`];
+  const execArgs = ['exec', '-it', containerName, 'bash', '-lc', `cd '${wd}' && PS1='# ' exec bash --noprofile --norc`];
   const env = { ...process.env, TERM: 'xterm-256color' };
 
   let isPTY = false;

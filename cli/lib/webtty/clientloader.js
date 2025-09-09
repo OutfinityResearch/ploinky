@@ -67,7 +67,15 @@
     es = new EventSource('/stream');
     es.onopen = () => { statusEl.textContent = 'connected'; dlog('SSE open'); showBanner('Connected', 'ok'); setTimeout(hideBanner, 1000); };
     es.onerror = (e) => { statusEl.textContent = 'reconnecting...'; dlog('SSE error', e); showBanner('Reconnecting…'); };
-    es.onmessage = (ev) => { dlog('SSE message', { bytes: (ev.data||'').length }); try { term.write(ev.data); } catch(e){ dlog('term write error', e); } };
+    es.onmessage = (ev) => {
+      try {
+        const text = JSON.parse(ev.data);
+        dlog('SSE message', { bytes: (text || '').length });
+        term.write(text);
+      } catch (e) {
+        dlog('term write error', e);
+      }
+    };
     es.addEventListener('meta', (ev) => {
       try { const meta = JSON.parse(ev.data || '{}'); if (typeof meta.clients === 'number') { statusEl.textContent = `connected (${meta.clients})`; dlog('meta', meta); } } catch (e) { dlog('meta parse error', e); }
     });
@@ -153,7 +161,8 @@
     chatList.scrollTop = chatList.scrollHeight;
   }
   document.getElementById('moreModal').onclick = (e) => { if (e.target.id === 'moreModal') e.currentTarget.style.display = 'none'; };
-  function autoresize() { cmdInput.style.height = 'auto'; cmdInput.style.height = Math.min(200, Math.max(44, cmdInput.scrollHeight)) + 'px'; }
+  function autoresize() {
+    cmdInput.style.height = 'auto'; cmdInput.style.height = Math.min(200, Math.max(44, cmdInput.scrollHeight)) + 'px'; }
   cmdInput.addEventListener('input', autoresize);
   setTimeout(autoresize, 0);
 
@@ -196,6 +205,11 @@
     }
     if (getCookie('webtty_auth')) return true;
     cover.style.display = 'flex';
+    pwd.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+          btn.click();
+      }
+    });
     return new Promise((resolve) => {
       btn.onclick = async () => {
         const ok = await tryAuth(pwd.value);
