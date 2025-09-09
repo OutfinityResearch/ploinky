@@ -7,6 +7,10 @@ const theme = {
     success: "\x1b[32m",   // green
     error: "\x1b[31m",     // red
 };
+const COMMANDS = {
+    HELP: 'help',
+    CONFIGURE: 'configure',
+};
 
 // Constants for file reading animation
 const BOX_CHARS = {
@@ -19,7 +23,7 @@ const frames = [
     `${theme.secondary}.${theme.text}.${theme.secondary}.`,
     `${theme.secondary}..${theme.text}.`
 ];
-const HINT_MESSAGE = `${theme.warning}Press Ctrl+C to stop generation...${theme.reset}`; // The hint message
+const HINT_MESSAGE = `${theme.warning}Press ESC to stop generation...${theme.reset}`; // The hint message
 
 const animationManager = (() => {
     const activeAnimations = new Map();
@@ -215,7 +219,67 @@ const stopReadFileAnimation = (id, error = null) => {
     return null;
 };
 
+/**
+ * Displays the application intro screen in the console.
+ */
+const displayIntro = () => {
+    const ploinkyArt = [
+        ' ____  _      ____  ___  _   _  _  __ __   __',
+        '|  _ \\| |    / __ \\|_ _|| \\ | || |/ / \\ \\ / /',
+        '| |_) | |   | |  | || | |  \\| || \' /   \\ V /',
+        '|  __/| |   | |  | || | | . ` ||  <     > <',
+        '| |   | |___| |__| || | | |\\  || . \\   / . \\',
+        '|_|   |______\\____/|___||_| \\_||_|\\_\\ /_/ \\_\\'
+    ];
+
+    console.log(theme.primary + ploinkyArt.join('\n') + theme.reset);
+    console.log();
+    console.log(`Welcome to Ploinky, your AI-powered command-line assistant.`);
+    console.log();
+    console.log(`  ${theme.secondary}•${theme.reset} Configure your LLM and provider using the ${theme.warning}/${COMMANDS.CONFIGURE}${theme.reset} command.`);
+    console.log(`  ${theme.secondary}•${theme.reset} Type ${theme.warning}/${COMMANDS.HELP}${theme.reset} for a list of all available commands.`);
+    console.log();
+};
+
+/**
+ * Creates a keypress event handler.
+ * This factory function allows the handler to be stateful, managing generation cancellation.
+ * @param {object} chatState - A state object, expected to have `isGenerating` and `abortController` properties.
+ * @returns {function(string, object): void} The event listener for keypress events.
+ */
+const createKeyPressHandler = (chatState) => (str, key) => {
+    // Allow Ctrl+C to exit the application cleanly
+    if (key.ctrl && key.name === 'c') {
+        process.exit();
+    }
+
+    // Handle ESC for stopping generation
+    if (chatState.isGenerating && key.name === 'escape') {
+        if (chatState.abortController) {
+            chatState.abortController.abort();
+        }
+    }
+};
+
+/**
+ * Handles the 'close' event on the readline interface, ensuring a clean exit.
+ */
+const handleRlClose = () => {
+    process.exit(0);
+};
+
+/**
+ * Handles the 'exit' event on the process, ensuring raw mode is turned off.
+ */
+const handleProcessExit = () => {
+    if (process.stdin.isTTY) {
+        process.stdin.setRawMode(false);
+    }
+    console.log('\nExiting Ploinky. Goodbye!');
+};
+
 module.exports = {
+    displayIntro,
     startThinkingAnimation,
     stopThinkingAnimation,
     logWithThinkingAnimation,
@@ -223,4 +287,9 @@ module.exports = {
     stopReadFileAnimation,
     theme,
     BOX_CHARS,
+    COMMANDS,
+    createKeyPressHandler,
+    handleRlClose,
+    handleProcessExit,
+    stripAnsi,
 };
