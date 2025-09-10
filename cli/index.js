@@ -17,13 +17,17 @@ const COMMANDS = {
     'refresh': ['agent'],
     'enable': ['env', 'repo'],
     'disable': ['repo'],
-    'run': ['task', 'sh', 'bash', 'webtty', 'cli', 'agent'],
+    'shell': [],
+    'cli': [],
+    'agent': [],
+    'run': ['task', 'webtty', 'cli', 'agent'],
     'start': [],
     'shutdown': [],
     'destroy': [],
     'list': ['agents', 'repos', 'current-agents', 'routes'],
     'delete': ['route'],
     'route': ['add', 'list', 'delete', 'static'],
+    'console': [],
     'probe': ['route'],
     'cloud': ['connect', 'init', 'show', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin', 'logs', 'settings'],
     'client': ['methods', 'status', 'list', 'task', 'task-status'],
@@ -131,7 +135,10 @@ function completer(line) {
             completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
-            if ((command === 'run' && ['task', 'sh', 'bash', 'webtty', 'cli', 'agent'].includes(subcommand)) ||
+            if ((command === 'run' && ['task', 'webtty', 'cli', 'agent'].includes(subcommand)) ||
+                (command === 'shell') ||
+                (command === 'cli') ||
+                (command === 'agent') ||
                 (command === 'update' && subcommand === 'agent') ||
                 (command === 'refresh' && subcommand === 'agent') ||
                 (command === 'enable' && subcommand === 'env') ||
@@ -349,6 +356,7 @@ function main() {
 
         debugLog('Raw arguments:', args);
         initEnvironment();
+        try { require('./lib/ploinkyboot').bootstrap(); } catch (_) {}
 
         if (args.length === 0) {
             startInteractiveMode();

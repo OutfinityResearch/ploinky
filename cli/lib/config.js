@@ -1,12 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 const PLOINKY_DIR = '.ploinky';
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
-const AGENTS_FILE = path.join(PLOINKY_DIR, '.agents');
+const AGENTS_FILE = path.join(PLOINKY_DIR, 'agents');
 const SECRETS_FILE = path.join(PLOINKY_DIR, '.secrets');
-const DEFAULT_REPO_URL = 'https://github.com/PloinkyRepos/Basic.git';
 
 let DEBUG_MODE = process.env.PLOINKY_DEBUG === '1';
 
@@ -32,17 +30,6 @@ function initEnvironment() {
 
     if (!fs.existsSync(AGENTS_FILE)) {
         fs.writeFileSync(AGENTS_FILE, JSON.stringify({}, null, 2));
-    }
-
-    const defaultRepoPath = path.join(REPOS_DIR, 'basic');
-    if (!fs.existsSync(defaultRepoPath)) {
-        console.log(`Default 'basic' repository not found. Cloning...`);
-        try {
-            execSync(`git clone ${DEFAULT_REPO_URL} ${defaultRepoPath}`, { stdio: 'inherit' });
-            console.log('Default repository cloned successfully.');
-        } catch (error) {
-            console.error(`Error cloning default repository: ${error.message}`);
-        }
     }
 
     if (!fs.existsSync(SECRETS_FILE)) {

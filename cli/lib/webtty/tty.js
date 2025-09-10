@@ -1,62 +1,48 @@
 const { spawn } = require('child_process');
+const { buildExecArgs } = require('../docker');
 
-function createTTYSession({ runtime, containerName, ptyLib, workdir }) {
+function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
   const DEBUG = process.env.WEBTTY_DEBUG === '1';
   const log = (...args) => { if (DEBUG) console.log('[webtty][tty]', ...args); };
-  const wd = workdir || process.cwd();
-  const execArgs = ['exec', '-it', containerName, 'sh', '-lc', `cd '${wd}' && exec sh`];
-  const env = { ...process.env, TERM: 'xterm-256color' };
+  const factory = () => {
+    const wd = workdir || process.cwd();
+    const env = { ...process.env, TERM: 'xterm-256color' };
+    const execArgs = buildExecArgs(containerName, wd, entry || 'exec sh', true);
+    let isPTY = false;
+    let ptyProc = null;
+    const outputHandlers = new Set();
+    const closeHandlers = new Set();
 
-  let isPTY = false;
-  let ptyProc = null;
-  const outputHandlers = new Set();
-  const closeHandlers = new Set();
+    const emitOutput = (data) => {
+      for (const h of outputHandlers) { try { h(data); } catch (_) {} }
+    };
+    const emitClose = () => {
+      for (const h of closeHandlers) { try { h(); } catch (_) {} }
+    };
 
-  const emitOutput = (data) => {
-    for (const h of outputHandlers) {
-      try { h(data); } catch (_) {}
+    if (!ptyLib) throw new Error("'node-pty' is required for WebTTY.");
+    try {
+      ptyProc = ptyLib.spawn(runtime, execArgs, { name: 'xterm-color', cols: 80, rows: 24, cwd: process.cwd(), env });
+      isPTY = true;
+      log('spawned PTY', { runtime, containerName, entry: entry || 'sh' });
+      ptyProc.onData(emitOutput);
+      ptyProc.onExit(() => { log('pty exit'); emitClose(); });
+    } catch (e) {
+      log('pty spawn failed', e?.message || e);
+      throw e;
     }
-  };
-  const emitClose = () => {
-    for (const h of closeHandlers) {
-      try { h(); } catch (_) {}
-    }
+
+    return {
+      isPTY,
+      onOutput(handler) { if (handler) outputHandlers.add(handler); return () => outputHandlers.delete(handler); },
+      onClose(handler) { if (handler) closeHandlers.add(handler); return () => closeHandlers.delete(handler); },
+      write(data) { if (DEBUG) log('write', { bytes: Buffer.byteLength(data || '') }); try { ptyProc?.write?.(data); } catch (e) { log('write error', e?.message || e); } },
+      resize(cols, rows) { if (!cols || !rows) return; try { ptyProc?.resize?.(cols, rows); } catch (e) { log('resize error', e?.message || e); } if (DEBUG) log('resized', { cols, rows, pty: isPTY }); },
+      close() { try { ptyProc?.kill?.(); } catch (_) {} }
+    };
   };
 
-  if (!ptyLib) {
-    throw new Error("node-pty is required for WebTTY session");
-  }
-  try {
-    ptyProc = ptyLib.spawn(runtime, execArgs, {
-      name: 'xterm-color',
-      cols: 80,
-      rows: 24,
-      cwd: process.cwd(),
-      env,
-    });
-    isPTY = true;
-    log('spawned PTY', { runtime, containerName });
-    ptyProc.onData(emitOutput);
-    ptyProc.onExit(() => { log('pty exit'); emitClose(); });
-  } catch (e) {
-    log('pty spawn failed', e?.message || e);
-    throw e;
-  }
-
-  return {
-    isPTY,
-    onOutput(handler) { if (handler) outputHandlers.add(handler); return () => outputHandlers.delete(handler); },
-    onClose(handler) { if (handler) closeHandlers.add(handler); return () => closeHandlers.delete(handler); },
-    write(data) {
-      if (DEBUG) log('write', { bytes: Buffer.byteLength(data || '') });
-      try { ptyProc?.write?.(data); } catch (e) { log('write error', e?.message || e); }
-    },
-    resize(cols, rows) {
-      if (!cols || !rows) return;
-      try { ptyProc?.resize?.(cols, rows); } catch (e) { log('resize error', e?.message || e); }
-      if (DEBUG) log('resized', { cols, rows, pty: isPTY });
-    },
-  };
+  return { create: factory };
 }
 
-module.exports = { createTTYSession };
+module.exports = { createTTYFactory };

@@ -2,7 +2,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-function startWebTTYServer({ agentName, runtime, containerName, port, ttySession, password, workdir }) {
+function startWebTTYServer({ agentName, runtime, containerName, port, ttyFactory, password, workdir, entry }) {
   const DEBUG = process.env.WEBTTY_DEBUG === '1';
   const log = (...args) => { if (DEBUG) console.log('[webtty]', ...args); };
   const LOG_PATH = path.resolve(process.cwd(), 'logs_webtty');
@@ -22,10 +22,10 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttySession
     .replace(/__RUNTIME__/g, runtime)
     .replace(/__REQUIRES_AUTH__/g, password ? 'true' : 'false');
 
+  // Simple in-memory session store with per-client PTY
   const clients = new Map(); // res -> heartbeat timer
-
-  // Simple in-memory session store
-  const sessions = new Set();
+  const sessions = new Set(); // authorized session ids
+  const clientSessions = new Map(); // sid -> { tty, sseRes, hb, unsub, queue }
   const COOKIE_NAME = 'webtty_auth';
   function parseCookies(hdr) {
     const out = {}; if (!hdr) return out;
@@ -42,6 +42,8 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttySession
     return ok;
   }
   function deny(res) { res.statusCode = 401; res.end('Unauthorized'); }
+
+  // No special chat execution; chat uses the same PTY via /input and observes output via /stream SSE.
 
   const server = http.createServer((req, res) => {
     const ip = req.socket?.remoteAddress;
@@ -96,17 +98,40 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttySession
         'X-Accel-Buffering': 'no'
       });
       res.write(': connected\n\n');
+      // Identify session
+      const cookies = parseCookies(req.headers['cookie']);
+      const sid = cookies[COOKIE_NAME];
+      // Create or replace session-specific PTY
+      try {
+        // Close previous SSE if any
+        const prev = clientSessions.get(sid);
+        if (prev && prev.sseRes && prev.sseRes !== res) { try { prev.sseRes.end(); } catch(_){} }
+      } catch (_) {}
       const t = setInterval(() => { try { res.write(': ping\n\n'); } catch (_) {} }, 15000);
       clients.set(res, t);
-      if (DEBUG) log('SSE open', { ip, clients: clients.size });
-      appendLog('sse_open', { ip, clients: clients.size });
-      // Send initial client count and broadcast to others
-      try { res.write(`event: meta\n` + `data: ${JSON.stringify({ clients: clients.size })}\n\n`); } catch (_) {}
-      try { for (const [r] of clients) { if (r !== res) r.write(`event: meta\n` + `data: ${JSON.stringify({ clients: clients.size })}\n\n`); } } catch (_) {}
+      appendLog('sse_open', { ip });
+      // Ensure PTY exists
+      if (!clientSessions.has(sid)) {
+        const tty = ttyFactory.create();
+        const unsub = tty.onOutput((d) => { try { res.write('data: ' + JSON.stringify(String(d||'')) + '\n\n'); } catch (_) {} });
+        clientSessions.set(sid, { tty, sseRes: res, hb: t, unsub, queue: Promise.resolve() });
+      } else {
+        const sess = clientSessions.get(sid);
+        sess.sseRes = res;
+        sess.hb = t;
+        // Attach output to this new res
+        const unsub = sess.tty.onOutput((d) => { try { res.write('data: ' + JSON.stringify(String(d||'')) + '\n\n'); } catch (_) {} });
+        sess.unsub = unsub;
+      }
       req.on('close', () => {
-        try { clearInterval(t); clients.delete(res); res.end(); } catch (_) {}
-        // Broadcast updated client count on disconnect
-        try { for (const [r] of clients) { r.write(`event: meta\n` + `data: ${JSON.stringify({ clients: clients.size })}\n\n`); } } catch (_) {}
+        try { clearInterval(t); clients.delete(res); } catch (_) {}
+        // Close PTY on disconnect to free resources
+        try {
+          const sess = clientSessions.get(sid);
+          if (sess && sess.unsub) { try { sess.unsub(); } catch(_){} }
+          if (sess && sess.tty) { try { sess.tty.close(); } catch(_){} }
+          clientSessions.delete(sid);
+        } catch (_) {}
       });
     } else if (req.url.startsWith('/input') && req.method === 'POST') {
       if (!authorized(req)) return deny(res);
@@ -116,7 +141,12 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttySession
         const data = Buffer.concat(chunks).toString('utf8');
         if (DEBUG) log('input', { bytes: Buffer.byteLength(data) });
         appendLog('input', { bytes: Buffer.byteLength(data), preview: data.slice(0,120) });
-        ttySession.write(data);
+        try {
+          const cookies = parseCookies(req.headers['cookie']);
+          const sid = cookies[COOKIE_NAME];
+          const sess = clientSessions.get(sid);
+          sess?.tty?.write?.(data);
+        } catch (_) {}
         res.writeHead(204); res.end();
       });
     } else if (req.url.startsWith('/resize') && req.method === 'POST') {
@@ -128,36 +158,14 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttySession
           const { cols, rows } = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
           if (DEBUG) log('resize', { cols, rows });
           appendLog('resize', { cols, rows });
-          ttySession.resize(cols, rows);
+          try {
+            const cookies = parseCookies(req.headers['cookie']);
+            const sid = cookies[COOKIE_NAME];
+            const sess = clientSessions.get(sid);
+            sess?.tty?.resize?.(cols, rows);
+          } catch (_) {}
         } catch (e) { if (DEBUG) log('resize parse error', e?.message||e); appendLog('resize_error', { error: String(e?.message||e) }); }
         res.writeHead(204); res.end();
-      });
-    } else if (req.url.startsWith('/chat') && req.method === 'POST') {
-      if (!authorized(req)) return deny(res);
-      const chunks = [];
-      req.on('data', c => chunks.push(c));
-      req.on('end', async () => {
-        let cmd = '';
-        try { cmd = JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}').cmd || ''; } catch(_) {}
-        if (DEBUG) log('chat', { cmd: cmd.slice(0,120) });
-        appendLog('chat_cmd', { cmd });
-        if (!cmd) { res.statusCode = 400; return res.end('{"error":"missing cmd"}'); }
-        // Execute command in container and return output
-        const { spawn } = require('child_process');
-        const wd = workdir || process.cwd();
-        const composed = `cd '${wd}' && ${cmd}`;
-        const proc = spawn(runtime, ['exec', '-i', containerName, 'sh', '-lc', composed], { cwd: '/' });
-        let out = Buffer.alloc(0);
-        let err = Buffer.alloc(0);
-        proc.stdout.on('data', d => { out = Buffer.concat([out, d]); });
-        proc.stderr.on('data', d => { err = Buffer.concat([err, d]); });
-        proc.on('close', (code) => {
-          const text = Buffer.concat([out, err]).toString('utf8');
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, code, output: text }));
-          if (DEBUG) log('chat done', { code, bytes: Buffer.byteLength(text) });
-          appendLog('chat_result', { code, bytes: Buffer.byteLength(text), preview: text.slice(0,2000) });
-        });
       });
     } else {
       res.statusCode = 404;
@@ -165,26 +173,12 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttySession
     }
   });
 
-  const broadcast = (data) => {
-    if (!data) return;
-    const str = typeof data === 'string' ? data : data.toString('utf8');
-    const chunk = 'data: ' + JSON.stringify(str) + '\n\n';
-    for (const [res] of clients) { try { res.write(chunk); } catch (_) {} }
-    if (DEBUG) log('broadcast', { bytes: Buffer.byteLength(chunk), clients: clients.size });
-    appendLog('broadcast', { bytes: Buffer.byteLength(chunk), clients: clients.size, preview: str.slice(0,2000) });
-  };
-
-  ttySession.onOutput((d) => { appendLog('tty_output', { bytes: Buffer.byteLength(d||''), preview: String(d||'').slice(0,2000) }); broadcast(d); });
-  ttySession.onClose(() => {
-    if (DEBUG) log('tty closed');
-    appendLog('tty_close', {});
-    broadcast('\n[session closed]\n');
-  });
+  // Per-client PTYs handle their own output wiring in /stream handler.
 
   server.listen(port, () => {
     console.log(`Ploinky WebTTY ready: http://localhost:${port} (agent: ${agentName})`);
     console.log('Close with Ctrl+C');
-    if (DEBUG) log('server started', { agentName, containerName, runtime, port, pty: !!ttySession.isPTY });
+    if (DEBUG) log('server started', { agentName, containerName, runtime, port });
   });
 
   return server;

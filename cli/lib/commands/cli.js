@@ -62,6 +62,18 @@ function addRepo(repoName, repoUrl) {
     console.log(`✓ Repository '${repoName}' added successfully.`);
 }
 
+function ensureAgentManifest(agentName) {
+    try { const p = findAgentManifest(agentName); return p; } catch (_) {}
+    const repo = 'basic';
+    const repoPath = path.join(REPOS_DIR, repo);
+    fs.mkdirSync(repoPath, { recursive: true });
+    const agentPath = path.join(repoPath, agentName);
+    fs.mkdirSync(agentPath, { recursive: true });
+    const manifest = { name: agentName, container: 'node:18-alpine', install: "", update: "", cli: "sh", agent: "", about: `Auto-created agent '${agentName}'.`, env: [] };
+    fs.writeFileSync(path.join(agentPath, 'manifest.json'), JSON.stringify(manifest, null, 2));
+    return path.join(agentPath, 'manifest.json');
+}
+
 function newAgent(repoName, agentName, containerImage) {
     if (!repoName || !agentName) { showHelp(); throw new Error('Missing required parameters.'); }
     const repoPath = path.join(REPOS_DIR, repoName);
@@ -150,19 +162,9 @@ function enableEnv(agentName, varName) {
     }
 }
 
-const ENABLED_REPOS_FILE = path.join(PLOINKY_DIR, 'enabled_repos.json');
-function loadEnabledRepos() {
-    try {
-        if (fs.existsSync(ENABLED_REPOS_FILE)) {
-            const data = JSON.parse(fs.readFileSync(ENABLED_REPOS_FILE, 'utf8'));
-            return Array.isArray(data) ? data : [];
-        }
-    } catch (_) {}
-    return [];
-}
-function saveEnabledRepos(list) {
-    try { fs.mkdirSync(PLOINKY_DIR, { recursive: true }); fs.writeFileSync(ENABLED_REPOS_FILE, JSON.stringify(list, null, 2)); } catch (_) {}
-}
+const ENABLED_REPOS_FILE = require('../repos').ENABLED_REPOS_FILE;
+function loadEnabledRepos() { return reposSvc.loadEnabledRepos(); }
+function saveEnabledRepos(list) { return reposSvc.saveEnabledRepos(list); }
 function enableRepo(repoName) {
     if (!repoName) throw new Error('Usage: enable repo <name>');
     if (!PREDEFINED_REPOS[repoName]) throw new Error(`Unknown repo '${repoName}'. Use 'list repos' to see options.`);
@@ -193,12 +195,9 @@ function disableRepo(repoName) {
 }
 
 function listAgents() {
-    const enabled = loadEnabledRepos();
-    if (enabled.length === 0) {
-        console.log('No repos enabled. Use: enable repo <name>');
-        return;
-    }
-    for (const repo of enabled) {
+    const activeRepos = reposSvc.getActiveRepos(REPOS_DIR);
+    if (!activeRepos || activeRepos.length === 0) { console.log('No repos installed. Use: add repo <name>'); return; }
+    for (const repo of activeRepos) {
         const repoPath = path.join(REPOS_DIR, repo);
         const installed = fs.existsSync(repoPath);
         console.log(`\n[Repo] ${repo}${installed ? '' : ' (not installed)'}:`);
@@ -215,7 +214,7 @@ function listAgents() {
             }
         }
     }
-    console.log("\nTip: to see more agents, use 'add repo <name>' or 'enable repo <name>'.");
+    console.log("\nTip: enable repos with 'enable repo <name>' to control listings. If none are enabled, installed repos are used by default.");
 }
 
 function listCurrentAgents() {
@@ -224,7 +223,7 @@ function listCurrentAgents() {
         const reg = getAgentsRegistry();
         const names = Object.keys(reg || {});
         if (!names.length) { console.log('No agents recorded for this workspace yet.'); return; }
-        console.log('Current agents (from .ploinky/.agents):');
+    console.log('Current agents (from .ploinky/agents):');
         for (const name of names) {
             const r = reg[name] || {};
             const type = r.type || '-';
@@ -332,7 +331,13 @@ function getAgentCmd(manifest) {
     return (manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '';
 }
 function getCliCmd(manifest) {
-    return (manifest.cli && String(manifest.cli)) || (manifest.commands && manifest.commands.cli) || '';
+    return (
+        (manifest.cli && String(manifest.cli)) ||
+        (manifest.commands && manifest.commands.cli) ||
+        (manifest.run && String(manifest.run)) ||
+        (manifest.commands && manifest.commands.run) ||
+        ''
+    );
 }
 
 
@@ -367,7 +372,7 @@ async function runTask(agentName, command, args) {
 }
 
 async function runSh(agentName) {
-    const manifestPath = findAgentManifest(agentName);
+    const manifestPath = ensureAgentManifest(agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
     const repoName = path.basename(path.dirname(agentPath));
@@ -383,7 +388,7 @@ async function runWebTTY(agentName, passwordArg, portArg) {
     // Require node-pty for a proper interactive TTY (echo, line editing, resize)
     try { pty = require('node-pty'); } catch (e) { throw new Error("'node-pty' is required for WebTTY. Install it with: (cd cli && npm install node-pty)"); }
 
-    const manifestPath = findAgentManifest(agentName);
+    const manifestPath = ensureAgentManifest(agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
     const repoName = path.basename(path.dirname(agentPath));
@@ -397,10 +402,11 @@ async function runWebTTY(agentName, passwordArg, portArg) {
     const password = String(passwordArg);
 
     // Use refactored modules for TTY and HTTP server
-    const { createTTYSession } = require('../webtty/tty');
+    const { createTTYFactory } = require('../webtty/tty');
     const { startWebTTYServer } = require('../webtty/server');
-    const ttySession = createTTYSession({ runtime, containerName, ptyLib: pty, workdir: process.cwd() });
-    startWebTTYServer({ agentName, runtime, containerName, port, ttySession, password, workdir: process.cwd() });
+    const entry = getCliCmd(manifest) || 'sh';
+    const ttyFactory = createTTYFactory({ runtime, containerName, ptyLib: pty, workdir: process.cwd(), entry });
+    startWebTTYServer({ agentName, runtime, containerName, port, ttyFactory, password, workdir: process.cwd(), entry });
 }
 
 async function runWeb(agentName, portArg) {
@@ -515,7 +521,7 @@ async function probeRoute(agentName, payloadStr) {
 }
 
 async function runCli(agentName, args) {
-    const manifestPath = findAgentManifest(agentName);
+    const manifestPath = ensureAgentManifest(agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const cliBase = getCliCmd(manifest);
     if (!cliBase || !cliBase.trim()) {
@@ -571,6 +577,15 @@ async function destroyAll() {
 async function handleCommand(args) {
     const [command, ...options] = args;
     switch (command) {
+        case 'shell':
+            await runSh(options[0]);
+            break;
+        case 'cli':
+            await runCli(options[0], options.slice(1));
+            break;
+        case 'agent':
+            await runAgent(options[0]);
+            break;
         case 'add':
             if (options[0] === 'repo') addRepo(options[1], options[2]);
             else if (options[0] === 'env') addEnv(options[1], options.slice(2).join(' '));
@@ -597,16 +612,16 @@ async function handleCommand(args) {
         case 'run':
             if (options.length === 0) { await runAll(); break; }
             if (options[0] === 'task') await runTask(options[1], options[2], options.slice(3));
-            else if (options[0] === 'sh') await runSh(options[1]);
-            else if (options[0] === 'bash') await runSh(options[1]); // backward compatible alias
             else if (options[0] === 'cli') await runCli(options[1], options.slice(2));
             else if (options[0] === 'agent') await runAgent(options[1]);
             else if (options[0] === 'webtty') await runWebTTY(options[1], options[2], options[3]);
             else showHelp();
             break;
-        case 'start':
-            await runAll();
-            break;
+        case 'start': {
+            const { startConfiguredAgents } = require('../docker');
+            const n = startConfiguredAgents();
+            console.log(`Started ${n} configured agent containers (if any were stopped).`);
+            break; }
         case 'route':
             if (options[0] === 'list') listRoutes();
             else if (options[0] === 'delete') deleteRoute(options[1]);
@@ -617,6 +632,9 @@ async function handleCommand(args) {
         case 'probe':
             if (options[0] === 'route') await probeRoute(options[1], options.slice(2).join(' '));
             else showHelp();
+            break;
+        case 'console':
+            await runWebTTY(options[0], options[1], options[2]);
             break;
         case 'list':
             if (options[0] === 'agents') listAgents();

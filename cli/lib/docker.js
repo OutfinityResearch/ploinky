@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { AGENTS_FILE, SECRETS_FILE } = require('./config');
+const workspace = require('./workspace');
 const { debugLog } = require('./utils');
 
 function getContainerRuntime() {
@@ -37,12 +38,8 @@ const containerRuntime = getContainerRuntime();
 //     ports: [ { containerPort, hostPort } ]
 //   }
 // }
-function loadAgentsMap() {
-  try { return JSON.parse(fs.readFileSync(AGENTS_FILE, 'utf-8') || '{}') || {}; } catch (_) { return {}; }
-}
-function saveAgentsMap(map) {
-  try { fs.writeFileSync(AGENTS_FILE, JSON.stringify(map, null, 2)); } catch (e) { debugLog('saveAgentsMap error: ' + (e?.message||e)); }
-}
+function loadAgentsMap() { return workspace.loadAgents(); }
+function saveAgentsMap(map) { return workspace.saveAgents(map); }
 
 
 function getAgentContainerName(agentName, repoName) {
@@ -113,13 +110,7 @@ function getSecretsForAgent(manifest) {
 
 function runCommandInContainer(agentName, repoName, manifest, command, interactive = false) {
     const containerName = getAgentContainerName(agentName, repoName);
-    let agents = {};
-    try {
-        agents = JSON.parse(fs.readFileSync(AGENTS_FILE, 'utf-8'));
-    } catch (e) {
-        debugLog('Agents file not found or invalid, creating new one');
-        agents = {};
-    }
+    let agents = loadAgentsMap();
     const currentDir = process.cwd();
 
     let firstRun = false;
@@ -183,7 +174,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             containerImage: containerImage,
             createdAt: new Date().toISOString(),
             projectPath: currentDir,
-            type: 'interactive',
+            type: 'agent',
             config: {
                 binds: [ { source: currentDir, target: currentDir } ],
                 env: (manifest.env||[]).map(name => ({ name })),
@@ -241,7 +232,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     let bashCommand;
     let envVars = '';
     
-    if (interactive && (command === '/bin/bash' || command === '/bin/sh')) {
+    if (interactive && (command === '/bin/sh')) {
         // Use POSIX sh for compatibility
         bashCommand = `cd '${currentDir}' && exec sh`;
     } else {
@@ -318,7 +309,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
                 throw error;
             }
         }
-        // Registrează în AGENTS_FILE
+        // Registrează în agents registry
         const agents = loadAgentsMap();
         agents[containerName] = {
             agentName,
@@ -326,7 +317,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
             containerImage,
             createdAt: new Date().toISOString(),
             projectPath: currentDir,
-            type: 'interactive',
+            type: 'agent',
             config: { binds: [ { source: currentDir, target: currentDir } ], env: (manifest.env||[]).map(name => ({ name })), ports: [] }
         };
         saveAgentsMap(agents);
@@ -341,6 +332,22 @@ function ensureAgentContainer(agentName, repoName, manifest) {
 }
 
 function getRuntime() { return containerRuntime; }
+
+// Start all configured agents recorded in workspace registry (if present but not running)
+function startConfiguredAgents() {
+    const agents = workspace.loadAgents();
+    const names = Object.keys(agents || {});
+    let started = 0;
+    for (const name of names) {
+        try {
+            if (!isContainerRunning(name) && containerExists(name)) {
+                execSync(`${containerRuntime} start ${name}`, { stdio: 'ignore' });
+                started++;
+            }
+        } catch (e) { debugLog(`startConfiguredAgents: ${name} ${e?.message||e}`); }
+    }
+    return started;
+}
 
 async function ensureAgentCore(manifest, agentPath) {
     const runtime = containerRuntime;
@@ -521,7 +528,20 @@ function cleanupSessionSet() { const list = Array.from(SESSION); stopAndRemoveMa
 
 function getAgentsRegistry() { return loadAgentsMap(); }
 
-module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry };
+module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents };
+
+// Build exec args for attaching to a running container with sh -lc and a given entry command.
+// Returns an array suitable to be used with spawn/spawnSync: [ 'exec', '-it', <container>, 'sh', '-lc', <cmd> ]
+function buildExecArgs(containerName, workdir, entryCommand, interactive = true) {
+    const wd = workdir || process.cwd();
+    const cmd = entryCommand && String(entryCommand).trim() ? entryCommand : 'exec sh';
+    const args = ['exec'];
+    if (interactive) args.push('-it');
+    args.push(containerName, 'sh', '-lc', `cd '${wd}' && ${cmd}`);
+    return args;
+}
+
+module.exports.buildExecArgs = buildExecArgs;
 
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000)
 function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {

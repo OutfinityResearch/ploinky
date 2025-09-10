@@ -60,6 +60,16 @@
   }
 
   let es;
+  let chatBuffer = '';
+  function stripAnsi(s) { try { return s.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, ''); } catch(_) { return s; } }
+  function pushSrvFromBuffer() {
+    if (!chatBuffer) return;
+    const parts = chatBuffer.split(/\r?\n/);
+    // keep last partial line in buffer
+    chatBuffer = parts.pop() || '';
+    const blocks = parts.filter(Boolean).join('\n');
+    if (blocks) addServerMsg(blocks);
+  }
   function startSSE() {
     dlog('SSE connecting');
     showBanner('Connecting…');
@@ -72,6 +82,9 @@
         const text = JSON.parse(ev.data);
         dlog('SSE message', { bytes: (text || '').length });
         term.write(text);
+        // Feed chat view from the same stream (server output on left)
+        chatBuffer += stripAnsi(text);
+        pushSrvFromBuffer();
       } catch (e) {
         dlog('term write error', e);
       }
@@ -81,6 +94,7 @@
     });
   }
 
+  let userInputBuf = '';
   function bindConsoleIO() {
     window.addEventListener('resize', sendResize);
     setTimeout(sendResize, 120);
@@ -88,6 +102,21 @@
       dlog('send input', { bytes: (data||'').length });
       fetch('/input', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: data })
         .catch((e)=>{ dlog('input error', e); showBanner('Input error', 'err'); });
+      // Mirror console-entered commands into chat as 'me'
+      try {
+        const s = data || '';
+        // Basic line buffering: treat Enter as end of command
+        for (let i = 0; i < s.length; i++) {
+          const ch = s[i];
+          if (ch === '\n' || ch === '\r') {
+            const msg = userInputBuf.trim();
+            if (msg) addMsg(msg, 'me');
+            userInputBuf = '';
+          } else {
+            userInputBuf += ch;
+          }
+        }
+      } catch(_){}
     });
   }
   function sendResize() {
@@ -172,10 +201,9 @@
     addMsg(cmd, 'me');
     cmdInput.value = '';
     autoresize();
-    fetch('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd }) })
-      .then(r => r.ok ? r.json() : Promise.reject(new Error('Auth or server error')))
-      .then(({ output }) => addServerMsg(output))
-      .catch((e) => { dlog('chat error', e); addServerMsg('[error]'); showBanner('Chat error', 'err'); });
+    // Send input to the same PTY; add newline to execute
+    fetch('/input', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: cmd + '\n' })
+      .catch((e) => { dlog('chat error', e); addServerMsg('[input error]'); showBanner('Chat error', 'err'); });
   }
   sendBtn.onclick = sendCmd;
   cmdInput.addEventListener('keydown', (e) => {

@@ -19,9 +19,9 @@ function showHelp(args = []) {
   update agent <name>            Interactive manifest update
   refresh agent <name>           Restart/remove agent container
   start                          Start containers for configured routes (.ploinky/routing.json)
-  run sh <name>                  Open interactive sh in container (attached TTY)
-  run cli <name> [args...]       Run manifest "cli" command (attached TTY)
-  run webtty <name> <pwd> [port] Start WebTTY (Console/Chat) for an agent
+  shell <name>                   Open interactive sh in container (attached TTY)
+  cli <name> [args...]           Run manifest "cli" command (attached TTY)
+  console <name> <pwd> [port]    Start WebTTY Console/Chat for an agent
   route static <name> [port]     Start RoutingServer; serve static from agent's /code
   route add <name>               Ensure agent service + register /apis/<name>
   route list | delete <name>     List or delete routes (alias: list routes | delete route)
@@ -50,7 +50,7 @@ function showHelp(args = []) {
   help cloud                     Show all cloud commands
   help cloud <subcommand>        Show specific cloud command help
   
-  Examples: help add | help cloud host | help run cli
+  Examples: help add | help cloud host | help cli
 
 Config stored in .ploinky/ • Type 'help' for commands
 ╚═══════════════════════════════════════════════════════╝
@@ -134,64 +134,35 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         
-        'run': {
-            description: 'Execute agent operations',
+        'shell': {
+            description: 'Interactive shell session',
             subcommands: {
-                'cli': {
-                    syntax: 'run cli <name> [args...]',
-                    description: 'Run manifest "cli" command interactively (attached TTY). Prompt returns when the command exits.',
-                    params: { '<name>': 'Agent name', '[args...]': 'Arguments appended to the cli command' },
-                    examples: [ 'run cli MyAPI --help' ],
-                    notes: 'Always attaches to container TTY. If the cli is a REPL (e.g., node/python), stay attached until you exit.'
-                },
-                'agent': {
-                    syntax: 'run agent <name>',
-                    description: 'Start persistent container using manifest "agent". Errors if missing.',
-                    params: { '<name>': 'Agent name' },
-                    examples: [ 'run agent MyAPI' ]
-                },
-                'sh': {
-                    syntax: 'run sh <name>',
+                'default': {
+                    syntax: 'shell <name>',
                     description: 'Open interactive POSIX sh (attached TTY) in the agent container',
-                    params: {
-                        '<name>': 'Agent name'
-                    },
-                    examples: [
-                        'run sh MyAPI  # Opens shell with /workspace mounted'
-                    ],
-                    notes: 'Always attaches to container TTY and waits until you exit the shell. Alias: run bash'
-                },
-                'webtty': {
-                    syntax: 'run webtty <name> <password> [port]',
-                    description: 'Pornește un server HTTP cu interfață Console/Chat pentru containerul agentului (Xterm.js + chat) — parola este obligatorie.',
-                    params: {
-                        '<name>': 'Numele agentului',
-                        '<password>': 'Parolă necesară pentru UI',
-                        '[port]': 'Port local pentru UI (implicit 8089)'
-                    },
-                    examples: [
-                        'run webtty MyAPI mySecret',
-                        'run webtty MyAPI mySecret 8090'
-                    ],
-                    notes: 'Moduri: Console (terminal live) și Chat (comenzi individuale). Fără WebSocket: SSE pentru output, HTTP POST pentru input. Dacă node-pty e disponibil, suportă și resize. Autentificarea se face prin cookie de sesiune după POST /auth.'
-                },
-                'update': {
-                    syntax: 'run update <name>',
-                    description: 'Run agent\'s configured update command',
-                    params: {
-                        '<name>': 'Agent name'
-                    },
-                    examples: [
-                        'run update MyAPI  # Runs the update command'
-                    ]
-                },
-                'web': {
-                    syntax: 'run web <name> [port]',
-                    description: 'Start local RoutingServer and serve static files from the agent\'s /code (host path).',
-                    params: { '<name>': 'Agent name', '[port]': 'RoutingServer port (default 8088)' },
-                    examples: [ 'run web MyWeb 8088' ],
-                    notes: 'Writes .ploinky/routing.json with static configuration and keeps the server attached.'
+                    params: { '<name>': 'Agent name' },
+                    examples: [ 'shell MyAPI' ],
+                    notes: 'Attaches to a persistent container; exit shell to return.'
                 }
+            }
+        },
+        'cli': {
+            description: 'Run the agent CLI command interactively',
+            subcommands: {
+                'default': {
+                    syntax: 'cli <name> [args...]',
+                    description: 'Run manifest "cli" command interactively (attached TTY).',
+                    params: { '<name>': 'Agent name', '[args...]': 'Arguments appended to the cli command' },
+                    examples: [ 'cli MyAPI --help' ],
+                    notes: 'Attaches to a persistent container. REPLs stay attached until exit.'
+                }
+            }
+        },
+        'run': {
+            description: 'Legacy alias group',
+            subcommands: {
+                'agent': { syntax: 'run agent <name>', description: 'Start persistent container using manifest "agent".', examples: [ 'run agent MyAPI' ] },
+                'web': { syntax: 'run web <name> [port]', description: 'Start local RoutingServer', examples: [ 'run web MyWeb 8088' ] }
             }
         },
         'route': {

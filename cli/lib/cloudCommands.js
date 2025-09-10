@@ -660,7 +660,8 @@ class CloudCommands {
         const fsSync = require('fs');
         const path = require('path');
         const { execSync } = require('child_process');
-        const agentsFile = path.join(process.cwd(), '.ploinky', '.agents');
+        const { AGENTS_FILE } = require('../lib/config');
+        const agentsFile = AGENTS_FILE;
         if (!fsSync.existsSync(agentsFile)) { console.log('No local agents file found.'); return; }
         let agents = {};
         try { agents = JSON.parse(fsSync.readFileSync(agentsFile, 'utf-8')); } catch { agents = {}; }
