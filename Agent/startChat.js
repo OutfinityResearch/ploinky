@@ -35,7 +35,7 @@ function main() {
         top: 0,
         left: 0,
         width: '100%',
-        height: '100%-4',
+        height: '100%-6',
         scrollable: true,
         alwaysScroll: true,
         keys: true,
@@ -94,50 +94,47 @@ function main() {
 
     // Event Handlers
     input.on('submit', async (userInput) => {
-        if (!userInput) {
-            input.focus();
-            return;
-        }
+        if (!userInput) return;
 
         chatLog.log(`> {/}${userInput}`);
         input.clearValue();
-        input.focus();
-        screen.render();
 
         if (userInput.toLowerCase() === 'exit') {
-            return process.exit(0);
+            return screen.destroy();
         }
 
         // --- Command Handling ---
         if (userInput.trim().startsWith('/')) {
             await handleCommand(userInput, screen, chatLog);
             updateStatusBar(statusBar, getConfig());
-            screen.render();
-            return;
-        }
+        } else {
+            // It's a regular chat message, do the LLM call
+            chatHistory.push({ role: 'human', message: userInput });
 
-        chatHistory.push({ role: 'human', message: userInput });
+            chatState.isGenerating = true;
+            showLoading(screen, 'Thinking...');
+            chatState.abortController = new AbortController();
 
-        chatState.isGenerating = true;
-        showLoading(screen, 'Thinking...');
-        chatState.abortController = new AbortController();
-
-        try {
-            const aiResponse = await callLLM(chatHistory, chatState.abortController.signal);
-            if (aiResponse === undefined) { // Cancelled
-                chatLog.log(`\n{${theme.warning}-fg}Generation stopped.{/}`);
-                chatHistory.pop(); // Remove the cancelled user message from history
-            } else if (aiResponse) {
-                chatLog.log(`\n{${theme.primary}-fg}${aiResponse}{/}\n`);
-                chatHistory.push({ role: 'ai', message: aiResponse });
+            try {
+                const aiResponse = await callLLM(chatHistory, chatState.abortController.signal);
+                if (aiResponse === undefined) { // Cancelled
+                    chatLog.log(`\n{${theme.warning}-fg}Generation stopped.{/}`);
+                    chatHistory.pop();
+                } else if (aiResponse) {
+                    chatLog.log(`\n{${theme.primary}-fg}${aiResponse}{/}\n`);
+                    chatHistory.push({ role: 'ai', message: aiResponse });
+                }
+            } catch (error) {
+                chatHistory.pop();
+            } finally {
+                chatState.isGenerating = false;
+                chatState.abortController = null;
+                hideLoading(screen);
             }
-        } catch (error) {
-            chatHistory.pop();
-        } finally {
-            chatState.isGenerating = false;
-            chatState.abortController = null;
-            hideLoading(screen);
         }
+
+        // After the command or chat is done, restore focus to the input and render.
+        input.focus();
         screen.render();
     });
 

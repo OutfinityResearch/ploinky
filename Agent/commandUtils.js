@@ -1,5 +1,8 @@
-const { theme, COMMANDS, createBoxedMessage, stripAnsi, BOX_CHARS, createInteractiveMenu } = require('./AgentUtil.js');
-
+const { theme, createBoxedMessage, createInteractiveMenu } = require('./AgentUtil.js');
+const COMMANDS = {
+    HELP: 'help',
+    CONFIGURE: 'configure',
+};
 const commandDescriptions = {
     [COMMANDS.HELP]: 'Displays this list of available commands.',
     [COMMANDS.CONFIGURE]: 'Allows you to configure the LLM provider and model.',

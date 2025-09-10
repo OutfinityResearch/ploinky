@@ -10,35 +10,33 @@ const theme = {
     error: 'red',
 };
 
-const COMMANDS = {
-    HELP: 'help',
-    CONFIGURE: 'configure',
-};
+
 
 // Constants for file reading animation
 const BOX_CHARS = {
     TL: '╭', TR: '╮', BL: '╰', BR: '╯', H: '─', V: '│'
 };
 
-let loadingWidget = null;
+let thinkingWidget = null;
+let hintWidget = null;
 let loadingInterval = null;
 
 /**
- * Displays an inline, animated loading indicator.
+ * Displays an inline, animated loading indicator with a cancel hint.
  * @param {reblessed.Screen} screen The main screen object.
  * @param {string} text The text to display.
  */
 function showLoading(screen, text = 'Thinking...') {
-    if (loadingWidget) {
+    if (thinkingWidget) {
         hideLoading(screen);
     }
 
     const frames = [' .  ', ' .. ', ' ...', '..  '];
     let frameIndex = 0;
 
-    loadingWidget = reblessed.box({
+    thinkingWidget = reblessed.box({
         parent: screen,
-        bottom: 4, // Positioned above the input box and status bar
+        bottom: 5, // Positioned in the space above the input box
         height: 1,
         width: 'shrink',
         left: 1,
@@ -48,15 +46,25 @@ function showLoading(screen, text = 'Thinking...') {
         }
     });
 
+    hintWidget = reblessed.box({
+        parent: screen,
+        bottom: 4, // Positioned directly above the input box
+        height: 1,
+        width: 'shrink',
+        left: 1,
+        tags: true,
+        content: `{${theme.secondary}-fg}(Press Esc to cancel){/}`,
+    });
+
     // Start the animation interval
     loadingInterval = setInterval(() => {
-        if (!loadingWidget) {
+        if (!thinkingWidget) {
             clearInterval(loadingInterval);
             loadingInterval = null;
             return;
         }
         frameIndex = (frameIndex + 1) % frames.length;
-        loadingWidget.setContent(`${text}${frames[frameIndex]}`);
+        thinkingWidget.setContent(`${text}${frames[frameIndex]}`);
         screen.render();
     }, 200);
 
@@ -64,7 +72,7 @@ function showLoading(screen, text = 'Thinking...') {
 }
 
 /**
- * Hides the inline loading indicator.
+ * Hides the inline loading indicator and hint.
  * @param {reblessed.Screen} screen The main screen object.
  */
 function hideLoading(screen) {
@@ -72,9 +80,13 @@ function hideLoading(screen) {
         clearInterval(loadingInterval);
         loadingInterval = null;
     }
-    if (loadingWidget) {
-        loadingWidget.destroy();
-        loadingWidget = null;
+    if (thinkingWidget) {
+        thinkingWidget.destroy();
+        thinkingWidget = null;
+    }
+    if (hintWidget) {
+        hintWidget.destroy();
+        hintWidget = null;
         screen.render();
     }
 }
@@ -120,8 +132,8 @@ const displayIntro = (log) => {
     log.log('');
     log.log(`Welcome to Ploinky, your AI-powered command-line assistant.`);
     log.log('');
-    log.log(`  {${theme.secondary}-fg}•{/} Configure your LLM and provider using the {${theme.warning}-fg}/${COMMANDS.CONFIGURE}{/} command.`);
-    log.log(`  {${theme.secondary}-fg}•{/} Type {${theme.warning}-fg}/${COMMANDS.HELP}{/} for a list of all available commands.`);
+    log.log(`  {${theme.secondary}-fg}•{/} Configure your LLM and provider using the {${theme.warning}-fg}/configure{/} command.`);
+    log.log(`  {${theme.secondary}-fg}•{/} Type {${theme.warning}-fg}/help{/} for a list of all available commands.`);
     log.log('');
 };
 
@@ -175,8 +187,9 @@ const createInteractiveMenu = (options) => {
             height: '70%',
             items: formattedItems,
             keys: true,
-            vi: true,
-            mouse: false,
+            vi: true, // vi-style navigation
+            mouse: false, // Disable mouse support to prevent hover-selection
+            grabKeys: true, // Lock all keypresses to this widget
             border: 'line',
             scrollable: true,
             interactive: true,
@@ -184,21 +197,18 @@ const createInteractiveMenu = (options) => {
                 fg: theme.text,
                 border: { fg: theme.primary },
                 selected: { bg: theme.primary, fg: 'black' },
-                item: { hover: { bg: theme.primary } },
                 label: { fg: theme.text, bg: theme.primary }
             }
         });
 
-        const cleanup = (result) => {
-            list.removeAllListeners();
+        list.on('select', (item, index) => {
             list.destroy();
-            screen.render();
-            resolve(result);
-        };
-
-        // Keep the list event handlers as backup
-        list.on('select', (item, index) => cleanup(items[index]));
-        list.on('cancel', () => cleanup(null));
+            resolve(items[index]);
+        });
+        list.on('cancel', () => {
+            list.destroy();
+            resolve(null);
+        });
 
         screen.append(list);
         list.focus();
@@ -212,7 +222,6 @@ module.exports = {
     hideLoading,
     theme,
     BOX_CHARS,
-    COMMANDS,
     stripAnsi,
     updateStatusBar,
     createBoxedMessage,
