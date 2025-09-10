@@ -142,11 +142,10 @@
   new agent &lt;repo&gt; &lt;name&gt;        Interactive manifest creation
   update agent &lt;name&gt;            Interactive manifest update
   refresh agent &lt;name&gt;           Restart/remove agent container
-  run                            Start containers for configured routes
-  run bash &lt;name&gt;                Open interactive bash in container (attached TTY)
-  run cli &lt;name&gt; [args...]       Run manifest "cli" command (attached TTY)
-  run webtty &lt;name&gt; &lt;pwd&gt; [port] Start WebTTY (Console/Chat) for an agent
-  run web &lt;name&gt; [port]          Start RoutingServer; serve static from agent's /code
+  start                          Start agents from .ploinky/agents and launch Router
+  shell &lt;name&gt;                   Open interactive sh in container (attached TTY)
+  cli &lt;name&gt; [args...]           Run manifest "cli" command (attached TTY)
+  console &lt;name&gt; &lt;pwd&gt; [port]    Start WebTTY (Console/Chat) for an agent
   route add &lt;name&gt;               Ensure agent service + register /apis/&lt;name&gt;
   route list | delete &lt;name&gt;     List or delete routes
   list agents | repos            List agents (manifests) or predefined repos
@@ -268,12 +267,12 @@ p-cli list agents</code>
             <div class="command-section">
                 <h3>▶️ Running Agents</h3>
                 
-                <h4>run</h4>
-                <div class="command-syntax">run</div>
-                <div class="command-description">Start containers for all configured routes in .ploinky/routing.json</div>
+                <h4>start</h4>
+                <div class="command-syntax">start</div>
+                <div class="command-description">Start agents from .ploinky/agents and launch the local Router</div>
                 
-                <h4>run cli</h4>
-                <div class="command-syntax">run cli &lt;name&gt; [args...]</div>
+                <h4>cli</h4>
+                <div class="command-syntax">cli &lt;name&gt; [args...]</div>
                 <div class="command-description">Run manifest "cli" command interactively (attached TTY). Prompt returns when the command exits.</div>
                 <dl class="command-params">
                     <dt>&lt;name&gt;</dt>
@@ -283,33 +282,33 @@ p-cli list agents</code>
                 </dl>
                 <div class="command-examples">
                     <strong>Example:</strong>
-                    <code>run cli MyAPI --help</code>
+                    <code>cli MyAPI --help</code>
                 </div>
                 <div class="command-notes">
                     <strong>Note:</strong> Always attaches to container TTY. If the cli is a REPL (e.g., node/python), stay attached until you exit.
                 </div>
 
-                <h4>run agent</h4>
-                <div class="command-syntax">run agent &lt;name&gt;</div>
+                <h4>agent</h4>
+                <div class="command-syntax">agent &lt;name&gt;</div>
                 <div class="command-description">Start persistent container using manifest "agent". Errors if missing.</div>
                 <div class="command-examples">
                     <strong>Example:</strong>
-                    <code>run agent MyAPI</code>
+                    <code>agent MyAPI</code>
                 </div>
 
-                <h4>run bash</h4>
-                <div class="command-syntax">run bash &lt;name&gt;</div>
-                <div class="command-description">Open interactive bash shell (attached TTY) in the agent container</div>
+                <h4>shell</h4>
+                <div class="command-syntax">shell &lt;name&gt;</div>
+                <div class="command-description">Open interactive POSIX sh (attached TTY) in the agent container</div>
                 <div class="command-examples">
                     <strong>Example:</strong>
-                    <code>run bash MyAPI  # Opens shell with /workspace mounted</code>
+                    <code>shell MyAPI  # Opens shell with current workspace mounted</code>
                 </div>
                 <div class="command-notes">
                     <strong>Note:</strong> Always attaches to container TTY and waits until you exit the shell.
                 </div>
 
-                <h4>run webtty</h4>
-                <div class="command-syntax">run webtty &lt;name&gt; &lt;password&gt; [port]</div>
+                <h4>console</h4>
+                <div class="command-syntax">console &lt;name&gt; &lt;password&gt; [port]</div>
                 <div class="command-description">Start an HTTP server with Console/Chat interface for the agent container (Xterm.js + chat) — password is required.</div>
                 <dl class="command-params">
                     <dt>&lt;name&gt;</dt>
@@ -321,16 +320,16 @@ p-cli list agents</code>
                 </dl>
                 <div class="command-examples">
                     <strong>Examples:</strong>
-                    <code>run webtty MyAPI mySecret</code>
-                    <code>run webtty MyAPI mySecret 8090</code>
+                    <code>console MyAPI mySecret</code>
+                    <code>console MyAPI mySecret 8090</code>
                 </div>
                 <div class="command-notes">
                     <strong>Note:</strong> Modes: Console (live terminal) and Chat (individual commands). No WebSocket: SSE for output, HTTP POST for input. If node-pty is available, supports resize. Authentication via session cookie after POST /auth.
                 </div>
 
-                <h4>run web</h4>
-                <div class="command-syntax">run web &lt;name&gt; [port]</div>
-                <div class="command-description">Start local RoutingServer and serve static files from the agent's /code (host path).</div>
+                <h4>start</h4>
+                <div class="command-syntax">start</div>
+                <div class="command-description">Start agents from .ploinky/agents and launch local RoutingServer.</div>
                 <dl class="command-params">
                     <dt>&lt;name&gt;</dt>
                     <dd>Agent name</dd>
@@ -339,10 +338,10 @@ p-cli list agents</code>
                 </dl>
                 <div class="command-examples">
                     <strong>Example:</strong>
-                    <code>run web MyWeb 8088</code>
+                    <code>start</code>
                 </div>
                 <div class="command-notes">
-                    <strong>Note:</strong> Writes .ploinky/routing.json with static configuration and keeps the server attached.
+                    <strong>Note:</strong> Generates .ploinky/routing.json automatically from enabled agents and keeps the server attached.
                 </div>
             </div>
 
@@ -427,7 +426,7 @@ p-cli list agents</code>
                 
                 <h4>list current-agents</h4>
                 <div class="command-syntax">list current-agents</div>
-                <div class="command-description">List current workspace containers from .ploinky/.agents (with ports, binds, env count)</div>
+                <div class="command-description">List current workspace containers from .ploinky/agents (with ports, binds, env count)</div>
                 
                 <h4>list routes</h4>
                 <div class="command-syntax">list routes</div>
@@ -615,7 +614,7 @@ p-cli list agents</code>
                 <div class="command-description">Stop and remove agent containers</div>
                 <div class="command-examples">
                     <strong>Examples:</strong>
-                    <code>cloud destroy agents            # Local .ploinky/.agents</code>
+                    <code>cloud destroy agents            # Local .ploinky/agents</code>
                     <code>cloud destroy server-agents     # On connected server</code>
                 </div>
 
@@ -709,7 +708,7 @@ p-cli list agents</code>
                 <div class="command-syntax">shutdown</div>
                 <div class="command-description">Stop and remove containers started in the current CLI session that are not persistent agents</div>
                 <div class="command-notes">
-                    <strong>Note:</strong> Does not affect containers started with run agent.
+                    <strong>Note:</strong> Removes containers recorded in .ploinky/agents.
                 </div>
 
                 <h4>destroy</h4>
@@ -769,7 +768,7 @@ p-cli list agents</code>
                     <ul>
                         <li>Start with predefined repositories (basic, cloud, vibe)</li>
                         <li>Use <code>list agents</code> to explore available agents</li>
-                        <li>Test agents with <code>run cli</code> before deploying</li>
+                        <li>Test agents with <code>cli</code> before deploying</li>
                     </ul>
                 </div>
                 
@@ -785,7 +784,7 @@ p-cli list agents</code>
                 <div class="command-card">
                     <h4>🚀 Development</h4>
                     <ul>
-                        <li>Use <code>run bash</code> for interactive debugging</li>
+                        <li>Use <code>shell</code> for interactive debugging</li>
                         <li>Keep agents stateless when possible</li>
                         <li>Version control your manifest.json files</li>
                     </ul>

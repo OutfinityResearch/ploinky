@@ -1,55 +1,55 @@
-# Ploinky - Universal Agent Platform
+# Ploinky
 
-Ploinky is an open-source platform that simplifies working with containerized environments and AI agents through a unified interface for both CLI tools and cloud functions.
+Ploinky is a lightweight runtime for AI agents. It is technology‑agnostic: an agent can be implemented in any language as long as it reads from stdin and writes to stdout (a simple console process). Ploinky exposes that process as a terminal (Console) and also as a chat interface — the chat mirrors the same TTY stream for a nicer UX.
 
-## Quick Start
+Beyond a single agent, Ploinky supports a multi‑agent workspace. Each agent runs in its own container. A local web router serves a simple web app and proxies API calls to the containers, so you can build applications that orchestrate multiple agents. A companion cloud component (in progress) will host multiple such custom apps, each with its own agents and routes.
+
+## Prerequisites
+- Node.js 18+
+- Docker or Podman
+- Git
+
+## Getting started
 
 ```bash
 # Clone and setup
 git clone https://github.com/PlonkyRepos/ploinky.git
 cd ploinky
-
-# Add to PATH
 export PATH="$PATH:$(pwd)/bin"
 
-# Start Ploinky
-ploinky
+# Start the CLI
+p-cli
+
+# Enable an agent and start the workspace
+enable agent my-agent
+start my-agent 8088
+
+# Web console (TTY + Chat)
+console my-agent myPassword
 ```
 
-### Prerequisites
-- Node.js 18+
-- Docker or Podman
-- Git
+## Core commands (in p-cli)
 
-### Basic Commands
+- `enable agent <name>`: register an agent in `.ploinky/agents` (creates a minimal manifest if missing).
+- `start <staticAgent> <port>`: first run requires a static agent and port; subsequent runs can just use `start`.
+  - Ensures all enabled agents are running and launches the Router on `<port>`.
+  - Serves static files from the repository of `<staticAgent>`; non `/apis/...` paths are static.
+- `console <name> <password> [port]`: start the WebConsole (TTY + Chat) for an agent.
+- `cli <name> [args...]`: run the agent’s CLI command interactively.
+- `shell <name>`: open interactive `/bin/sh` in the agent container.
+- `stop`: stop containers recorded in `.ploinky/agents` (do not remove).
+- `shutdown`: stop and remove containers recorded in `.ploinky/agents`.
 
-```bash
-# List available agents
-ploinky> list agents
+## Notes
 
-# Run an agent
-ploinky> run agent bash
+- Containers run with the workspace directory mounted read‑write at the same path inside the container.
+- Ploinky’s `Agent` tools directory is mounted read‑only at `/Agent` in every container, providing a supervisor script and helpers.
+- If an agent manifest lacks an `agent` command, the container runs `/Agent/AgentServer.sh` which supervises the default AgentServer and restarts it if it exits.
 
-# Add more agent repositories
-ploinky> add repo cloud
-```
+## Cloud (preview)
 
-## What is Ploinky?
-
-- **🖥️ Ploinky CLI** - Command-line tool for running containerized development environments locally
-- **☁️ Ploinky Cloud** - Serverless runtime for deploying agents as Lambda-style functions *(coming soon)*
-
-Both tools use the same agent definitions from GitHub repositories, allowing seamless scaling from local development to cloud deployment.
-
-## Documentation
-
-Full documentation is available at **[www.ploinky.com](https://www.ploinky.com)**
-
-## Community
-
-- **Repository**: [github.com/PlonkyRepos/ploinky](https://github.com/PlonkyRepos/ploinky)
-- **Issues**: [Report bugs or request features](https://github.com/PlonkyRepos/ploinky/issues)
+The cloud component will allow hosting multiple custom apps built on Ploinky, each with its own agents and routes.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE).

@@ -40,4 +40,16 @@ function removeAgent(containerName) {
 }
 
 module.exports = { loadAgents, saveAgents, listAgents, getAgentRecord, upsertAgent, removeAgent };
+// Optional top-level config (stored under _config)
+function getConfig() {
+  const map = loadAgents();
+  return map._config || {};
+}
+function setConfig(cfg) {
+  const map = loadAgents();
+  map._config = cfg || {};
+  saveAgents(map);
+}
 
+module.exports.getConfig = getConfig;
+module.exports.setConfig = setConfig;

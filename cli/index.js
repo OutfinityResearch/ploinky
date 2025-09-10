@@ -20,16 +20,16 @@ const COMMANDS = {
     'shell': [],
     'cli': [],
     'agent': [],
-    'run': ['task', 'webtty', 'cli', 'agent'],
+    'run': ['task'],
     'start': [],
+    'restart': [],
+    'clean': [],
+    'status': [],
     'shutdown': [],
+    'stop': [],
     'destroy': [],
-    'list': ['agents', 'repos', 'current-agents', 'routes'],
-    'delete': ['route'],
-    'route': ['add', 'list', 'delete', 'static'],
+    'list': ['agents', 'repos', 'current-agents'],
     'console': [],
-    'probe': ['route'],
-    'cloud': ['connect', 'init', 'show', 'login', 'logout', 'status', 'host', 'repo', 'agent', 'deploy', 'undeploy', 'deployments', 'task', 'admin', 'logs', 'settings'],
     'client': ['methods', 'status', 'list', 'task', 'task-status'],
     'help': []
 };
@@ -331,6 +331,12 @@ function startInteractiveMode() {
         }
         process.exit(0);
     });
+
+    // Ensure Ctrl-D (EOF) closes the CLI gracefully
+    try {
+        rl.input.on('end', () => { try { rl.close(); } catch(_) {} });
+        process.stdin.on('end', () => { try { rl.close(); } catch(_) {} });
+    } catch(_) {}
 
     // If input is not a TTY, we are in script mode. Don't show initial prompt.
     if (process.stdin.isTTY) {

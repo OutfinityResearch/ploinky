@@ -337,18 +337,29 @@ function getRuntime() { return containerRuntime; }
 function startConfiguredAgents() {
     const agents = workspace.loadAgents();
     const names = Object.keys(agents || {});
-    let started = 0;
+    const startedList = [];
     for (const name of names) {
         try {
             if (!isContainerRunning(name) && containerExists(name)) {
                 execSync(`${containerRuntime} start ${name}`, { stdio: 'ignore' });
-                started++;
+                startedList.push(name);
             }
         } catch (e) { debugLog(`startConfiguredAgents: ${name} ${e?.message||e}`); }
     }
-    return started;
+    return startedList;
 }
 
+// Stop (but do not remove) all containers recorded in workspace registry
+function stopConfiguredAgents() {
+    const agents = workspace.loadAgents();
+    const names = Object.keys(agents || {});
+    const stoppedList = [];
+    for (const name of names) {
+        try { execSync(`${containerRuntime} stop ${name}`, { stdio: 'ignore' }); stoppedList.push(name); }
+        catch (e) { debugLog(`stopConfiguredAgents: ${name} ${e?.message||e}`); }
+    }
+    return stoppedList;
+}
 async function ensureAgentCore(manifest, agentPath) {
     const runtime = containerRuntime;
     const containerName = `ploinky_agent_${manifest.name}`;
@@ -444,6 +455,13 @@ async function ensureAgentCore(manifest, agentPath) {
     }
 }
 
+// Start a persistent agent container in detached mode.
+// Behavior:
+// - Working directory: current project root (process.cwd()), mounted RW at the same path inside container.
+// - Map Ploinky's Agent tools directory (repository 'Agent') read-only into /Agent inside the container.
+// - If manifest.agent is provided (non-empty), run it via /bin/sh -lc <agentCmd>.
+// - If manifest.agent is missing/empty, run fallback supervisor '/Agent/AgentServer.sh' which loops and restarts AgentServer.js.
+// - Always keep the container running; do not auto-stop on exit.
 function startAgentContainer(agentName, manifest, agentPath) {
     const runtime = containerRuntime;
     const containerName = `ploinky_agent_${agentName}`;
@@ -451,9 +469,15 @@ function startAgentContainer(agentName, manifest, agentPath) {
     try { execSync(`${runtime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
-    if (!agentCmd) throw new Error(`Manifest for '${agentName}' has no 'agent' command.`);
-    const args = ['run', '-d', '--name', containerName, '-w', '/agent',
-        '-v', `${agentPath}:/agent:z`, '-v', `${agentPath}:/code:z`, image, '/bin/sh', '-lc', agentCmd];
+    const cwd = process.cwd();
+    const agentLibPath = path.resolve(__dirname, '../../Agent');
+    const args = ['run', '-d', '--name', containerName, '-w', cwd,
+        '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
+        '-v', `${agentLibPath}:/Agent:ro${runtime==='podman'?',z':''}`,
+        '-v', `${agentPath}:/code:ro${runtime==='podman'?',z':''}`
+    ];
+    const entry = agentCmd ? agentCmd : 'sh /Agent/AgentServer.sh';
+    args.push(image, '/bin/sh', '-lc', entry);
     execSync(`${runtime} ${args.join(' ')}`, { stdio: 'inherit' });
     // Înregistrează în registry
     const agents = loadAgentsMap();
@@ -464,7 +488,7 @@ function startAgentContainer(agentName, manifest, agentPath) {
         createdAt: new Date().toISOString(),
         projectPath: process.cwd(),
         type: 'agent',
-        config: { binds: [ { source: agentPath, target: '/agent' }, { source: agentPath, target: '/code' } ], env: [], ports: [] }
+        config: { binds: [ { source: cwd, target: cwd }, { source: agentLibPath, target: '/Agent' }, { source: agentPath, target: '/code' } ], env: [], ports: [] }
     };
     saveAgentsMap(agents);
     return containerName;
@@ -510,15 +534,15 @@ function destroyAllPloinky() {
 function destroyWorkspaceContainers() {
     const cwd = process.cwd();
     const agents = loadAgentsMap();
-    let removed = 0;
+    const removedList = [];
     for (const [name, rec] of Object.entries(agents)) {
         if (rec && rec.projectPath === cwd) {
-            try { stopAndRemove(name); delete agents[name]; removed++; }
+            try { stopAndRemove(name); delete agents[name]; removedList.push(name); }
             catch (e) { debugLog(`destroyWorkspaceContainers ${name} error: ${e?.message||e}`); }
         }
     }
     saveAgentsMap(agents);
-    return removed;
+    return removedList;
 }
 
 // Session container tracking (optional helpers)
@@ -528,7 +552,7 @@ function cleanupSessionSet() { const list = Array.from(SESSION); stopAndRemoveMa
 
 function getAgentsRegistry() { return loadAgentsMap(); }
 
-module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents };
+module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents, stopConfiguredAgents, ensureAgentService };
 
 // Build exec args for attaching to a running container with sh -lc and a given entry command.
 // Returns an array suitable to be used with spawn/spawnSync: [ 'exec', '-it', <container>, 'sh', '-lc', <cmd> ]
@@ -544,6 +568,8 @@ function buildExecArgs(containerName, workdir, entryCommand, interactive = true)
 module.exports.buildExecArgs = buildExecArgs;
 
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000)
+// Ensure an agent service is running on container port 7000 mapped to random host port (>10000).
+// Uses the same mounting strategy as startAgentContainer. Falls back to /Agent/AgentServer.sh if no agent command set.
 function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const runtime = containerRuntime;
     const containerName = `ploinky_agent_${agentName}`;
@@ -574,10 +600,10 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const args = ['run', '-d', '-p', `${hostPort}:7000`, '--name', containerName,
         '-w', cwd,
         '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
-        '-v', `${agentLibPath}:/agent:ro${runtime==='podman'?',z':''}`,
+        '-v', `${agentLibPath}:/Agent:ro${runtime==='podman'?',z':''}`,
         '-v', `${agentPath}:/code:ro${runtime==='podman'?',z':''}`
     ];
-    const cmd = agentCmd || 'sh /agent/AgentServer.sh';
+    const cmd = agentCmd || 'sh /Agent/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', cmd);
     execSync(`${runtime} ${args.join(' ')}`, { stdio: 'inherit' });
 

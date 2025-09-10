@@ -6,6 +6,7 @@ function showHelp(args = []) {
     
     // Detailed help for specific commands
     if (topic) {
+        if (topic === 'cloud') { console.log('Cloud commands are not available in this build.'); return; }
         return showDetailedHelp(topic, subtopic, subsubtopic);
     }
     
@@ -18,39 +19,25 @@ function showHelp(args = []) {
   new agent <repo> <name>        Interactive manifest creation
   update agent <name>            Interactive manifest update
   refresh agent <name>           Restart/remove agent container
-  start                          Start containers for configured routes (.ploinky/routing.json)
+  start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <name>                   Open interactive sh in container (attached TTY)
   cli <name> [args...]           Run manifest "cli" command (attached TTY)
   console <name> <pwd> [port]    Start WebTTY Console/Chat for an agent
-  route static <name> [port]     Start RoutingServer; serve static from agent's /code
-  route add <name>               Ensure agent service + register /apis/<name>
-  route list | delete <name>     List or delete routes (alias: list routes | delete route)
   list agents | repos            List agents (manifests) or predefined repos
-  list current-agents | routes   List workspace containers or RoutingServer routes
+  list current-agents            List workspace containers registered in .ploinky/agents
   add env <name> <val>           Add secret | enable env <agent> <var>
-
-▶ CLOUD OPERATIONS  
-  cloud connect [url]            Connect to server (default: localhost:8000)
-  cloud login/logout/status      Authentication and status
-  cloud host add/remove/list     Manage hosts/domains
-  cloud repo add/remove/list     Manage repositories  
-  cloud agent list/info/start    Control deployed agents
-  cloud deploy/undeploy          Manage deployments
-  cloud admin add/password       Admin management
 
 ▶ CLIENT OPERATIONS
   client task <agent>            Interactive: type command, then params; sends via RoutingServer
   client methods <agent>         If supported by your agent (via RoutingServer)
   client status <agent>          If supported by your agent
 
-  help | shutdown | destroy      Utilities & shell control
+  status | restart               Show state | restart enabled agents + Router
+  stop | shutdown | clean        Stop containers | remove containers
 
 ▶ FOR DETAILED HELP
   help <command>                 Show detailed help for a command
-  help cloud                     Show all cloud commands
-  help cloud <subcommand>        Show specific cloud command help
-  
-  Examples: help add | help cloud host | help cli
+  Examples: help add | help cli
 
 Config stored in .ploinky/ • Type 'help' for commands
 ╚═══════════════════════════════════════════════════════╝
@@ -158,13 +145,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 }
             }
         },
-        'run': {
-            description: 'Legacy alias group',
-            subcommands: {
-                'agent': { syntax: 'run agent <name>', description: 'Start persistent container using manifest "agent".', examples: [ 'run agent MyAPI' ] },
-                'web': { syntax: 'run web <name> [port]', description: 'Start local RoutingServer', examples: [ 'run web MyWeb 8088' ] }
-            }
-        },
+        
         'route': {
             description: 'RoutingServer route management',
             subcommands: {
@@ -200,10 +181,10 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         'shutdown': {
-            description: 'Stop and remove containers started in the current CLI session that are not persistent agents',
+            description: 'Stop and remove containers recorded in .ploinky/agents',
             syntax: 'shutdown',
             examples: ['shutdown'],
-            notes: 'Does not affect containers started with run agent.'
+            notes: 'Removes containers for all enabled agents in this workspace.'
         },
         'destroy': {
             description: 'Stop and remove all Ploinky containers created in this workspace',
@@ -232,8 +213,31 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'enable repo <name>',
                     description: 'Enable a repository for agent listings (see list repos)',
                     examples: [ 'enable repo cloud', 'enable repo basic' ]
+                },
+                'agent': {
+                    syntax: 'enable agent <name>',
+                    description: 'Register agent in .ploinky/agents (for start/stop/shutdown)',
+                    examples: [ 'enable agent MyAPI', 'enable agent MyWorker' ]
                 }
             }
+        },
+        'start': {
+            description: 'Start enabled agents and the local Router',
+            syntax: 'start [staticAgent] [port] ',
+            examples: [ 'start MyStaticAgent 8088', 'start' ],
+            notes: 'On first run, provide both staticAgent and port. Subsequent runs can use plain start.'
+        },
+        'status': {
+            description: 'Show enabled agents and router configuration',
+            syntax: 'status',
+            examples: [ 'status' ],
+            notes: 'Reads .ploinky/agents and prints container, binds, ports, and static config.'
+        },
+        'restart': {
+            description: 'Stop and then start all enabled agents and Router',
+            syntax: 'restart',
+            examples: [ 'restart' ],
+            notes: 'Fails if start was not configured yet (no staticAgent/port).'
         },
         'disable': {
             description: 'Disable features',
@@ -261,7 +265,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'current-agents': {
                     syntax: 'list current-agents',
-                    description: 'List current workspace containers from .ploinky/.agents (with ports, binds, env count)',
+                    description: 'List current workspace containers from .ploinky/agents (with ports, binds, env count)',
                     examples: ['list current-agents']
                 },
                 'routes': {
@@ -389,7 +393,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'cloud destroy <agents|server-agents>',
                     description: 'Stop and remove agent containers',
                     examples: [
-                        'cloud destroy agents            # Local .ploinky/.agents',
+                        'cloud destroy agents            # Local .ploinky/agents',
                         'cloud destroy server-agents     # On connected server'
                     ]
                 },

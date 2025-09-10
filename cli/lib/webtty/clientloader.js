@@ -26,6 +26,8 @@
   }
   tabConsole.onclick = () => setTab('console');
   tabChat.onclick = () => setTab('chat');
+  // Default to Chat first
+  setTab('chat');
 
   const statusEl = document.getElementById('status');
   const banner = document.getElementById('connBanner');

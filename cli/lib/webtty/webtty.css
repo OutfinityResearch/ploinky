@@ -80,28 +80,11 @@ html, body {
     background: rgba(99, 102, 241, 0.18);
 }
 
-.tabs {
-    display: flex;
-    gap: 8px;
-    margin-left: 12px;
-    padding: 2px;
-    background: rgba(148, 163, 184, 0.12);
-    border-radius: 999px;
-}
-
-.tab {
-    padding: 6px 12px;
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 13px;
-    color: var(--ink);
-    opacity: .8;
-}
-
-.tab.active {
-    background: var(--accent-weak);
-    opacity: 1;
-}
+.tabs { display: flex; gap: 0; margin-left: 12px; }
+.tab { cursor: pointer; font-size: 13px; color: var(--ink); opacity: .85; padding: 10px 16px; border: 1px solid var(--border); border-bottom: none; background: rgba(148,163,184,.08); }
+.tab:first-child { border-top-left-radius: 8px; }
+.tab:last-child { border-top-right-radius: 8px; }
+.tab.active { background: var(--panel); opacity: 1; border-bottom: 1px solid transparent; }
 
 .meta {
     position: fixed;

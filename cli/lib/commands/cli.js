@@ -194,6 +194,37 @@ function disableRepo(repoName) {
     console.log(`✓ Repo '${repoName}' disabled.`);
 }
 
+async function enableAgent(agentName) {
+    if (!agentName) throw new Error('Usage: enable agent <name>');
+    const manifestPath = ensureAgentManifest(agentName);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const agentPath = path.dirname(manifestPath);
+    const repoName = path.basename(path.dirname(agentPath));
+    const { getAgentContainerName } = require('../docker');
+    const containerName = getAgentContainerName(agentName, repoName);
+    const image = manifest.container || manifest.image || 'node:18-alpine';
+    const agentLibPath = path.resolve(__dirname, '../../../Agent');
+    const cwd = process.cwd();
+    const record = {
+        agentName,
+        repoName,
+        containerImage: image,
+        createdAt: new Date().toISOString(),
+        projectPath: cwd,
+        type: 'agent',
+        config: {
+            binds: [ { source: cwd, target: cwd }, { source: agentLibPath, target: '/Agent' }, { source: agentPath, target: '/code' } ],
+            env: [],
+            ports: [ { containerPort: 7000 } ]
+        }
+    };
+    const ws = require('../workspace');
+    const map = ws.loadAgents();
+    map[containerName] = record;
+    ws.saveAgents(map);
+    console.log(`✓ Agent '${agentName}' enabled. Use 'start' to start all configured agents.`);
+}
+
 function listAgents() {
     const activeRepos = reposSvc.getActiveRepos(REPOS_DIR);
     if (!activeRepos || activeRepos.length === 0) { console.log('No repos installed. Use: add repo <name>'); return; }
@@ -300,6 +331,36 @@ function listRepos() {
     console.log("\nUse 'add repo <name>' to install and 'enable repo <name>' to include in agent listings.");
 }
 
+async function statusWorkspace() {
+    const ws = require('../workspace');
+    const reg = ws.loadAgents();
+    const cfg = ws.getConfig();
+    const names = Object.keys(reg || {}).filter(k => k !== '_config');
+    console.log('Workspace status');
+    if (cfg && cfg.static) {
+        console.log(`- Static: agent=${cfg.static.agent} port=${cfg.static.port}`);
+    } else {
+        console.log('- Static: (not configured)');
+        console.log('  Tip: start <staticAgent> <port> to configure.');
+    }
+    if (!names.length) { console.log('- Agents: (none enabled)'); return; }
+    console.log('- Agents:');
+    const { getRuntime } = require('../docker');
+    const runtime = getRuntime();
+    const execSync = require('child_process').execSync;
+    for (const name of names) {
+        const r = reg[name] || {};
+        let running = false;
+        try {
+            const out = execSync(`${runtime} ps --format "{{.Names}}"`, { stdio: 'pipe' }).toString();
+            running = out.split(/\n+/).includes(name);
+        } catch(_) {}
+        const ports = (r.config && r.config.ports ? r.config.ports.map(p => `${p.containerPort}->${p.hostPort||'?'} `).join(', ') : '');
+        console.log(`  • ${r.agentName||'?'}  [container: ${name}] ${running? '(running)':'(stopped)'}`);
+        console.log(`    image: ${r.containerImage||'?'}  repo: ${r.repoName||'?'}  cwd: ${r.projectPath||'?'}${ports? '  ports: '+ports:''}`);
+    }
+}
+
 function executeBashCommand(command, args) {
     const fullCommand = [command, ...args].join(' ');
     try {
@@ -383,7 +444,7 @@ async function runSh(agentName) {
 
 async function runWebTTY(agentName, passwordArg, portArg) {
     if (!agentName || !passwordArg) {
-        throw new Error("Usage: run webtty <agentName> <password> [port]");
+        throw new Error("Usage: console <agentName> <password> [port]");
     }
     // Require node-pty for a proper interactive TTY (echo, line editing, resize)
     try { pty = require('node-pty'); } catch (e) { throw new Error("'node-pty' is required for WebTTY. Install it with: (cd cli && npm install node-pty)"); }
@@ -393,7 +454,9 @@ async function runWebTTY(agentName, passwordArg, portArg) {
     const agentPath = path.dirname(manifestPath);
     const repoName = path.basename(path.dirname(agentPath));
     const { ensureAgentContainer, getRuntime, getAgentContainerName } = require('../docker');
-    // Ensure container is up using docker.js and mount current working dir
+    // Ensure agent is registered in workspace
+    try { await enableAgent(agentName); } catch (_) {}
+    // Ensure interactive container is created and running for CLI attach
     const containerName = ensureAgentContainer(agentName, repoName, manifest);
     const runtime = getRuntime();
 
@@ -410,7 +473,7 @@ async function runWebTTY(agentName, passwordArg, portArg) {
 }
 
 async function runWeb(agentName, portArg) {
-    if (!agentName) { throw new Error('Usage: run web <agentName> [port]'); }
+    if (!agentName) { throw new Error('Usage: route static <agentName> [port]'); }
     const manifestPath = findAgentManifest(agentName);
     const agentPath = path.dirname(manifestPath);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -435,6 +498,65 @@ async function runWeb(agentName, portArg) {
     const child = require('child_process').spawn('node', [serverPath], { stdio: 'inherit', env: { ...process.env, PORT: String(port) } });
     // Wait for child to run; do not exit main process
     await new Promise((resolve) => { child.on('exit', () => resolve()); });
+}
+
+async function startWorkspace(staticAgentArg, portArg) {
+    try {
+        const ws = require('../workspace');
+        if (staticAgentArg) {
+            const portNum = parseInt(portArg || '0', 10) || 8088;
+            const cfg = ws.getConfig() || {};
+            cfg.static = { agent: staticAgentArg, port: portNum };
+            ws.setConfig(cfg);
+        }
+        const cfg0 = ws.getConfig() || {};
+        if (!cfg0.static || !cfg0.static.agent || !cfg0.static.port) {
+            console.error('start: missing static agent or port. Usage: start <staticAgent> <port> (first time).');
+            return;
+        }
+        const reg = ws.loadAgents();
+        const names = Object.keys(reg || {});
+        const { ensureAgentService } = require('../docker');
+        const routingFile = path.resolve('.ploinky/routing.json');
+        let cfg = { routes: {} };
+        try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch (_) {}
+        cfg.routes = cfg.routes || {};
+        const staticAgent = cfg0.static.agent;
+        const staticPort = cfg0.static.port;
+        const staticManifestPath = ensureAgentManifest(staticAgent);
+        const staticManifest = JSON.parse(fs.readFileSync(staticManifestPath, 'utf8'));
+        const staticAgentPath = path.dirname(staticManifestPath);
+        try {
+            const repoName = path.basename(path.dirname(staticAgentPath));
+            const { ensureAgentContainer } = require('../docker');
+            ensureAgentContainer(staticAgent, repoName, staticManifest);
+        } catch (e) { console.error('Warning: could not ensure static container:', e.message); }
+        cfg.port = staticPort;
+        cfg.static = { agent: staticAgent, container: `ploinky_agent_${staticAgent}`, hostPath: staticAgentPath };
+        for (const name of names) {
+            const rec = reg[name] || {}; const agentName = rec.agentName || null;
+            if (!agentName) continue;
+            const manifestPath = ensureAgentManifest(agentName);
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            const agentPath = path.dirname(manifestPath);
+            console.log(`→ Ensuring service for '${agentName}'...`);
+            const { hostPort } = ensureAgentService(agentName, manifest, agentPath);
+            console.log(`  OK: /apis/${agentName} -> http://127.0.0.1:${hostPort}/api`);
+            cfg.routes[agentName] = { container: `ploinky_agent_${agentName}`, hostPort };
+        }
+        fs.mkdirSync(path.dirname(routingFile), { recursive: true });
+        fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+        console.log('✓ Routes updated from .ploinky/agents');
+
+        // Start RoutingServer attached
+        const port = parseInt(cfg.port || process.env.ROUTER_PORT || '8088', 10);
+        console.log(`[Ploinky] Starting RoutingServer on port ${port}`);
+        const serverPath = path.resolve(__dirname, '../../../cloud/RoutingServer.js');
+        const child = require('child_process').spawn('node', [serverPath], { stdio: 'inherit', env: { ...process.env, PORT: String(port) } });
+        await new Promise((resolve) => { child.on('exit', () => resolve()); });
+    } catch (e) {
+        console.error('start (workspace) failed:', e.message);
+    }
 }
 
 async function addRoute(agentName) {
@@ -489,7 +611,7 @@ async function runAll() {
                 console.error(`API route start failed for '${agentName}':`, e.message);
             }
         }
-        console.log('Done. Start RoutingServer with: run web <agent> [port] (for static), and routes are ready.');
+        console.log('Done. Use "start" to generate routes from .ploinky/agents and run the Router.');
     } catch (e) {
         console.error('run (all) failed:', e.message);
     }
@@ -531,7 +653,7 @@ async function runCli(agentName, args) {
     const repoName = path.basename(path.dirname(agentPath));
     const { runCommandInContainer, getAgentContainerName } = require('../docker');
     const cmd = cliBase + (args && args.length ? (' ' + args.join(' ')) : '');
-    console.log(`[run cli] ${agentName}: ${cmd}`);
+    console.log(`[cli] ${agentName}: ${cmd}`);
     // Attach interactively for CLI as well
     try { registerSessionContainer(getAgentContainerName(agentName, repoName)); } catch (_) {}
     await runCommandInContainer(agentName, repoName, manifest, cmd, true);
@@ -604,30 +726,18 @@ async function handleCommand(args) {
         case 'enable':
             if (options[0] === 'env') enableEnv(options[1], options[2]);
             else if (options[0] === 'repo') enableRepo(options[1]);
+            else if (options[0] === 'agent') await enableAgent(options[1]);
             else showHelp();
             break;
         case 'disable':
             if (options[0] === 'repo') disableRepo(options[1]); else showHelp();
             break;
-        case 'run':
-            if (options.length === 0) { await runAll(); break; }
-            if (options[0] === 'task') await runTask(options[1], options[2], options.slice(3));
-            else if (options[0] === 'cli') await runCli(options[1], options.slice(2));
-            else if (options[0] === 'agent') await runAgent(options[1]);
-            else if (options[0] === 'webtty') await runWebTTY(options[1], options[2], options[3]);
-            else showHelp();
+        // 'run' legacy commands removed; use 'start', 'cli', 'shell', 'console'.
+        case 'start':
+            await startWorkspace(options[0], options[1]);
             break;
-        case 'start': {
-            const { startConfiguredAgents } = require('../docker');
-            const n = startConfiguredAgents();
-            console.log(`Started ${n} configured agent containers (if any were stopped).`);
-            break; }
         case 'route':
-            if (options[0] === 'list') listRoutes();
-            else if (options[0] === 'delete') deleteRoute(options[1]);
-            else if (options[0] === 'static') await runWeb(options[1], options[2]);
-            else if (options[0] === 'add') await addRoute(options[1]);
-            else await addRoute(options[0]);
+            console.log('Route commands are deprecated. Use start/status.');
             break;
         case 'probe':
             if (options[0] === 'route') await probeRoute(options[1], options.slice(2).join(' '));
@@ -640,26 +750,54 @@ async function handleCommand(args) {
             if (options[0] === 'agents') listAgents();
             else if (options[0] === 'repos') listRepos();
             else if (options[0] === 'current-agents') listCurrentAgents();
-            else if (options[0] === 'routes') listRoutes();
             else showHelp();
             break;
+        case 'status':
+            await statusWorkspace();
+            break;
+        case 'restart': {
+            const ws = require('../workspace');
+            const cfg = ws.getConfig();
+            if (!cfg || !cfg.static || !cfg.static.agent || !cfg.static.port) { console.error('restart: start is not configured. Run: start <staticAgent> <port>'); break; }
+            const { stopConfiguredAgents } = require('../docker');
+            const list = stopConfiguredAgents();
+            if (list.length) { console.log('Stopped containers:'); list.forEach(n => console.log(` - ${n}`)); }
+            await startWorkspace();
+            break; }
         case 'delete':
             if (options[0] === 'route') deleteRoute(options[1]);
             else showHelp();
             break;
-        case 'shutdown':
-            await shutdownSession();
-            break;
+        case 'shutdown': {
+            const { destroyWorkspaceContainers } = require('../docker');
+            const list = destroyWorkspaceContainers();
+            if (list.length) {
+                console.log('Removed containers:');
+                list.forEach(n => console.log(` - ${n}`));
+            }
+            console.log(`Destroyed ${list.length} containers from this workspace (per .ploinky/agents).`);
+            break; }
+        case 'stop': {
+            const { stopConfiguredAgents } = require('../docker');
+            const list = stopConfiguredAgents();
+            if (list.length) {
+                console.log('Stopped containers:');
+                list.forEach(n => console.log(` - ${n}`));
+            }
+            console.log(`Stopped ${list.length} configured agent containers.`);
+            break; }
         case 'destroy':
+            await destroyAll();
+            break;
+        case 'clean':
             await destroyAll();
             break;
         case 'help':
             showHelp(options);
             break;
-        case 'cloud': {
-            const CloudCommands = require('../cloudCommands');
-            new CloudCommands().handleCloudCommand(options);
-            break; }
+        case 'cloud':
+            console.log('Cloud commands are not available in this build.');
+            break;
         case 'client': {
             const ClientCommands = require('./client');
             new ClientCommands().handleClientCommand(options);
