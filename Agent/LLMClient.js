@@ -1,7 +1,3 @@
-const {
-    startThinkingAnimation,
-    stopThinkingAnimation,
-} = require('./AgentUtil.js');
 const google = require('./providers/google.js');
 const openai = require('./providers/openai.js');
 const anthropic = require('./providers/anthropic.js');
@@ -13,7 +9,6 @@ let providers = {
     huggingFace
 }
 async function callLLM(chatContext, signal) {
-    const thinkingId = startThinkingAnimation("Thinking");
     try {
         let openAIFormatProviders = ["openai", "openrouter", "custom"]
         let textResult;
@@ -26,15 +21,13 @@ async function callLLM(chatContext, signal) {
             }
             textResult = await provider.callLLM(chatContext, signal);
         }
-        stopThinkingAnimation(thinkingId);
         return textResult;
     } catch (error) {
-        stopThinkingAnimation(thinkingId);
         // Gracefully handle user cancellation
         if (error.name === 'AbortError') {
             return; // Return undefined, which the caller should handle
         }
-        console.error("\nError calling LLM:", error.message);
+        // The error will be logged to the reblessed chatLog by the caller
         throw error; // Re-throw the error to be caught by the outer .catch
     }
 }
