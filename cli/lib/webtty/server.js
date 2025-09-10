@@ -146,7 +146,7 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttySession
         const { spawn } = require('child_process');
         const wd = workdir || process.cwd();
         const composed = `cd '${wd}' && ${cmd}`;
-        const proc = spawn(runtime, ['exec', '-i', containerName, 'bash', '-lc', composed], { cwd: '/' });
+        const proc = spawn(runtime, ['exec', '-i', containerName, 'sh', '-lc', composed], { cwd: '/' });
         let out = Buffer.alloc(0);
         let err = Buffer.alloc(0);
         proc.stdout.on('data', d => { out = Buffer.concat([out, d]); });
