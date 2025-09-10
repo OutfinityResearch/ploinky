@@ -9,10 +9,16 @@
   <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
   <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
   <script src="https://unpkg.com/xterm-addon-web-links/lib/xterm-addon-web-links.js"></script>
+  <style>
+    /* Matrix background canvas */
+    #matrixBg{position:fixed;inset:0;z-index:-1;background:#000;opacity:.35;}
+    body[data-theme="light"] #matrixBg{display:none}
+  </style>
 </head>
 <body data-theme="dark" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__">
+  <canvas id="matrixBg"></canvas>
   <div class="bar">
-    <span class="title">Ploinky WebTTY — <span id="agentName"></span></span>
+    <span class="title" id="titleBar"></span>
     <div class="tabs">
       <div class="tab active" id="tabChat">Chat</div>
       <div class="tab" id="tabConsole">Console</div>
@@ -68,6 +74,17 @@
     </div>
   </div>
 
+  <script>
+    // Simple matrix rain background for dark theme
+    (function(){
+      const cvs = document.getElementById('matrixBg'); if(!cvs) return;
+      const ctx = cvs.getContext('2d'); let W,H,cols,ypos;
+      function resize(){ W=window.innerWidth; H=window.innerHeight; cvs.width=W; cvs.height=H; cols=Math.floor(W/14); ypos=new Array(cols).fill(0); }
+      function rndChar(){ const s='アイウエオカキクケコｱｲｳｴｵ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'; return s[Math.floor(Math.random()*s.length)]; }
+      function step(){ ctx.fillStyle='rgba(0,0,0,0.08)'; ctx.fillRect(0,0,W,H); ctx.fillStyle='#0f0'; ctx.font='14px monospace'; for(let i=0;i<cols;i++){ const ch=rndChar(); ctx.fillText(ch, i*14, ypos[i]*18); if (ypos[i]*18 > H && Math.random()>0.975) ypos[i]=0; ypos[i]++; } requestAnimationFrame(step); }
+      window.addEventListener('resize', resize); resize(); step();
+    })();
+  </script>
   <script src="/assets/clientloader.js"></script>
 </body>
 </html>

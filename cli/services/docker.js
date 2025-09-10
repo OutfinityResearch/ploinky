@@ -51,9 +51,10 @@ function getAgentContainerName(agentName, repoName) {
         .update(process.cwd())
         .digest('hex')
         .substring(0, 8);
+    const projectDir = path.basename(process.cwd()).replace(/[^a-zA-Z0-9_.-]/g, '_');
     
-    // Format: ploinky_<repo>_<agent>_<cwdhash>
-    const containerName = `ploinky_${safeRepoName}_${safeAgentName}_${cwdHash}`;
+    // Format: ploinky_<repo>_<agent>_<project>_<cwdhash>
+    const containerName = `ploinky_${safeRepoName}_${safeAgentName}_${projectDir}_${cwdHash}`;
     debugLog(`Calculated container name: ${containerName} (for path: ${process.cwd()})`);
     return containerName;
 }
@@ -174,7 +175,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             containerImage: containerImage,
             createdAt: new Date().toISOString(),
             projectPath: currentDir,
-            type: 'agent',
+            type: 'interactive',
             config: {
                 binds: [ { source: currentDir, target: currentDir } ],
                 env: (manifest.env||[]).map(name => ({ name })),
@@ -317,7 +318,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
             containerImage,
             createdAt: new Date().toISOString(),
             projectPath: currentDir,
-            type: 'agent',
+            type: 'interactive',
             config: { binds: [ { source: currentDir, target: currentDir } ], env: (manifest.env||[]).map(name => ({ name })), ports: [] }
         };
         saveAgentsMap(agents);
@@ -355,11 +356,27 @@ function stopConfiguredAgents() {
     const names = Object.keys(agents || {});
     const stoppedList = [];
     for (const name of names) {
-        try { execSync(`${containerRuntime} stop ${name}`, { stdio: 'ignore' }); stoppedList.push(name); }
-        catch (e) { debugLog(`stopConfiguredAgents: ${name} ${e?.message||e}`); }
+        try {
+            console.log(`[stop] Stopping container: ${name}...`);
+            execSync(`${containerRuntime} stop ${name}`, { stdio: 'ignore' });
+            console.log(`[stop] ✓ stopped ${name}`);
+            stoppedList.push(name);
+        } catch (e) {
+            console.log(`[stop] ${name}: ${e?.message||e}`);
+        }
     }
     return stoppedList;
 }
+function parseHostPort(output) {
+    try {
+        if (!output) return 0;
+        // Handle lines like "0.0.0.0:32768", "[::]:32768", ":::32768", or just "32768"
+        const firstLine = String(output).split(/\n+/)[0].trim();
+        const m = firstLine.match(/(\d+)\s*$/);
+        return m ? parseInt(m[1], 10) : 0;
+    } catch (_) { return 0; }
+}
+
 async function ensureAgentCore(manifest, agentPath) {
     const runtime = containerRuntime;
     const containerName = `ploinky_agent_${manifest.name}`;
@@ -399,7 +416,7 @@ async function ensureAgentCore(manifest, agentPath) {
                 await new Promise(r => setTimeout(r, 1000));
             }
             const portMapping = execSync(`${runtime} port ${containerName} 8080/tcp`).toString().trim();
-            const hostPort = portMapping.split(':')[1];
+            const hostPort = parseHostPort(portMapping);
             if (!hostPort) throw new Error(`Could not determine host port for running container ${containerName}`);
             fs.mkdirSync(path.dirname(portFilePath), { recursive: true });
             fs.writeFileSync(portFilePath, hostPort);
@@ -429,7 +446,7 @@ async function ensureAgentCore(manifest, agentPath) {
         execSync(`${runtime} ${args.join(' ')}`, { stdio: 'inherit' });
         await new Promise(r => setTimeout(r, 2000));
         const portMapping = execSync(`${runtime} port ${containerName} 8080/tcp`).toString().trim();
-        const hostPort = portMapping.split(':')[1];
+        const hostPort = parseHostPort(portMapping);
         if (!hostPort) throw new Error(`Could not determine host port for new container ${containerName}`);
         fs.mkdirSync(path.dirname(portFilePath), { recursive: true });
         fs.writeFileSync(portFilePath, hostPort);
@@ -474,11 +491,13 @@ function startAgentContainer(agentName, manifest, agentPath) {
     const args = ['run', '-d', '--name', containerName, '-w', cwd,
         '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
         '-v', `${agentLibPath}:/Agent:ro${runtime==='podman'?',z':''}`,
-        '-v', `${agentPath}:/code:ro${runtime==='podman'?',z':''}`
+        '-v', `${path.resolve(agentPath)}:/code:ro${runtime==='podman'?',z':''}`
     ];
     const entry = agentCmd ? agentCmd : 'sh /Agent/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', entry);
-    execSync(`${runtime} ${args.join(' ')}`, { stdio: 'inherit' });
+    const { spawnSync } = require('child_process');
+    const res = spawnSync(runtime, args, { stdio: 'inherit' });
+    if (res.status !== 0) { throw new Error(`${runtime} run failed with code ${res.status}`); }
     // Înregistrează în registry
     const agents = loadAgentsMap();
     agents[containerName] = {
@@ -497,12 +516,14 @@ function startAgentContainer(agentName, manifest, agentPath) {
 function stopAndRemove(name) {
     const runtime = containerRuntime;
     try {
+        console.log(`[destroy] Removing container: ${name}`);
         // Most robust: rm -f (forces stop + remove)
         execSync(`${runtime} rm -f ${name}`, { stdio: 'ignore' });
+        console.log(`[destroy] ✓ removed ${name}`);
     } catch (e) {
-        debugLog(`rm -f ${name} error: ${e.message}`);
-        try { execSync(`${runtime} stop ${name}`, { stdio: 'ignore' }); } catch (e2) { debugLog(`stop ${name} error: ${e2.message}`); }
-        try { execSync(`${runtime} rm ${name}`, { stdio: 'ignore' }); } catch (e3) { debugLog(`rm ${name} error: ${e3.message}`); }
+        console.log(`[destroy] rm -f failed for ${name}: ${e.message}. Trying stop then rm...`);
+        try { console.log(`[destroy] - stopping ${name}...`); execSync(`${runtime} stop ${name}`, { stdio: 'ignore' }); console.log(`[destroy] - stopped ${name}`); } catch (e2) { console.log(`[destroy] - stop failed for ${name}: ${e2.message}`); }
+        try { console.log(`[destroy] - removing ${name}...`); execSync(`${runtime} rm ${name}`, { stdio: 'ignore' }); console.log(`[destroy] - removed ${name}`); } catch (e3) { console.log(`[destroy] - rm failed for ${name}: ${e3.message}`); }
     }
 }
 
@@ -538,7 +559,7 @@ function destroyWorkspaceContainers() {
     for (const [name, rec] of Object.entries(agents)) {
         if (rec && rec.projectPath === cwd) {
             try { stopAndRemove(name); delete agents[name]; removedList.push(name); }
-            catch (e) { debugLog(`destroyWorkspaceContainers ${name} error: ${e?.message||e}`); }
+            catch (e) { console.log(`[destroy] ${name} error: ${e?.message||e}`); }
         }
     }
     saveAgentsMap(agents);
@@ -572,11 +593,13 @@ module.exports.buildExecArgs = buildExecArgs;
 // Uses the same mounting strategy as startAgentContainer. Falls back to /Agent/AgentServer.sh if no agent command set.
 function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const runtime = containerRuntime;
-    const containerName = `ploinky_agent_${agentName}`;
+    const repoName = path.basename(path.dirname(agentPath));
+    const containerName = getAgentContainerName(agentName, repoName);
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
     const cwd = process.cwd();
     const agentLibPath = path.resolve(__dirname, '../../Agent');
+    const absAgentPath = path.resolve(agentPath);
 
     // If container exists, ensure it's running and return current mapped port.
     if (containerExists(containerName)) {
@@ -585,8 +608,10 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         }
         try {
             const portMap = execSync(`${runtime} port ${containerName} 7000/tcp`, { stdio: 'pipe' }).toString().trim();
-            const hostPort = parseInt(portMap.split(':')[1] || '0', 10) || preferredHostPort || 0;
-            return { containerName, hostPort };
+            const hostPort = parseHostPort(portMap);
+            if (hostPort) { return { containerName, hostPort }; }
+            // No mapping; remove and recreate below
+            try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch(_) {}
         } catch (_) {
             // Fall through to recreate if mapping cannot be determined
         }
@@ -601,11 +626,13 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         '-w', cwd,
         '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
         '-v', `${agentLibPath}:/Agent:ro${runtime==='podman'?',z':''}`,
-        '-v', `${agentPath}:/code:ro${runtime==='podman'?',z':''}`
+        '-v', `${absAgentPath}:/code:ro${runtime==='podman'?',z':''}`
     ];
     const cmd = agentCmd || 'sh /Agent/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', cmd);
-    execSync(`${runtime} ${args.join(' ')}`, { stdio: 'inherit' });
+    const { spawnSync } = require('child_process');
+    const runRes = spawnSync(runtime, args, { stdio: 'inherit' });
+    if (runRes.status !== 0) { throw new Error(`${runtime} run failed with code ${runRes.status}`); }
 
     // Save to registry
     const agents = loadAgentsMap();

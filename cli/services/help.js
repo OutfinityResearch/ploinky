@@ -16,13 +16,14 @@ function showHelp(args = []) {
 
 ▶ LOCAL DEVELOPMENT
   add repo <name> [url]          Add repository (basic/cloud/vibe/security/extra/demo)
-  new agent <repo> <name>        Interactive manifest creation
-  update agent <name>            Interactive manifest update
+  
   refresh agent <name>           Restart/remove agent container
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
-  shell <name>                   Open interactive sh in container (attached TTY)
-  cli <name> [args...]           Run manifest "cli" command (attached TTY)
-  console <name> <pwd> [port]    Start WebTTY Console/Chat for an agent
+  shell <agentName>              Open interactive sh in container (attached TTY)
+  cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
+  console <agentName> <pwd> [port] Start WebTTY Console/Chat for an agent
+  set env <VAR> <VALUE>          Create or update a secret env variable
+  enable env <VAR> <agentName>   Attach env to agent (manifest.env)
   list agents | repos            List agents (manifests) or predefined repos
   list current-agents            List workspace containers registered in .ploinky/agents
   add env <name> <val>           Add secret | enable env <agent> <var>
@@ -63,18 +64,16 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     ],
                     notes: 'Predefined repos: cloud (AWS/Azure/GCP), vibe (social), security (auth/crypto), extra (utilities)'
                 },
+                
+            }
+        },
+        'set': {
+            description: 'Set values (env, etc.)',
+            subcommands: {
                 'env': {
-                    syntax: 'add env <name> <value>',
-                    description: 'Add a secret environment variable',
-                    params: {
-                        '<name>': 'Variable name',
-                        '<value>': 'Secret value (will be encrypted)'
-                    },
-                    examples: [
-                        'add env API_KEY sk-1234567890',
-                        'add env DB_PASSWORD mySecretPass123'
-                    ],
-                    notes: 'Secrets are stored encrypted and must be explicitly enabled per agent'
+                    syntax: 'set env <VAR> <VALUE>',
+                    description: 'Create or update a secret environment variable (stored in .ploinky/.secrets)',
+                    examples: [ 'set env API_KEY sk-1234567890' ]
                 }
             }
         },
@@ -125,9 +124,9 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Interactive shell session',
             subcommands: {
                 'default': {
-                    syntax: 'shell <name>',
+                    syntax: 'shell <agentName>',
                     description: 'Open interactive POSIX sh (attached TTY) in the agent container',
-                    params: { '<name>': 'Agent name' },
+                    params: { '<agentName>': 'Agent name' },
                     examples: [ 'shell MyAPI' ],
                     notes: 'Attaches to a persistent container; exit shell to return.'
                 }
@@ -137,11 +136,23 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Run the agent CLI command interactively',
             subcommands: {
                 'default': {
-                    syntax: 'cli <name> [args...]',
+                    syntax: 'cli <agentName> [args...]',
                     description: 'Run manifest "cli" command interactively (attached TTY).',
-                    params: { '<name>': 'Agent name', '[args...]': 'Arguments appended to the cli command' },
+                    params: { '<agentName>': 'Agent name', '[args...]': 'Arguments appended to the cli command' },
                     examples: [ 'cli MyAPI --help' ],
                     notes: 'Attaches to a persistent container. REPLs stay attached until exit.'
+                }
+            }
+        },
+        'console': {
+            description: 'Start the Web Console (TTY + Chat) for an agent',
+            subcommands: {
+                'default': {
+                    syntax: 'console <agentName> <password> [port] [title] ',
+                    description: 'Starts a web UI on localhost:[port] (default 8089). Title is optional and shown in the header.',
+                    params: { '<agentName>': 'Agent name', '<password>': 'UI access password', '[port]': 'Port for web UI', '[title]': 'Header label' },
+                    examples: [ 'console MyAPI secret 8089 "My Local Agent"' ],
+                    notes: 'Works on first run by auto-creating/ enabling the agent and ensuring a container exists.'
                 }
             }
         },
@@ -197,17 +208,10 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Enable features for agents and repos',
             subcommands: {
                 'env': {
-                    syntax: 'enable env <agent> <variable>',
-                    description: 'Enable a secret environment variable for an agent',
-                    params: {
-                        '<agent>': 'Agent name',
-                        '<variable>': 'Environment variable name'
-                    },
-                    examples: [
-                        'enable env MyAPI API_KEY',
-                        'enable env Database DB_PASSWORD'
-                    ],
-                    notes: 'Variable must be added with "add env" first'
+                    syntax: 'enable env <VAR> <agentName>',
+                    description: 'Attach a secret environment variable to an agent (manifest.env)',
+                    examples: [ 'enable env API_KEY MyAPI' ],
+                    notes: 'Variable must be set with "set env" first'
                 },
                 'repo': {
                     syntax: 'enable repo <name>',

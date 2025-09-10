@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-const { initEnvironment, setDebugMode, PLOINKY_DIR } = require('./lib/config');
-const { handleCommand, getAgentNames, getRepoNames } = require('./lib/commands/cli');
-const { showHelp } = require('./lib/help');
-const { debugLog } = require('./lib/utils');
-const inputState = require('./lib/inputState');
+const { initEnvironment, setDebugMode, PLOINKY_DIR } = require('./services/config');
+const { handleCommand, getAgentNames, getRepoNames } = require('./commands/cli');
+const { showHelp } = require('./services/help');
+const { debugLog } = require('./services/utils');
+const inputState = require('./services/inputState');
 const readline = require('readline');
 const fs = require('fs');
 const os = require('os');
@@ -12,14 +12,11 @@ const path = require('path');
 
 const COMMANDS = {
     'add': ['repo', 'env'],
-    'new': ['agent'],
-    'update': ['agent'],
     'refresh': ['agent'],
     'enable': ['env', 'repo'],
     'disable': ['repo'],
     'shell': [],
     'cli': [],
-    'agent': [],
     'run': ['task'],
     'start': [],
     'restart': [],
@@ -28,7 +25,7 @@ const COMMANDS = {
     'shutdown': [],
     'stop': [],
     'destroy': [],
-    'list': ['agents', 'repos', 'current-agents'],
+    'list': ['agents', 'repos'],
     'console': [],
     'client': ['methods', 'status', 'list', 'task', 'task-status'],
     'help': []
@@ -74,7 +71,7 @@ function completer(line) {
             } else if (command === 'list' && words.length === 2) {
                 // After list agents/repos, don't show anything
                 context = 'none';
-            } else if ((command === 'route' || command === 'probe' || command === 'start') && words.length === 2) {
+            } else if ((command === 'start') && words.length === 2) {
                 context = 'subcommands';
             } else if (words.length === 2) {
                 context = 'args';
@@ -99,8 +96,6 @@ function completer(line) {
                 if (['host', 'repo', 'agent', 'admin'].includes(cloudSubcommand)) {
                     context = 'cloud-sub';
                 }
-            } else if ((command === 'route' || command === 'probe') && words.length === 3) {
-                context = 'args';
             } else if (command === 'client' && words.length === 3) {
                 const clientSubcommand = words[1];
                 if (['methods', 'status', 'task', 'task-status'].includes(clientSubcommand)) {
@@ -135,13 +130,12 @@ function completer(line) {
             completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
-            if ((command === 'run' && ['task', 'webtty', 'cli', 'agent'].includes(subcommand)) ||
+            if ((command === 'run' && ['task'].includes(subcommand)) ||
                 (command === 'shell') ||
                 (command === 'cli') ||
-                (command === 'agent') ||
                 (command === 'update' && subcommand === 'agent') ||
                 (command === 'refresh' && subcommand === 'agent') ||
-                (command === 'enable' && subcommand === 'env') ||
+                (command === 'enable' && subcommand === 'agent') ||
                 (command === 'client' && ['methods', 'status', 'task', 'task-status'].includes(subcommand))) {
                 completions = getAgentNames();
             } else if (command === 'new' && subcommand === 'agent') {
@@ -264,6 +258,15 @@ function startInteractiveMode() {
     if (process.stdin.isTTY && typeof process.stdin.setRawMode === 'function') {
         try { process.stdin.setRawMode(false); } catch (_) {}
     }
+    const restoreTTY = () => {
+        try {
+            if (process.stdin.isTTY && typeof process.stdin.setRawMode === 'function') {
+                process.stdin.setRawMode(false);
+            }
+            // Show cursor and reset attributes just in case
+            try { process.stdout.write('\x1b[?25h\x1b[0m'); } catch(_) {}
+        } catch(_) {}
+    };
     // Use .ploinky_history in the current directory
     const historyPath = path.join(process.cwd(), '.ploinky_history');
     let history = [];
@@ -287,6 +290,21 @@ function startInteractiveMode() {
         completer: process.stdin.isTTY ? completer : undefined // Only use completer in TTY mode
     });
 
+    const cleanupAndExit = () => {
+        try { require('./commands/cli').cleanupSessionContainers(); } catch (_) {}
+        restoreTTY();
+        try { rl.close(); } catch(_) {}
+        process.exit(0);
+    };
+
+    // Handle signals to restore TTY
+    try {
+        process.on('SIGINT', () => cleanupAndExit());
+        process.on('SIGTERM', () => cleanupAndExit());
+        process.on('uncaughtException', (err) => { try { console.error(err); } catch(_) {}; cleanupAndExit(); });
+        process.on('exit', () => { try { restoreTTY(); } catch(_) {} });
+    } catch(_) {}
+
     rl.on('line', async (line) => {
         // If input is suspended (e.g., password prompt), ignore this line
         if (inputState.isSuspended()) {
@@ -298,11 +316,7 @@ function startInteractiveMode() {
         }
         const trimmedLine = line.trim();
             if (trimmedLine) {
-            if (trimmedLine === 'exit') {
-                try { require('./lib/commands/cli').cleanupSessionContainers(); } catch (_) {}
-                rl.close();
-                return;
-            }
+            if (trimmedLine === 'exit' || trimmedLine === 'quit') { return cleanupAndExit(); }
             // Append to history file immediately
             try {
                 fs.appendFileSync(historyPath, trimmedLine + '\n');
@@ -322,20 +336,12 @@ function startInteractiveMode() {
         if (process.stdin.isTTY) {
             rl.prompt();
         }
-    }).on('close', async () => {
-        try {
-            require('./lib/commands/cli').cleanupSessionContainers();
-        } catch (_) {}
-        if (process.stdin.isTTY) {
-            console.log('Bye.');
-        }
-        process.exit(0);
-    });
+    }).on('close', async () => { restoreTTY(); try { require('./commands/cli').cleanupSessionContainers(); } catch (_) {} if (process.stdin.isTTY) { console.log('Bye.'); } process.exit(0); });
 
     // Ensure Ctrl-D (EOF) closes the CLI gracefully
     try {
-        rl.input.on('end', () => { try { rl.close(); } catch(_) {} });
-        process.stdin.on('end', () => { try { rl.close(); } catch(_) {} });
+        rl.input.on('end', () => { try { restoreTTY(); rl.close(); } catch(_) {} });
+        process.stdin.on('end', () => { try { restoreTTY(); rl.close(); } catch(_) {} });
     } catch(_) {}
 
     // If input is not a TTY, we are in script mode. Don't show initial prompt.
@@ -362,7 +368,7 @@ function main() {
 
         debugLog('Raw arguments:', args);
         initEnvironment();
-        try { require('./lib/ploinkyboot').bootstrap(); } catch (_) {}
+        try { require('./services/ploinkyboot').bootstrap(); } catch (_) {}
 
         if (args.length === 0) {
             startInteractiveMode();

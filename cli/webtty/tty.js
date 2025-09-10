@@ -1,5 +1,5 @@
 const { spawn } = require('child_process');
-const { buildExecArgs } = require('../docker');
+const { buildExecArgs } = require('../services/docker');
 
 function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
   const DEBUG = process.env.WEBTTY_DEBUG === '1';

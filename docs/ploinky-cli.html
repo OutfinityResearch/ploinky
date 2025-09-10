@@ -345,33 +345,7 @@ p-cli list agents</code>
                 </div>
             </div>
 
-            <div class="command-section">
-                <h3>🌐 Routing Management</h3>
-                
-                <h4>route add</h4>
-                <div class="command-syntax">route add &lt;name&gt;</div>
-                <div class="command-description">Ensures the agent service listens on port 7000 in the container, mapped to a random host port (>10000). Registers /apis/&lt;name&gt; → http://127.0.0.1:&lt;hostPort&gt;/api.</div>
-                <div class="command-examples">
-                    <strong>Example:</strong>
-                    <code>route add MyAPI</code>
-                </div>
-
-                <h4>route list</h4>
-                <div class="command-syntax">route list</div>
-                <div class="command-description">List current routes (same as: list routes)</div>
-                <div class="command-examples">
-                    <strong>Example:</strong>
-                    <code>route list</code>
-                </div>
-
-                <h4>route delete</h4>
-                <div class="command-syntax">route delete &lt;name&gt;</div>
-                <div class="command-description">Delete a route from RoutingServer config</div>
-                <div class="command-examples">
-                    <strong>Example:</strong>
-                    <code>route delete MyAPI</code>
-                </div>
-            </div>
+            <!-- Routing Management commands removed; use start/status and client commands -->
 
             <div class="command-section">
                 <h3>🔑 Environment Variables</h3>
@@ -732,15 +706,12 @@ p-cli list agents</code>
 
             <div class="command-section">
                 <h3>🔍 Testing & Debugging</h3>
-                
-                <h4>probe route</h4>
-                <div class="command-syntax">probe route &lt;name&gt; [jsonPayload]</div>
-                <div class="command-description">POSTs JSON to /apis/&lt;name&gt;; if no payload provided, uses {"command":"probe"}</div>
-                <div class="command-examples">
-                    <strong>Examples:</strong>
-                    <code>probe route MyAPI</code>
-                    <code>probe route MyAPI '{"command":"hello","args":{}}'</code>
-                </div>
+                <p>Use <code>status</code> to inspect routes/agents and <code>client</code> commands to interact with agents:</p>
+                <ul>
+                  <li><code>client methods &lt;agent&gt;</code></li>
+                  <li><code>client status &lt;agent&gt;</code></li>
+                  <li><code>client task &lt;agent&gt; -k v ...</code></li>
+                </ul>
             </div>
         </section>
 
