@@ -17,7 +17,7 @@ const COMMANDS = {
     'refresh': ['agent'],
     'enable': ['env', 'repo'],
     'disable': ['repo'],
-    'run': ['task', 'bash', 'webtty', 'cli', 'agent'],
+    'run': ['task', 'sh', 'bash', 'webtty', 'cli', 'agent'],
     'start': [],
     'shutdown': [],
     'destroy': [],
@@ -131,7 +131,7 @@ function completer(line) {
             completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
-            if ((command === 'run' && ['task', 'bash', 'webtty', 'cli', 'agent'].includes(subcommand)) ||
+            if ((command === 'run' && ['task', 'sh', 'bash', 'webtty', 'cli', 'agent'].includes(subcommand)) ||
                 (command === 'update' && subcommand === 'agent') ||
                 (command === 'refresh' && subcommand === 'agent') ||
                 (command === 'enable' && subcommand === 'env') ||

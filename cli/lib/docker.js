@@ -138,7 +138,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
         let containerId;
         
         try {
-            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/bash`;
+            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
             debugLog(`Executing create command: ${createCommand}`);
             // Use pipe to capture container ID but also show any pulling progress
             createOutput = execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] }).toString().trim();
@@ -158,7 +158,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
                 }
                 
                 console.log(`Retrying with full registry name: ${containerImage}`);
-                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/bash`;
+                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
                 debugLog(`Executing retry command: ${retryCommand}`);
                 
                 try {
@@ -230,7 +230,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     if (firstRun && manifest.install) {
         console.log(`Running install command for '${agentName}'...`);
         // Prepend cd to the command string itself
-        const installCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} bash -c "cd '${currentDir}' && ${manifest.install}"`;
+        const installCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} sh -lc "cd '${currentDir}' && ${manifest.install}"`;
         debugLog(`Executing install command: ${installCommand}`);
         execSync(installCommand, { stdio: 'inherit' });
     }
@@ -241,27 +241,14 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     let bashCommand;
     let envVars = '';
     
-    if (interactive && command === '/bin/bash') {
-        // Create a temporary .inputrc to disable bracketed paste and mouse
-        const inputrcContent = `
-set enable-bracketed-paste off
-set enable-mouse off
-        `;
-        // Use a cleaner approach with environment setup
-        bashCommand = `cd '${currentDir}' && exec bash`;
-        // Create .inputrc in container to disable problematic features
-        const setupCommand = `${containerRuntime} exec ${containerName} bash -c "echo '${inputrcContent}' > /tmp/.inputrc"`;
-        try {
-            execSync(setupCommand, { stdio: 'pipe' });
-            envVars = '-e INPUTRC=/tmp/.inputrc';
-        } catch (e) {
-            debugLog('Could not create custom .inputrc, continuing without it');
-        }
+    if (interactive && (command === '/bin/bash' || command === '/bin/sh')) {
+        // Use POSIX sh for compatibility
+        bashCommand = `cd '${currentDir}' && exec sh`;
     } else {
         bashCommand = `cd '${currentDir}' && ${command}`;
     }
-    
-    const execCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${envVars} ${containerName} bash -c "${bashCommand}"`;
+
+    const execCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${envVars} ${containerName} sh -lc "${bashCommand}"`;
     debugLog(`Executing run command: ${execCommand}`);
     
     if (interactive) {
@@ -273,7 +260,7 @@ set enable-mouse off
         const args = ['exec'];
         if (interactive) args.push('-it');
         if (envVars) args.push(...envVars.split(' '));
-        args.push(containerName, 'bash', '-c', bashCommand);
+        args.push(containerName, 'sh', '-lc', bashCommand);
         
         debugLog(`Running interactive session with args: ${args.join(' ')}`);
         
@@ -300,30 +287,7 @@ set enable-mouse off
         }
     }
     
-    // Stop the container after interactive sessions to prevent it from staying up
-    // Only stop if it was an interactive bash session
-    if (interactive && (command === '/bin/bash' || command.includes('bash'))) {
-        console.log(`Container will be stopped in background...`);
-        try {
-            // Use exec to run the stop command truly in background with nohup
-            const { exec } = require('child_process');
-            const stopCommand = `(sleep 1 && ${containerRuntime} stop ${containerName}) > /dev/null 2>&1 &`;
-            
-            exec(stopCommand, (error) => {
-                if (error) {
-                    debugLog(`Background stop error: ${error.message}`);
-                }
-            });
-            
-            debugLog(`Container stop command launched in background for ${containerName}`);
-            
-            // Give a moment for the background process to start, but don't wait
-            setTimeout(() => {}, 10);
-        } catch (e) {
-            console.error(`Warning: Could not stop container ${containerName}: ${e.message}`);
-            debugLog(`Stop container error details: ${e.toString()}`);
-        }
-    }
+    // Keep container running after interactive sessions.
 }
 
 function ensureAgentContainer(agentName, repoName, manifest) {
@@ -337,7 +301,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
             : `-v "${currentDir}:${currentDir}"`;
         let containerImage = manifest.container;
         try {
-            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/bash`;
+            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
             debugLog(`Executing create command: ${createCommand}`);
             execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
         } catch (error) {
@@ -345,7 +309,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
                 if (!containerImage.includes('/')) containerImage = `docker.io/library/${containerImage}`;
                 else if (!containerImage.startsWith('docker.io/') && !containerImage.includes('.')) containerImage = `docker.io/${containerImage}`;
                 console.log(`Retrying with full registry name: ${containerImage}`);
-                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/bash`;
+                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
                 debugLog(`Executing retry command: ${retryCommand}`);
                 execSync(retryCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
                 manifest.container = containerImage;

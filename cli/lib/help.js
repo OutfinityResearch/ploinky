@@ -19,7 +19,7 @@ function showHelp(args = []) {
   update agent <name>            Interactive manifest update
   refresh agent <name>           Restart/remove agent container
   start                          Start containers for configured routes (.ploinky/routing.json)
-  run bash <name>                Open interactive bash in container (attached TTY)
+  run sh <name>                  Open interactive sh in container (attached TTY)
   run cli <name> [args...]       Run manifest "cli" command (attached TTY)
   run webtty <name> <pwd> [port] Start WebTTY (Console/Chat) for an agent
   route static <name> [port]     Start RoutingServer; serve static from agent's /code
@@ -150,16 +150,16 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     params: { '<name>': 'Agent name' },
                     examples: [ 'run agent MyAPI' ]
                 },
-                'bash': {
-                    syntax: 'run bash <name>',
-                    description: 'Open interactive bash shell (attached TTY) in the agent container',
+                'sh': {
+                    syntax: 'run sh <name>',
+                    description: 'Open interactive POSIX sh (attached TTY) in the agent container',
                     params: {
                         '<name>': 'Agent name'
                     },
                     examples: [
-                        'run bash MyAPI  # Opens shell with /workspace mounted'
+                        'run sh MyAPI  # Opens shell with /workspace mounted'
                     ],
-                    notes: 'Always attaches to container TTY and waits until you exit the shell.'
+                    notes: 'Always attaches to container TTY and waits until you exit the shell. Alias: run bash'
                 },
                 'webtty': {
                     syntax: 'run webtty <name> <password> [port]',

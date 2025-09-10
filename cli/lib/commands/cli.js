@@ -78,11 +78,11 @@ function newAgent(repoName, agentName, containerImage) {
     (async () => {
         const defaults = {
             container: containerImage || 'node:18-alpine',
-            install: "echo 'No installation needed for buildpack Bash.'",
+            install: "echo 'No installation needed.'",
             update: "",
-            cli: "bash",
+            cli: "sh",
             agent: "/agent/AgentServer.sh 'node /code/demoApi.js'",
-            about: "Bash shell environment. Run any bash commands and scripts"
+            about: "Shell environment (sh). Run POSIX shell commands and scripts"
         };
         const container = await ask('Container image', defaults.container);
         const install = await ask('Install command', defaults.install);
@@ -105,9 +105,9 @@ async function updateAgent(agentName) {
     const get = (k, alt) => (current[k] != null ? current[k] : alt);
     const defaults = {
         container: get('container', current.image || 'node:18-alpine'),
-        install: get('install', (current.commands?.install) || "echo 'No installation needed for buildpack Bash.'"),
+        install: get('install', (current.commands?.install) || "echo 'No installation needed.'"),
         update: get('update', (current.commands?.update) || ""),
-        cli: get('cli', (current.commands?.cli) || "bash"),
+        cli: get('cli', (current.commands?.cli) || "sh"),
         agent: get('agent', (current.commands?.run) || ""),
         about: get('about', '-')
     };
@@ -366,14 +366,14 @@ async function runTask(agentName, command, args) {
     }
 }
 
-async function runBash(agentName) {
+async function runSh(agentName) {
     const manifestPath = findAgentManifest(agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
     const repoName = path.basename(path.dirname(agentPath));
     const { runCommandInContainer, getAgentContainerName } = require('../docker');
     try { registerSessionContainer(getAgentContainerName(agentName, repoName)); } catch (_) {}
-    await runCommandInContainer(agentName, repoName, manifest, '/bin/bash', true);
+    await runCommandInContainer(agentName, repoName, manifest, '/bin/sh', true);
 }
 
 async function runWebTTY(agentName, passwordArg, portArg) {
@@ -597,7 +597,8 @@ async function handleCommand(args) {
         case 'run':
             if (options.length === 0) { await runAll(); break; }
             if (options[0] === 'task') await runTask(options[1], options[2], options.slice(3));
-            else if (options[0] === 'bash') await runBash(options[1]);
+            else if (options[0] === 'sh') await runSh(options[1]);
+            else if (options[0] === 'bash') await runSh(options[1]); // backward compatible alias
             else if (options[0] === 'cli') await runCli(options[1], options.slice(2));
             else if (options[0] === 'agent') await runAgent(options[1]);
             else if (options[0] === 'webtty') await runWebTTY(options[1], options[2], options[3]);
