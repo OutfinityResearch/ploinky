@@ -21,12 +21,14 @@ function showHelp(args = []) {
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
-  console <agentName> <pwd> [port] Start WebTTY Console/Chat for an agent
-  set env <VAR> <VALUE>          Create or update a secret env variable
-  enable env <VAR> <agentName>   Attach env to agent (manifest.env)
+  webconsole <password> [command...] Start WebTTY attached to a local command (default: /bin/bash)
+  webtty <password> [command...]     Alias for webconsole
+  set <VAR> <$VAR|value>         Set a variable value or alias another variable
+  set                            List all variable names (no values)
+  echo <VAR|$VAR>                Print the resolved value of a variable
+  expose <ENV_NAME> <$VAR|value> [agent]  Expose to agent environment
   list agents | repos            List agents (manifests) or predefined repos
-  list current-agents            List workspace containers registered in .ploinky/agents
-  add env <name> <val>           Add secret | enable env <agent> <var>
+
 
 ▶ CLIENT OPERATIONS
   client task <agent>            Interactive: type command, then params; sends via RoutingServer
@@ -68,14 +70,10 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         'set': {
-            description: 'Set values (env, etc.)',
-            subcommands: {
-                'env': {
-                    syntax: 'set env <VAR> <VALUE>',
-                    description: 'Create or update a secret environment variable (stored in .ploinky/.secrets)',
-                    examples: [ 'set env API_KEY sk-1234567890' ]
-                }
-            }
+            description: 'Manage workspace variables (stored in .ploinky/.secrets)',
+            syntax: 'set <VAR> <$OTHER|value>',
+            examples: [ 'set API_KEY sk-123456', 'set PROD_KEY $API_KEY', 'set' ],
+            notes: 'Running set with no arguments lists all variable names.'
         },
         
         'new': {
@@ -144,17 +142,16 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 }
             }
         },
-        'console': {
-            description: 'Start the Web Console (TTY + Chat) for an agent',
-            subcommands: {
-                'default': {
-                    syntax: 'console <agentName> <password> [port] [title] ',
-                    description: 'Starts a web UI on localhost:[port] (default 8089). Title is optional and shown in the header.',
-                    params: { '<agentName>': 'Agent name', '<password>': 'UI access password', '[port]': 'Port for web UI', '[title]': 'Header label' },
-                    examples: [ 'console MyAPI secret 8089 "My Local Agent"' ],
-                    notes: 'Works on first run by auto-creating/ enabling the agent and ensuring a container exists.'
-                }
-            }
+        'webconsole': {
+            description: 'Start the Web Console (TTY + Chat) attached to a local command',
+            syntax: 'webconsole <password> [command...]',
+            examples: [ 'webconsole secret /bin/bash', 'webconsole secret p-cli shell MyAgent' ],
+            notes: 'Defaults to /bin/bash if no command is provided. Configure port/title via env: WEBTTY_PORT, WEBTTY_TITLE.'
+        },
+        'webtty': {
+            description: 'Alias for webconsole',
+            syntax: 'webtty <password> [command...]',
+            examples: [ 'webtty secret /bin/bash' ]
         },
         
         'route': {
@@ -207,12 +204,6 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'enable': {
             description: 'Enable features for agents and repos',
             subcommands: {
-                'env': {
-                    syntax: 'enable env <VAR> <agentName>',
-                    description: 'Attach a secret environment variable to an agent (manifest.env)',
-                    examples: [ 'enable env API_KEY MyAPI' ],
-                    notes: 'Variable must be set with "set env" first'
-                },
                 'repo': {
                     syntax: 'enable repo <name>',
                     description: 'Enable a repository for agent listings (see list repos)',
@@ -225,11 +216,23 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 }
             }
         },
+        'expose': {
+            description: 'Expose variables to an agent as environment variables',
+            syntax: 'expose <ENV_NAME> <$VAR|value> [agentName] ',
+            examples: [ 'expose API_KEY $MY_API_KEY MyAPI', 'expose MODE prod MyAPI', 'expose API_KEY $MY_API_KEY' ],
+            notes: 'First arg is the environment variable name inside the container. If agentName omitted, uses static agent configured via start.'
+        },
+        'echo': {
+            description: 'Print the resolved value of a variable',
+            syntax: 'echo <VAR|$VAR> ',
+            examples: [ 'echo API_KEY', 'echo $PROD_KEY' ],
+            notes: 'Resolves chained aliases like VAR=$OTHER.'
+        },
         'start': {
             description: 'Start enabled agents and the local Router',
             syntax: 'start [staticAgent] [port] ',
             examples: [ 'start MyStaticAgent 8088', 'start' ],
-            notes: 'On first run, provide both staticAgent and port. Subsequent runs can use plain start.'
+            notes: 'Reads manifest of static agent: applies repos{} (clone+enable) and enable[] (enable agents). First run needs agent and port.'
         },
         'status': {
             description: 'Show enabled agents and router configuration',
@@ -266,11 +269,6 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'list repos',
                     description: 'List available repositories with URLs; mark installed and enabled. Use enable repo <name> to include in listings.',
                     examples: ['list repos']
-                },
-                'current-agents': {
-                    syntax: 'list current-agents',
-                    description: 'List current workspace containers from .ploinky/agents (with ports, binds, env count)',
-                    examples: ['list current-agents']
                 },
                 'routes': {
                     syntax: 'list routes',

@@ -11,9 +11,9 @@ const os = require('os');
 const path = require('path');
 
 const COMMANDS = {
-    'add': ['repo', 'env'],
+    'add': ['repo'],
     'refresh': ['agent'],
-    'enable': ['env', 'repo'],
+    'enable': ['repo', 'agent'],
     'disable': ['repo'],
     'shell': [],
     'cli': [],
@@ -26,8 +26,12 @@ const COMMANDS = {
     'stop': [],
     'destroy': [],
     'list': ['agents', 'repos'],
-    'console': [],
+    'webconsole': [],
+    'webtty': [],
     'client': ['methods', 'status', 'list', 'task', 'task-status'],
+    'expose': [],
+    'set': [],
+    'echo': [],
     'help': []
 };
 
@@ -138,6 +142,9 @@ function completer(line) {
                 (command === 'enable' && subcommand === 'agent') ||
                 (command === 'client' && ['methods', 'status', 'task', 'task-status'].includes(subcommand))) {
                 completions = getAgentNames();
+            } else if (command === 'expose') {
+                // expose <EXPOSED> <$VAR|value> <agent>
+                if (words.length >= 4) completions = getAgentNames();
             } else if (command === 'new' && subcommand === 'agent') {
                 completions = getRepoNames();
             } else if (command === 'disable' && subcommand === 'repo') {

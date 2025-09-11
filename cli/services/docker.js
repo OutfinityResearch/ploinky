@@ -2,7 +2,8 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { AGENTS_FILE, SECRETS_FILE } = require('./config');
+const { AGENTS_FILE, SECRETS_FILE, REPOS_DIR } = require('./config');
+const { buildEnvFlags, getExposedNames, buildEnvMap } = require('./secretVars');
 const workspace = require('./workspace');
 const { debugLog } = require('./utils');
 
@@ -59,6 +60,17 @@ function getAgentContainerName(agentName, repoName) {
     return containerName;
 }
 
+function getServiceContainerName(agentName) {
+    const safeAgentName = agentName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const projectDir = path.basename(process.cwd()).replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const cwdHash = crypto.createHash('sha256')
+        .update(process.cwd())
+        .digest('hex')
+        .substring(0, 6);
+    return `ploinky_agent_${safeAgentName}_${projectDir}_${cwdHash}`;
+}
+module.exports.getServiceContainerName = getServiceContainerName;
+
 function isContainerRunning(containerName) {
     // Use exact name matching for better compatibility
     const command = `${containerRuntime} ps --format "{{.Names}}" | grep -x "${containerName}"`;
@@ -90,23 +102,20 @@ function containerExists(containerName) {
 }
 
 function getSecretsForAgent(manifest) {
-    if (!manifest.env || manifest.env.length === 0) {
-        debugLog('No environment variables to inject.');
-        return [];
-    }
-    debugLog(`Found environment variables to inject: ${manifest.env.join(', ')}`);
-    const secrets = fs.readFileSync(SECRETS_FILE, 'utf-8');
-    const secretLines = secrets.split('\n');
-    const envVars = [];
+    const vars = buildEnvFlags(manifest);
+    debugLog(`Formatted env vars for ${containerRuntime} command: ${vars.join(' ')}`);
+    return vars;
+}
 
-    for (const varName of manifest.env) {
-        const secretLine = secretLines.find(line => line.startsWith(`${varName}=`));
-        if (secretLine) {
-            envVars.push(`-e ${secretLine}`);
-        }
+function flagsToArgs(flags) {
+    // Convert ["-e VAR=val", "-e OTHER=val"] -> ["-e","VAR=val","-e","OTHER=val"] for spawn args
+    const out = [];
+    for (const f of (flags || [])) {
+        if (!f) continue;
+        const parts = String(f).split(' ');
+        for (const p of parts) { if (p) out.push(p); }
     }
-    debugLog(`Formatted env vars for ${containerRuntime} command: ${envVars.join(' ')}`);
-    return envVars;
+    return out;
 }
 
 function runCommandInContainer(agentName, repoName, manifest, command, interactive = false) {
@@ -168,6 +177,8 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             }
         }
         
+        // Collect declared env names (legacy env[] + expose[] names) for registry
+        const declaredEnvNames = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
         agents[containerName] = {
             agentName,
             repoName,
@@ -178,7 +189,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             type: 'interactive',
             config: {
                 binds: [ { source: currentDir, target: currentDir } ],
-                env: (manifest.env||[]).map(name => ({ name })),
+                env: Array.from(new Set(declaredEnvNames)).map(name => ({ name })),
                 ports: []
             }
         };
@@ -285,26 +296,48 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
 function ensureAgentContainer(agentName, repoName, manifest) {
     const containerName = getAgentContainerName(agentName, repoName);
     const currentDir = process.cwd();
+    const agentLibPath = path.resolve(__dirname, '../../Agent');
+    const agentPath = path.join(REPOS_DIR, repoName, agentName);
+    const absAgentPath = path.resolve(agentPath);
+    // If container exists but env hash label mismatches, recreate
+    if (containerExists(containerName)) {
+        const desired = computeEnvHash(manifest);
+        const current = getContainerLabel(containerName, 'ploinky.envhash');
+        if (desired && desired !== current) {
+            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch(_) {}
+        }
+    }
+    let createdNew = false;
     if (!containerExists(containerName)) {
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
         const envVars = getSecretsForAgent(manifest).join(' ');
-        const mountOption = containerRuntime === 'podman'
-            ? `--mount type=bind,source="${currentDir}",destination="${currentDir}",relabel=shared`
-            : `-v "${currentDir}:${currentDir}"`;
+        const volZ = (containerRuntime === 'podman') ? ':z' : '';
+        const roOpt = (containerRuntime === 'podman') ? ':ro,z' : ':ro';
         let containerImage = manifest.container;
+        const envHash = computeEnvHash(manifest);
         try {
-            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
+            const createCommand = `${containerRuntime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
+              -v "${currentDir}:${currentDir}${volZ}" \
+              -v "${agentLibPath}:/Agent${roOpt}" \
+              -v "${absAgentPath}:/code${roOpt}" \
+              ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
             debugLog(`Executing create command: ${createCommand}`);
             execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
+            createdNew = true;
         } catch (error) {
             if (containerRuntime === 'podman' && String(error.message||'').includes('short-name')) {
                 if (!containerImage.includes('/')) containerImage = `docker.io/library/${containerImage}`;
                 else if (!containerImage.startsWith('docker.io/') && !containerImage.includes('.')) containerImage = `docker.io/${containerImage}`;
                 console.log(`Retrying with full registry name: ${containerImage}`);
-                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
+                const retryCommand = `${containerRuntime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
+                  -v "${currentDir}:${currentDir}${volZ}" \
+                  -v "${agentLibPath}:/Agent${roOpt}" \
+                  -v "${absAgentPath}:/code${roOpt}" \
+                  ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
                 debugLog(`Executing retry command: ${retryCommand}`);
                 execSync(retryCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
                 manifest.container = containerImage;
+                createdNew = true;
             } else {
                 console.error('[docker.ensureAgentContainer] create failed:', error.message || error);
                 throw error;
@@ -312,6 +345,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         }
         // Registrează în agents registry
         const agents = loadAgentsMap();
+        const declaredEnvNamesX = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
         agents[containerName] = {
             agentName,
             repoName,
@@ -319,7 +353,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
             createdAt: new Date().toISOString(),
             projectPath: currentDir,
             type: 'interactive',
-            config: { binds: [ { source: currentDir, target: currentDir } ], env: (manifest.env||[]).map(name => ({ name })), ports: [] }
+            config: { binds: [ { source: currentDir, target: currentDir }, { source: agentLibPath, target: '/Agent', ro: true }, { source: absAgentPath, target: '/code', ro: true } ], env: Array.from(new Set(declaredEnvNamesX)).map(name => ({ name })), ports: [] }
         };
         saveAgentsMap(agents);
     }
@@ -329,6 +363,17 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         try { execSync(startCommand, { stdio: 'inherit' }); }
         catch (e) { console.error('[docker.ensureAgentContainer] start failed:', e.message || e); throw e; }
     }
+    // Run install on first creation if defined
+    try {
+        if (createdNew && manifest.install && String(manifest.install).trim()) {
+            console.log(`Running install command for '${agentName}'...`);
+            const installCommand = `${containerRuntime} exec ${containerName} sh -lc "cd '${currentDir}' && ${manifest.install}"`;
+            debugLog(`Executing install command: ${installCommand}`);
+            execSync(installCommand, { stdio: 'inherit' });
+        }
+    } catch (e) {
+        console.log(`[install] ${agentName}: ${e?.message||e}`);
+    }
     return containerName;
 }
 
@@ -337,7 +382,9 @@ function getRuntime() { return containerRuntime; }
 // Start all configured agents recorded in workspace registry (if present but not running)
 function startConfiguredAgents() {
     const agents = workspace.loadAgents();
-    const names = Object.keys(agents || {});
+    const names = Object.entries(agents || {})
+        .filter(([name, rec]) => rec && rec.type && typeof name === 'string' && !name.startsWith('_'))
+        .map(([name]) => name);
     const startedList = [];
     for (const name of names) {
         try {
@@ -353,7 +400,9 @@ function startConfiguredAgents() {
 // Stop (but do not remove) all containers recorded in workspace registry
 function stopConfiguredAgents() {
     const agents = workspace.loadAgents();
-    const names = Object.keys(agents || {});
+    const names = Object.entries(agents || {})
+        .filter(([name, rec]) => rec && rec.type && typeof name === 'string' && !name.startsWith('_'))
+        .map(([name]) => name);
     const stoppedList = [];
     for (const name of names) {
         try {
@@ -379,7 +428,7 @@ function parseHostPort(output) {
 
 async function ensureAgentCore(manifest, agentPath) {
     const runtime = containerRuntime;
-    const containerName = `ploinky_agent_${manifest.name}`;
+    const containerName = getServiceContainerName(manifest.name);
     const fs = require('fs');
     const path = require('path');
     const { PLOINKY_DIR } = require('./config');
@@ -481,18 +530,22 @@ async function ensureAgentCore(manifest, agentPath) {
 // - Always keep the container running; do not auto-stop on exit.
 function startAgentContainer(agentName, manifest, agentPath) {
     const runtime = containerRuntime;
-    const containerName = `ploinky_agent_${agentName}`;
+    const containerName = getServiceContainerName(agentName);
     try { execSync(`${runtime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
     try { execSync(`${runtime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
     const cwd = process.cwd();
     const agentLibPath = path.resolve(__dirname, '../../Agent');
-    const args = ['run', '-d', '--name', containerName, '-w', cwd,
+    const envHash = computeEnvHash(manifest);
+    const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', cwd,
         '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
-        '-v', `${agentLibPath}:/Agent:ro${runtime==='podman'?',z':''}`,
-        '-v', `${path.resolve(agentPath)}:/code:ro${runtime==='podman'?',z':''}`
+        '-v', `${agentLibPath}:/Agent${runtime==='podman'?':ro,z':':ro'}`,
+        '-v', `${path.resolve(agentPath)}:/code${runtime==='podman'?':ro,z':':ro'}`
     ];
+    // Inject environment for exposed variables
+    const envFlags = flagsToArgs(buildEnvFlags(manifest));
+    if (envFlags.length) args.push(...envFlags);
     const entry = agentCmd ? agentCmd : 'sh /Agent/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', entry);
     const { spawnSync } = require('child_process');
@@ -500,6 +553,7 @@ function startAgentContainer(agentName, manifest, agentPath) {
     if (res.status !== 0) { throw new Error(`${runtime} run failed with code ${res.status}`); }
     // Înregistrează în registry
     const agents = loadAgentsMap();
+    const declaredEnvNames2 = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
     agents[containerName] = {
         agentName,
         repoName: path.basename(path.dirname(agentPath)),
@@ -507,7 +561,7 @@ function startAgentContainer(agentName, manifest, agentPath) {
         createdAt: new Date().toISOString(),
         projectPath: process.cwd(),
         type: 'agent',
-        config: { binds: [ { source: cwd, target: cwd }, { source: agentLibPath, target: '/Agent' }, { source: agentPath, target: '/code' } ], env: [], ports: [] }
+        config: { binds: [ { source: cwd, target: cwd }, { source: agentLibPath, target: '/Agent' }, { source: agentPath, target: '/code' } ], env: Array.from(new Set(declaredEnvNames2)).map(name => ({ name })), ports: [] }
     };
     saveAgentsMap(agents);
     return containerName;
@@ -557,7 +611,7 @@ function destroyWorkspaceContainers() {
     const agents = loadAgentsMap();
     const removedList = [];
     for (const [name, rec] of Object.entries(agents)) {
-        if (rec && rec.projectPath === cwd) {
+        if (rec && rec.type && rec.projectPath === cwd) {
             try { stopAndRemove(name); delete agents[name]; removedList.push(name); }
             catch (e) { console.log(`[destroy] ${name} error: ${e?.message||e}`); }
         }
@@ -573,7 +627,7 @@ function cleanupSessionSet() { const list = Array.from(SESSION); stopAndRemoveMa
 
 function getAgentsRegistry() { return loadAgentsMap(); }
 
-module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents, stopConfiguredAgents, ensureAgentService };
+module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents, stopConfiguredAgents, ensureAgentService, getServiceContainerName };
 
 // Build exec args for attaching to a running container with sh -lc and a given entry command.
 // Returns an array suitable to be used with spawn/spawnSync: [ 'exec', '-it', <container>, 'sh', '-lc', <cmd> ]
@@ -588,13 +642,45 @@ function buildExecArgs(containerName, workdir, entryCommand, interactive = true)
 
 module.exports.buildExecArgs = buildExecArgs;
 
+// Attach to a running container and run a command interactively with proper TTY.
+// Returns the exit code from the spawned process.
+function attachInteractive(containerName, workdir, entryCommand) {
+    const runtime = containerRuntime;
+    const { spawnSync } = require('child_process');
+    const execArgs = buildExecArgs(containerName, workdir, entryCommand, true);
+    const res = spawnSync(runtime, execArgs, { stdio: 'inherit' });
+    return res.status ?? 0;
+}
+
+module.exports.attachInteractive = attachInteractive;
+
+function computeEnvHash(manifest) {
+    try {
+        const map = buildEnvMap(manifest);
+        const sorted = Object.keys(map).sort().reduce((o,k)=>{o[k]=map[k];return o;},{});
+        const data = JSON.stringify(sorted);
+        return require('crypto').createHash('sha256').update(data).digest('hex');
+    } catch (_) {
+        return '';
+    }
+}
+
+function getContainerLabel(containerName, key) {
+    try {
+        const out = execSync(`${containerRuntime} inspect ${containerName} --format '{{ json .Config.Labels }}'`, { stdio: 'pipe' }).toString();
+        const labels = JSON.parse(out || '{}') || {};
+        return labels[key] || '';
+    } catch (_) { return ''; }
+}
+
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000)
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000).
 // Uses the same mounting strategy as startAgentContainer. Falls back to /Agent/AgentServer.sh if no agent command set.
 function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const runtime = containerRuntime;
     const repoName = path.basename(path.dirname(agentPath));
-    const containerName = getAgentContainerName(agentName, repoName);
+    // Use a dedicated service container name with cwd hash to avoid clashes across workspaces
+    const containerName = getServiceContainerName(agentName);
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
     const cwd = process.cwd();
@@ -602,6 +688,15 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const absAgentPath = path.resolve(agentPath);
 
     // If container exists, ensure it's running and return current mapped port.
+    let createdNew = false;
+    if (containerExists(containerName)) {
+        // Recreate container if env hash changed or missing
+        const desired = computeEnvHash(manifest);
+        const current = getContainerLabel(containerName, 'ploinky.envhash');
+        if (desired && desired !== current) {
+            try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch(_) {}
+        }
+    }
     if (containerExists(containerName)) {
         if (!isContainerRunning(containerName)) {
             try { execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
@@ -622,20 +717,25 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     // - Mount current directory RW at same path (workdir = cwd)
     // - Mount Agent library RO at /agent
     // - Mount agentPath RO at /code (for apps expecting /code)
-    const args = ['run', '-d', '-p', `${hostPort}:7000`, '--name', containerName,
+    const envHash2 = computeEnvHash(manifest);
+    const args = ['run', '-d', '-p', `${hostPort}:7000`, '--name', containerName, '--label', `ploinky.envhash=${envHash2}`,
         '-w', cwd,
         '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
-        '-v', `${agentLibPath}:/Agent:ro${runtime==='podman'?',z':''}`,
-        '-v', `${absAgentPath}:/code:ro${runtime==='podman'?',z':''}`
+        '-v', `${agentLibPath}:/Agent${runtime==='podman'?':ro,z':':ro'}`,
+        '-v', `${absAgentPath}:/code${runtime==='podman'?':ro,z':':ro'}`
     ];
+    const envFlags2 = flagsToArgs(buildEnvFlags(manifest));
+    if (envFlags2.length) args.push(...envFlags2);
     const cmd = agentCmd || 'sh /Agent/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', cmd);
     const { spawnSync } = require('child_process');
     const runRes = spawnSync(runtime, args, { stdio: 'inherit' });
     if (runRes.status !== 0) { throw new Error(`${runtime} run failed with code ${runRes.status}`); }
+    createdNew = true;
 
     // Save to registry
     const agents = loadAgentsMap();
+    const declaredEnvNames3 = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
     agents[containerName] = {
         agentName,
         repoName: path.basename(path.dirname(agentPath)),
@@ -649,11 +749,24 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
                 { source: agentLibPath, target: '/agent', ro: true },
                 { source: agentPath, target: '/code', ro: true }
             ],
-            env: [],
+            env: Array.from(new Set(declaredEnvNames3)).map(name => ({ name })),
             ports: [ { containerPort: 7000, hostPort } ]
         }
     };
     saveAgentsMap(agents);
+
+    // Run install once on first creation
+    try {
+        if (createdNew && manifest.install && String(manifest.install).trim()) {
+            console.log(`[install] running for '${agentName}'...`);
+            const cwd = process.cwd();
+            const installCmd = `${runtime} exec ${containerName} sh -lc "cd '${cwd}' && ${manifest.install}"`;
+            debugLog(`Executing install (service): ${installCmd}`);
+            execSync(installCmd, { stdio: 'inherit' });
+        }
+    } catch (e) {
+        console.log(`[install] ${agentName}: ${e?.message||e}`);
+    }
     return { containerName, hostPort };
 }
 module.exports.ensureAgentService = ensureAgentService;

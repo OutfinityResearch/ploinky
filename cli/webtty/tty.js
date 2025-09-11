@@ -46,3 +46,49 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
 }
 
 module.exports = { createTTYFactory };
+
+// Local TTY factory: runs a local command in a PTY (no containers)
+function createLocalTTYFactory({ ptyLib, workdir, command }) {
+  const DEBUG = process.env.WEBTTY_DEBUG === '1';
+  const log = (...args) => { if (DEBUG) console.log('[webtty][tty-local]', ...args); };
+  const factory = () => {
+    const wd = workdir || process.cwd();
+    const env = { ...process.env, TERM: 'xterm-256color' };
+    let isPTY = false;
+    let ptyProc = null;
+    const outputHandlers = new Set();
+    const closeHandlers = new Set();
+    const emitOutput = (data) => { for (const h of outputHandlers) { try { h(data); } catch (_) {} } };
+    const emitClose = () => { for (const h of closeHandlers) { try { h(); } catch (_) {} } };
+
+    const hasCustom = !!(command && String(command).trim());
+    const defaultShell = (process.env.SHELL || '/bin/bash');
+    const parentShell = (process.env.WEBTTY_SHELL || '/bin/bash');
+    const entry = hasCustom ? String(command) : defaultShell;
+    // If running default shell, rename argv[0] to 'webtty' for easier ps visibility (requires bash)
+    const renameExec = hasCustom ? entry : `exec -a webtty ${entry}`;
+    const shCmd = `cd '${wd}' && ${renameExec}`;
+
+    if (!ptyLib) throw new Error("'node-pty' is required for WebTTY.");
+    try {
+      ptyProc = ptyLib.spawn(parentShell, ['-lc', shCmd], { name: 'xterm-color', cols: 80, rows: 24, cwd: wd, env });
+      isPTY = true;
+      log('spawned PTY local', { entry });
+      ptyProc.onData(emitOutput);
+      ptyProc.onExit(() => { log('pty exit'); emitClose(); });
+    } catch (e) { log('pty spawn failed', e?.message || e); throw e; }
+
+    return {
+      isPTY,
+      onOutput(handler) { if (handler) outputHandlers.add(handler); return () => outputHandlers.delete(handler); },
+      onClose(handler) { if (handler) closeHandlers.add(handler); return () => closeHandlers.delete(handler); },
+      write(data) { if (DEBUG) log('write', { bytes: Buffer.byteLength(data || '') }); try { ptyProc?.write?.(data); } catch (e) { log('write error', e?.message || e); } },
+      resize(cols, rows) { if (!cols || !rows) return; try { ptyProc?.resize?.(cols, rows); } catch (e) { log('resize error', e?.message || e); } if (DEBUG) log('resized', { cols, rows, pty: isPTY }); },
+      close() { try { ptyProc?.kill?.(); } catch (_) {} }
+    };
+  };
+
+  return { create: factory };
+}
+
+module.exports.createLocalTTYFactory = createLocalTTYFactory;
