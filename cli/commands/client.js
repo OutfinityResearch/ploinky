@@ -32,20 +32,33 @@ class ClientCommands {
         let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
         const port = cfg.port || 8088;
         const payload = { command: 'methods' };
-        const res = await new Promise((resolve, reject) => {
+        const result = await new Promise((resolve, reject) => {
             const req = http.request({ hostname: '127.0.0.1', port, path: `/apis/${agentName}`, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (r) => {
                 let buf = [];
                 r.on('data', d => buf.push(d));
                 r.on('end', () => {
-                    try { resolve(JSON.parse(Buffer.concat(buf).toString('utf8') || '{}')); }
-                    catch (e) { resolve({ ok: false, error: 'invalid JSON from agent', raw: Buffer.concat(buf).toString('utf8') }); }
+                    const bodyStr = Buffer.concat(buf).toString('utf8');
+                    try {
+                        const json = JSON.parse(bodyStr || 'null');
+                        resolve({ code: r.statusCode||0, json, raw: bodyStr });
+                    } catch {
+                        resolve({ code: r.statusCode||0, json: null, raw: bodyStr });
+                    }
                 });
             });
-            req.on('error', reject);
+            req.on('error', (e) => resolve({ code: 0, json: null, raw: String(e) }));
             req.write(JSON.stringify(payload));
             req.end();
         });
-        console.log(JSON.stringify(res, null, 2));
+        if (Array.isArray(result.json)) {
+            console.log(JSON.stringify(result.json));
+        } else if (result.code && result.code >= 200 && result.code < 300 && result.json && Array.isArray(result.json.methods)) {
+            console.log(JSON.stringify(result.json.methods));
+        } else if (result.code && result.code >= 400) {
+            console.log(`${agentName}: http=${result.code}`);
+        } else {
+            console.log(`${agentName}: cannot parse methods`);
+        }
     }
 
     async getAgentStatus(agentName) {
@@ -58,20 +71,26 @@ class ClientCommands {
         let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
         const port = cfg.port || 8088;
         const payload = { command: 'status' };
-        const res = await new Promise((resolve, reject) => {
+        const result = await new Promise((resolve, reject) => {
             const req = http.request({ hostname: '127.0.0.1', port, path: `/apis/${agentName}`, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (r) => {
                 let buf = [];
                 r.on('data', d => buf.push(d));
                 r.on('end', () => {
-                    try { resolve(JSON.parse(Buffer.concat(buf).toString('utf8') || '{}')); }
-                    catch (e) { resolve({ ok: false, error: 'invalid JSON from agent', raw: Buffer.concat(buf).toString('utf8') }); }
+                    const bodyStr = Buffer.concat(buf).toString('utf8');
+                    let parsed = null;
+                    try { parsed = JSON.parse(bodyStr || 'null'); } catch (_) {}
+                    resolve({ code: r.statusCode||0, parsed, bodyStr });
                 });
             });
-            req.on('error', reject);
+            req.on('error', (e)=> resolve({ code: 0, parsed: null, bodyStr: String(e) }));
             req.write(JSON.stringify(payload));
             req.end();
         });
-        console.log(JSON.stringify(res, null, 2));
+        const code = result.code;
+        const hasBody = result.bodyStr && result.bodyStr.length ? 'yes' : 'no';
+        const parsed = result.parsed ? 'yes' : 'no';
+        const ok = (result.parsed && typeof result.parsed.ok === 'boolean') ? String(result.parsed.ok) : '-';
+        console.log(`${agentName}: http=${code} body=${hasBody} parsed=${parsed} ok=${ok}`);
     }
 
     async listAgents() {

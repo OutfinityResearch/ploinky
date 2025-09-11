@@ -383,7 +383,7 @@ function getRuntime() { return containerRuntime; }
 function startConfiguredAgents() {
     const agents = workspace.loadAgents();
     const names = Object.entries(agents || {})
-        .filter(([name, rec]) => rec && rec.type && typeof name === 'string' && !name.startsWith('_'))
+        .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'))
         .map(([name]) => name);
     const startedList = [];
     for (const name of names) {
@@ -401,7 +401,7 @@ function startConfiguredAgents() {
 function stopConfiguredAgents() {
     const agents = workspace.loadAgents();
     const names = Object.entries(agents || {})
-        .filter(([name, rec]) => rec && rec.type && typeof name === 'string' && !name.startsWith('_'))
+        .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'))
         .map(([name]) => name);
     const stoppedList = [];
     for (const name of names) {
@@ -611,7 +611,7 @@ function destroyWorkspaceContainers() {
     const agents = loadAgentsMap();
     const removedList = [];
     for (const [name, rec] of Object.entries(agents)) {
-        if (rec && rec.type && rec.projectPath === cwd) {
+        if (rec && (rec.type === 'agent' || rec.type === 'agentCore') && rec.projectPath === cwd) {
             try { stopAndRemove(name); delete agents[name]; removedList.push(name); }
             catch (e) { console.log(`[destroy] ${name} error: ${e?.message||e}`); }
         }

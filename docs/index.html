@@ -25,11 +25,21 @@
     <header class="hero">
         <div class="hero-content">
             <h1>Ploinky</h1>
-            <p class="hero-subtitle">Universal Agent Platform for Containers and AI</p>
+            <p class="hero-subtitle">It’s Ploinky — run agents in a straightforward way!</p>
             <div class="hero-buttons">
                 <a href="#quick-start" class="btn btn-primary">Get Started</a>
                 <a href="https://github.com/PlonkyRepos/ploinky" class="btn btn-secondary">View on GitHub</a>
             </div>
+            <pre style="margin-top:16px; background:#111; color:#ddd; padding:12px; border-radius:6px;"><code># Quick usage
+p-cli add repo basic
+p-cli set API_KEY sk-123
+p-cli expose API_KEY $API_KEY demo
+p-cli start demo 8088
+p-cli shell demo   # attach shell
+# or WebTTY local console
+p-cli webtty secret p-cli shell demo
+# view logs
+p-cli logs last 200 router</code></pre>
         </div>
     </header>
 
@@ -110,19 +120,17 @@ sudo ln -s $(pwd)/bin/p-cli /usr/local/bin/p-cli</code></pre>
 
             <h3>First Commands</h3>
             <pre><code># Start Ploinky interactive mode
-ploinky
+p-cli
 
 # List available agents
-ploinky> list agents
+list agents
 
-# Run a bash agent
-ploinky> agent bash
+# Enable and start an agent
+enable agent demo
+restart demo
 
-# See available repositories
-ploinky> list repos
-
-# Add more agents
-ploinky> add repo cloud</code></pre>
+# Open a shell to the agent
+shell demo</code></pre>
         </section>
 
         <section class="architecture">

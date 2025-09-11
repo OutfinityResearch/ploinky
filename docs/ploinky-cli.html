@@ -139,34 +139,29 @@
 
 ▶ LOCAL DEVELOPMENT
   add repo &lt;name&gt; [url]          Add repository (basic/cloud/vibe/security/extra/demo)
-  new agent &lt;repo&gt; &lt;name&gt;        Interactive manifest creation
-  update agent &lt;name&gt;            Interactive manifest update
   refresh agent &lt;name&gt;           Restart/remove agent container
-  start                          Start agents from .ploinky/agents and launch Router
-  shell &lt;name&gt;                   Open interactive sh in container (attached TTY)
-  cli &lt;name&gt; [args...]           Run manifest "cli" command (attached TTY)
-  console &lt;name&gt; &lt;pwd&gt; [port]    Start WebTTY (Console/Chat) for an agent
-  route add &lt;name&gt;               Ensure agent service + register /apis/&lt;name&gt;
-  route list | delete &lt;name&gt;     List or delete routes
+  start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
+  shell &lt;agent&gt;                  Open interactive sh in agent container (TTY)
+  cli &lt;agent&gt; [args...]          Run manifest "cli" command (TTY)
+  webconsole &lt;pwd&gt; [cmd...]      WebTTY attached to a local command (default: /bin/bash)
+  webtty &lt;pwd&gt; [cmd...]          Alias for webconsole
+  set &lt;VAR&gt; &lt;$OTHER|value&gt;       Set a variable value or alias
+  echo &lt;VAR|$VAR&gt;                Print resolved value of a variable
+  expose &lt;ENV&gt; &lt;$VAR|value&gt; [&lt;agent&gt;]  Expose to agent environment
   list agents | repos            List agents (manifests) or predefined repos
-  list current-agents | routes   List workspace containers or RoutingServer routes
-  add env &lt;name&gt; &lt;val&gt;           Add secret | enable env &lt;agent&gt; &lt;var&gt;
-
-▶ CLOUD OPERATIONS  
-  cloud connect [url]            Connect to server (default: localhost:8000)
-  cloud login/logout/status      Authentication and status
-  cloud host add/remove/list     Manage hosts/domains
-  cloud repo add/remove/list     Manage repositories  
-  cloud agent list/info/start    Control deployed agents
-  cloud deploy/undeploy          Manage deployments
-  cloud admin add/password       Admin management
 
 ▶ CLIENT OPERATIONS
-  client task &lt;agent&gt;            Interactive: type command, then params; sends via RoutingServer
-  client methods &lt;agent&gt;         If supported by your agent (via RoutingServer)
+  client task &lt;agent&gt;            Interactive: send commands via RoutingServer
+  client methods &lt;agent&gt;         If supported by your agent
   client status &lt;agent&gt;          If supported by your agent
 
-  help | shutdown | destroy      Utilities & shell control
+  status | restart               Show state | restart agents + Router
+  stop | shutdown | destroy      Stop containers | remove containers
+  logs tail &lt;router|webtty&gt;      Follow server logs
+  logs last &lt;N&gt; [router|webtty]  Show last N log lines
+
+▶ FOR DETAILED HELP
+  help &lt;command&gt;                 Show detailed help for a command
             </div>
         </section>
 
@@ -267,10 +262,6 @@ p-cli list agents</code>
             <div class="command-section">
                 <h3>▶️ Running Agents</h3>
                 
-                <h4>start</h4>
-                <div class="command-syntax">start</div>
-                <div class="command-description">Start agents from .ploinky/agents and launch the local Router</div>
-                
                 <h4>cli</h4>
                 <div class="command-syntax">cli &lt;name&gt; [args...]</div>
                 <div class="command-description">Run manifest "cli" command interactively (attached TTY). Prompt returns when the command exits.</div>
@@ -288,13 +279,7 @@ p-cli list agents</code>
                     <strong>Note:</strong> Always attaches to container TTY. If the cli is a REPL (e.g., node/python), stay attached until you exit.
                 </div>
 
-                <h4>agent</h4>
-                <div class="command-syntax">agent &lt;name&gt;</div>
-                <div class="command-description">Start persistent container using manifest "agent". Errors if missing.</div>
-                <div class="command-examples">
-                    <strong>Example:</strong>
-                    <code>agent MyAPI</code>
-                </div>
+                <!-- agent command removed; use start/cli/shell and expose -->
 
                 <h4>shell</h4>
                 <div class="command-syntax">shell &lt;name&gt;</div>
@@ -307,88 +292,72 @@ p-cli list agents</code>
                     <strong>Note:</strong> Always attaches to container TTY and waits until you exit the shell.
                 </div>
 
-                <h4>console</h4>
-                <div class="command-syntax">console &lt;name&gt; &lt;password&gt; [port]</div>
-                <div class="command-description">Start an HTTP server with Console/Chat interface for the agent container (Xterm.js + chat) — password is required.</div>
+                <h4>webconsole</h4>
+                <div class="command-syntax">webconsole &lt;password&gt; [command...]</div>
+                <div class="command-description">Start WebTTY (Console/Chat) attached to a local command. Defaults to /bin/bash if no command is provided.</div>
                 <dl class="command-params">
-                    <dt>&lt;name&gt;</dt>
-                    <dd>Agent name</dd>
                     <dt>&lt;password&gt;</dt>
                     <dd>Password required for UI access</dd>
-                    <dt>[port]</dt>
-                    <dd>Local port for UI (default 8089)</dd>
+                    <dt>[command...]</dt>
+                    <dd>Local command to run inside the PTY (e.g., <code>p-cli shell MyAgent</code>)</dd>
                 </dl>
                 <div class="command-examples">
                     <strong>Examples:</strong>
-                    <code>console MyAPI mySecret</code>
-                    <code>console MyAPI mySecret 8090</code>
+                    <code>webconsole secret</code>
+                    <code>webconsole secret p-cli shell MyAPI</code>
                 </div>
                 <div class="command-notes">
-                    <strong>Note:</strong> Modes: Console (live terminal) and Chat (individual commands). No WebSocket: SSE for output, HTTP POST for input. If node-pty is available, supports resize. Authentication via session cookie after POST /auth.
+                    <strong>Note:</strong> UI served on localhost:WEBTTY_PORT (default 8089). Set title via WEBTTY_TITLE. Supports resize (node-pty). Auth via POST /auth.
                 </div>
 
                 <h4>start</h4>
-                <div class="command-syntax">start</div>
-                <div class="command-description">Start agents from .ploinky/agents and launch local RoutingServer.</div>
+                <div class="command-syntax">start [staticAgent] [port]</div>
+                <div class="command-description">Start enabled agents and the local Router. On first run, provide a static agent and port.</div>
                 <dl class="command-params">
-                    <dt>&lt;name&gt;</dt>
-                    <dd>Agent name</dd>
+                    <dt>[staticAgent]</dt>
+                    <dd>Agent whose static files are served and whose manifest directives (repos/enable) are applied</dd>
                     <dt>[port]</dt>
-                    <dd>RoutingServer port (default 8088)</dd>
+                    <dd>Router port (default 8088)</dd>
                 </dl>
                 <div class="command-examples">
-                    <strong>Example:</strong>
+                    <strong>Examples:</strong>
+                    <code>start MyWeb 8088</code>
                     <code>start</code>
                 </div>
                 <div class="command-notes">
-                    <strong>Note:</strong> Generates .ploinky/routing.json automatically from enabled agents and keeps the server attached.
+                    <strong>Note:</strong> Writes routes to <code>.ploinky/routing.json</code> and keeps the Router attached.
                 </div>
             </div>
 
             <!-- Routing Management commands removed; use start/status and client commands -->
 
             <div class="command-section">
-                <h3>🔑 Environment Variables</h3>
+                <h3>🔑 Variables & Environment</h3>
                 
-                <h4>add env</h4>
-                <div class="command-syntax">add env &lt;name&gt; &lt;value&gt;</div>
-                <div class="command-description">Add a secret environment variable</div>
-                <dl class="command-params">
-                    <dt>&lt;name&gt;</dt>
-                    <dd>Variable name</dd>
-                    <dt>&lt;value&gt;</dt>
-                    <dd>Secret value (will be encrypted)</dd>
-                </dl>
+                <h4>set</h4>
+                <div class="command-syntax">set &lt;VAR&gt; &lt;$OTHER|value&gt;</div>
+                <div class="command-description">Set a workspace variable to a literal value or alias another variable.</div>
                 <div class="command-examples">
-                    <strong>Examples:</strong>
-                    <code>add env API_KEY sk-1234567890</code>
-                    <code>add env DB_PASSWORD mySecretPass123</code>
+                    <code>set API_KEY sk-123456</code>
+                    <code>set PROD_KEY $API_KEY</code>
                 </div>
-                <div class="command-notes">
-                    <strong>Note:</strong> Secrets are stored encrypted and must be explicitly enabled per agent
-                </div>
+                <div class="command-notes"><strong>Note:</strong> Variables are stored in <code>.ploinky/.secrets</code>. <code>set</code> without arguments lists variable names.</div>
 
-                <h4>enable env</h4>
-                <div class="command-syntax">enable env &lt;agent&gt; &lt;variable&gt;</div>
-                <div class="command-description">Enable a secret environment variable for an agent</div>
-                <dl class="command-params">
-                    <dt>&lt;agent&gt;</dt>
-                    <dd>Agent name</dd>
-                    <dt>&lt;variable&gt;</dt>
-                    <dd>Environment variable name</dd>
-                </dl>
+                <h4>echo</h4>
+                <div class="command-syntax">echo &lt;VAR|$VAR&gt;</div>
+                <div class="command-description">Print the resolved value of a variable (aliases resolved).</div>
+
+                <h4>expose</h4>
+                <div class="command-syntax">expose &lt;ENV_NAME&gt; &lt;$VAR|value&gt; [agent]</div>
+                <div class="command-description">Expose a variable or literal to the agent's environment; injected on container create.</div>
                 <div class="command-examples">
-                    <strong>Examples:</strong>
-                    <code>enable env MyAPI API_KEY</code>
-                    <code>enable env Database DB_PASSWORD</code>
-                </div>
-                <div class="command-notes">
-                    <strong>Note:</strong> Variable must be added with "add env" first
+                    <code>expose API_KEY $PROD_KEY MyAPI</code>
+                    <code>expose MODE prod MyAPI</code>
                 </div>
             </div>
 
             <div class="command-section">
-                <h3>📋 Listing Resources</h3>
+                <h3>📋 Listing & Status</h3>
                 
                 <h4>list agents</h4>
                 <div class="command-syntax">list agents</div>
@@ -397,14 +366,18 @@ p-cli list agents</code>
                 <h4>list repos</h4>
                 <div class="command-syntax">list repos</div>
                 <div class="command-description">List available repositories with URLs; mark installed and enabled</div>
-                
-                <h4>list current-agents</h4>
-                <div class="command-syntax">list current-agents</div>
-                <div class="command-description">List current workspace containers from .ploinky/agents (with ports, binds, env count)</div>
-                
-                <h4>list routes</h4>
-                <div class="command-syntax">list routes</div>
-                <div class="command-description">List configured routes from .ploinky/routing.json</div>
+
+                <h4>status</h4>
+                <div class="command-syntax">status</div>
+                <div class="command-description">Show enabled agents, containers, exposed env, and routing info.</div>
+
+                <h4>logs tail</h4>
+                <div class="command-syntax">logs tail &lt;router|webtty&gt;</div>
+                <div class="command-description">Follow router or webtty logs (writes to <code>.ploinky/logs/</code>).</div>
+
+                <h4>logs last</h4>
+                <div class="command-syntax">logs last &lt;N&gt; [router|webtty]</div>
+                <div class="command-description">Show last N log lines (defaults to both).</div>
             </div>
         </section>
 

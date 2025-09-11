@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ploinky Console</title>
+  <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
+  <link rel="stylesheet" href="/assets/webtty.css" />
+  <style>
+    html, body { height: 100%; }
+    #term { height: calc(100vh - 120px); padding: 0; }
+  </style>
+  <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
+  <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+  <script src="https://unpkg.com/xterm-addon-web-links/lib/xterm-addon-web-links.js"></script>
+</head>
+<body data-page="console" data-theme="dark" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__">
+  <div class="bar">
+    <span class="title" id="titleBar"></span>
+    <a class="tab active" href="/">Console</a>
+    <span style="margin-left:auto" class="status" id="status">disconnected</span>
+    <button id="themeToggle" class="theme-btn">Dark</button>
+  </div>
+  <div id="connBanner" class="banner hidden"><span id="bannerText">Connecting…</span></div>
+  <div class="meta">
+    <span><span class="k">Container:</span> <span id="containerName"></span></span>
+    <span><span class="k">Runtime:</span> <span id="runtime"></span></span>
+    <span><span class="k">Size:</span> <span id="size">-</span></span>
+    <span style="margin-left:auto; opacity:.8;">Tip: click terminal to focus</span>
+  </div>
+  <div id="term"></div>
+  <script src="/assets/console.js"></script>
+</body>
+</html>

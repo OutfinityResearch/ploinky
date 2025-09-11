@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ploinky Dashboard</title>
+  <link rel="stylesheet" href="/assets/webtty.css" />
+  <style>
+    .tabs-strip{display:flex;gap:8px;border-bottom:1px solid #1e2936;padding:8px 12px}
+    .tabs-strip .t{padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--muted);border:1px solid transparent}
+    .tabs-strip .t.active{color:var(--fg);border-color:#1e2936;background:#0b1117}
+    .view{display:none;padding:12px}
+    .view.active{display:block}
+    pre{white-space:pre-wrap;background:#0a0f14;border:1px solid #1e2936;border-radius:8px;padding:10px}
+    .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .row input{padding:6px 8px;border-radius:6px;background:#0a0f14;color:var(--fg);border:1px solid #1e2936}
+    .row button{padding:6px 10px;border-radius:6px;background:#19232e;color:var(--fg);border:1px solid #253140;cursor:pointer}
+    .list{display:flex;flex-direction:column;gap:8px}
+    .item{display:flex;gap:10px;align-items:center;justify-content:space-between;background:#0a0f14;border:1px solid #1e2936;border-radius:8px;padding:8px 10px}
+  </style>
+</head>
+<body data-page="dashboard" data-theme="dark" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__">
+  <div class="bar">
+    <span class="title" id="titleBar">Dashboard</span>
+    <a class="tab active" href="/">Dashboard</a>
+    <span style="margin-left:auto"></span>
+    <a class="tab" id="lnkConsole" href="#" target="_blank" rel="noopener">Open Console</a>
+    <a class="tab" id="lnkChat" href="#" target="_blank" rel="noopener">Open Chat</a>
+    <span class="status" id="status">ready</span>
+    <button id="themeToggle" class="theme-btn">Dark</button>
+  </div>
+
+  <div class="outer">
+    <div class="frame" style="display:block">
+      <div class="tabs-strip">
+        <div class="t active" data-tab="status">Status</div>
+        <div class="t" data-tab="logs">Logs</div>
+        <div class="t" data-tab="agents">Agents</div>
+        <div class="t" data-tab="control">Control</div>
+      </div>
+      <div id="view-status" class="view active">
+        <div class="row"><button id="refreshStatus">Refresh</button></div>
+        <pre id="statusOut">Loading…</pre>
+      </div>
+      <div id="view-logs" class="view">
+        <div class="row">Last <input id="logCount" type="number" value="200" style="width:90px"/> lines</div>
+        <pre id="logsOut">Loading…</pre>
+      </div>
+      <div id="view-agents" class="view">
+        <div class="row"><button id="refreshAgents">Refresh</button></div>
+        <div id="agentsList" class="list"></div>
+      </div>
+      <div id="view-control" class="view">
+        <div class="row"><button id="restartBtn">Restart</button></div>
+        <pre id="ctrlOut"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/assets/dashboard.js"></script>
+</body>
+</html>

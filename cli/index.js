@@ -28,7 +28,9 @@ const COMMANDS = {
     'list': ['agents', 'repos'],
     'webconsole': [],
     'webtty': [],
+    'admin-mode': [],
     'client': ['methods', 'status', 'list', 'task', 'task-status'],
+    'logs': ['tail', 'last'],
     'expose': [],
     'set': [],
     'echo': [],
@@ -142,6 +144,11 @@ function completer(line) {
                 (command === 'enable' && subcommand === 'agent') ||
                 (command === 'client' && ['methods', 'status', 'task', 'task-status'].includes(subcommand))) {
                 completions = getAgentNames();
+            } else if (command === 'logs' && subcommand === 'tail') {
+                completions = ['router', 'webtty'];
+            } else if (command === 'logs' && subcommand === 'last') {
+                // may accept count then optional type; if third token, suggest type
+                if (words.length >= 4) completions = ['router', 'webtty'];
             } else if (command === 'expose') {
                 // expose <EXPOSED> <$VAR|value> <agent>
                 if (words.length >= 4) completions = getAgentNames();

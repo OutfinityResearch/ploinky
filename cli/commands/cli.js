@@ -409,19 +409,40 @@ async function runConsole(passwordArg, ...cmdTokens) {
     // Require node-pty for a proper interactive TTY
     try { pty = require('node-pty'); } catch (e) { throw new Error("'node-pty' is required for WebTTY. Install it with: (cd cli && npm install node-pty)"); }
     const command = (cmdTokens && cmdTokens.length) ? cmdTokens.join(' ') : (process.env.SHELL || '/bin/bash');
-    const port = parseInt(process.env.WEBTTY_PORT, 10) || 8089;
+    const mode = (process.env.WEBTTY_MODE || 'console');
+    // Internal config-driven ports
+    let port;
+    try {
+        const env = require('../services/secretVars');
+        if (mode === 'chat') {
+            const v = parseInt(env.resolveVarValue('WEBCHAT_PORT'), 10);
+            port = (!Number.isNaN(v) && v > 0) ? v : 8080;
+        } else { // console
+            const v = parseInt(env.resolveVarValue('WEBTTY_PORT'), 10);
+            port = (!Number.isNaN(v) && v > 0) ? v : 9001;
+        }
+    } catch(_) { port = (mode === 'chat') ? 8080 : 9001; }
     const password = String(passwordArg);
-    const title = process.env.WEBTTY_TITLE || 'Local Console';
+    let title = 'Local Console';
+    try { const env = require('../services/secretVars'); const t = env.resolveVarValue('WEBTTY_TITLE'); if (t && String(t).trim()) title = String(t); } catch(_) {}
 
     const { createLocalTTYFactory } = require('../webtty/tty');
     const { startWebTTYServer } = require('../webtty/server');
     console.log(`[console] local command: ${command}`);
     const ttyFactory = createLocalTTYFactory({ ptyLib: pty, workdir: process.cwd(), command });
-    startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory, password, workdir: process.cwd(), entry: command, title });
+    const srv = startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory, password, workdir: process.cwd(), entry: command, title, mode });
     try {
-        const runningDir = path.resolve('.ploinky/running');
-        fs.mkdirSync(runningDir, { recursive: true });
-        fs.writeFileSync(path.join(runningDir, 'webtty.pid'), String(process.pid));
+        srv.on('listening', () => {
+            try {
+                const runningDir = path.resolve('.ploinky/running');
+                fs.mkdirSync(runningDir, { recursive: true });
+                fs.writeFileSync(path.join(runningDir, 'webtty.pid'), String(process.pid));
+            } catch(_) {}
+        });
+        srv.on('error', (e) => {
+            console.error(`[webtty] Failed to start on port ${port}: ${e?.message || e}`);
+            console.error('Tip: set WEBTTY_PORT to a free port or stop the existing server.');
+        });
     } catch(_) {}
 }
 
@@ -591,6 +612,62 @@ async function destroyAll() {
     catch (e) { console.error('Destroy failed:', e.message); }
 }
 
+function getLogPath(kind) {
+    const base = path.resolve('.ploinky/logs');
+    const map = { router: 'router.log', webtty: 'webtty.log' };
+    const file = map[kind] || map.router;
+    return path.join(base, file);
+}
+
+async function logsTail(kind) {
+    const file = getLogPath(kind);
+    if (!fs.existsSync(file)) { console.log(`No log file yet: ${file}`); return; }
+    try {
+        const { spawn } = require('child_process');
+        const p = spawn('tail', ['-f', file], { stdio: 'inherit' });
+        await new Promise(resolve => p.on('exit', resolve));
+    } catch (_) {
+        // Fallback: simple watcher
+        console.log(`Following ${file} (fallback watcher). Stop with Ctrl+C.`);
+        let pos = fs.statSync(file).size;
+        const fd = fs.openSync(file, 'r');
+        const loop = () => {
+            try {
+                const st = fs.statSync(file);
+                if (st.size > pos) {
+                    const len = st.size - pos; const buf = Buffer.alloc(len);
+                    fs.readSync(fd, buf, 0, len, pos); process.stdout.write(buf.toString('utf8'));
+                    pos = st.size;
+                }
+            } catch(_) {}
+            setTimeout(loop, 1000);
+        };
+        loop();
+    }
+}
+
+function showLast(count, kind) {
+    const n = Math.max(1, parseInt(count || '200', 10) || 200);
+    const file = kind ? getLogPath(kind) : null;
+    const list = file ? [file] : [getLogPath('router'), getLogPath('webtty')];
+    for (const f of list) {
+        if (!fs.existsSync(f)) { console.log(`No log file: ${f}`); continue; }
+        try {
+            const { spawnSync } = require('child_process');
+            const r = spawnSync('tail', ['-n', String(n), f], { stdio: 'inherit' });
+            if (r.status !== 0) throw new Error('tail failed');
+        } catch (e) {
+            // Fallback: read file and slice lines
+            try {
+                const data = fs.readFileSync(f, 'utf8');
+                const lines = data.split('\n');
+                const chunk = lines.slice(-n).join('\n');
+                console.log(chunk);
+            } catch (e2) { console.error(`Failed to read ${f}: ${e2.message}`); }
+        }
+    }
+}
+
 async function handleCommand(args) {
     const [command, ...options] = args;
     switch (command) {
@@ -605,16 +682,27 @@ async function handleCommand(args) {
             if (options[0] === 'repo') addRepo(options[1], options[2]);
             else showHelp();
             break;
-        case 'set':
+        case 'set': {
+            const defaults = ['WEBTTY_PORT', 'WEBCHAT_PORT', 'WEBDASHBOARD_PORT', 'WEBTTY_TITLE'];
             if (!options[0]) {
-                try { const { parseSecrets } = require('../services/secretVars'); const m = parseSecrets(); Object.keys(m).sort().forEach(k => console.log(k)); }
-                catch (e) { console.error('Failed to list variables:', e.message); }
+                try {
+                    const env = require('../services/secretVars');
+                    const map = env.parseSecrets();
+                    // Ensure predefined keys appear in listing
+                    for (const k of defaults) { if (!Object.prototype.hasOwnProperty.call(map, k)) { env.declareVar(k); } }
+                    const merged = env.parseSecrets();
+                    Object.keys(merged).sort().forEach(k => console.log(k));
+                } catch (e) { console.error('Failed to list variables:', e.message); }
             } else {
                 const name = options[0];
                 const value = options.slice(1).join(' ');
                 setVar(name, value);
+                // If setting a port var, echo a hint
+                if (name === 'WEBTTY_PORT' || name === 'WEBCHAT_PORT') {
+                    console.log(`Hint: restart your WebTTY/WebChat to apply ${name}.`);
+                }
             }
-            break;
+            break; }
         case 'echo':
             echoVar(options[0]);
             break;
@@ -645,9 +733,51 @@ async function handleCommand(args) {
             break;
         // 'route' and 'probe' commands removed (replaced by start/status and client commands)
         case 'webconsole':
-        case 'webtty':
+            // Synonym for 'webtty' (console-only server)
+            process.env.WEBTTY_MODE = 'console';
             await runConsole(options[0], ...options.slice(1));
             break;
+        case 'webchat':
+            process.env.WEBTTY_MODE = 'chat';
+            await runConsole(options[0], ...options.slice(1));
+            break;
+        case 'webtty':
+            process.env.WEBTTY_MODE = 'console';
+            await runConsole(options[0], ...options.slice(1));
+            break;
+        case 'dashboard': {
+            const password = options[0];
+            if (!password) { throw new Error("Usage: dashboard <password>"); }
+            const mode = 'dashboard';
+            let port;
+            try { const env = require('../services/secretVars'); const v = parseInt(env.resolveVarValue('WEBDASHBOARD_PORT'), 10); port = (!Number.isNaN(v) && v > 0) ? v : 9000; } catch(_) { port = 9000; }
+            const { startWebTTYServer } = require('../webtty/server');
+            startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory: null, password: String(password), workdir: process.cwd(), entry: '', title: 'Dashboard', mode });
+            break; }
+        case 'admin-mode': {
+            const sub = options[0];
+            if (sub === 'task') { const ClientCommands = require('./client'); await new ClientCommands().handleClientCommand(['task', ...options.slice(1)]); break; }
+            const password = options[0];
+            if (!password) { throw new Error("Usage: run <password> [command...]\nStarts: webtty (console), webchat (chat), dashboard"); }
+            const cmd = (options.slice(1).length ? options.slice(1) : [(process.env.SHELL || '/bin/bash')]);
+            const nodeBin = process.argv[0];
+            const cliPath = path.resolve(__dirname, '../index.js');
+            const env = require('../services/secretVars');
+            const ports = {
+                webtty: (()=>{ const v = parseInt(env.resolveVarValue('WEBTTY_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:9001; })(),
+                webchat: (()=>{ const v = parseInt(env.resolveVarValue('WEBCHAT_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:8080; })(),
+                dashboard: (()=>{ const v = parseInt(env.resolveVarValue('WEBDASHBOARD_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:9000; })(),
+            };
+            const procs = [];
+            const spawnOne = (args, extraEnv = {}) => {
+                const p = spawn(nodeBin, [cliPath, ...args], { stdio: 'inherit', env: { ...process.env, ...extraEnv } });
+                procs.push(p);
+                return p;
+            };
+            spawnOne(['webtty', password, ...cmd], { WEBTTY_PORT: String(ports.webtty) });
+            spawnOne(['webchat', password, ...cmd], { WEBCHAT_PORT: String(ports.webchat) });
+            spawnOne(['dashboard', password], { WEBDASHBOARD_PORT: String(ports.dashboard) });
+            break; }
         case 'list':
             if (options[0] === 'agents') listAgents();
             else if (options[0] === 'repos') listRepos();
@@ -657,20 +787,38 @@ async function handleCommand(args) {
             await statusWorkspace();
             break;
         case 'restart': {
-            const ws = require('../services/workspace');
-            const cfg = ws.getConfig();
-            if (!cfg || !cfg.static || !cfg.static.agent || !cfg.static.port) { console.error('restart: start is not configured. Run: start <staticAgent> <port>'); break; }
-            const { stopConfiguredAgents } = require('../services/docker');
-            console.log('[restart] Stopping WebTTY and Router...');
-            killWebTTYIfRunning();
-            killRouterIfRunning();
-            console.log('[restart] Stopping configured agent containers...');
-            const list = stopConfiguredAgents();
-            if (list.length) { console.log('[restart] Stopped containers:'); list.forEach(n => console.log(` - ${n}`)); }
-            else { console.log('[restart] No containers to stop.'); }
-            console.log('[restart] Starting workspace...');
-            await startWorkspace();
-            console.log('[restart] Done.');
+            if (options[0]) {
+                const target = options[0];
+                try {
+                    const { findAgent } = require('../services/utils');
+                    const res = findAgent(target);
+                    const short = res.shortAgentName;
+                    const manifest = JSON.parse(fs.readFileSync(res.manifestPath, 'utf8'));
+                    const agentPath = path.dirname(res.manifestPath);
+                    const { stopAndRemove, ensureAgentService, getServiceContainerName } = require('../services/docker');
+                    const cname = getServiceContainerName(short);
+                    try { stopAndRemove(cname); } catch(_) {}
+                    const { containerName } = ensureAgentService(short, manifest, agentPath);
+                    console.log(`[restart] restarted '${short}' [container: ${containerName}]`);
+                } catch (e) {
+                    console.error(`[restart] ${target}: ${e?.message||e}`);
+                }
+            } else {
+                const ws = require('../services/workspace');
+                const cfg = ws.getConfig();
+                if (!cfg || !cfg.static || !cfg.static.agent || !cfg.static.port) { console.error('restart: start is not configured. Run: start <staticAgent> <port>'); break; }
+                const { stopConfiguredAgents } = require('../services/docker');
+                console.log('[restart] Stopping WebTTY and Router...');
+                killWebTTYIfRunning();
+                killRouterIfRunning();
+                console.log('[restart] Stopping configured agent containers...');
+                const list = stopConfiguredAgents();
+                if (list.length) { console.log('[restart] Stopped containers:'); list.forEach(n => console.log(` - ${n}`)); }
+                else { console.log('[restart] No containers to stop.'); }
+                console.log('[restart] Starting workspace...');
+                await startWorkspace();
+                console.log('[restart] Done.');
+            }
             break; }
         case 'delete':
             showHelp();
@@ -708,6 +856,17 @@ async function handleCommand(args) {
             console.log('[destroy] Removing all workspace containers...');
             await destroyAll();
             break;
+        case 'logs': {
+            const sub = options[0];
+            if (sub === 'tail') {
+                const kind = options[1] || 'router';
+                await logsTail(kind);
+            } else if (sub === 'last') {
+                const count = options[1] || '200';
+                const kind = options[2];
+                showLast(count, kind);
+            } else { console.log("Usage: logs tail <router|webtty> | logs last <count> [router|webtty]"); }
+            break; }
         case 'clean':
             console.log('[clean] Removing all workspace containers...');
             await destroyAll();

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ploinky Chat</title>
+  <link rel="stylesheet" href="/assets/webtty.css" />
+</head>
+<body data-page="chat" data-theme="dark" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__">
+  <div class="bar">
+    <span class="title" id="titleBar"></span>
+    <a class="tab active" href="/">Chat</a>
+    <span style="margin-left:auto" class="status" id="status">disconnected</span>
+    <button id="themeToggle" class="theme-btn">Dark</button>
+  </div>
+  <div id="connBanner" class="banner hidden"><span id="bannerText">Connecting…</span></div>
+  <div class="outer">
+    <div class="frame" style="min-height:70vh">
+      <div id="chat" class="active" style="display:block;flex:1">
+        <div class="chat-wrap">
+          <div class="chat-list" id="chatList"></div>
+          <div class="composer">
+            <div class="composer-input">
+              <textarea id="cmd" rows="1" placeholder="Type message…"></textarea>
+              <button id="send">Send</button>
+            </div>
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color: var(--muted); padding-left: 4px;">
+              <input type="checkbox" id="enterSendToggle" checked/> Press Enter to send (Shift+Enter = newline)
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop" id="moreModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Full response</h3>
+        <button class="modal-close" id="moreClose" aria-label="Close">×</button>
+      </div>
+      <pre id="moreContent"></pre>
+    </div>
+  </div>
+  <script src="/assets/chat.js"></script>
+</body>
+</html>

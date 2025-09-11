@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ploinky Login</title>
+  <link rel="stylesheet" href="/assets/webtty.css" />
+  <style>
+    #matrixBg{position:fixed;inset:0;z-index:-1;background:#000;opacity:.35;}
+    .login-container{min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .login-card{background:#0b1117;border:1px solid #1e2936;border-radius:12px;padding:24px;min-width:300px;box-shadow:0 10px 24px rgba(0,0,0,.3)}
+    .login-card h1{margin:0 0 8px 0;font-size:18px}
+    .login-card p{margin:0 0 16px 0;color:var(--muted);font-size:13px}
+    .login-card input{width:100%;padding:10px;border-radius:8px;border:1px solid #263241;background:#0a0f14;color:var(--fg)}
+    .login-card button{margin-top:12px;width:100%;padding:10px;border-radius:8px;border:1px solid #263241;background:#19232e;color:var(--fg);cursor:pointer}
+    .err{color:#ef4444;font-size:12px;margin-top:8px;min-height:16px}
+  </style>
+  <script>
+    // matrix background
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const cvs=document.getElementById('matrixBg'); const ctx=cvs.getContext('2d'); let W,H,cols,ypos; function resize(){W=innerWidth;H=innerHeight;cvs.width=W;cvs.height=H;cols=Math.floor(W/14);ypos=new Array(cols).fill(0);} function ch(){const s='アイウエオｱｲｳｴｵ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'; return s[Math.floor(Math.random()*s.length)]; } function step(){ ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#0f0';ctx.font='14px monospace'; for(let i=0;i<cols;i++){ ctx.fillText(ch(), i*14, ypos[i]*18); if (ypos[i]*18>H && Math.random()>0.975) ypos[i]=0; ypos[i]++; } requestAnimationFrame(step);} addEventListener('resize', resize); resize(); step();
+    });
+  </script>
+</head>
+<body data-page="login" data-theme="dark" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__">
+  <canvas id="matrixBg"></canvas>
+  <div class="login-container">
+    <div class="login-card">
+      <h1>Welcome</h1>
+      <p>Enter password to continue</p>
+      <input id="pwd" type="password" placeholder="Password" />
+      <div class="err" id="err"></div>
+      <button id="btn">Sign in</button>
+    </div>
+  </div>
+  <script src="/assets/login.js"></script>
+</body>
+</html>
