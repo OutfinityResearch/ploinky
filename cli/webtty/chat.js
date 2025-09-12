@@ -209,8 +209,8 @@
       statusDot.classList.remove('online');
       statusDot.classList.add('offline');
       try { es.close(); } catch (_) {}
-      try { fetch('/logout', { method: 'POST' }).catch(() => {}); } catch (_) {}
-      window.location.href = '/';
+      // Keep session cookie; auto-reconnect
+      setTimeout(() => { try { startSSE(); } catch(_){} }, 1000);
     };
 
     es.onmessage = (ev) => {

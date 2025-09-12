@@ -462,8 +462,7 @@ function getCliCmd(manifest) {
 
 
 
-async function runConsole(passwordArg, ...cmdTokens) {
-    if (!passwordArg) { throw new Error("Usage: console <password> [command...]\nExample: console mypass p-cli shell MyAgent\n         console mypass /bin/bash"); }
+async function runConsole(...cmdTokens) {
     // Require node-pty for a proper interactive TTY
     try { pty = require('node-pty'); } catch (e) { throw new Error("'node-pty' is required for WebTTY. Install it with: (cd cli && npm install node-pty)"); }
     const command = (cmdTokens && cmdTokens.length) ? cmdTokens.join(' ') : (process.env.SHELL || '/bin/bash');
@@ -480,7 +479,6 @@ async function runConsole(passwordArg, ...cmdTokens) {
             port = (!Number.isNaN(v) && v > 0) ? v : 9001;
         }
     } catch(_) { port = (mode === 'chat') ? 8080 : 9001; }
-    const password = String(passwordArg);
     let title = 'Local Console';
     try { const env = require('../services/secretVars'); const t = env.resolveVarValue('WEBTTY_TITLE'); if (t && String(t).trim()) title = String(t); } catch(_) {}
 
@@ -488,7 +486,7 @@ async function runConsole(passwordArg, ...cmdTokens) {
     const { startWebTTYServer } = require('../webtty/server');
     console.log(`[console] local command: ${command}`);
     const ttyFactory = createLocalTTYFactory({ ptyLib: pty, workdir: process.cwd(), command });
-    const srv = startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory, password, workdir: process.cwd(), entry: command, title, mode });
+    const srv = startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory, password: null, workdir: process.cwd(), entry: command, title, mode });
     try {
         srv.on('listening', () => {
             try {
@@ -742,14 +740,35 @@ async function handleCommand(args) {
             else showHelp();
             break;
         case 'set': {
-            const defaults = ['WEBTTY_PORT', 'WEBCHAT_PORT', 'WEBDASHBOARD_PORT', 'WEBTTY_TITLE'];
+            const defaults = ['WEBTTY_PORT', 'WEBCHAT_PORT', 'WEBDASHBOARD_PORT', 'WEBTTY_TITLE', 'APP_NAME', 'WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
             if (!options[0]) {
                 try {
                     const env = require('../services/secretVars');
-                    const map = env.parseSecrets();
-                    for (const k of defaults) { if (!Object.prototype.hasOwnProperty.call(map, k)) { env.declareVar(k); } }
+                    const path = require('path');
+                    const crypto = require('crypto');
+                    let secrets = env.parseSecrets();
+                    // Ensure APP_NAME defaults to current folder if missing
+                    if (!secrets.APP_NAME || !String(secrets.APP_NAME).trim()) {
+                        try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch(_) {}
+                    }
+                    // Ensure default ports if missing
+                    const portDefaults = { WEBTTY_PORT: '9001', WEBCHAT_PORT: '8080', WEBDASHBOARD_PORT: '9000' };
+                    for (const [k, v] of Object.entries(portDefaults)) {
+                        if (!secrets[k] || !String(secrets[k]).trim()) { try { env.setEnvVar(k, v); } catch(_) {}
+                        }
+                    }
+                    // Ensure persistent tokens if missing
+                    const tokens = ['WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
+                    for (const t of tokens) {
+                        if (!secrets[t] || !String(secrets[t]).trim()) {
+                            try { env.setEnvVar(t, crypto.randomBytes(32).toString('hex')); } catch(_) {}
+                        }
+                    }
+                    // Reload and print
                     const merged = env.parseSecrets();
-                    Object.keys(merged).sort().forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
+                    const printOrder = ['APP_NAME', 'WEBCHAT_PORT', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_PORT', 'WEBDASHBOARD_TOKEN', 'WEBTTY_PORT', 'WEBTTY_TITLE', 'WEBTTY_TOKEN'];
+                    const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
+                    keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
                 } catch (e) { console.error('Failed to list variables:', e.message); }
             } else {
                 const name = options[0];
@@ -792,24 +811,22 @@ async function handleCommand(args) {
         case 'webconsole':
             // Synonym for 'webtty' (console-only server)
             process.env.WEBTTY_MODE = 'console';
-            await runConsole(options[0], ...options.slice(1));
+            await runConsole(...options);
             break;
         case 'webchat':
             process.env.WEBTTY_MODE = 'chat';
-            await runConsole(options[0], ...options.slice(1));
+            await runConsole(...options);
             break;
         case 'webtty':
             process.env.WEBTTY_MODE = 'console';
-            await runConsole(options[0], ...options.slice(1));
+            await runConsole(...options);
             break;
         case 'dashboard': {
-            const password = options[0];
-            if (!password) { throw new Error("Usage: dashboard <password>"); }
             const mode = 'dashboard';
             let port;
             try { const env = require('../services/secretVars'); const v = parseInt(env.resolveVarValue('WEBDASHBOARD_PORT'), 10); port = (!Number.isNaN(v) && v > 0) ? v : 9000; } catch(_) { port = 9000; }
             const { startWebTTYServer } = require('../webtty/server');
-            const srv = startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory: null, password: String(password), workdir: process.cwd(), entry: '', title: 'Dashboard', mode });
+            const srv = startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory: null, password: null, workdir: process.cwd(), entry: '', title: 'Dashboard', mode });
             try {
                 srv.on('listening', () => {
                     try {
@@ -823,9 +840,7 @@ async function handleCommand(args) {
         case 'admin-mode': {
             const sub = options[0];
             if (sub === 'task') { const ClientCommands = require('./client'); await new ClientCommands().handleClientCommand(['task', ...options.slice(1)]); break; }
-            const password = options[0];
-            if (!password) { throw new Error("Usage: admin-mode <password> [command...]\nStarts: webtty (console), webchat (chat), dashboard"); }
-            const cmd = (options.slice(1).length ? options.slice(1) : [(process.env.SHELL || '/bin/bash')]);
+            const cmd = (options.length ? options : [(process.env.SHELL || '/bin/bash')]);
             const nodeBin = process.argv[0];
             const cliPath = path.resolve(__dirname, '../index.js');
             const env = require('../services/secretVars');
@@ -840,9 +855,9 @@ async function handleCommand(args) {
                 procs.push(p);
                 return p;
             };
-            spawnOne(['webtty', password, ...cmd], { WEBTTY_PORT: String(ports.webtty) });
-            spawnOne(['webchat', password, ...cmd], { WEBCHAT_PORT: String(ports.webchat) });
-            spawnOne(['dashboard', password], { WEBDASHBOARD_PORT: String(ports.dashboard) });
+            spawnOne(['webtty', ...cmd], { WEBTTY_PORT: String(ports.webtty) });
+            spawnOne(['webchat', ...cmd], { WEBCHAT_PORT: String(ports.webchat) });
+            spawnOne(['dashboard'], { WEBDASHBOARD_PORT: String(ports.dashboard) });
             break; }
         case 'list':
             if (options[0] === 'agents') listAgents();

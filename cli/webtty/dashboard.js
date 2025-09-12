@@ -26,12 +26,14 @@
     const loc = window.location;
     const host = loc.hostname || 'localhost';
     const proto = loc.protocol || 'http:';
-    const consolePort = (localStorage.getItem('WEBTTY_PORT') || '9001');
-    const chatPort = (localStorage.getItem('WEBCHAT_PORT') || '8080');
+    const consolePort = (document.body.dataset.ttyPort || localStorage.getItem('WEBTTY_PORT') || '9001');
+    const chatPort = (document.body.dataset.chatPort || localStorage.getItem('WEBCHAT_PORT') || '8080');
+    const consoleToken = document.body.dataset.ttyToken || '';
+    const chatToken = document.body.dataset.chatToken || '';
     const lnkConsole = document.getElementById('lnkConsole');
     const lnkChat = document.getElementById('lnkChat');
-    if (lnkConsole) lnkConsole.href = `${proto}//${host}:${consolePort}/`;
-    if (lnkChat) lnkChat.href = `${proto}//${host}:${chatPort}/`;
+    if (lnkConsole) lnkConsole.href = `${proto}//${host}:${consolePort}/` + (consoleToken ? `?token=${consoleToken}` : '');
+    if (lnkChat) lnkChat.href = `${proto}//${host}:${chatPort}/` + (chatToken ? `?token=${chatToken}` : '');
   } catch(_) {}
 
   // Tab navigation

@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Specification - Ploinky</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="index.html" class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <span>Ploinky</span>
+                </a>
+                <nav>
+                    <ul>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="cli-reference.html">CLI Reference</a></li>
+                        <li><a href="architecture.html">Architecture</a></li>
+                        <li><a href="spec-agent.html" class="active">Agent Spec</a></li>
+                        <li><a href="webchat.html">WebChat</a></li>
+                        <li><button class="theme-toggle" id="themeToggle">🌙</button></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="doc-layout">
+                <aside class="sidebar">
+                    <h3>Agent Topics</h3>
+                    <ul>
+                        <li><a href="#manifest">Manifest Structure</a></li>
+                        <li><a href="#lifecycle">Agent Lifecycle</a></li>
+                        <li><a href="#commands">Command Types</a></li>
+                        <li><a href="#environment">Environment Setup</a></li>
+                        <li><a href="#api">API Development</a></li>
+                        <li><a href="#examples">Examples</a></li>
+                        <li><a href="#best-practices">Best Practices</a></li>
+                        <li><a href="#troubleshooting">Troubleshooting</a></li>
+                    </ul>
+                </aside>
+
+                <div class="content-wrapper">
+                    <div class="doc-section">
+                        <h1>Agent Specification</h1>
+                        <p class="subtitle">Complete guide to creating, configuring, and deploying Ploinky agents.</p>
+                    </div>
+
+                    <div class="doc-section" id="manifest">
+                        <h2>Manifest Structure</h2>
+                        <p>Every agent is defined by a <code>manifest.json</code> file that specifies its container, dependencies, and behavior:</p>
+                        
+                        <h3>Complete Manifest Schema</h3>
+                        <pre><code>{
+  // Required fields
+  "container": "node:18-alpine",      // Docker/Podman image
+  
+  // Lifecycle commands
+  "install": "npm install",           // Run once when agent is first created
+  "update": "npm update",             // Run when agent needs updating
+  
+  // Execution modes
+  "cli": "node repl.js",              // Interactive CLI command (ploinky cli)
+  "agent": "node server.js",          // Long-running service (ploinky start)
+  
+  // Metadata
+  "about": "Express API server",      // Description shown in listings
+  
+  // Environment configuration
+  "env": ["API_KEY", "DATABASE_URL"], // Required environment variables
+  
+  // Auto-configuration (optional)
+  "enable": ["other-agent"],          // Auto-enable other agents
+  "repos": {                          // Auto-add repositories
+    "repo1": "https://github.com/org/repo.git"
+  }
+}</code></pre>
+
+                        <h3>Field Descriptions</h3>
+                        <table class="command-table">
+                            <tr>
+                                <th>Field</th>
+                                <th>Required</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><code>container</code></td>
+                                <td>Yes</td>
+                                <td>Base container image from Docker Hub or other registry</td>
+                            </tr>
+                            <tr>
+                                <td><code>install</code></td>
+                                <td>No</td>
+                                <td>One-time setup command for dependencies</td>
+                            </tr>
+                            <tr>
+                                <td><code>update</code></td>
+                                <td>No</td>
+                                <td>Command to update agent dependencies</td>
+                            </tr>
+                            <tr>
+                                <td><code>cli</code></td>
+                                <td>No</td>
+                                <td>Interactive command for <code>ploinky cli</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>agent</code></td>
+                                <td>No</td>
+                                <td>Service command for <code>ploinky start</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>about</code></td>
+                                <td>No</td>
+                                <td>Human-readable description</td>
+                            </tr>
+                            <tr>
+                                <td><code>env</code></td>
+                                <td>No</td>
+                                <td>List of required environment variables</td>
+                            </tr>
+                            <tr>
+                                <td><code>enable</code></td>
+                                <td>No</td>
+                                <td>Agents to auto-enable when this agent is enabled</td>
+                            </tr>
+                            <tr>
+                                <td><code>repos</code></td>
+                                <td>No</td>
+                                <td>Repositories to auto-add when this agent is enabled</td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <div class="doc-section" id="lifecycle">
+                        <h2>Agent Lifecycle</h2>
+                        
+                        <h3>1. Creation</h3>
+                        <pre><code># Create new agent
+ploinky new agent myrepo MyAgent node:20
+
+# Creates:
+.ploinky/repos/myrepo/MyAgent/
+├── manifest.json
+└── (agent files)</code></pre>
+
+                        <h3>2. Installation</h3>
+                        <p>When an agent is first enabled, Ploinky runs the <code>install</code> command:</p>
+                        <pre><code># manifest.json
+"install": "npm install express body-parser"
+
+# Executed in container:
+docker run -v $PWD:$PWD node:18-alpine sh -c "npm install express body-parser"</code></pre>
+
+                        <h3>3. Enablement</h3>
+                        <pre><code># Register agent in workspace
+ploinky enable agent MyAgent
+
+# Creates entry in .ploinky/agents
+{
+  "ploinky_project_abc123_agent_MyAgent": {
+    "agentName": "MyAgent",
+    "containerImage": "node:18-alpine",
+    "createdAt": "2024-01-01T00:00:00Z",
+    ...
+  }
+}</code></pre>
+
+                        <h3>4. Startup</h3>
+                        <pre><code># Start all enabled agents
+ploinky start
+
+# For each agent:
+1. Create/start container
+2. Mount volumes
+3. Set environment variables
+4. Execute agent command or supervisor</code></pre>
+
+                        <h3>5. Runtime</h3>
+                        <p>During runtime, agents can be in different states:</p>
+                        <ul style="margin-left: 2rem;">
+                            <li><strong>Running:</strong> Container active, service responding</li>
+                            <li><strong>Stopped:</strong> Container exists but not running</li>
+                            <li><strong>Exited:</strong> Container terminated (check exit code)</li>
+                            <li><strong>Removed:</strong> Container deleted</li>
+                        </ul>
+                    </div>
+
+                    <div class="doc-section" id="commands">
+                        <h2>Command Types</h2>
+                        
+                        <h3>CLI Command</h3>
+                        <p>Interactive command for direct user interaction:</p>
+                        <pre><code># manifest.json
+"cli": "python -i assistant.py"
+
+# Usage
+ploinky cli MyAgent
+> # Interactive Python session</code></pre>
+
+                        <h3>Agent Command</h3>
+                        <p>Long-running service for API endpoints:</p>
+                        <pre><code># manifest.json
+"agent": "node server.js"
+
+# server.js
+const express = require('express');
+const app = express();
+
+app.get('/api/status', (req, res) => {
+    res.json({ status: 'running' });
+});
+
+app.listen(7000);</code></pre>
+
+                        <h3>Supervisor Mode</h3>
+                        <p>If no <code>agent</code> command is specified, Ploinky uses the default supervisor:</p>
+                        <pre><code># /Agent/AgentServer.js provides:
+- HTTP server on port 7000
+- Health check at /api/status
+- Process management
+- Automatic restarts</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="environment">
+                        <h2>Environment Setup</h2>
+                        
+                        <h3>Container Environment</h3>
+                        <p>Agents run with these environment variables:</p>
+                        <pre><code>AGENT_NAME=MyAgent           # Agent name
+AGENT_REPO=myrepo           # Repository name
+WORKSPACE_PATH=/workspace   # Mounted workspace
+CODE_PATH=/code             # Agent code directory
+PORT=7000                   # Default service port</code></pre>
+
+                        <h3>Volume Mounts</h3>
+                        <table class="command-table">
+                            <tr>
+                                <th>Host Path</th>
+                                <th>Container Path</th>
+                                <th>Purpose</th>
+                            </tr>
+                            <tr>
+                                <td><code>$(pwd)</code></td>
+                                <td><code>$(pwd)</code></td>
+                                <td>Workspace access</td>
+                            </tr>
+                            <tr>
+                                <td><code>/Agent</code></td>
+                                <td><code>/Agent</code></td>
+                                <td>Supervisor runtime</td>
+                            </tr>
+                            <tr>
+                                <td><code>.ploinky/repos/X/Y</code></td>
+                                <td><code>/code</code></td>
+                                <td>Agent code</td>
+                            </tr>
+                        </table>
+
+                        <h3>Exposing Variables</h3>
+                        <pre><code># Set variable in workspace
+ploinky set DATABASE_URL postgres://localhost/mydb
+
+# Expose to agent
+ploinky expose DATABASE_URL $DATABASE_URL MyAgent
+
+# Agent can now access:
+process.env.DATABASE_URL</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="api">
+                        <h2>API Development</h2>
+                        
+                        <h3>Basic HTTP Server</h3>
+                        <pre><code>// server.js
+const http = require('http');
+
+const server = http.createServer((req, res) => {
+    if (req.url === '/api/status') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+    } else if (req.url.startsWith('/api/')) {
+        // Handle API routes
+        const path = req.url.substring(5);
+        res.writeHead(200);
+        res.end(`API path: ${path}`);
+    } else {
+        res.writeHead(404);
+        res.end('Not found');
+    }
+});
+
+server.listen(7000, () => {
+    console.log('Agent server running on port 7000');
+});</code></pre>
+
+                        <h3>Express.js API</h3>
+                        <pre><code>// api.js
+const express = require('express');
+const app = express();
+
+app.use(express.json());
+
+// Health check
+app.get('/api/status', (req, res) => {
+    res.json({ 
+        status: 'healthy',
+        agent: process.env.AGENT_NAME,
+        uptime: process.uptime()
+    });
+});
+
+// Custom endpoints
+app.post('/api/process', (req, res) => {
+    const { data } = req.body;
+    // Process data
+    res.json({ 
+        result: `Processed: ${data}`,
+        timestamp: new Date()
+    });
+});
+
+app.listen(7000);</code></pre>
+
+                        <h3>Python Flask API</h3>
+                        <pre><code># api.py
+from flask import Flask, jsonify, request
+import os
+
+app = Flask(__name__)
+
+@app.route('/api/status')
+def status():
+    return jsonify({
+        'status': 'healthy',
+        'agent': os.environ.get('AGENT_NAME'),
+        'language': 'python'
+    })
+
+@app.route('/api/process', methods=['POST'])
+def process():
+    data = request.json
+    return jsonify({
+        'result': f"Processed: {data}",
+        'method': 'python'
+    })
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=7000)</code></pre>
+
+                        <h3>Accessing Your API</h3>
+                        <p>Once deployed, access your agent's API through the routing server:</p>
+                        <pre><code># Local development
+http://localhost:8088/apis/MyAgent/status
+http://localhost:8088/apis/MyAgent/process
+
+# From client
+ploinky client status MyAgent
+ploinky client task MyAgent</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="examples">
+                        <h2>Example Agents</h2>
+                        
+                        <h3>Simple Shell Agent</h3>
+                        <pre><code>{
+  "container": "alpine:latest",
+  "install": "apk add curl jq",
+  "cli": "/bin/sh",
+  "about": "Alpine Linux shell with curl and jq"
+}</code></pre>
+
+                        <h3>Node.js Development Agent</h3>
+                        <pre><code>{
+  "container": "node:20",
+  "install": "npm install -g nodemon typescript @types/node",
+  "update": "npm update -g",
+  "cli": "node",
+  "agent": "nodemon --watch /workspace server.js",
+  "about": "Node.js development environment with hot reload"
+}</code></pre>
+
+                        <h3>Python AI Assistant</h3>
+                        <pre><code>{
+  "container": "python:3.11",
+  "install": "pip install openai numpy pandas flask",
+  "update": "pip install --upgrade openai",
+  "cli": "python -i",
+  "agent": "python api_server.py",
+  "env": ["OPENAI_API_KEY"],
+  "about": "Python AI assistant with OpenAI integration"
+}</code></pre>
+
+                        <h3>Database Client Agent</h3>
+                        <pre><code>{
+  "container": "postgres:15",
+  "install": "echo 'PostgreSQL client ready'",
+  "cli": "psql -U postgres",
+  "env": ["POSTGRES_PASSWORD"],
+  "about": "PostgreSQL client for database operations"
+}</code></pre>
+
+                        <h3>Multi-Agent System</h3>
+                        <pre><code>{
+  "container": "node:18-alpine",
+  "install": "npm install",
+  "agent": "node orchestrator.js",
+  "about": "Orchestrator agent",
+  "enable": ["worker1", "worker2", "database"],
+  "repos": {
+    "workers": "https://github.com/myorg/worker-agents.git"
+  }
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="best-practices">
+                        <h2>Best Practices</h2>
+                        
+                        <h3>Container Selection</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>Use Alpine-based images for smaller size</li>
+                            <li>Pin specific versions (node:18.19.0 vs node:18)</li>
+                            <li>Consider multi-stage builds for complex agents</li>
+                            <li>Minimize layers in install commands</li>
+                        </ul>
+
+                        <h3>Security</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>Never hardcode secrets in manifest.json</li>
+                            <li>Use environment variables for sensitive data</li>
+                            <li>Run processes as non-root user when possible</li>
+                            <li>Validate all input in API endpoints</li>
+                        </ul>
+
+                        <h3>Performance</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>Keep install commands minimal</li>
+                            <li>Cache dependencies in agent directory</li>
+                            <li>Use health checks for monitoring</li>
+                            <li>Implement graceful shutdown handlers</li>
+                        </ul>
+
+                        <h3>Development</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>Test locally with <code>ploinky shell</code> first</li>
+                            <li>Use <code>ploinky cli</code> for interactive debugging</li>
+                            <li>Check logs with container runtime directly</li>
+                            <li>Version control your agent code separately</li>
+                        </ul>
+                    </div>
+
+                    <div class="doc-section" id="troubleshooting">
+                        <h2>Troubleshooting</h2>
+                        
+                        <h3>Common Issues</h3>
+                        <table class="command-table">
+                            <tr>
+                                <th>Problem</th>
+                                <th>Cause</th>
+                                <th>Solution</th>
+                            </tr>
+                            <tr>
+                                <td>Container exits immediately</td>
+                                <td>No long-running process</td>
+                                <td>Add <code>agent</code> command or use supervisor</td>
+                            </tr>
+                            <tr>
+                                <td>Port 7000 not accessible</td>
+                                <td>Service not binding correctly</td>
+                                <td>Bind to 0.0.0.0:7000, not localhost</td>
+                            </tr>
+                            <tr>
+                                <td>Install command fails</td>
+                                <td>Missing dependencies in base image</td>
+                                <td>Use fuller base image or add apt/apk commands</td>
+                            </tr>
+                            <tr>
+                                <td>Environment variables not set</td>
+                                <td>Not exposed to agent</td>
+                                <td>Use <code>ploinky expose</code> command</td>
+                            </tr>
+                            <tr>
+                                <td>API returns 404</td>
+                                <td>Routing misconfiguration</td>
+                                <td>Check path starts with /api/</td>
+                            </tr>
+                        </table>
+
+                        <h3>Debugging Commands</h3>
+                        <pre><code># Check agent status
+ploinky status
+
+# View container logs
+docker logs ploinky_project_abc123_agent_MyAgent
+podman logs ploinky_project_abc123_agent_MyAgent
+
+# Enter container shell
+ploinky shell MyAgent
+
+# Test API directly
+curl http://localhost:7001/api/status
+
+# Check routing configuration
+cat .ploinky/routing.json</code></pre>
+
+                        <h3>Health Checks</h3>
+                        <p>Implement health endpoints for monitoring:</p>
+                        <pre><code>// Health check endpoint
+app.get('/api/status', (req, res) => {
+    const health = {
+        status: 'healthy',
+        checks: {
+            database: checkDatabase(),
+            memory: process.memoryUsage(),
+            uptime: process.uptime()
+        }
+    };
+    
+    const isHealthy = Object.values(health.checks)
+        .every(check => check !== false);
+    
+    res.status(isHealthy ? 200 : 503).json(health);
+});</code></pre>
+                    </div>
+
+                    <div class="doc-section">
+                        <h2>Advanced Features</h2>
+                        
+                        <h3>Auto-Configuration</h3>
+                        <p>Agents can automatically configure their environment:</p>
+                        <pre><code># manifest.json
+{
+  "container": "node:18",
+  "agent": "node server.js",
+  "enable": ["database", "cache"],  // Enable required agents
+  "repos": {                        // Add required repos
+    "utils": "https://github.com/org/utils.git"
+  }
+}
+
+# When this agent is enabled:
+1. Adds 'utils' repository
+2. Enables 'database' agent
+3. Enables 'cache' agent</code></pre>
+
+                        <h3>Custom Supervisor</h3>
+                        <p>Override the default supervisor with custom logic:</p>
+                        <pre><code>// custom-supervisor.js
+const { spawn } = require('child_process');
+const http = require('http');
+
+// Start main process
+const main = spawn('node', ['app.js']);
+
+// Health check server
+http.createServer((req, res) => {
+    if (req.url === '/api/status') {
+        res.writeHead(200);
+        res.end(JSON.stringify({
+            status: main.exitCode === null ? 'running' : 'stopped',
+            pid: main.pid
+        }));
+    }
+}).listen(7000);
+
+// Restart on crash
+main.on('exit', (code) => {
+    if (code !== 0) {
+        console.log('Restarting after crash...');
+        // Restart logic
+    }
+});</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Ploinky Project. Built with security and simplicity in mind.</p>
+            <p>
+                <a href="https://github.com/ploinky/ploinky">GitHub</a> • 
+                <a href="index.html">Home</a> • 
+                <a href="cli-reference.html">CLI Reference</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Theme toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        body.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+
+        // Highlight active section in sidebar
+        const sections = document.querySelectorAll('.doc-section[id]');
+        const navLinks = document.querySelectorAll('.sidebar a');
+        
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const rect = section.getBoundingClientRect();
+                if (rect.top <= 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

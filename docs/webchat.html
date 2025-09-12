@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebChat - Ploinky</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="index.html" class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <span>Ploinky</span>
+                </a>
+                <nav>
+                    <ul>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="cli-reference.html">CLI Reference</a></li>
+                        <li><a href="architecture.html">Architecture</a></li>
+                        <li><a href="spec-agent.html">Agent Spec</a></li>
+                        <li><a href="webchat.html" class="active">WebChat</a></li>
+                        <li><button class="theme-toggle" id="themeToggle">🌙</button></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="content-wrapper">
+                <div class="doc-section">
+                    <h1>WebChat - Transform CLI into Modern Chat Interface</h1>
+                    <p class="subtitle">Convert any command-line program into an elegant conversational web assistant that your clients can use directly in their browser.</p>
+                </div>
+
+                <div class="doc-section">
+                    <h2>What is WebChat?</h2>
+                    <p>WebChat is a powerful feature that transforms any CLI tool, agent, or text-based program into a modern chat interface. It captures stdout/stdin interactions and presents them in a WhatsApp-style web interface that's familiar and easy to use.</p>
+                    
+                    <div class="features" style="margin-top: 2rem;">
+                        <div class="feature-card">
+                            <div class="feature-icon">💬</div>
+                            <h3>Conversational UI</h3>
+                            <p>Beautiful chat interface with message bubbles, timestamps, and typing indicators. Feels like using WhatsApp or Telegram.</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">🔐</div>
+                            <h3>Token Security</h3>
+                            <p>Secure access with unique tokens generated at startup. Share the link to grant access - no passwords needed.</p>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">🎨</div>
+                            <h3>Customizable Themes</h3>
+                            <p>Light and dark themes with WhatsApp-inspired design. Automatically saves user preference.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="doc-section">
+                    <h2>How It Works</h2>
+                    
+                    <h3>1. Start Any Program</h3>
+                    <p>WebChat can wrap any program that reads from stdin and writes to stdout:</p>
+                    <pre><code># Default: starts bash shell as chat
+ploinky webchat
+
+# Output:
+Ploinky WebChat ready on http://localhost:8080 (agent: local)
+Access URL (share to authenticate): http://localhost:8080/?token=918079319222ed91bb68777bf69a500a332465ff9e9a34989644081ee8fca3bb
+Close with Ctrl+C</code></pre>
+
+                    <p>Start with a specific command:</p>
+                    <pre><code># Python assistant
+ploinky webchat python assistant.py
+
+# Node.js chatbot
+ploinky webchat node chatbot.js
+
+# Ploinky CLI agent
+ploinky webchat ploinky cli myAgent
+
+# Even system commands
+ploinky webchat htop</code></pre>
+
+                    <h3>2. Secure Token Access</h3>
+                    <div class="alert alert-info">
+                        <strong>Security Model:</strong>
+                        <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+                            <li>A unique 256-bit token is generated at startup</li>
+                            <li>The access URL includes this token</li>
+                            <li>Only users with the complete URL can access the chat</li>
+                            <li>Token persists in <code>.ploinky/.secrets</code> for consistent access</li>
+                            <li>No passwords to remember or type</li>
+                        </ul>
+                    </div>
+
+                    <h3>3. Magic Transformation</h3>
+                    <p>The program's text output becomes chat messages from the assistant. User inputs are sent as chat messages to the program's stdin.</p>
+                    
+                    <div class="alert alert-success">
+                        <strong>Example Flow:</strong>
+                        <ol style="margin-left: 1rem; margin-top: 0.5rem;">
+                            <li>User types "help" in chat interface</li>
+                            <li>WebChat sends "help\n" to program's stdin</li>
+                            <li>Program outputs help text to stdout</li>
+                            <li>WebChat displays output as assistant message</li>
+                        </ol>
+                    </div>
+
+                    <h3>4. Share the Link</h3>
+                    <p>Simply share the access URL with anyone who needs to use the chat interface. The token ensures only authorized users can connect.</p>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Command Syntax</h2>
+                    
+                    <h3>Basic Usage</h3>
+                    <pre><code>ploinky webchat [command...]</code></pre>
+                    
+                    <table class="command-table">
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Description</th>
+                            <th>Default</th>
+                        </tr>
+                        <tr>
+                            <td><code>[command...]</code></td>
+                            <td>Optional command to run</td>
+                            <td>/bin/bash</td>
+                        </tr>
+                    </table>
+
+                    <h3>Examples</h3>
+                    <pre><code># Start with default bash shell
+ploinky webchat
+
+# Start Python REPL
+ploinky webchat python
+
+# Run a specific script
+ploinky webchat python chatbot.py
+
+# Run Node.js application
+ploinky webchat node assistant.js
+
+# Connect to a Ploinky agent
+ploinky webchat ploinky cli demo
+
+# Multiple command arguments
+ploinky webchat python -u assistant.py --verbose</code></pre>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Configuration</h2>
+                    
+                    <h3>Environment Variables</h3>
+                    <pre><code># Set custom port (default: 8080)
+ploinky set WEBCHAT_PORT 3000
+
+# Set custom title
+ploinky set WEBTTY_TITLE "Customer Support"
+
+# View current settings
+ploinky set</code></pre>
+
+                    <h3>Token Management</h3>
+                    <p>Tokens are automatically generated and stored in <code>.ploinky/.secrets</code>:</p>
+                    <pre><code># Token is stored as
+WEBCHAT_TOKEN=918079319222ed91bb68777bf69a500a332465ff9e9a34989644081ee8fca3bb
+
+# Token persists across sessions
+# Same token = same access URL
+# To regenerate, delete the token and restart</code></pre>
+
+                    <h3>Port Configuration</h3>
+                    <pre><code># Change default port
+ploinky set WEBCHAT_PORT 3000
+
+# Start on new port
+ploinky webchat
+# Will now run on http://localhost:3000/?token=...</code></pre>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Use Cases</h2>
+                    
+                    <h3>Customer Support Bots</h3>
+                    <p>Transform your Python/Node.js support scripts into customer-facing chat interfaces:</p>
+                    <pre><code># support_bot.py
+while True:
+    user_input = input()
+    if "order" in user_input.lower():
+        print("I can help you track your order. Please provide your order number.")
+    elif "refund" in user_input.lower():
+        print("For refunds, please visit our refund portal or contact support@example.com")
+    else:
+        print("How can I help you today?")
+
+# Run as chat interface
+ploinky webchat python support_bot.py
+
+# Output:
+Ploinky WebChat ready on http://localhost:8080 (agent: local)
+Access URL (share to authenticate): http://localhost:8080/?token=918079319222...
+# Share this URL with customers!</code></pre>
+
+                    <h3>Interactive Debugging</h3>
+                    <p>Debug applications with a friendly chat interface instead of terminal:</p>
+                    <pre><code># Start Node.js REPL as chat
+ploinky webchat node
+
+# Start Python interactive session
+ploinky webchat python -i
+
+# Start database CLI
+ploinky webchat mysql -u root -p</code></pre>
+
+                    <h3>AI Agent Interfaces</h3>
+                    <p>Perfect for LLM-powered agents and assistants:</p>
+                    <pre><code># Your AI agent that reads prompts from stdin
+ploinky webchat python llm_agent.py
+
+# GPT-powered coding assistant
+ploinky webchat node gpt-coder.js
+
+# Connect to running Ploinky agent
+ploinky webchat ploinky cli ai-assistant</code></pre>
+
+                    <h3>System Administration</h3>
+                    <p>Make system tools accessible to non-technical users:</p>
+                    <pre><code># System status checker
+ploinky webchat bash system-health.sh
+
+# Log analyzer
+ploinky webchat python log-analyzer.py
+
+# Container management
+ploinky webchat docker ps</code></pre>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Features</h2>
+                    
+                    <h3>Message Formatting</h3>
+                    <ul style="margin-left: 2rem;">
+                        <li>✅ Automatic timestamp for each message</li>
+                        <li>✅ Read receipts visualization</li>
+                        <li>✅ Multi-line message support</li>
+                        <li>✅ Long message truncation with "Show more"</li>
+                        <li>✅ Side panel for viewing full messages</li>
+                    </ul>
+
+                    <h3>User Experience</h3>
+                    <ul style="margin-left: 2rem;">
+                        <li>✅ Auto-resize input field</li>
+                        <li>✅ Enter to send (Shift+Enter for new line)</li>
+                        <li>✅ Connection status indicator</li>
+                        <li>✅ Automatic reconnection</li>
+                        <li>✅ Mobile responsive design</li>
+                    </ul>
+
+                    <h3>Security Features</h3>
+                    <ul style="margin-left: 2rem;">
+                        <li>✅ Cryptographically secure tokens (256-bit)</li>
+                        <li>✅ No passwords stored or transmitted</li>
+                        <li>✅ Session-based authentication</li>
+                        <li>✅ Secure WebSocket communication</li>
+                        <li>✅ Input sanitization</li>
+                    </ul>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Integration Examples</h2>
+                    
+                    <h3>Python ChatBot</h3>
+                    <pre><code># chatbot.py
+import json
+import sys
+
+def process_command(cmd):
+    if cmd.lower() == 'help':
+        return "Available commands: help, status, info, quit"
+    elif cmd.lower() == 'status':
+        return "System is operational"
+    elif cmd.lower() == 'info':
+        return "ChatBot v1.0 - Python Edition"
+    else:
+        return f"You said: {cmd}"
+
+print("Welcome! I'm your Python assistant. Type 'help' for commands.")
+sys.stdout.flush()
+
+while True:
+    try:
+        user_input = input()
+        response = process_command(user_input)
+        print(response)
+        sys.stdout.flush()
+    except EOFError:
+        break
+
+# Run it:
+# ploinky webchat python chatbot.py</code></pre>
+
+                    <h3>Node.js Assistant</h3>
+                    <pre><code>// assistant.js
+const readline = require('readline');
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
+});
+
+console.log("Hello! I'm your Node.js assistant.");
+
+rl.on('line', (input) => {
+    const cmd = input.trim().toLowerCase();
+    
+    if (cmd === 'time') {
+        console.log(`Current time: ${new Date().toLocaleString()}`);
+    } else if (cmd === 'random') {
+        console.log(`Random number: ${Math.random()}`);
+    } else if (cmd.startsWith('calc ')) {
+        try {
+            const expr = cmd.substring(5);
+            console.log(`Result: ${eval(expr)}`);
+        } catch (e) {
+            console.log('Invalid expression');
+        }
+    } else {
+        console.log(`Echo: ${input}`);
+    }
+});
+
+// Run it:
+// ploinky webchat node assistant.js</code></pre>
+
+                    <h3>Bash Script Interface</h3>
+                    <pre><code>#!/bin/bash
+# menu.sh
+
+echo "Welcome to System Manager"
+echo "========================="
+
+while true; do
+    echo ""
+    echo "1. Check disk usage"
+    echo "2. Show system info"
+    echo "3. List processes"
+    echo "4. Network status"
+    echo "5. Exit"
+    echo ""
+    echo -n "Select option: "
+    
+    read option
+    
+    case $option in
+        1)
+            df -h
+            ;;
+        2)
+            uname -a
+            uptime
+            ;;
+        3)
+            ps aux | head -20
+            ;;
+        4)
+            ip addr show
+            ;;
+        5)
+            echo "Goodbye!"
+            exit 0
+            ;;
+        *)
+            echo "Invalid option"
+            ;;
+    esac
+done
+
+# Run it:
+# ploinky webchat bash menu.sh</code></pre>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Admin Mode</h2>
+                    <p>The <code>admin-mode</code> command starts WebChat alongside Console and Dashboard:</p>
+                    <pre><code>ploinky admin-mode
+
+# Output:
+Ploinky Dashboard ready on http://localhost:9000 (agent: local)
+Access URL: http://localhost:9000/?token=12db7b7ad0ae967a4d818e5fc8fc900d...
+Close with Ctrl+C
+
+Ploinky WebChat ready on http://localhost:8080 (agent: local)
+Access URL: http://localhost:8080/?token=918079319222ed91bb68777bf69a500a...
+Close with Ctrl+C
+
+Ploinky WebTTY ready on http://localhost:9001 (agent: local)
+Access URL: http://localhost:9001/?token=930c421ba50da4aca7afeae6aa0a02e3...
+Close with Ctrl+C</code></pre>
+                    
+                    <div class="alert alert-success">
+                        <strong>Three services with unique tokens:</strong>
+                        <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+                            <li><strong>Dashboard</strong> - Management UI at port 9000</li>
+                            <li><strong>WebChat</strong> - Chat interface at port 8080</li>
+                            <li><strong>Console</strong> - Full terminal at port 9001</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Tips & Best Practices</h2>
+                    
+                    <h3>For Developers</h3>
+                    <ul style="margin-left: 2rem;">
+                        <li>Always flush stdout after printing (Python: <code>sys.stdout.flush()</code>)</li>
+                        <li>Handle EOF gracefully for clean disconnections</li>
+                        <li>Use line-buffered output for real-time responses</li>
+                        <li>Implement timeout handling for long-running operations</li>
+                        <li>Keep the access URL secure - it's the only authentication</li>
+                    </ul>
+
+                    <h3>For Production</h3>
+                    <ul style="margin-left: 2rem;">
+                        <li>Run behind a reverse proxy (nginx/Apache) with SSL</li>
+                        <li>Use HTTPS in production to protect token transmission</li>
+                        <li>Set appropriate CORS headers for embedding</li>
+                        <li>Monitor WebSocket connections for scaling</li>
+                        <li>Rotate tokens periodically for enhanced security</li>
+                    </ul>
+
+                    <h3>UI Customization</h3>
+                    <p>The chat interface uses CSS variables for easy theming. You can customize colors by modifying the CSS file or injecting custom styles.</p>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Troubleshooting</h2>
+                    
+                    <h3>Common Issues</h3>
+                    <table class="command-table">
+                        <tr>
+                            <th>Issue</th>
+                            <th>Solution</th>
+                        </tr>
+                        <tr>
+                            <td>Port already in use</td>
+                            <td>Change port: <code>ploinky set WEBCHAT_PORT 3000</code></td>
+                        </tr>
+                        <tr>
+                            <td>Connection refused</td>
+                            <td>Check firewall settings and ensure service is running</td>
+                        </tr>
+                        <tr>
+                            <td>Messages not appearing</td>
+                            <td>Ensure program flushes stdout after printing</td>
+                        </tr>
+                        <tr>
+                            <td>Program exits immediately</td>
+                            <td>Use interactive mode or loop in your program</td>
+                        </tr>
+                        <tr>
+                            <td>Token lost</td>
+                            <td>Check <code>.ploinky/.secrets</code> for WEBCHAT_TOKEN</td>
+                        </tr>
+                        <tr>
+                            <td>Need new token</td>
+                            <td>Delete WEBCHAT_TOKEN from .secrets and restart</td>
+                        </tr>
+                    </table>
+
+                    <h3>Security Notes</h3>
+                    <div class="alert alert-warning">
+                        <strong>Important:</strong>
+                        <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+                            <li>The access URL contains the authentication token</li>
+                            <li>Share it only with trusted users</li>
+                            <li>Use HTTPS in production environments</li>
+                            <li>Tokens are stored in <code>.ploinky/.secrets</code></li>
+                            <li>Each service (WebChat, Console, Dashboard) has its own token</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Ploinky Project. Built with security and simplicity in mind.</p>
+            <p>
+                <a href="https://github.com/ploinky/ploinky">GitHub</a> • 
+                <a href="index.html">Home</a> • 
+                <a href="cli-reference.html">CLI Reference</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Theme toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        body.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+    </script>
+</body>
+</html>

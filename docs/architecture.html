@@ -3,726 +3,520 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ploinky Architecture - Technical Deep Dive</title>
+    <title>Architecture - Ploinky</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-        .architecture-diagram {
-            background: #f5f5f5;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 20px;
-            margin: 20px 0;
-            overflow-x: auto;
-        }
-        .architecture-diagram pre {
-            margin: 0;
-            font-size: 12px;
-            line-height: 1.4;
-        }
-        .component-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        .component-card {
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-        }
-        .component-card h3 {
-            color: #2563eb;
-            margin-top: 0;
-        }
-        .performance-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }
-        .performance-table th,
-        .performance-table td {
-            border: 1px solid #ddd;
-            padding: 12px;
-            text-align: left;
-        }
-        .performance-table th {
-            background: #f5f5f5;
-            font-weight: 600;
-        }
-        .code-block {
-            background: #1e1e1e;
-            color: #d4d4d4;
-            padding: 15px;
-            border-radius: 6px;
-            overflow-x: auto;
-            margin: 15px 0;
-        }
-        .code-block code {
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-        }
-    </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="nav-container">
-            <div class="nav-brand">
-                <h1>Ploinky</h1>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="index.html" class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <span>Ploinky</span>
+                </a>
+                <nav>
+                    <ul>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="cli-reference.html">CLI Reference</a></li>
+                        <li><a href="architecture.html" class="active">Architecture</a></li>
+                        <li><a href="spec-agent.html">Agent Spec</a></li>
+                        <li><a href="webchat.html">WebChat</a></li>
+                        <li><button class="theme-toggle" id="themeToggle">🌙</button></li>
+                    </ul>
+                </nav>
             </div>
-            <ul class="nav-menu">
-                <li><a href="index.html">Home</a></li>
-                <li><a href="ploinky-cli.html">CLI Documentation</a></li>
-                <li><a href="ploinky-cloud.html">Cloud Platform</a></li>
-                <li><a href="architecture.html" class="active">Architecture</a></li>
-                <li><a href="https://github.com/PlonkyRepos/ploinky" target="_blank">GitHub</a></li>
-            </ul>
         </div>
-    </nav>
+    </header>
 
-    <main class="container">
-        <section class="content-section">
-            <h1>Ploinky Architecture</h1>
-            <p class="lead">A comprehensive technical deep dive into Ploinky's system design, components, and architectural decisions.</p>
-
-            <nav class="toc">
-                <h3>Table of Contents</h3>
-                <ul>
-                    <li><a href="#overview">System Overview</a></li>
-                    <li><a href="#principles">Design Principles</a></li>
-                    <li><a href="#architecture">High-Level Architecture</a></li>
-                    <li><a href="#components">Core Components</a></li>
-                    <li><a href="#data-flow">Data Flow Architecture</a></li>
-                    <li><a href="#concurrency">Concurrency & Performance</a></li>
-                    <li><a href="#security">Security Architecture</a></li>
-                    <li><a href="#deployment">Deployment Architecture</a></li>
-                    <li><a href="#future">Future Roadmap</a></li>
-                </ul>
-            </nav>
-        </section>
-
-        <section id="overview" class="content-section">
-            <h2>System Overview</h2>
-            <p>Ploinky is a container orchestration platform designed for simplicity and efficiency. It provides a lightweight alternative to Kubernetes for managing containerized applications, with a focus on file-based communication patterns and minimal resource overhead.</p>
-            
-            <div class="features">
-                <div class="feature-card">
-                    <h3>🎯 Purpose</h3>
-                    <p>Bridge the gap between simple Docker commands and complex Kubernetes deployments</p>
-                </div>
-                <div class="feature-card">
-                    <h3>⚡ Key Innovation</h3>
-                    <p>Unique file-based IPC mechanism transitioning to HTTP for both simplicity and scalability</p>
-                </div>
-                <div class="feature-card">
-                    <h3>🔧 Target Users</h3>
-                    <p>Developers needing container orchestration without the complexity of enterprise solutions</p>
-                </div>
-            </div>
-        </section>
-
-        <section id="principles" class="content-section">
-            <h2>Design Principles</h2>
-            
-            <div class="component-grid">
-                <div class="component-card">
-                    <h3>1. Simplicity First</h3>
-                    <p>Minimize complexity while maintaining functionality. Every feature must justify its complexity cost.</p>
-                </div>
-                <div class="component-card">
-                    <h3>2. File-Based Communication</h3>
-                    <p>Use filesystem as the primary IPC mechanism for reliability and simplicity.</p>
-                </div>
-                <div class="component-card">
-                    <h3>3. Container Agnostic</h3>
-                    <p>Support both Docker and Podman transparently without vendor lock-in.</p>
-                </div>
-                <div class="component-card">
-                    <h3>4. Modular Architecture</h3>
-                    <p>Clear separation of concerns between components for maintainability.</p>
-                </div>
-                <div class="component-card">
-                    <h3>5. HTTP-Based Control Plane</h3>
-                    <p>Simple REST API for all operations, making integration straightforward.</p>
-                </div>
-                <div class="component-card">
-                    <h3>6. Progressive Enhancement</h3>
-                    <p>Start simple, scale when needed. No over-engineering upfront.</p>
-                </div>
-            </div>
-        </section>
-
-        <section id="architecture" class="content-section">
-            <h2>High-Level Architecture</h2>
-            
-            <div class="architecture-diagram">
-                <pre>
-┌─────────────────────────────────────────────────────────────────┐
-│                         External Clients                         │
-│  (Browser, p-cli, PloinkyClient, curl, 3rd-party integrations)  │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ HTTP/HTTPS
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Ploinky Cloud Server                         │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                    Request Router V2                      │  │
-│  │  - Path-based routing (/management, /auth, /agents/*)    │  │
-│  │  - Domain/host routing for multi-tenancy                 │  │
-│  └──────────────────┬───────────────────────────────────────┘  │
-│                     │                                           │
-│  ┌──────────────────▼───────────────────────────────────────┐  │
-│  │                  Task Orchestrator V2                     │  │
-│  │  - Task creation and scheduling                          │  │
-│  │  - Deployment management                                 │  │
-│  │  - Container lifecycle control                           │  │
-│  └──────────────────┬───────────────────────────────────────┘  │
-│                     │                                           │
-│  ┌──────────────────▼───────────────────────────────────────┐  │
-│  │              AgentCore Task Executor                      │  │
-│  │  - HTTP → AgentCoreClient translation (transitioning)    │  │
-│  │  - Task queue management                                 │  │
-│  │  - Result polling and retrieval                          │  │
-│  └──────────────────┬───────────────────────────────────────┘  │
-└─────────────────────┼───────────────────────────────────────────┘
-                      │
-                      │ HTTP (future) / Filesystem (current)
-                      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         Container Layer                          │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                    Agent Container                        │  │
-│  │  ┌────────────────────────────────────────────────────┐  │  │
-│  │  │                   AgentCore                        │  │  │
-│  │  │  - HTTP server (future) / File watcher (current)   │  │  │
-│  │  │  - Task execution engine                           │  │  │
-│  │  │  - Handler invocation                              │  │  │
-│  │  └────────────────────────────────────────────────────┘  │  │
-│  │  ┌────────────────────────────────────────────────────┐  │  │
-│  │  │              Application Code                       │  │  │
-│  │  │  - User agents from Git repositories               │  │  │
-│  │  │  - Custom business logic                           │  │  │
-│  │  └────────────────────────────────────────────────────┘  │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                </pre>
-            </div>
-        </section>
-
-        <section id="components" class="content-section">
-            <h2>Core Components</h2>
-            
-            <div class="component-grid">
-                <div class="component-card">
-                    <h3>🌩️ Ploinky Cloud Server</h3>
-                    <p><strong>Location:</strong> <code>/cloud</code></p>
-                    <p>Central control plane implemented as a Node.js HTTP server with clustering support.</p>
+    <main>
+        <div class="container">
+            <div class="doc-layout">
+                <aside class="sidebar">
+                    <h3>Architecture Components</h3>
                     <ul>
-                        <li>Main server entry point with cluster management</li>
-                        <li>HTTP request routing and dispatch</li>
-                        <li>Task lifecycle management</li>
-                        <li>Configuration persistence</li>
+                        <li><a href="#overview">System Overview</a></li>
+                        <li><a href="#core">Core Components</a></li>
+                        <li><a href="#containers">Container Management</a></li>
+                        <li><a href="#routing">Routing Server</a></li>
+                        <li><a href="#workspace">Workspace System</a></li>
+                        <li><a href="#security">Security Model</a></li>
+                        <li><a href="#web-services">Web Services</a></li>
+                        <li><a href="#data-flow">Data Flow</a></li>
                     </ul>
-                </div>
+                </aside>
 
-                <div class="component-card">
-                    <h3>📦 Container Management</h3>
-                    <p><strong>Location:</strong> <code>/cloud/container</code></p>
-                    <p>Abstracts container runtime operations for both Docker and Podman.</p>
-                    <ul>
-                        <li>Container lifecycle operations</li>
-                        <li>Git repository cloning and sync</li>
-                        <li>Volume mounting strategies</li>
-                        <li>Port management and caching</li>
-                    </ul>
-                </div>
+                <div class="content-wrapper">
+                    <div class="doc-section">
+                        <h1>Ploinky Architecture</h1>
+                        <p class="subtitle">Technical architecture and implementation details of the Ploinky AI agent deployment system.</p>
+                    </div>
 
-                <div class="component-card">
-                    <h3>⚙️ AgentCore</h3>
-                    <p><strong>Location:</strong> <code>/agentCore</code></p>
-                    <p>Runtime engine that executes inside containers.</p>
-                    <ul>
-                        <li>File-based task watching (current)</li>
-                        <li>HTTP server (future)</li>
-                        <li>Task execution engine</li>
-                        <li>Result management</li>
-                    </ul>
-                </div>
+                    <div class="doc-section" id="overview">
+                        <h2>System Overview</h2>
+                        <p>Ploinky is built as a modular system with clear separation of concerns:</p>
+                        
+                        <pre><code>┌─────────────────────────────────────────────────────────┐
+│                     User Interface                       │
+│  (CLI Commands / Web Console / Chat / Dashboard)         │
+└─────────────────────────────────────────────────────────┘
+                            │
+┌─────────────────────────────────────────────────────────┐
+│                    Ploinky CLI Core                      │
+│  (Command Handler / Service Manager / Config)            │
+└─────────────────────────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│ Routing Server│   │  Web Services │   │Container Mgmt │
+│   (HTTP API)  │   │  (WebTTY/Chat)│   │ (Docker/Podman)│
+└───────────────┘   └───────────────┘   └───────────────┘
+        │                   │                   │
+┌─────────────────────────────────────────────────────────┐
+│                    Agent Containers                      │
+│         (Isolated Linux containers per agent)            │
+└─────────────────────────────────────────────────────────┘</code></pre>
 
-                <div class="component-card">
-                    <h3>🔌 AgentCoreClient</h3>
-                    <p><strong>Location:</strong> <code>/agentCoreClient</code></p>
-                    <p>Client library for interacting with AgentCore.</p>
-                    <ul>
-                        <li>Task enqueueing</li>
-                        <li>Result polling</li>
-                        <li>File-based communication (current)</li>
-                        <li>HTTP communication (future)</li>
-                    </ul>
-                </div>
+                        <h3>Key Design Principles</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li><strong>Isolation First:</strong> Every agent runs in its own container</li>
+                            <li><strong>Workspace Scoped:</strong> All configuration is local to the project directory</li>
+                            <li><strong>Zero Global State:</strong> No system-wide installation or configuration</li>
+                            <li><strong>Git-Friendly:</strong> Configuration stored in .ploinky folder, can be gitignored</li>
+                            <li><strong>Runtime Agnostic:</strong> Supports Docker and Podman transparently</li>
+                        </ul>
+                    </div>
 
-                <div class="component-card">
-                    <h3>💻 PloinkyClient SDK</h3>
-                    <p><strong>Location:</strong> <code>/client</code></p>
-                    <p>JavaScript SDK for browser and Node.js applications.</p>
-                    <ul>
-                        <li>Simple API for agent interaction</li>
-                        <li>Authentication handling</li>
-                        <li>Error management</li>
-                        <li>Promise-based interface</li>
-                    </ul>
-                </div>
+                    <div class="doc-section" id="core">
+                        <h2>Core Components</h2>
+                        
+                        <h3>CLI Command System (cli/commands/cli.js)</h3>
+                        <p>The main entry point that handles all user commands:</p>
+                        <pre><code>// Command routing structure
+handleCommand(args) {
+    switch(command) {
+        case 'add':      // Repository management
+        case 'enable':   // Agent/repo activation
+        case 'start':    // Workspace initialization
+        case 'shell':    // Interactive container access
+        case 'webchat':  // Web interface launchers
+        // ... more commands
+    }
+}</code></pre>
 
-                <div class="component-card">
-                    <h3>🖥️ CLI Interface</h3>
-                    <p><strong>Location:</strong> <code>/cli</code></p>
-                    <p>Command-line interface for system administration.</p>
-                    <ul>
-                        <li>Local development commands</li>
-                        <li>Cloud operations</li>
-                        <li>Container management</li>
-                        <li>Interactive shell</li>
-                    </ul>
-                </div>
-            </div>
-        </section>
+                        <h3>Service Layer (cli/services/)</h3>
+                        <table class="command-table">
+                            <tr>
+                                <th>Service</th>
+                                <th>Responsibility</th>
+                            </tr>
+                            <tr>
+                                <td><code>workspace.js</code></td>
+                                <td>Manages .ploinky directory and configuration</td>
+                            </tr>
+                            <tr>
+                                <td><code>docker.js</code></td>
+                                <td>Container lifecycle management (Docker/Podman)</td>
+                            </tr>
+                            <tr>
+                                <td><code>repos.js</code></td>
+                                <td>Repository management and agent discovery</td>
+                            </tr>
+                            <tr>
+                                <td><code>agents.js</code></td>
+                                <td>Agent registration and configuration</td>
+                            </tr>
+                            <tr>
+                                <td><code>secretVars.js</code></td>
+                                <td>Environment variable and secrets management</td>
+                            </tr>
+                            <tr>
+                                <td><code>config.js</code></td>
+                                <td>Global configuration constants</td>
+                            </tr>
+                            <tr>
+                                <td><code>help.js</code></td>
+                                <td>Help system and documentation</td>
+                            </tr>
+                        </table>
+                    </div>
 
-        <section id="data-flow" class="content-section">
-            <h2>Data Flow Architecture</h2>
-            
-            <h3>Current Implementation (File-based)</h3>
-            <div class="architecture-diagram">
-                <pre>
-1. HTTP Request → Cloud Server
-   POST /demo/hello { params: ["world"] }
+                    <div class="doc-section" id="containers">
+                        <h2>Container Management</h2>
+                        
+                        <h3>Container Lifecycle</h3>
+                        <p>Ploinky manages containers with specific naming conventions and lifecycle hooks:</p>
+                        
+                        <pre><code>// Container naming convention
+function getAgentContainerName(agentName, repoName) {
+    const proj = path.basename(process.cwd()).replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const wsid = crypto.createHash('sha256')
+        .update(process.cwd())
+        .digest('hex')
+        .substring(0, 6);
+    return `ploinky_${proj}_${wsid}_agent_${agentName}`;
+}
+
+// Service container (for API endpoints)
+function getServiceContainerName(agentName) {
+    // Similar but with _service_ prefix
+    return `ploinky_${proj}_${wsid}_service_${agentName}`;
+}</code></pre>
+
+                        <h3>Volume Mounts</h3>
+                        <p>Each container gets specific volume mounts for security:</p>
+                        <pre><code>{
+    binds: [
+        { source: process.cwd(), target: process.cwd() },      // Workspace
+        { source: '/Agent', target: '/Agent' },                // Agent runtime
+        { source: agentPath, target: '/code' }                 // Agent code
+    ]
+}</code></pre>
+
+                        <h3>Runtime Detection</h3>
+                        <p>Automatically detects and uses available container runtime:</p>
+                        <pre><code>function getRuntime() {
+    try {
+        execSync('docker --version', { stdio: 'ignore' });
+        return 'docker';
+    } catch {
+        try {
+            execSync('podman --version', { stdio: 'ignore' });
+            return 'podman';
+        } catch {
+            throw new Error('No container runtime found');
+        }
+    }
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="routing">
+                        <h2>Routing Server</h2>
+                        
+                        <h3>Purpose</h3>
+                        <p>The RoutingServer (cli/server/RoutingServer.js) acts as a reverse proxy, routing API requests to appropriate agent containers:</p>
+                        
+                        <pre><code>// routing.json structure
+{
+    "port": 8088,
+    "static": {
+        "agent": "demo",
+        "container": "ploinky_myproject_abc123_service_demo",
+        "hostPath": "/path/to/demo/agent"
+    },
+    "routes": {
+        "agent1": {
+            "container": "ploinky_myproject_abc123_service_agent1",
+            "hostPort": 7001
+        },
+        "agent2": {
+            "container": "ploinky_myproject_abc123_service_agent2",
+            "hostPort": 7002
+        }
+    }
+}</code></pre>
+
+                        <h3>Request Flow</h3>
+                        <ol style="margin-left: 2rem;">
+                            <li>Client sends request to <code>http://localhost:8088/apis/agent1/method</code></li>
+                            <li>RoutingServer extracts agent name from path</li>
+                            <li>Looks up agent's container port in routing.json</li>
+                            <li>Proxies request to <code>http://localhost:7001/api/method</code></li>
+                            <li>Returns response to client</li>
+                        </ol>
+
+                        <h3>Static File Serving</h3>
+                        <p>The "static" agent serves files directly from the host filesystem:</p>
+                        <pre><code>// Serves files from static.hostPath
+GET /index.html → /path/to/demo/agent/index.html
+GET /assets/app.js → /path/to/demo/agent/assets/app.js</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="workspace">
+                        <h2>Workspace System</h2>
+                        
+                        <h3>Directory Structure</h3>
+                        <pre><code>.ploinky/
+├── agents/              # Agent registry (JSON)
+├── repos/               # Cloned agent repositories
+│   ├── basic/
+│   │   ├── shell/
+│   │   │   └── manifest.json
+│   │   └── node-dev/
+│   │       └── manifest.json
+│   ├── demo/
+│   │   ├── demo/
+│   │   └── simulator/
+│   └── custom-repo/
+├── routing.json         # Router configuration
+├── .secrets            # Environment variables
+├── logs/               # Application logs
+│   ├── router.log
+│   └── webtty.log
+└── running/            # Process PID files
+    ├── router.pid
+    ├── webtty.pid
+    ├── webchat.pid
+    └── dashboard.pid</code></pre>
+
+                        <h3>Agent Registry (agents/)</h3>
+                        <p>JSON file storing enabled agents and their configuration:</p>
+                        <pre><code>{
+    "ploinky_project_abc123_agent_demo": {
+        "agentName": "demo",
+        "repoName": "demo",
+        "containerImage": "node:18-alpine",
+        "createdAt": "2024-01-01T00:00:00Z",
+        "projectPath": "/home/user/project",
+        "type": "agent",
+        "config": {
+            "binds": [...],
+            "env": [...],
+            "ports": [{"containerPort": 7000}]
+        }
+    }
+}</code></pre>
+
+                        <h3>Configuration Management</h3>
+                        <p>Workspace configuration persists across sessions:</p>
+                        <pre><code>// Stored in agents/_config
+{
+    "static": {
+        "agent": "demo",
+        "port": 8088
+    }
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="security">
+                        <h2>Security Model</h2>
+                        
+                        <h3>Container Isolation</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li><strong>Filesystem:</strong> Containers only access current workspace directory</li>
+                            <li><strong>Network:</strong> Isolated network namespace per container</li>
+                            <li><strong>Process:</strong> No access to host processes</li>
+                            <li><strong>Resources:</strong> Can set CPU/memory limits</li>
+                        </ul>
+
+                        <h3>Secret Management</h3>
+                        <p>Environment variables stored in .ploinky/.secrets with aliasing support:</p>
+                        <pre><code>API_KEY=sk-123456789
+PROD_KEY=$API_KEY        # Alias reference
+DATABASE_URL=postgres://localhost/db</code></pre>
+
+                        <h3>Web Access Control</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>Password protection for web interfaces</li>
+                            <li>Session-based authentication</li>
+                            <li>WebSocket token validation</li>
+                            <li>CORS headers configuration</li>
+                        </ul>
+                    </div>
+
+                    <div class="doc-section" id="web-services">
+                        <h2>Web Services Architecture</h2>
+                        
+                        <h3>WebTTY/Console (cli/webtty/)</h3>
+                        <p>Provides terminal access through web browser:</p>
+                        <pre><code>// Component structure
+server.js       // HTTP/WebSocket server
+tty.js          // PTY management
+console.js      // Client-side terminal UI
+clientloader.js // Dynamic UI loader</code></pre>
+
+                        <h3>WebChat (cli/webtty/chat.js)</h3>
+                        <p>Chat interface for CLI programs:</p>
+                        <ul style="margin-left: 2rem;">
+                            <li>Captures stdout/stdin through PTY</li>
+                            <li>WebSocket-based real-time communication</li>
+                            <li>WhatsApp-style UI with message bubbles</li>
+                            <li>Automatic reconnection handling</li>
+                        </ul>
+
+                        <h3>Dashboard (dashboard/)</h3>
+                        <p>Management interface components:</p>
+                        <pre><code>landingPage.js      // Main dashboard UI
+auth.js             // Authentication
+repositories.js     // Repo management
+configurations.js   // Settings management
+observability.js    // Monitoring views</code></pre>
+
+                        <h3>WebSocket Protocol</h3>
+                        <pre><code>// Message types
+{ type: 'input', data: 'user command' }     // User input
+{ type: 'output', data: 'program output' }  // Program output
+{ type: 'resize', cols: 80, rows: 24 }      // Terminal resize
+{ type: 'ping' }                             // Keep-alive</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="data-flow">
+                        <h2>Data Flow Examples</h2>
+                        
+                        <h3>Starting an Agent</h3>
+                        <pre><code>1. User: ploinky enable agent demo
+   → Find manifest in repos/demo/demo/manifest.json
+   → Register in .ploinky/agents
+   → Generate container name
+
+2. User: ploinky start demo 8088
+   → Read agents registry
+   → Start container for each agent
+   → Map ports (container:7000 → host:7001)
+   → Update routing.json
+   → Start RoutingServer on 8088
+
+3. Container startup:
+   → Pull image if needed
+   → Mount volumes (workspace, code, Agent)
+   → Set environment variables
+   → Run agent command or supervisor</code></pre>
+
+                        <h3>API Request Routing</h3>
+                        <pre><code>1. Client: GET http://localhost:8088/apis/simulator/monty-hall
    
-2. Cloud Server → Task Orchestrator
-   Create task with security context
+2. RoutingServer:
+   → Extract agent: "simulator"
+   → Lookup in routing.json: hostPort: 7002
+   → Proxy to: http://localhost:7002/api/monty-hall
    
-3. Task Orchestrator → AgentCoreTaskExecutor
-   Deployment lookup and validation
+3. Agent Container:
+   → Process request
+   → Return response
    
-4. AgentCoreTaskExecutor → AgentCoreClient
-   Task enqueuing via filesystem
+4. RoutingServer:
+   → Forward response to client</code></pre>
+
+                        <h3>WebChat Session</h3>
+                        <pre><code>1. User: ploinky webchat secret python bot.py
    
-5. Filesystem Queue (Write)
-   /agents/localhost/demo/.ploinky/queue/tasks/{taskId}
+2. WebTTY Server:
+   → Start PTY with command: python bot.py
+   → Create HTTP server on port 8080
+   → Serve chat.html interface
    
-6. AgentCore in Container (Poll & Process)
-   Read task → Execute → Write result
+3. Browser connects:
+   → WebSocket handshake
+   → Authenticate with password
+   → Establish bidirectional channel
    
-7. Filesystem Queue (Result)
-   /agents/localhost/demo/.ploinky/queue/results/{taskId}
-   
-8. AgentCoreClient → HTTP Response
-   Poll result → Return to client
-                </pre>
-            </div>
+4. Message flow:
+   → User types in chat
+   → WebSocket → Server → PTY stdin
+   → Program output → PTY stdout → WebSocket → Browser
+   → Display as chat bubble</code></pre>
+                    </div>
 
-            <h3>Future Implementation (HTTP-based)</h3>
-            <div class="architecture-diagram">
-                <pre>
-1. HTTP Request → Cloud Server
-   POST /demo/hello { params: ["world"] }
-   
-2. Cloud Server → Container HTTP
-   Direct HTTP call to container port
-   
-3. Container AgentCore Server
-   Process request → Return response
-   
-4. Cloud Server → HTTP Response
-   Forward response to client
-                </pre>
-            </div>
+                    <div class="doc-section">
+                        <h2>Agent Supervisor</h2>
+                        <p>The Agent runtime (/Agent/AgentServer.js) provides a supervisor for agents:</p>
+                        
+                        <h3>Supervisor Features</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>HTTP server on port 7000</li>
+                            <li>Health check endpoint (/api/status)</li>
+                            <li>Process management for agent command</li>
+                            <li>Automatic restart on failure</li>
+                            <li>Request proxying to agent process</li>
+                        </ul>
 
-            <h3>Performance Comparison</h3>
-            <table class="performance-table">
-                <thead>
-                    <tr>
-                        <th>Metric</th>
-                        <th>File-based</th>
-                        <th>HTTP-based</th>
-                        <th>Improvement</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Latency</td>
-                        <td>200-400ms</td>
-                        <td>10-50ms</td>
-                        <td>~8x faster</td>
-                    </tr>
-                    <tr>
-                        <td>Throughput</td>
-                        <td>~100 req/s</td>
-                        <td>~1000 req/s</td>
-                        <td>10x higher</td>
-                    </tr>
-                    <tr>
-                        <td>Complexity</td>
-                        <td>Low</td>
-                        <td>Medium</td>
-                        <td>-</td>
-                    </tr>
-                    <tr>
-                        <td>Debugging</td>
-                        <td>Hard</td>
-                        <td>Easy</td>
-                        <td>Much better</td>
-                    </tr>
-                    <tr>
-                        <td>Persistence</td>
-                        <td>Built-in</td>
-                        <td>Requires implementation</td>
-                        <td>-</td>
-                    </tr>
-                </tbody>
-            </table>
-        </section>
+                        <h3>Agent Manifest Processing</h3>
+                        <pre><code>// manifest.json
+{
+    "agent": "node server.js",    // Long-running service
+    "cli": "node repl.js",       // Interactive CLI
+    "install": "npm install",    // Setup command
+    "update": "npm update"       // Update command
+}
 
-        <section id="concurrency" class="content-section">
-            <h2>Concurrency & Performance</h2>
-            
-            <h3>Parallel Task Execution</h3>
-            <p>Ploinky supports high-performance parallel task execution through several optimization strategies:</p>
-            
-            <div class="component-grid">
-                <div class="component-card">
-                    <h3>🔒 Race Condition Prevention</h3>
-                    <ul>
-                        <li><strong>Container Port Management:</strong> Port caching with validation</li>
-                        <li><strong>Container Creation Locking:</strong> Atomic filesystem operations using mkdir</li>
-                        <li><strong>Task Queue Management:</strong> Atomic file operations prevent corruption</li>
-                    </ul>
-                </div>
+// Supervisor runs:
+if (manifest.agent) {
+    spawn(manifest.agent)  // Start service
+} else {
+    startDefaultServer()   // Basic HTTP server
+}</code></pre>
+                    </div>
 
-                <div class="component-card">
-                    <h3>⚡ Performance Optimizations</h3>
-                    <ul>
-                        <li><strong>Port Caching:</strong> Reduces system calls by 80%</li>
-                        <li><strong>Container Reuse:</strong> Persistent containers across task executions</li>
-                        <li><strong>Warm Containers:</strong> Eliminate startup overhead</li>
-                        <li><strong>Lock-Free Fast Path:</strong> Check cached values before acquiring locks</li>
-                    </ul>
+                    <div class="doc-section">
+                        <h2>Performance Considerations</h2>
+                        
+                        <h3>Container Optimization</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>Reuse existing containers when possible</li>
+                            <li>Lazy image pulling</li>
+                            <li>Shared base layers between agents</li>
+                            <li>Volume mount caching</li>
+                        </ul>
+
+                        <h3>Network Efficiency</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>Local port mapping avoids network overhead</li>
+                            <li>HTTP keep-alive for persistent connections</li>
+                            <li>WebSocket for real-time communication</li>
+                            <li>Request buffering and batching</li>
+                        </ul>
+
+                        <h3>Resource Management</h3>
+                        <ul style="margin-left: 2rem;">
+                            <li>Automatic container cleanup on exit</li>
+                            <li>PID file tracking for process management</li>
+                            <li>Log rotation for long-running services</li>
+                            <li>Memory-efficient streaming for large outputs</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-
-            <h3>Stress Testing Results</h3>
-            <table class="performance-table">
-                <thead>
-                    <tr>
-                        <th>Concurrent Tasks</th>
-                        <th>Success Rate</th>
-                        <th>Avg Lock Wait</th>
-                        <th>Port Cache Hit</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>1 (Sequential)</td>
-                        <td>100%</td>
-                        <td>0ms</td>
-                        <td>N/A</td>
-                    </tr>
-                    <tr>
-                        <td>10</td>
-                        <td>100%</td>
-                        <td>50ms</td>
-                        <td>70%</td>
-                    </tr>
-                    <tr>
-                        <td>20</td>
-                        <td>>95%</td>
-                        <td>200ms</td>
-                        <td>85%</td>
-                    </tr>
-                    <tr>
-                        <td>50</td>
-                        <td>>90%</td>
-                        <td>1200ms</td>
-                        <td>87%</td>
-                    </tr>
-                    <tr>
-                        <td>100</td>
-                        <td>>85%</td>
-                        <td>2500ms</td>
-                        <td>90%</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <h3>Benchmarks</h3>
-            <table class="performance-table">
-                <thead>
-                    <tr>
-                        <th>Operation</th>
-                        <th>Latency (p50)</th>
-                        <th>Latency (p99)</th>
-                        <th>Throughput</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>Task Submit</td>
-                        <td>5ms</td>
-                        <td>20ms</td>
-                        <td>2000/s</td>
-                    </tr>
-                    <tr>
-                        <td>Task Execute (file)</td>
-                        <td>250ms</td>
-                        <td>500ms</td>
-                        <td>100/s</td>
-                    </tr>
-                    <tr>
-                        <td>Task Execute (HTTP)</td>
-                        <td>25ms</td>
-                        <td>100ms</td>
-                        <td>1000/s</td>
-                    </tr>
-                    <tr>
-                        <td>Container Start</td>
-                        <td>2s</td>
-                        <td>5s</td>
-                        <td>10/s</td>
-                    </tr>
-                    <tr>
-                        <td>Container Port Lookup</td>
-                        <td>1ms</td>
-                        <td>5ms</td>
-                        <td>5000/s</td>
-                    </tr>
-                </tbody>
-            </table>
-        </section>
-
-        <section id="security" class="content-section">
-            <h2>Security Architecture</h2>
-            
-            <h3>Security Layers</h3>
-            <div class="component-grid">
-                <div class="component-card">
-                    <h3>🔐 Transport Security</h3>
-                    <p>HTTPS termination at reverse proxy level for encrypted communication.</p>
-                </div>
-                <div class="component-card">
-                    <h3>🎫 Authentication</h3>
-                    <p>API keys and session tokens for user verification.</p>
-                </div>
-                <div class="component-card">
-                    <h3>🛡️ Authorization</h3>
-                    <p>Role-based access control (RBAC) for permission management.</p>
-                </div>
-                <div class="component-card">
-                    <h3>📦 Container Isolation</h3>
-                    <p>Separate namespaces and cgroups for process isolation.</p>
-                </div>
-                <div class="component-card">
-                    <h3>⚡ Resource Limits</h3>
-                    <p>CPU/Memory constraints to prevent resource exhaustion.</p>
-                </div>
-                <div class="component-card">
-                    <h3>📝 Auditing</h3>
-                    <p>Comprehensive request/response logging with security context.</p>
-                </div>
-            </div>
-
-            <h3>Authentication Flow</h3>
-            <div class="architecture-diagram">
-                <pre>
-Client Request
-     │
-     ▼
-Extract Credentials ──────▶ Missing ──────▶ 401 Unauthorized
-     │
-     │ Present
-     ▼
-Validate Token ──────────▶ Invalid ──────▶ 401 Unauthorized
-     │
-     │ Valid
-     ▼
-Check Permissions ───────▶ Denied ───────▶ 403 Forbidden
-     │
-     │ Allowed
-     ▼
-Process Request ─────────▶ Response
-                </pre>
-            </div>
-        </section>
-
-        <section id="deployment" class="content-section">
-            <h2>Deployment Architecture</h2>
-            
-            <h3>Production Deployment with Docker Compose</h3>
-            <div class="code-block">
-                <code>version: '3.8'
-services:
-  ploinky:
-    image: ploinky/cloud:latest
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - NODE_ENV=production
-      - WORKERS=auto
-    deploy:
-      replicas: 3
-      restart_policy:
-        condition: on-failure</code>
-            </div>
-
-            <h3>Horizontal Scaling Architecture</h3>
-            <div class="architecture-diagram">
-                <pre>
-Load Balancer (nginx/haproxy)
-      │
-      ├──── Node 1 (8 workers)
-      ├──── Node 2 (8 workers)
-      └──── Node N (8 workers)
-            │
-            └──── Shared Storage (NFS/GlusterFS)
-                </pre>
-            </div>
-
-            <h3>Monitoring Stack</h3>
-            <div class="architecture-diagram">
-                <pre>
-Ploinky Metrics ──▶ Prometheus ──▶ Grafana
-      │                              │
-      └──▶ Logs ──▶ Loki ────────────┘
-                </pre>
-            </div>
-        </section>
-
-        <section id="future" class="content-section">
-            <h2>Future Roadmap</h2>
-            
-            <div class="component-grid">
-                <div class="component-card">
-                    <h3>📅 Short Term (3 months)</h3>
-                    <ul>
-                        <li>✅ Complete HTTP-based AgentCore</li>
-                        <li>⬜ WebSocket support for real-time</li>
-                        <li>⬜ Basic metrics dashboard</li>
-                        <li>⬜ Docker Compose import</li>
-                    </ul>
-                </div>
-
-                <div class="component-card">
-                    <h3>📅 Medium Term (6 months)</h3>
-                    <ul>
-                        <li>⬜ Distributed task queue (Redis)</li>
-                        <li>⬜ Multi-node clustering</li>
-                        <li>⬜ Agent marketplace</li>
-                        <li>⬜ Advanced monitoring</li>
-                    </ul>
-                </div>
-
-                <div class="component-card">
-                    <h3>📅 Long Term (12 months)</h3>
-                    <ul>
-                        <li>⬜ Kubernetes operator</li>
-                        <li>⬜ Service mesh integration</li>
-                        <li>⬜ Cloud provider adapters</li>
-                        <li>⬜ Enterprise features</li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-
-        <section class="content-section">
-            <h2>Design Patterns</h2>
-            
-            <table class="performance-table">
-                <thead>
-                    <tr>
-                        <th>Pattern</th>
-                        <th>Implementation</th>
-                        <th>Rationale</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td><strong>Strategy Pattern</strong></td>
-                        <td>Task Queue implementations</td>
-                        <td>Swap queue backends transparently</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Factory Pattern</strong></td>
-                        <td>Container runtime selection</td>
-                        <td>Docker/Podman abstraction</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Observer Pattern</strong></td>
-                        <td>File system watchers</td>
-                        <td>Event-driven task processing</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Singleton Pattern</strong></td>
-                        <td>Configuration manager</td>
-                        <td>Single source of truth</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Command Pattern</strong></td>
-                        <td>Task/Command objects</td>
-                        <td>Encapsulate operations</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Proxy Pattern</strong></td>
-                        <td>PloinkyClient</td>
-                        <td>Remote object access</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Chain of Responsibility</strong></td>
-                        <td>Request routing</td>
-                        <td>Layered request handling</td>
-                    </tr>
-                </tbody>
-            </table>
-        </section>
-
-        <section class="content-section">
-            <h2>Conclusion</h2>
-            <p>Ploinky represents a pragmatic approach to container orchestration, prioritizing developer experience and operational simplicity. The architecture is designed to evolve from simple file-based communication to sophisticated HTTP-based systems while maintaining backward compatibility and operational stability.</p>
-            
-            <div class="features">
-                <div class="feature-card">
-                    <h3>💡 Simplicity</h3>
-                    <p>Easy to understand and debug</p>
-                </div>
-                <div class="feature-card">
-                    <h3>🔄 Flexibility</h3>
-                    <p>Supports multiple deployment patterns</p>
-                </div>
-                <div class="feature-card">
-                    <h3>✅ Reliability</h3>
-                    <p>Fail-safe file-based operations</p>
-                </div>
-                <div class="feature-card">
-                    <h3>⚡ Performance</h3>
-                    <p>Efficient resource utilization</p>
-                </div>
-                <div class="feature-card">
-                    <h3>🔌 Extensibility</h3>
-                    <p>Plugin architecture for customization</p>
-                </div>
-                <div class="feature-card">
-                    <h3>🚀 Future-Proof</h3>
-                    <p>Progressive enhancement path</p>
-                </div>
-            </div>
-            
-            <p>This design ensures Ploinky can serve both small deployments requiring minimal overhead and large-scale systems demanding high performance and reliability.</p>
-        </section>
+        </div>
     </main>
 
-    <footer class="footer">
+    <footer>
         <div class="container">
-            <p>&copy; 2024 Ploinky Project. Open Source under MIT License.</p>
+            <p>&copy; 2024 Ploinky Project. Built with security and simplicity in mind.</p>
+            <p>
+                <a href="https://github.com/ploinky/ploinky">GitHub</a> • 
+                <a href="index.html">Home</a> • 
+                <a href="cli-reference.html">CLI Reference</a>
+            </p>
         </div>
     </footer>
+
+    <script>
+        // Theme toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        body.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+
+        // Highlight active section in sidebar
+        const sections = document.querySelectorAll('.doc-section[id]');
+        const navLinks = document.querySelectorAll('.sidebar a');
+        
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const rect = section.getBoundingClientRect();
+                if (rect.top <= 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
 </body>
 </html>

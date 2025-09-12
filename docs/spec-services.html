@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Services Specification - Ploinky</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="index.html" class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <span>Ploinky</span>
+                </a>
+                <nav>
+                    <ul>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="cli-reference.html">CLI Reference</a></li>
+                        <li><a href="spec-services.html" class="active">Services</a></li>
+                        <li><a href="spec-webtty.html">WebTTY</a></li>
+                        <li><a href="spec-cli.html">CLI Spec</a></li>
+                        <li><button class="theme-toggle" id="themeToggle">🌙</button></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="doc-layout">
+                <aside class="sidebar">
+                    <h3>Service Modules</h3>
+                    <ul>
+                        <li><a href="#workspace">Workspace Service</a></li>
+                        <li><a href="#docker">Docker Service</a></li>
+                        <li><a href="#repos">Repository Service</a></li>
+                        <li><a href="#agents">Agents Service</a></li>
+                        <li><a href="#secrets">Secrets Service</a></li>
+                        <li><a href="#routing">Routing Server</a></li>
+                        <li><a href="#bootstrap">Bootstrap Service</a></li>
+                        <li><a href="#utils">Utilities</a></li>
+                    </ul>
+                </aside>
+
+                <div class="content-wrapper">
+                    <div class="doc-section">
+                        <h1>Services Specification</h1>
+                        <p class="subtitle">Technical documentation for Ploinky's service layer implementation.</p>
+                    </div>
+
+                    <div class="doc-section" id="workspace">
+                        <h2>Workspace Service</h2>
+                        <p><strong>File:</strong> <code>cli/services/workspace.js</code></p>
+                        <p>Manages the .ploinky directory structure and workspace configuration.</p>
+                        
+                        <h3>Key Functions</h3>
+                        <pre><code>// Initialize workspace directory
+function ensureWorkspace() {
+    const PLOINKY_DIR = path.join(process.cwd(), '.ploinky');
+    fs.mkdirSync(PLOINKY_DIR, { recursive: true });
+    fs.mkdirSync(path.join(PLOINKY_DIR, 'repos'), { recursive: true });
+    fs.mkdirSync(path.join(PLOINKY_DIR, 'logs'), { recursive: true });
+    fs.mkdirSync(path.join(PLOINKY_DIR, 'running'), { recursive: true });
+}
+
+// Load agent registry
+function loadAgents() {
+    const agentsFile = path.join(PLOINKY_DIR, 'agents');
+    if (!fs.existsSync(agentsFile)) return {};
+    return JSON.parse(fs.readFileSync(agentsFile, 'utf8'));
+}
+
+// Save agent registry
+function saveAgents(agents) {
+    const agentsFile = path.join(PLOINKY_DIR, 'agents');
+    fs.writeFileSync(agentsFile, JSON.stringify(agents, null, 2));
+}
+
+// Get/set workspace configuration
+function getConfig() {
+    const agents = loadAgents();
+    return agents._config || {};
+}
+
+function setConfig(config) {
+    const agents = loadAgents();
+    agents._config = config;
+    saveAgents(agents);
+}</code></pre>
+
+                        <h3>Data Structure</h3>
+                        <pre><code>// .ploinky/agents file structure
+{
+    "_config": {
+        "static": {
+            "agent": "demo",
+            "port": 8088
+        }
+    },
+    "ploinky_project_abc123_agent_demo": {
+        "agentName": "demo",
+        "repoName": "demo",
+        "containerImage": "node:18-alpine",
+        "createdAt": "2024-01-01T00:00:00Z",
+        "projectPath": "/home/user/project",
+        "type": "agent",
+        "config": {
+            "binds": [...],
+            "env": [...],
+            "ports": [...]
+        }
+    }
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="docker">
+                        <h2>Docker Service</h2>
+                        <p><strong>File:</strong> <code>cli/services/docker.js</code></p>
+                        <p>Handles all container operations including lifecycle management, port mapping, and runtime detection.</p>
+                        
+                        <h3>Container Naming</h3>
+                        <pre><code>// Generate unique container names based on workspace
+function getAgentContainerName(agentName, repoName) {
+    const proj = path.basename(process.cwd())
+        .replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const wsid = crypto.createHash('sha256')
+        .update(process.cwd())
+        .digest('hex')
+        .substring(0, 6);
+    return `ploinky_${proj}_${wsid}_agent_${agentName}`;
+}
+
+function getServiceContainerName(agentName) {
+    // Similar but for service containers
+    return `ploinky_${proj}_${wsid}_service_${agentName}`;
+}</code></pre>
+
+                        <h3>Container Operations</h3>
+                        <pre><code>// Start agent container
+function ensureAgentService(agentName, manifest, agentPath) {
+    const containerName = getServiceContainerName(agentName);
+    const hostPort = findFreePort(7000, 7100);
+    
+    // Check if container exists
+    if (containerExists(containerName)) {
+        if (!isRunning(containerName)) {
+            startContainer(containerName);
+        }
+    } else {
+        createContainer({
+            name: containerName,
+            image: manifest.container,
+            binds: [
+                `${process.cwd()}:${process.cwd()}`,
+                `${agentPath}:/code`,
+                `/Agent:/Agent`
+            ],
+            ports: [`${hostPort}:7000`],
+            command: manifest.agent || '/Agent/AgentServer.js'
+        });
+    }
+    
+    return { containerName, hostPort };
+}
+
+// Interactive container access
+function attachInteractive(containerName, workdir, command) {
+    const runtime = getRuntime();
+    const args = [
+        'exec', '-it',
+        '-w', workdir,
+        containerName,
+        ...command.split(' ')
+    ];
+    
+    const child = spawn(runtime, args, {
+        stdio: 'inherit',
+        env: process.env
+    });
+    
+    return new Promise(resolve => {
+        child.on('exit', resolve);
+    });
+}</code></pre>
+
+                        <h3>Runtime Detection</h3>
+                        <pre><code>// Detect available container runtime
+function getRuntime() {
+    // Check for Docker
+    try {
+        execSync('docker --version', { stdio: 'ignore' });
+        return 'docker';
+    } catch {}
+    
+    // Check for Podman
+    try {
+        execSync('podman --version', { stdio: 'ignore' });
+        return 'podman';
+    } catch {}
+    
+    throw new Error('No container runtime (Docker/Podman) found');
+}
+
+// Port finding utility
+function findFreePort(start, end) {
+    for (let port = start; port <= end; port++) {
+        if (isPortFree(port)) return port;
+    }
+    throw new Error(`No free ports between ${start}-${end}`);
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="repos">
+                        <h2>Repository Service</h2>
+                        <p><strong>File:</strong> <code>cli/services/repos.js</code></p>
+                        <p>Manages agent repositories including predefined and custom repos.</p>
+                        
+                        <h3>Predefined Repositories</h3>
+                        <pre><code>const PREDEFINED_REPOS = {
+    basic: {
+        url: 'https://github.com/PloinkyBasic/basic.git',
+        description: 'Essential tools and shells'
+    },
+    cloud: {
+        url: 'https://github.com/PloinkyCloud/cloud.git',
+        description: 'Cloud provider integrations'
+    },
+    vibe: {
+        url: 'https://github.com/PloinkyVibe/vibe.git',
+        description: 'Social and communication tools'
+    },
+    security: {
+        url: 'https://github.com/PloinkySecurity/security.git',
+        description: 'Security and auth tools'
+    },
+    demo: {
+        url: 'https://github.com/PloinkyDemo/demo.git',
+        description: 'Example agents'
+    }
+};</code></pre>
+
+                        <h3>Repository Management</h3>
+                        <pre><code>// Add repository (clone or register)
+function addRepo(repoName, repoUrl) {
+    const repoPath = path.join(REPOS_DIR, repoName);
+    
+    if (fs.existsSync(repoPath)) {
+        return { status: 'exists' };
+    }
+    
+    // Check if predefined
+    if (PREDEFINED_REPOS[repoName]) {
+        repoUrl = repoUrl || PREDEFINED_REPOS[repoName].url;
+    }
+    
+    if (repoUrl) {
+        // Clone from Git
+        execSync(`git clone ${repoUrl} ${repoPath}`, {
+            stdio: 'inherit'
+        });
+    } else {
+        // Create empty repo
+        fs.mkdirSync(repoPath, { recursive: true });
+    }
+    
+    return { status: 'added' };
+}
+
+// Enable/disable repositories
+function enableRepo(repoName) {
+    const enabled = loadEnabledRepos();
+    if (!enabled.includes(repoName)) {
+        enabled.push(repoName);
+        saveEnabledRepos(enabled);
+    }
+}
+
+function getActiveRepos(reposDir) {
+    const enabled = loadEnabledRepos();
+    if (enabled.length > 0) return enabled;
+    
+    // If none enabled, return all installed
+    return fs.readdirSync(reposDir)
+        .filter(f => fs.statSync(path.join(reposDir, f)).isDirectory());
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="agents">
+                        <h2>Agents Service</h2>
+                        <p><strong>File:</strong> <code>cli/services/agents.js</code></p>
+                        <p>Handles agent registration and lifecycle management.</p>
+                        
+                        <h3>Agent Registration</h3>
+                        <pre><code>// Enable (register) an agent
+function enableAgent(agentName) {
+    // Find agent in repos
+    const { manifestPath, repo, shortAgentName } = findAgent(agentName);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const agentPath = path.dirname(manifestPath);
+    
+    // Generate container name
+    const containerName = getAgentContainerName(shortAgentName, repo);
+    
+    // Create registry record
+    const record = {
+        agentName: shortAgentName,
+        repoName: repo,
+        containerImage: manifest.container || 'node:18-alpine',
+        createdAt: new Date().toISOString(),
+        projectPath: process.cwd(),
+        type: 'agent',
+        config: {
+            binds: [
+                { source: process.cwd(), target: process.cwd() },
+                { source: '/Agent', target: '/Agent' },
+                { source: agentPath, target: '/code' }
+            ],
+            env: [],
+            ports: [{ containerPort: 7000 }]
+        }
+    };
+    
+    // Save to registry
+    const map = workspace.loadAgents();
+    map[containerName] = record;
+    workspace.saveAgents(map);
+    
+    return { containerName, repoName: repo, shortAgentName };
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="secrets">
+                        <h2>Secrets Service</h2>
+                        <p><strong>File:</strong> <code>cli/services/secretVars.js</code></p>
+                        <p>Manages environment variables and secrets with aliasing support.</p>
+                        
+                        <h3>Variable Management</h3>
+                        <pre><code>// Parse .secrets file
+function parseSecrets() {
+    const secretsFile = path.join(PLOINKY_DIR, '.secrets');
+    if (!fs.existsSync(secretsFile)) return {};
+    
+    const lines = fs.readFileSync(secretsFile, 'utf8').split('\n');
+    const vars = {};
+    
+    for (const line of lines) {
+        if (!line.trim() || line.startsWith('#')) continue;
+        const [key, ...valueParts] = line.split('=');
+        if (key) vars[key.trim()] = valueParts.join('=').trim();
+    }
+    
+    return vars;
+}
+
+// Set environment variable
+function setEnvVar(name, value) {
+    const vars = parseSecrets();
+    vars[name] = value;
+    saveSecrets(vars);
+}
+
+// Resolve variable with alias support
+function resolveVarValue(varName) {
+    const vars = parseSecrets();
+    let value = vars[varName];
+    
+    // Follow alias chain
+    const visited = new Set();
+    while (value && value.startsWith('$')) {
+        if (visited.has(value)) break; // Circular reference
+        visited.add(value);
+        const ref = value.substring(1);
+        value = vars[ref];
+    }
+    
+    return value;
+}</code></pre>
+
+                        <h3>Agent Environment Exposure</h3>
+                        <pre><code>// Update agent manifest with exposed variables
+function updateAgentExpose(manifestPath, exposedName, valueOrRef) {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    
+    manifest.env = manifest.env || [];
+    manifest.expose = manifest.expose || {};
+    
+    // Add to env list if not present
+    if (!manifest.env.includes(exposedName)) {
+        manifest.env.push(exposedName);
+    }
+    
+    // Set the mapping
+    manifest.expose[exposedName] = valueOrRef;
+    
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+}
+
+// Get exposed variables for agent
+function getExposedEnv(manifest) {
+    const result = [];
+    const expose = manifest.expose || {};
+    
+    for (const [name, valueOrRef] of Object.entries(expose)) {
+        const resolved = valueOrRef.startsWith('$') 
+            ? resolveVarValue(valueOrRef.substring(1))
+            : valueOrRef;
+        
+        if (resolved) {
+            result.push(`${name}=${resolved}`);
+        }
+    }
+    
+    return result;
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="routing">
+                        <h2>Routing Server</h2>
+                        <p><strong>File:</strong> <code>cli/server/RoutingServer.js</code></p>
+                        <p>HTTP reverse proxy that routes requests to agent containers.</p>
+                        
+                        <h3>Server Implementation</h3>
+                        <pre><code>const http = require('http');
+const httpProxy = require('http-proxy');
+const fs = require('fs');
+const path = require('path');
+
+// Load routing configuration
+const configPath = path.join(process.cwd(), '.ploinky/routing.json');
+const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+// Create proxy
+const proxy = httpProxy.createProxyServer({});
+
+// Create server
+const server = http.createServer((req, res) => {
+    const url = req.url;
+    
+    // API routing: /apis/{agent}/{path}
+    if (url.startsWith('/apis/')) {
+        const parts = url.substring(6).split('/');
+        const agentName = parts[0];
+        const apiPath = '/' + parts.slice(1).join('/');
+        
+        const route = config.routes[agentName];
+        if (route && route.hostPort) {
+            // Proxy to agent container
+            req.url = '/api' + apiPath;
+            proxy.web(req, res, {
+                target: `http://localhost:${route.hostPort}`
+            });
+        } else {
+            res.writeHead(404);
+            res.end('Agent not found');
+        }
+    }
+    // Static file serving
+    else if (config.static && config.static.hostPath) {
+        const filePath = path.join(config.static.hostPath, url);
+        
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            const stream = fs.createReadStream(filePath);
+            stream.pipe(res);
+        } else {
+            // Try index.html for directories
+            const indexPath = path.join(filePath, 'index.html');
+            if (fs.existsSync(indexPath)) {
+                fs.createReadStream(indexPath).pipe(res);
+            } else {
+                res.writeHead(404);
+                res.end('Not found');
+            }
+        }
+    }
+    else {
+        res.writeHead(404);
+        res.end('Not found');
+    }
+});
+
+// Error handling
+proxy.on('error', (err, req, res) => {
+    console.error('Proxy error:', err);
+    res.writeHead(502);
+    res.end('Bad Gateway');
+});
+
+// Start server
+const port = config.port || process.env.PORT || 8088;
+server.listen(port, () => {
+    console.log(`RoutingServer listening on port ${port}`);
+    console.log(`Static files: ${config.static?.hostPath || 'none'}`);
+    console.log(`API routes: ${Object.keys(config.routes).join(', ')}`);
+});</code></pre>
+
+                        <h3>Routing Configuration</h3>
+                        <pre><code>// .ploinky/routing.json
+{
+    "port": 8088,
+    "static": {
+        "agent": "demo",
+        "container": "ploinky_project_abc123_service_demo",
+        "hostPath": "/home/user/project/.ploinky/repos/demo/demo"
+    },
+    "routes": {
+        "agent1": {
+            "container": "ploinky_project_abc123_service_agent1",
+            "hostPort": 7001
+        },
+        "agent2": {
+            "container": "ploinky_project_abc123_service_agent2",
+            "hostPort": 7002
+        }
+    }
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="bootstrap">
+                        <h2>Bootstrap Service</h2>
+                        <p><strong>File:</strong> <code>cli/services/bootstrapManifest.js</code></p>
+                        <p>Handles manifest directives for auto-configuration.</p>
+                        
+                        <h3>Manifest Directives</h3>
+                        <pre><code>// Process manifest directives
+async function applyManifestDirectives(agentName) {
+    const { manifestPath } = findAgent(agentName);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    
+    // Auto-add repositories
+    if (manifest.repos) {
+        for (const [name, url] of Object.entries(manifest.repos)) {
+            console.log(`Auto-adding repo: ${name}`);
+            addRepo(name, url);
+        }
+    }
+    
+    // Auto-enable agents
+    if (manifest.enable && Array.isArray(manifest.enable)) {
+        for (const agent of manifest.enable) {
+            console.log(`Auto-enabling agent: ${agent}`);
+            try {
+                enableAgent(agent);
+            } catch (e) {
+                console.warn(`Could not enable ${agent}: ${e.message}`);
+            }
+        }
+    }
+    
+    // Process environment variables
+    if (manifest.env && Array.isArray(manifest.env)) {
+        for (const varName of manifest.env) {
+            if (!process.env[varName]) {
+                console.warn(`Required env var not set: ${varName}`);
+            }
+        }
+    }
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="utils">
+                        <h2>Utilities</h2>
+                        <p><strong>File:</strong> <code>cli/services/utils.js</code></p>
+                        <p>Common utility functions used across services.</p>
+                        
+                        <h3>Agent Discovery</h3>
+                        <pre><code>// Find agent in any repository
+function findAgent(agentName) {
+    const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
+    
+    // Check if repo/agent format
+    if (agentName.includes('/')) {
+        const [repo, name] = agentName.split('/');
+        const manifestPath = path.join(REPOS_DIR, repo, name, 'manifest.json');
+        if (fs.existsSync(manifestPath)) {
+            return { manifestPath, repo, shortAgentName: name };
+        }
+    }
+    
+    // Search all repos
+    const repos = fs.readdirSync(REPOS_DIR);
+    for (const repo of repos) {
+        const manifestPath = path.join(REPOS_DIR, repo, agentName, 'manifest.json');
+        if (fs.existsSync(manifestPath)) {
+            return { manifestPath, repo, shortAgentName: agentName };
+        }
+    }
+    
+    throw new Error(`Agent '${agentName}' not found in any repository`);
+}</code></pre>
+
+                        <h3>Console Formatting</h3>
+                        <pre><code>// ANSI color codes
+const ANSI = {
+    reset: '\x1b[0m',
+    bold: '\x1b[1m',
+    red: '\x1b[31m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    magenta: '\x1b[35m',
+    cyan: '\x1b[36m'
+};
+
+// Colorize text for terminal
+function colorize(text, color) {
+    const code = ANSI[color] || '';
+    return `${code}${text}${ANSI.reset}`;
+}
+
+// Debug logging
+function debugLog(...args) {
+    if (process.env.DEBUG) {
+        console.log('[DEBUG]', ...args);
+    }
+}</code></pre>
+
+                        <h3>Process Management</h3>
+                        <pre><code>// Check if process is running
+function isProcessRunning(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// Write PID file
+function writePidFile(name, pid) {
+    const pidFile = path.join(PLOINKY_DIR, 'running', `${name}.pid`);
+    fs.mkdirSync(path.dirname(pidFile), { recursive: true });
+    fs.writeFileSync(pidFile, String(pid));
+}
+
+// Read PID file
+function readPidFile(name) {
+    const pidFile = path.join(PLOINKY_DIR, 'running', `${name}.pid`);
+    if (!fs.existsSync(pidFile)) return null;
+    
+    const pid = parseInt(fs.readFileSync(pidFile, 'utf8'), 10);
+    return isNaN(pid) ? null : pid;
+}
+
+// Kill process by PID file
+function killByPidFile(name) {
+    const pid = readPidFile(name);
+    if (pid && isProcessRunning(pid)) {
+        process.kill(pid, 'SIGTERM');
+        return true;
+    }
+    return false;
+}</code></pre>
+                    </div>
+
+                    <div class="doc-section">
+                        <h2>Service Integration</h2>
+                        <p>Services work together to provide the complete Ploinky functionality:</p>
+                        
+                        <h3>Service Dependencies</h3>
+                        <pre><code>// Service dependency graph
+cli.js
+├── workspace.js      // Configuration storage
+├── docker.js         // Container management
+│   └── workspace.js  // Read agent registry
+├── repos.js          // Repository management
+│   └── workspace.js  // Store enabled repos
+├── agents.js         // Agent lifecycle
+│   ├── workspace.js  // Update registry
+│   ├── docker.js     // Create containers
+│   └── utils.js      // Find agents
+├── secretVars.js     // Environment variables
+│   └── workspace.js  // Store in .secrets
+└── bootstrapManifest.js  // Auto-configuration
+    ├── repos.js      // Add repositories
+    └── agents.js     // Enable agents</code></pre>
+
+                        <h3>Typical Flow</h3>
+                        <ol style="margin-left: 2rem;">
+                            <li><strong>Workspace Init:</strong> workspace.js creates .ploinky structure</li>
+                            <li><strong>Repo Add:</strong> repos.js clones/registers repositories</li>
+                            <li><strong>Agent Enable:</strong> agents.js registers in workspace</li>
+                            <li><strong>Container Start:</strong> docker.js creates/starts containers</li>
+                            <li><strong>Route Setup:</strong> RoutingServer.js configures proxying</li>
+                            <li><strong>Service Run:</strong> Agents serve API endpoints</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Ploinky Project. Built with security and simplicity in mind.</p>
+            <p>
+                <a href="https://github.com/ploinky/ploinky">GitHub</a> • 
+                <a href="index.html">Home</a> • 
+                <a href="cli-reference.html">CLI Reference</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Theme toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        body.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+
+        // Highlight active section
+        const sections = document.querySelectorAll('.doc-section[id]');
+        const navLinks = document.querySelectorAll('.sidebar a');
+        
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const rect = section.getBoundingClientRect();
+                if (rect.top <= 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
