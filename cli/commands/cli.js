@@ -479,8 +479,7 @@ async function runConsole(...cmdTokens) {
             port = (!Number.isNaN(v) && v > 0) ? v : 9001;
         }
     } catch(_) { port = (mode === 'chat') ? 8080 : 9001; }
-    let title = 'Local Console';
-    try { const env = require('../services/secretVars'); const t = env.resolveVarValue('WEBTTY_TITLE'); if (t && String(t).trim()) title = String(t); } catch(_) {}
+    const title = '';
 
     const { createLocalTTYFactory } = require('../webtty/tty');
     const { startWebTTYServer } = require('../webtty/server');
@@ -740,7 +739,7 @@ async function handleCommand(args) {
             else showHelp();
             break;
         case 'set': {
-            const defaults = ['WEBTTY_PORT', 'WEBCHAT_PORT', 'WEBDASHBOARD_PORT', 'WEBTTY_TITLE', 'APP_NAME', 'WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
+            const defaults = ['WEBTTY_PORT', 'WEBCHAT_PORT', 'WEBDASHBOARD_PORT', 'APP_NAME', 'WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
             if (!options[0]) {
                 try {
                     const env = require('../services/secretVars');
@@ -766,7 +765,7 @@ async function handleCommand(args) {
                     }
                     // Reload and print
                     const merged = env.parseSecrets();
-                    const printOrder = ['APP_NAME', 'WEBCHAT_PORT', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_PORT', 'WEBDASHBOARD_TOKEN', 'WEBTTY_PORT', 'WEBTTY_TITLE', 'WEBTTY_TOKEN'];
+                    const printOrder = ['APP_NAME', 'WEBCHAT_PORT', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_PORT', 'WEBDASHBOARD_TOKEN', 'WEBTTY_PORT', 'WEBTTY_TOKEN'];
                     const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
                     keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
                 } catch (e) { console.error('Failed to list variables:', e.message); }

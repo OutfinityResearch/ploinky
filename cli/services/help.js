@@ -19,11 +19,11 @@ function showHelp(args = []) {
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
-  webconsole <password> [command...] Start Console server (synonym: webtty)
-  webtty <password> [command...]     Start Console server (xterm)
-  webchat <password> [command...]    Start Chat server
-  dashboard <password>               Start Dashboard server
-  admin-mode <password> [command...] Start console+chat+dashboard servers
+  webconsole [command...]            Start Console server (synonym: webtty)
+  webtty [command...]                Start Console server (xterm)
+  webchat [command...]               Start Chat server
+  dashboard                          Start Dashboard server
+  admin-mode [command...]            Start console+chat+dashboard servers
   set <VAR> <$VAR|value>         Set a variable value or alias another variable
   set                            List all variable names (no values)
   echo <VAR|$VAR>                Print the resolved value of a variable
@@ -78,12 +78,12 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             examples: [
                 'set WEBTTY_PORT 9000  # Full UI port',
                 'set WEBCHAT_PORT 8080 # Chat-only port',
-                'set WEBTTY_TITLE Local Console',
+                // 'set WEBTTY_TITLE' removed (title is auto-computed)
                 'set API_KEY sk-123456',
                 'set PROD_KEY $API_KEY',
                 'set'
             ],
-            notes: 'Running set with no args lists variables. Predefined: WEBTTY_PORT, WEBCHAT_PORT, WEBTTY_TITLE.'
+            notes: 'Running set with no args lists variables. Predefined: WEBTTY_PORT, WEBCHAT_PORT.'
         },
         
         'new': {

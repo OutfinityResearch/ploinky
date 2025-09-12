@@ -44,11 +44,39 @@
   (async () => { if (requiresAuth && !(await fetch('/whoami').then(r => r.ok).catch(()=>false))) location.href = '/'; })();
 
   // --- Side Panel Logic ---
-  function openSidePanel(bubble, fullText) {
-    sidePanelContent.textContent = fullText;
+  function getPanelWrapper() { return document.querySelector('.wa-side-panel-content'); }
+
+  function showTextInPanel(text) {
+    const wrap = getPanelWrapper();
+    if (!wrap) return;
+    wrap.innerHTML = '<pre id="sidePanelContent"></pre>';
+    const el = document.getElementById('sidePanelContent');
+    if (el) el.textContent = text;
     sidePanel.style.display = 'flex';
     chatContainer.classList.add('side-panel-open');
+  }
+
+  function openSidePanel(bubble, fullText) {
+    showTextInPanel(fullText);
     activeSidePanelBubble = bubble;
+  }
+
+  function openIframe(url) {
+    try {
+      const wrap = getPanelWrapper();
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      const frame = document.createElement('iframe');
+      frame.src = url;
+      frame.style.border = '0';
+      frame.style.width = '100%';
+      frame.style.height = '100%';
+      frame.referrerPolicy = 'no-referrer';
+      frame.loading = 'lazy';
+      wrap.appendChild(frame);
+      sidePanel.style.display = 'flex';
+      chatContainer.classList.add('side-panel-open');
+    } catch(_) {}
   }
 
   function closeSidePanel() {
@@ -87,7 +115,8 @@
           <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M11.071.653a.5.5 0 0 0-.707.707l3.289 3.289a.5.5 0 0 0 .707 0L15.354 3.656a.5.5 0 0 0-.707-.707L14 3.596 11.071.653zm-4.207 0a.5.5 0 0 0-.707.707l3.289 3.289a.5.5 0 0 0 .707 0l.994-.993a.5.5 0 0 0-.707-.707L9.793 3.596 6.864.653z"/></svg>
         </span>
       </div>`;
-    msgDiv.querySelector('.wa-message-text').textContent = text;
+    const textDiv = msgDiv.querySelector('.wa-message-text');
+    textDiv.appendChild(linkify(text));
     chatList.appendChild(msgDiv);
     chatList.scrollTop = chatList.scrollHeight;
     lastServerMsg.bubble = null; // Reset server message grouping
@@ -101,7 +130,9 @@
     const textDiv = bubble.querySelector('.wa-message-text');
     const moreDiv = bubble.querySelector('.wa-message-more');
 
-    textDiv.textContent = preview;
+    // linkify preview
+    textDiv.innerHTML = '';
+    textDiv.appendChild(linkify(preview));
 
     if (hasMore && !moreDiv) {
       const more = document.createElement('div');
@@ -114,7 +145,8 @@
     }
 
     if (activeSidePanelBubble === bubble) {
-      sidePanelContent.textContent = fullText;
+      const el = document.getElementById('sidePanelContent');
+      if (el) el.textContent = fullText;
     }
   }
 
@@ -167,6 +199,37 @@
 
   let es;
   let chatBuffer = '';
+
+  function linkify(text) {
+    const frag = document.createDocumentFragment();
+    const urlRe = /(https?:\/\/[\w\-._~:\/?#\[\]@!$&'()*+,;=%]+)/gi;
+    let lastIndex = 0;
+    let m;
+    while ((m = urlRe.exec(text)) !== null) {
+      const before = text.slice(lastIndex, m.index);
+      if (before) frag.appendChild(document.createTextNode(before));
+      const rawUrl = m[0];
+      const a = document.createElement('a');
+      a.href = rawUrl;
+      try {
+        const u = new URL(rawUrl);
+        const host = u.host;
+        const path = (u.pathname || '/') + (u.search || '') + (u.hash || '');
+        a.textContent = `Link towards ${path} on domain ${host}`;
+        a.title = rawUrl;
+      } catch(_) {
+        a.textContent = rawUrl;
+      }
+      a.style.color = 'var(--wa-accent)';
+      a.style.textDecoration = 'underline';
+      a.addEventListener('click', (e) => { e.preventDefault(); openIframe(rawUrl); });
+      frag.appendChild(a);
+      lastIndex = m.index + rawUrl.length;
+    }
+    const rest = text.slice(lastIndex);
+    if (rest) frag.appendChild(document.createTextNode(rest));
+    return frag;
+  }
 
   function stripCtrlAndAnsi(s) {
     try {
