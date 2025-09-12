@@ -1,4 +1,5 @@
 (() => {
+  const TAB_ID = crypto.randomUUID();
   const body = document.body;
   const title = body.dataset.title || body.dataset.agent || 'Console';
   const requiresAuth = body.dataset.auth === 'true';
@@ -21,15 +22,15 @@
   function setTheme(t) { 
     document.body.setAttribute('data-theme', t); 
     localStorage.setItem('webtty_theme', t); 
-    try { 
-      const termBg = t === 'dark' ? '#0a0b0d' : '#1e2329';
-      term?.setOption('theme', { background: termBg }); 
+    try {
+      term?.setOption('theme', t === 'dark' ? darkTheme : lightTheme);
     } catch(_) {}
   }
   
   themeToggle.onclick = () => { 
     const cur = getTheme(); 
     setTheme(cur === 'dark' ? 'light' : 'dark'); 
+    location.reload();
   };
   
   setTheme(getTheme());
@@ -64,6 +65,50 @@
 
   // xterm
   let term, fitAddon;
+
+  const darkTheme = {
+    background: '#0a0b0d',
+    foreground: '#e9edef',
+    cursor: '#e9edef',
+    black: '#000000',
+    red: '#cd3131',
+    green: '#0dbc79',
+    yellow: '#e5e510',
+    blue: '#2472c8',
+    magenta: '#bc3fbc',
+    cyan: '#11a8cd',
+    white: '#e5e5e5',
+    brightBlack: '#666666',
+    brightRed: '#f14c4c',
+    brightGreen: '#23d18b',
+    brightYellow: '#f5f543',
+    brightBlue: '#3b8eea',
+    brightMagenta: '#d670d6',
+    brightCyan: '#29b8db',
+    brightWhite: '#e5e5e5'
+  };
+
+  const lightTheme = {
+    background: '#ffffff',
+    foreground: '#111b21',
+    cursor: '#111b21',
+    black: '#000000',
+    red: '#cd3131',
+    green: '#05a369',
+    yellow: '#b58900',
+    blue: '#2472c8',
+    magenta: '#bc3fbc',
+    cyan: '#11a8cd',
+    white: '#333333',
+    brightBlack: '#666666',
+    brightRed: '#f14c4c',
+    brightGreen: '#05a369',
+    brightYellow: '#b58900',
+    brightBlue: '#2472c8',
+    brightMagenta: '#bc3fbc',
+    brightCyan: '#11a8cd',
+    brightWhite: '#000000'
+  };
   
   function initConsole() { 
     const termEl = document.getElementById('term'); 
@@ -71,32 +116,10 @@
     const FitAddon = window.FitAddon.FitAddon; 
     const WebLinksAddon = window.WebLinksAddon.WebLinksAddon; 
     
-    const termBg = getTheme() === 'dark' ? '#0a0b0d' : '#1e2329';
-    
     term = new Terminal({ 
       fontFamily: 'Menlo, Monaco, Consolas, monospace', 
       fontSize: 13, 
-      theme: { 
-        background: termBg,
-        foreground: '#e9edef',
-        cursor: '#e9edef',
-        black: '#000000',
-        red: '#cd3131',
-        green: '#0dbc79',
-        yellow: '#e5e510',
-        blue: '#2472c8',
-        magenta: '#bc3fbc',
-        cyan: '#11a8cd',
-        white: '#e5e5e5',
-        brightBlack: '#666666',
-        brightRed: '#f14c4c',
-        brightGreen: '#23d18b',
-        brightYellow: '#f5f543',
-        brightBlue: '#3b8eea',
-        brightMagenta: '#d670d6',
-        brightCyan: '#29b8db',
-        brightWhite: '#e5e5e5'
-      }, 
+      theme: getTheme() === 'dark' ? darkTheme : lightTheme, 
       cursorBlink: true, 
       cursorStyle: 'bar', 
       allowProposedApi: true, 
@@ -110,7 +133,7 @@
     term.loadAddon(fitAddon); 
     term.loadAddon(links); 
     term.open(termEl); 
-    term.focus(); 
+    // do not focus by default; only on click
     
     try { 
       fitAddon.fit(); 
@@ -118,6 +141,17 @@
     
     sizeEl.textContent = term.rows + ' × ' + term.cols; 
     termEl.addEventListener('mousedown', () => term.focus()); 
+    // Observe container size changes (more robust than window resize only)
+    /* Loop detected, disabling ResizeObserver
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(() => {
+        try { fitAddon.fit(); } catch(_) {}
+        // Also notify server on true size change
+        try { sendResize(); } catch(_) {}
+      });
+      ro.observe(termEl);
+    }
+    */
   }
   
   function sendResize() { 
@@ -129,7 +163,7 @@
     const rows = term.rows; 
     sizeEl.textContent = rows + ' × ' + cols; 
     
-    fetch('/resize', { 
+    fetch(`/resize?tabId=${TAB_ID}`, { 
       method: 'POST', 
       headers: {'Content-Type': 'application/json'}, 
       body: JSON.stringify({ cols, rows }) 
@@ -141,7 +175,7 @@
     setTimeout(sendResize, 120); 
     
     term.onData(data => { 
-      fetch('/input', { 
+      fetch(`/input?tabId=${TAB_ID}`, { 
         method: 'POST', 
         headers: {'Content-Type': 'text/plain'}, 
         body: data 
@@ -158,7 +192,7 @@
       es?.close?.(); 
     } catch(_) {} 
     
-    es = new EventSource('/stream'); 
+    es = new EventSource(`/stream?tabId=${TAB_ID}`); 
     
     es.onopen = () => { 
       statusEl.textContent = 'connected';

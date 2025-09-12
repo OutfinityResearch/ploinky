@@ -24,6 +24,17 @@
       font-size: 13px;
       color: var(--wa-text-secondary);
     }
+
+    .wa-terminal-footer {
+      padding: 8px 16px;
+      background: var(--wa-bg-panel);
+      border-top: 1px solid var(--wa-border);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 13px;
+      color: var(--wa-text-secondary);
+    }
     
     .wa-terminal-info-item {
       display: flex;
@@ -42,7 +53,7 @@
     }
     
     body[data-theme="light"] #term {
-      background: #1e2329;
+      background: #ffffff;
     }
   </style>
   <script src="https://unpkg.com/xterm/lib/xterm.js"></script>
@@ -95,6 +106,10 @@
     </div>
     
     <div id="term"></div>
+
+    <div class="wa-terminal-footer">
+      <span>&nbsp;</span>
+    </div>
   </div>
 
   <script src="/assets/console.js"></script>

@@ -94,7 +94,8 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttyFactory
           if (password && body.password === password) {
             const sid = crypto.randomBytes(32).toString('hex');
             sessions.add(sid);
-            if (!clientSessions.has(sid)) clientSessions.set(sid, { tty: null, sseRes: null, hb: null, unsub: null });
+            // Each session ID can have multiple tab sessions
+            if (!clientSessions.has(sid)) clientSessions.set(sid, new Map());
             res.writeHead(200, { 'Set-Cookie': `${COOKIE_NAME}=${sid}; Path=/; HttpOnly; SameSite=Strict` }); res.end('{"ok":true}');
           } else { res.statusCode = 403; res.end('Forbidden'); }
         } catch { res.statusCode = 400; res.end('Bad Request'); }
@@ -103,15 +104,18 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttyFactory
       try {
         const cookies = parseCookies(req.headers['cookie']); const sid = cookies[COOKIE_NAME];
         if (sid && sessions.has(sid)) {
-          sessions.delete(sid);
-          const sess = clientSessions.get(sid);
-          if (sess) {
-            try { sess.unsub?.(); } catch(_){}
-            try { clearInterval(sess.hb); } catch(_){}
-            try { sess.sseRes?.end?.(); } catch(_){}
-            try { sess.tty?.close?.(); } catch(_){}
-            clientSessions.delete(sid);
+          // Clear all TTYs for this auth session
+          const tabSessions = clientSessions.get(sid);
+          if (tabSessions) {
+            for (const sess of tabSessions.values()) {
+              try { sess.unsub?.(); } catch(_){}
+              try { clearInterval(sess.hb); } catch(_){}
+              try { sess.sseRes?.end?.(); } catch(_){}
+              try { sess.tty?.close?.(); } catch(_){}
+            }
           }
+          clientSessions.delete(sid);
+          sessions.delete(sid);
         }
       } catch(_) {}
       res.writeHead(204); res.end();
@@ -125,29 +129,78 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttyFactory
       if (!authorized(req)) return deny(res);
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write(': connected\n\n');
-      const cookies = parseCookies(req.headers['cookie']); const sid = cookies[COOKIE_NAME];
-      try { const prev = clientSessions.get(sid); if (prev && prev.sseRes && prev.sseRes !== res) { try { prev.sseRes.end(); } catch(_){} } } catch(_){}
-      const t = setInterval(() => { try { res.write(': ping\n\n'); } catch(_){} }, 15000); clients.set(res, t);
-      appendLog('sse_open', { ip });
-      let sess = clientSessions.get(sid);
-      if (!sess) { sess = { tty: null, sseRes: null, hb: null, unsub: null }; clientSessions.set(sid, sess); }
-      if (!sess.tty) { sess.tty = ttyFactory.create(); }
+      const cookies = parseCookies(req.headers['cookie']);
+      const sid = cookies[COOKIE_NAME];
+      const tabId = u.searchParams.get('tabId');
+
+      if (!sid || !tabId) { return deny(res); }
+
+      const tabSessions = clientSessions.get(sid);
+      if (!tabSessions) { return deny(res); } // Should have been created at auth
+
+      // Get or create the session for this specific tab
+      let sess = tabSessions.get(tabId);
+      if (!sess) {
+        sess = { tty: ttyFactory.create(), sseRes: null, hb: null, unsub: null };
+        tabSessions.set(tabId, sess);
+      }
+
+      // Clean up previous connection for this tab if it exists
+      try { sess.sseRes?.end?.(); } catch(_){}
+      try { clearInterval(sess.hb); } catch(_){}
+
+      const t = setInterval(() => { try { res.write(': ping\n\n'); } catch(_){} }, 15000);
+      appendLog('sse_open', { ip, sid, tabId });
+
+      // Unsubscribe old output handler and subscribe new one
       try { sess.unsub?.(); } catch(_){}
       const unsub = sess.tty.onOutput((d)=>{ try { res.write('data: ' + JSON.stringify(String(d||'')) + '\n\n'); } catch(_){} });
-      sess.unsub = unsub; sess.sseRes = res; sess.hb = t;
+      
+      // Update session with new connection details
+      sess.unsub = unsub; 
+      sess.sseRes = res; 
+      sess.hb = t;
+
       req.on('close', () => {
-        try { clearInterval(t); clients.delete(res); } catch(_){}
-        try { const s = clientSessions.get(sid); if (s) { try { s.unsub?.(); } catch(_){} s.unsub = null; s.sseRes = null; s.hb = null; } } catch(_){}
-        appendLog('sse_close', { ip });
+        try { clearInterval(t); } catch(_){}
+        // When SSE closes, we don't kill the TTY, just detach.
+        // The TTY process will be killed on /logout or server shutdown.
+        if (sess) {
+          try { sess.unsub?.(); } catch(_){}
+          sess.unsub = null;
+          sess.sseRes = null;
+          sess.hb = null;
+        }
+        appendLog('sse_close', { ip, sid, tabId });
       });
     } else if (req.url.startsWith('/input') && req.method === 'POST') {
       if (MODE === 'dashboard') { res.statusCode = 404; return res.end('Not found'); }
       if (!authorized(req)) return deny(res);
-      const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => { const data = Buffer.concat(chunks).toString('utf8'); try { const cookies = parseCookies(req.headers['cookie']); const sid = cookies[COOKIE_NAME]; const sess = clientSessions.get(sid); sess?.tty?.write?.(data); } catch(_){} res.writeHead(204); res.end(); });
+      const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => { 
+        const data = Buffer.concat(chunks).toString('utf8'); 
+        try { 
+          const cookies = parseCookies(req.headers['cookie']); 
+          const sid = cookies[COOKIE_NAME];
+          const tabId = u.searchParams.get('tabId');
+          const sess = clientSessions.get(sid)?.get(tabId);
+          sess?.tty?.write?.(data); 
+        } catch(_){} 
+        res.writeHead(204); res.end(); 
+      });
     } else if (req.url.startsWith('/resize') && req.method === 'POST') {
       if (MODE === 'dashboard') { res.statusCode = 404; return res.end('Not found'); }
       if (!authorized(req)) return deny(res);
-      const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => { try { const { cols, rows } = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); try { const cookies = parseCookies(req.headers['cookie']); const sid = cookies[COOKIE_NAME]; const sess = clientSessions.get(sid); sess?.tty?.resize?.(cols, rows); } catch(_){} } catch(_){} res.writeHead(204); res.end(); });
+      const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => { 
+        try { 
+          const { cols, rows } = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); 
+          const cookies = parseCookies(req.headers['cookie']); 
+          const sid = cookies[COOKIE_NAME];
+          const tabId = u.searchParams.get('tabId');
+          const sess = clientSessions.get(sid)?.get(tabId);
+          sess?.tty?.resize?.(cols, rows); 
+        } catch(_){} 
+        res.writeHead(204); res.end(); 
+      });
     } else if (pathname.startsWith('/run')) {
       if (MODE !== 'dashboard') { res.statusCode = 404; return res.end('Not found'); }
       if (!authorized(req)) return deny(res);
