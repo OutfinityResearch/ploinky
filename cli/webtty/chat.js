@@ -14,9 +14,12 @@
   const cmdInput = document.getElementById('cmd');
   const sendBtn = document.getElementById('send');
   const chatContainer = document.getElementById('chatContainer');
+  const chatArea = document.getElementById('chatArea');
   const sidePanel = document.getElementById('sidePanel');
   const sidePanelContent = document.getElementById('sidePanelContent');
   const sidePanelClose = document.getElementById('sidePanelClose');
+  const sidePanelTitle = document.querySelector('.wa-side-panel-title');
+  const sidePanelResizer = document.getElementById('sidePanelResizer');
 
   // --- State ---
   const requiresAuth = body.dataset.auth === 'true';
@@ -46,12 +49,76 @@
   // --- Side Panel Logic ---
   function getPanelWrapper() { return document.querySelector('.wa-side-panel-content'); }
 
+  function clearPanelTitle() {
+    if (!sidePanelTitle) return;
+    sidePanelTitle.textContent = '';
+    // Remove any children (e.g., anchors)
+    try { while (sidePanelTitle.firstChild) sidePanelTitle.removeChild(sidePanelTitle.firstChild); } catch(_){}
+  }
+
+  function setPanelTitleText(text) {
+    if (!sidePanelTitle) return;
+    clearPanelTitle();
+    sidePanelTitle.textContent = text || '';
+  }
+
+  function setPanelTitleLink(url) {
+    if (!sidePanelTitle) return;
+    clearPanelTitle();
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = url;
+    a.title = url;
+    a.style.color = 'var(--wa-accent)';
+    a.style.textDecoration = 'none';
+    a.style.wordBreak = 'break-all';
+    a.style.overflowWrap = 'anywhere';
+    a.style.fontFamily = "Menlo, Monaco, Consolas, monospace";
+    a.style.fontSize = '13px';
+    // Small external-link icon
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.setAttribute('width', '16');
+    icon.setAttribute('height', '16');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.style.marginLeft = '6px';
+    icon.style.verticalAlign = 'text-bottom';
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('fill', 'currentColor');
+    path.setAttribute('d', 'M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14V3z M19 19H5V5h7V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z');
+    icon.appendChild(path);
+    // Copy button
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.title = 'Copy link';
+    copyBtn.className = 'wa-copy-btn';
+    copyBtn.onclick = async (e) => {
+      e.preventDefault();
+      try {
+        await navigator.clipboard.writeText(url);
+        copyBtn.classList.add('ok');
+        copyBtn.title = 'Copied';
+        setTimeout(() => { copyBtn.classList.remove('ok'); copyBtn.title = 'Copy link'; }, 1000);
+      } catch(_) {}
+    };
+    copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
+    const wrap = document.createElement('span');
+    wrap.style.display = 'inline-flex';
+    wrap.style.alignItems = 'center';
+    wrap.appendChild(a);
+    wrap.appendChild(icon);
+    wrap.appendChild(copyBtn);
+    sidePanelTitle.appendChild(wrap);
+  }
+
   function showTextInPanel(text) {
     const wrap = getPanelWrapper();
     if (!wrap) return;
     wrap.innerHTML = '<pre id="sidePanelContent"></pre>';
     const el = document.getElementById('sidePanelContent');
     if (el) el.textContent = text;
+    setPanelTitleText('Full Message');
     sidePanel.style.display = 'flex';
     chatContainer.classList.add('side-panel-open');
   }
@@ -59,6 +126,7 @@
   function openSidePanel(bubble, fullText) {
     showTextInPanel(fullText);
     activeSidePanelBubble = bubble;
+    applyPanelSizeFromStorage();
   }
 
   function openIframe(url) {
@@ -66,6 +134,12 @@
       const wrap = getPanelWrapper();
       if (!wrap) return;
       wrap.innerHTML = '';
+      const holder = document.createElement('div');
+      holder.className = 'wa-iframe-wrap';
+      holder.style.position = 'relative';
+      holder.style.width = '100%';
+      holder.style.height = '100%';
+
       const frame = document.createElement('iframe');
       frame.src = url;
       frame.style.border = '0';
@@ -73,9 +147,31 @@
       frame.style.height = '100%';
       frame.referrerPolicy = 'no-referrer';
       frame.loading = 'lazy';
-      wrap.appendChild(frame);
+
+      const overlay = document.createElement('div');
+      overlay.className = 'wa-iframe-error';
+      overlay.style.display = 'none';
+      overlay.innerHTML = `
+        <div class="wa-iframe-error-card">
+          <div class="wa-iframe-error-title">Cannot display this site in an embedded view</div>
+          <div class="wa-iframe-error-text">It may be blocked by X-Frame-Options or Content Security Policy.</div>
+          <div class="wa-iframe-error-actions">
+            <a class="wa-btn" href="${url}" target="_blank" rel="noopener noreferrer">Open in new tab</a>
+          </div>
+        </div>`;
+
+      holder.appendChild(frame);
+      holder.appendChild(overlay);
+      wrap.appendChild(holder);
+
+      let loaded = false;
+      frame.addEventListener('load', () => { loaded = true; overlay.style.display = 'none'; });
+      setTimeout(() => { if (!loaded) overlay.style.display = 'flex'; }, 2500);
+
+      setPanelTitleLink(url);
       sidePanel.style.display = 'flex';
       chatContainer.classList.add('side-panel-open');
+      applyPanelSizeFromStorage();
     } catch(_) {}
   }
 
@@ -86,6 +182,75 @@
   }
 
   sidePanelClose.onclick = closeSidePanel;
+
+  // --- Resizer logic ---
+  const PANEL_SIZE_KEY = 'webchat_sidepanel_pct';
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  function applyPanelSize(pct) {
+    const p = clamp(pct, 20, 80);
+    if (sidePanel) {
+      sidePanel.style.flex = `0 0 ${p}%`;
+      sidePanel.style.maxWidth = 'unset';
+      sidePanel.style.width = `${p}%`;
+    }
+    if (chatArea) {
+      const leftPct = 100 - p;
+      chatArea.style.flex = `0 0 auto`;
+      chatArea.style.width = `calc(${leftPct}% - 6px)`; // minus resizer width
+    }
+  }
+  function applyPanelSizeFromStorage() {
+    try {
+      const saved = parseFloat(localStorage.getItem(PANEL_SIZE_KEY) || '40');
+      applyPanelSize(Number.isFinite(saved) ? saved : 40);
+    } catch(_) { applyPanelSize(40); }
+  }
+  (function initResizer(){
+    if (!sidePanelResizer) return;
+    let dragging = false;
+    let startX = 0; let containerW = 0; let startPanelW = 0; let raf = 0; let nextPct = null;
+    function scheduleApply(p){
+      nextPct = p;
+      if (raf) return;
+      raf = requestAnimationFrame(()=>{ if (nextPct!=null) applyPanelSize(nextPct); raf = 0; nextPct = null; });
+    }
+    function onDown(e){
+      try { e.preventDefault(); } catch(_){}
+      dragging = true;
+      chatContainer.classList.add('dragging');
+      startX = e.clientX;
+      try { sidePanelResizer.setPointerCapture(e.pointerId); } catch(_){}
+      const rects = chatContainer.getBoundingClientRect();
+      containerW = rects.width;
+      startPanelW = sidePanel.getBoundingClientRect().width;
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp, { once: true });
+      window.addEventListener('pointercancel', onUp, { once: true });
+    }
+    function onMove(e){
+      if (!dragging) return;
+      try { e.preventDefault(); } catch(_){}
+      const dx = e.clientX - startX;
+      const newWidth = clamp(startPanelW - dx, containerW * 0.2, containerW * 0.8);
+      const pct = (newWidth / containerW) * 100;
+      scheduleApply(pct);
+    }
+    function onUp(e){
+      if (!dragging) return;
+      dragging = false;
+      chatContainer.classList.remove('dragging');
+      try { sidePanelResizer.releasePointerCapture(e.pointerId); } catch(_){}
+      window.removeEventListener('pointermove', onMove);
+      // Persist size
+      try {
+        const panelRect = sidePanel.getBoundingClientRect();
+        const contRect = chatContainer.getBoundingClientRect();
+        const pct = clamp((panelRect.width / contRect.width) * 100, 20, 80);
+        localStorage.setItem(PANEL_SIZE_KEY, String(pct.toFixed(1)));
+      } catch(_) {}
+    }
+    sidePanelResizer.addEventListener('pointerdown', onDown);
+  })();
 
   // --- Composer & Message UI ---
   const MAX_TXT_PX = 72;
@@ -200,6 +365,50 @@
   let es;
   let chatBuffer = '';
 
+  function formatLinkText(rawUrl) {
+    try {
+      const u = new URL(rawUrl);
+      // Domain without port and without leading www.
+      let domain = u.hostname || '';
+      if (domain.startsWith('www.')) domain = domain.slice(4);
+      // Build a short, readable path summary
+      const rawPath = (u.pathname || '/').replace(/\/+$/,'') || '/';
+      const path = decodeURIComponent(rawPath);
+      const segs = path.split('/').filter(Boolean);
+      const short = (s, n) => (s.length > n ? (s.slice(0, Math.max(1, n-1)) + '…') : s);
+      let shortPath = '/';
+      if (segs.length === 1) {
+        shortPath = '/' + short(segs[0], 18);
+      } else if (segs.length === 2) {
+        shortPath = '/' + short(segs[0], 12) + '/' + short(segs[1], 12);
+      } else if (segs.length >= 3) {
+        shortPath = '/' + short(segs[0], 10) + '/…/' + short(segs[segs.length - 1], 14);
+      }
+
+      // Prefer a meaningful query hint (id or q)
+      let hint = '';
+      try {
+        const qp = new URLSearchParams(u.search || '');
+        const id = qp.get('id');
+        const q = qp.get('q');
+        if (id) hint = ` ?id=${short(id, 12)}`;
+        else if (q) hint = ` ?q=${short(q, 12)}`;
+      } catch(_) {}
+
+      // Optional hash hint
+      if (u.hash) {
+        const h = u.hash.replace(/^#/, '');
+        if (h) hint += ` #${short(h, 12)}`;
+      }
+
+      const labelPath = (shortPath === '/') ? '' : shortPath;
+      const sep = hint ? ' ' : '';
+      return `Open ${domain}${labelPath}${sep}${hint}`;
+    } catch(_) {
+      return rawUrl;
+    }
+  }
+
   function linkify(text) {
     const frag = document.createDocumentFragment();
     const urlRe = /(https?:\/\/[\w\-._~:\/?#\[\]@!$&'()*+,;=%]+)/gi;
@@ -211,15 +420,8 @@
       const rawUrl = m[0];
       const a = document.createElement('a');
       a.href = rawUrl;
-      try {
-        const u = new URL(rawUrl);
-        const host = u.host;
-        const path = (u.pathname || '/') + (u.search || '') + (u.hash || '');
-        a.textContent = `Link towards ${path} on domain ${host}`;
-        a.title = rawUrl;
-      } catch(_) {
-        a.textContent = rawUrl;
-      }
+      a.textContent = formatLinkText(rawUrl);
+      a.title = rawUrl;
       a.style.color = 'var(--wa-accent)';
       a.style.textDecoration = 'underline';
       a.addEventListener('click', (e) => { e.preventDefault(); openIframe(rawUrl); });
