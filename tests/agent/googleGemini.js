@@ -7,7 +7,6 @@ process.env.LLM_BASE_URL = apiUrl + `${process.env.LLM_MODEL}:generateContent?ke
 
 
 let context = []
-context.push({ role: 'human', message: "hello" });
-callLLM(context).then((aiResponse)=>{
+callLLM(context, "hello").then((aiResponse)=>{
     console.log(aiResponse);
 });
