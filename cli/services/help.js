@@ -22,6 +22,7 @@ function showHelp(args = []) {
   webconsole [command...]            Start Console server (synonym: webtty)
   webtty [command...]                Start Console server (xterm)
   webchat [command...]               Start Chat server
+  voicechat [agentName]              Start VoiceChat server (audio + chat)
   dashboard                          Start Dashboard server
   admin-mode [command...]            Start console+chat+dashboard servers
   set <VAR> <$VAR|value>         Set a variable value or alias another variable
@@ -160,6 +161,12 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             syntax: 'webchat <password> [command...]',
             examples: [ 'webchat secret /bin/bash' ],
             notes: 'Port via WEBCHAT_PORT (default 8080).'
+        },
+        'voicechat': {
+            description: 'Start VoiceChat server (audio chat with speaking queue).',
+            syntax: 'voicechat [agentName]',
+            examples: [ 'voicechat', 'voicechat MyAgent' ],
+            notes: 'Port via VOICECHAT_PORT (default 8180). Auth via VOICECHAT_TOKEN link.'
         },
         'dashboard': {
             description: 'Start Dashboard server.',

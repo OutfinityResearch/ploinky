@@ -363,10 +363,13 @@ function startWebTTYServer({ agentName, runtime, containerName, port, ttyFactory
     try { appendLog('server_error', { message: err?.message || String(err), port }); } catch(_) {}
     try { console.error(`WebTTY failed to start on port ${port}: ${err?.message || err}`); } catch(_) {}
   });
+  const os = require('os');
+  function localIP(){ try { const ifs=os.networkInterfaces(); for (const k of Object.keys(ifs)) { for (const i of ifs[k]) { if (i.family==='IPv4' && !i.internal) return i.address; } } } catch(_){} return 'localhost'; }
   server.listen(port, () => { 
-    const accessUrl = `http://localhost:${port}/?token=${loginToken}`;
+    const host = localIP();
+    const accessUrl = `http://${host}:${port}/?token=${loginToken}`;
     const label = (MODE === 'dashboard') ? 'Dashboard' : (MODE === 'chat' ? 'WebChat' : 'WebTTY');
-    console.log(`Ploinky ${label} ready on http://localhost:${port} (agent: ${agentName})`);
+    console.log(`Ploinky ${label} ready on http://${host}:${port} (agent: ${agentName})`);
     console.log(`Access URL (share to authenticate): ${accessUrl}`);
     appendLog('server_start', { port, agentName, runtime }); 
   });

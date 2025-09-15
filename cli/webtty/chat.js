@@ -340,6 +340,140 @@
     chatList.scrollTop = chatList.scrollHeight;
   }
 
+  // --- STT (Speech-to-Text) Logic ---
+  const sttBtn = document.getElementById('sttBtn');
+  const sttOverlay = document.getElementById('sttOverlay');
+  const sttText = document.getElementById('sttText');
+  const sttSend = document.getElementById('sttSend');
+  const sttCancel = document.getElementById('sttCancel');
+  const sttLang = document.getElementById('sttLang');
+  const sttEnable = document.getElementById('sttEnable');
+  const sttStatus = document.getElementById('sttStatus');
+  const sttRecord = document.getElementById('sttRecord');
+
+  let sttRecognition = null;
+  let sttRecording = false;
+  let finalTranscript = '';
+  let sttLangCode = localStorage.getItem('vc_stt_lang') || 'en-US';
+
+  if (sttBtn) {
+    sttBtn.onclick = () => {
+      // Reset state before showing
+      if (sttText) sttText.value = '';
+      if (sttStatus) sttStatus.textContent = 'Ready';
+      finalTranscript = '';
+
+      if (sttOverlay) sttOverlay.style.display = 'flex';
+      // Auto-start recording if enabled
+      setTimeout(() => { if (sttEnable?.checked && sttRecord) sttRecord.click(); }, 100);
+    };
+  }
+
+  if (sttCancel) {
+    sttCancel.onclick = () => {
+      if (sttRecognition) sttRecognition.stop();
+      if (sttOverlay) sttOverlay.style.display = 'none';
+    };
+  }
+
+  if (sttSend) {
+    sttSend.onclick = () => {
+      const text = sttText.value.trim();
+      if (text) {
+        cmdInput.value = text;
+        sendCmd();
+      }
+      if (sttRecognition) sttRecognition.stop();
+      if (sttOverlay) sttOverlay.style.display = 'none';
+    };
+  }
+
+  if (sttRecord) {
+    sttRecord.onclick = () => {
+      if (sttRecording) {
+        if (sttRecognition) sttRecognition.stop();
+        return;
+      }
+
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        alert('Speech recognition not supported in this browser.');
+        return;
+      }
+      if (!sttEnable?.checked) return;
+
+      finalTranscript = sttText.value ? sttText.value + ' ' : '';
+      sttRecognition = new SR();
+      sttRecognition.lang = sttLang?.value || sttLangCode || 'en-US';
+      sttRecognition.continuous = true;
+      sttRecognition.interimResults = true;
+
+      sttRecognition.onresult = (event) => {
+        let interim_transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript + ' ';
+          } else {
+            interim_transcript += event.results[i][0].transcript;
+          }
+        }
+        sttText.value = finalTranscript + interim_transcript;
+      };
+
+      sttRecognition.onerror = (e) => { sttStatus.textContent = `Error: ${e.error}`; };
+      sttRecognition.onend = () => {
+        finalTranscript = sttText.value;
+        sttRecording = false;
+        sttRecord.textContent = 'Start Recording';
+        sttStatus.textContent = 'Ready';
+      };
+
+      try {
+        sttRecognition.start();
+        sttRecording = true;
+        sttRecord.textContent = 'Stop Recording';
+        sttStatus.textContent = 'Listening...';
+      } catch (e) {
+        alert(`Could not start STT: ${e.message}`);
+      }
+    };
+  }
+
+  try {
+    function fillLangs() {
+      const list = (window.speechSynthesis?.getVoices?.() || []).map(v => v.lang).filter(Boolean);
+      const common = ['en-US', 'en-GB', 'ro-RO', 'fr-FR', 'de-DE', 'es-ES', 'it-IT', 'pt-PT', 'pt-BR', 'nl-NL', 'pl-PL', 'tr-TR', 'ru-RU', 'zh-CN', 'ja-JP', 'ko-KR'];
+      const langs = Array.from(new Set([...(list || []), ...common])).sort();
+      
+      if (sttLang) {
+        sttLang.innerHTML = '';
+        langs.forEach(code => {
+          const opt = document.createElement('option');
+          opt.value = code;
+          opt.textContent = code;
+          if (code === sttLangCode) opt.selected = true;
+          sttLang.appendChild(opt);
+        });
+      }
+    }
+
+    fillLangs();
+    window.speechSynthesis?.addEventListener?.('voiceschanged', fillLangs);
+
+    if (sttLang) {
+      sttLang.addEventListener('change', (e) => {
+        sttLangCode = e.target.value || 'en-US';
+        localStorage.setItem('vc_stt_lang', sttLangCode);
+        // If recording is active, restart it to apply the new language
+        if (sttRecording && sttRecord) {
+          if (sttRecognition) sttRecognition.stop(); // This will trigger onend
+          // A brief timeout to allow the 'onend' event to fire properly before restarting
+          setTimeout(() => sttRecord.click(), 100);
+        }
+      });
+    }
+  } catch (_) {}
+
   // --- Actions & Network ---
   function sendCmd() {
     const cmd = cmdInput.value.trim();

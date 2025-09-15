@@ -52,8 +52,8 @@
   </div>
 
   <div class="wa-composer">
-    <button class="wa-icon-btn" title="Attach">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
+    <button class="wa-icon-btn" id="sttBtn" title="Voice input">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2s1.2.54 1.2 1.2v6.2c0 .66-.54 1.2-1.2 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
     </button>
     <div class="wa-composer-input-wrapper">
       <textarea 
@@ -68,6 +68,38 @@
       <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
     </button>
   </div>
+
+  <!-- STT Overlay -->
+  <div id="sttOverlay" class="vc-overlay" style="--wa-bg-panel: #202c33; --wa-text-primary: #e9edef; --wa-border: #222d34; --wa-shadow-md: 0 4px 5px -1px rgba(11,20,26,.13); --wa-bg-input: #2a3942; --wa-text-secondary: #8696a0;">
+    <div class="vc-card">
+      <div class="vc-row" style="justify-content:space-between;margin-bottom:8px">
+        <h3 style="margin:0">Voice Input</h3>
+        <div class="vc-row">
+          <label style="font-size:12px;margin-right:8px">
+            <input type="checkbox" id="sttEnable" checked /> Enable voice
+          </label>
+          <select id="sttLang" class="vc-select"></select>
+        </div>
+      </div>
+      <textarea id="sttText" class="vc-text" placeholder="Speak or type your message..."></textarea>
+      <div class="vc-row" style="margin-top:8px;justify-content:space-between">
+        <div class="vc-hint" id="sttStatus">Ready</div>
+        <div class="vc-row">
+          <button class="wa-btn" id="sttRecord">Start Recording</button>
+          <button class="wa-btn" id="sttSend">Send</button>
+          <button class="wa-btn" id="sttCancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <style>
+    .vc-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:30;display:none}
+    .vc-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(900px,92vw);background:var(--wa-bg-panel);color:var(--wa-text-primary);border:1px solid var(--wa-border);border-radius:10px;box-shadow:var(--wa-shadow-md);padding:14px}
+    .vc-text{min-height:200px;max-height:60vh;resize:vertical;width:100%;background:var(--wa-bg-input);color:var(--wa-text-primary);border:1px solid var(--wa-border);border-radius:8px;padding:10px;font-family:inherit;font-size:14px}
+    .vc-row{display:flex;gap:8px;align-items:center}
+    .vc-select{background:var(--wa-bg-input);color:var(--wa-text-primary);border:1px solid var(--wa-border);border-radius:6px;padding:6px 8px}
+    .vc-hint{color:var(--wa-text-secondary);font-size:12px}
+  </style>
 
   <script src="/assets/chat.js"></script>
 </body>

@@ -423,6 +423,18 @@ function killWebChatIfRunning() {
     } catch(_) {}
 }
 
+function killVoiceChatIfRunning() {
+    try {
+        const pidFile = path.resolve('.ploinky/running/voicechat.pid');
+        if (!fs.existsSync(pidFile)) return;
+        const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
+        if (pid && !Number.isNaN(pid)) {
+            try { process.kill(pid, 'SIGTERM'); console.log(`Stopped VoiceChat (pid ${pid}).`); } catch(_) {}
+        }
+        try { fs.unlinkSync(pidFile); } catch(_) {}
+    } catch(_) {}
+}
+
 function killDashboardIfRunning() {
     try {
         const pidFile = path.resolve('.ploinky/running/dashboard.pid');
@@ -765,7 +777,7 @@ async function handleCommand(args) {
                     }
                     // Reload and print
                     const merged = env.parseSecrets();
-                    const printOrder = ['APP_NAME', 'WEBCHAT_PORT', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_PORT', 'WEBDASHBOARD_TOKEN', 'WEBTTY_PORT', 'WEBTTY_TOKEN'];
+                    const printOrder = ['APP_NAME', 'VOICECHAT_PORT', 'VOICECHAT_TOKEN', 'WEBCHAT_PORT', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_PORT', 'WEBDASHBOARD_TOKEN', 'WEBTTY_PORT', 'WEBTTY_TOKEN'];
                     const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
                     keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
                 } catch (e) { console.error('Failed to list variables:', e.message); }
@@ -773,7 +785,7 @@ async function handleCommand(args) {
                 const name = options[0];
                 const value = options.slice(1).join(' ');
                 setVar(name, value);
-                if (name === 'WEBTTY_PORT' || name === 'WEBCHAT_PORT' || name === 'WEBDASHBOARD_PORT') {
+                if (name === 'WEBTTY_PORT' || name === 'WEBCHAT_PORT' || name === 'WEBDASHBOARD_PORT' || name === 'VOICECHAT_PORT') {
                     console.log(`Hint: restart the respective server to apply ${name}.`);
                 }
             }
@@ -820,6 +832,23 @@ async function handleCommand(args) {
             process.env.WEBTTY_MODE = 'console';
             await runConsole(...options);
             break;
+        case 'voicechat': {
+            // Start the VoiceChat HTTP server (separate stack from webtty)
+            const agentName = options[0] || null; // optional target agent for command forwarding
+            let port;
+            try { const env = require('../services/secretVars'); const v = parseInt(env.resolveVarValue('VOICECHAT_PORT'), 10); port = (!Number.isNaN(v) && v > 0) ? v : 8180; } catch(_) { port = 8180; }
+            const { startVoiceChatServer } = require('../voicechat/server');
+            const srv = startVoiceChatServer({ port, agentName, workdir: process.cwd() });
+            try {
+                srv.on('listening', () => {
+                    try {
+                        const runningDir = path.resolve('.ploinky/running');
+                        fs.mkdirSync(runningDir, { recursive: true });
+                        fs.writeFileSync(path.join(runningDir, 'voicechat.pid'), String(process.pid));
+                    } catch(_) {}
+                });
+            } catch(_) {}
+            break; }
         case 'dashboard': {
             const mode = 'dashboard';
             let port;
@@ -891,6 +920,7 @@ async function handleCommand(args) {
                 console.log('[restart] Stopping Web servers and Router...');
                 killWebTTYIfRunning();
                 killWebChatIfRunning();
+                killVoiceChatIfRunning();
                 killDashboardIfRunning();
                 killRouterIfRunning();
                 console.log('[restart] Stopping configured agent containers...');
@@ -909,6 +939,7 @@ async function handleCommand(args) {
             console.log('[shutdown] Stopping Web servers and RoutingServer...');
             killWebTTYIfRunning();
             killWebChatIfRunning();
+            killVoiceChatIfRunning();
             killDashboardIfRunning();
             killRouterIfRunning();
             const { destroyWorkspaceContainers } = require('../services/docker');
@@ -924,6 +955,7 @@ async function handleCommand(args) {
             console.log('[stop] Stopping Web servers and RoutingServer...');
             killWebTTYIfRunning();
             killWebChatIfRunning();
+            killVoiceChatIfRunning();
             killDashboardIfRunning();
             killRouterIfRunning();
             const { stopConfiguredAgents } = require('../services/docker');
@@ -939,6 +971,7 @@ async function handleCommand(args) {
             console.log('[destroy] Stopping Web servers and RoutingServer...');
             killWebTTYIfRunning();
             killWebChatIfRunning();
+            killVoiceChatIfRunning();
             killDashboardIfRunning();
             killRouterIfRunning();
             console.log('[destroy] Removing all workspace containers...');

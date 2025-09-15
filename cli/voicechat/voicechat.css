@@ -1,0 +1,30 @@
+:root{ --bg:#0b0d10; --fg:#e6e6e6; --muted:#9aa0a6; --card:#13171c; --accent:#4b9eff; --danger:#ff4b4b }
+*{ box-sizing:border-box }
+body{ margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--fg) }
+.vc-app{ display:flex; flex-direction:column; height:100vh }
+.topbar{ display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:#0f141a; border-bottom:1px solid #1f2833 }
+.brand{ font-weight:700 }
+.status button{ margin-left:8px }
+.content{ display:flex; flex:1; min-height:0 }
+.side{ width:280px; padding:12px; overflow:auto; border-right:1px solid #1f2833 }
+.main{ flex:1; display:flex; flex-direction:column; min-width:0 }
+.card{ background:var(--card); border:1px solid #1f2833; border-radius:8px; padding:10px; margin-bottom:12px }
+.chat{ flex:1; overflow:auto; padding:12px }
+.chat-header{ display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1px solid #1f2833 }
+.composer{ display:flex; padding:10px; gap:8px; border-top:1px solid #1f2833 }
+input, textarea, button{ background:#0f141a; color:var(--fg); border:1px solid #2a3642; border-radius:6px; padding:8px }
+button{ cursor:pointer }
+button:disabled{ opacity:0.5; cursor:not-allowed }
+ul,ol{ margin:0; padding-left:18px }
+.msg{ margin:6px 0; padding:8px 10px; border-radius:8px; background:#0f141a; border:1px solid #1f2833 }
+.msg .meta{ color:var(--muted); font-size:12px; margin-bottom:4px }
+.msg.transcript{ border-color:#2b6cb0; background:#0e1521 }
+.msg.command{ border-color:#5a5a5a; font-style:italic }
+.me{ color:#8bd5ff }
+.modal{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.6) }
+.hidden{ display:none }
+.modal-content{ background:#0f141a; border:1px solid #1f2833; border-radius:10px; padding:16px; width:320px }
+.login-container{ max-width:420px; margin:60px auto; padding:20px; background:#0f141a; border:1px solid #1f2833; border-radius:10px }
+.login-box{ display:flex; gap:8px; margin-top:12px }
+.hint{ color:var(--muted); font-size:12px }
+
