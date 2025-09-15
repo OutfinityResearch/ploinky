@@ -1,0 +1,33 @@
+{
+    "providers": {
+        "openai": {
+            "baseURL": "https://api.openai.com/v1/chat/completions"
+        },
+        "anthropic": {
+            "baseURL": "https://api.anthropic.com/v1/messages"
+        },
+        "google": {
+            "baseURL": "https://generativelanguage.googleapis.com/v1beta/models/"
+        },
+        "huggingface": {
+            "baseURL": "https://api-inference.huggingface.co/models"
+        },
+        "openrouter": {
+            "baseURL": "https://openrouter.ai/api/v1/chat/completions"
+        }
+    },
+    "models": {
+        "gpt-5": "openai",
+        "gpt-4o-mini": "openai",
+        "gpt-5-mini": "openai",
+        "gpt-4.1": "openai",
+        "claude-opus-4-1-20250805": "anthropic",
+        "claude-opus-4-20250514": "anthropic",
+        "claude-sonnet-4-20250514": "anthropic",
+        "gemini-2.5-pro": "google",
+        "gemini-2.5-flash": "google",
+        "google/gemini-2.5-flash": "openrouter",
+        "anthropic/claude-sonnet-4": "openrouter",
+        "google/gemini-2.5-pro": "openrouter"
+    }
+}

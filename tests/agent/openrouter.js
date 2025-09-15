@@ -5,7 +5,6 @@ process.env.LLM_MODEL = "gpt-4o-mini";
 process.env.LLM_PROVIDER = "openrouter";
 
 let context = []
-context.push({ role: 'human', message: "hello" });
-callLLM(context).then((aiResponse)=>{
+callLLM(context, "hello").then((aiResponse)=>{
     console.log(aiResponse);
 });

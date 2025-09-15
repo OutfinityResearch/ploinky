@@ -5,7 +5,6 @@ process.env.LLM_MODEL = "mistralai/Mistral-7B-Instruct-v0.1";
 process.env.LLM_PROVIDER = "huggingFace";
 
 let context = []
-context.push({ role: 'human', message: "hello" });
-callLLM(context).then((aiResponse)=>{
+callLLM(context, "hello").then((aiResponse)=>{
     console.log(aiResponse);
 });

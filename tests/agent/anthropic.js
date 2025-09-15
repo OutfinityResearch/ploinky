@@ -5,7 +5,6 @@ process.env.LLM_MODEL = "claude-sonnet-4-20250514";
 process.env.LLM_PROVIDER = "anthropic";
 
 let context = []
-context.push({ role: 'human', message: "hello" });
-callLLM(context).then((aiResponse)=>{
+callLLM(context, "hello").then((aiResponse)=>{
     console.log(aiResponse);
 });
