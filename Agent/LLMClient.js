@@ -48,7 +48,9 @@ async function callLLM(historyArray, prompt) {
 async function callLLMWithModel(modelName, historyArray, prompt){
     const controller = new AbortController();
     llmCalls.push(controller);
-    historyArray.push({ role: 'human', message: prompt });
+    if(prompt){
+        historyArray.push({ role: 'human', message: prompt });
+    }
 
     try {
         const providerName = modelConfig.models[modelName];
