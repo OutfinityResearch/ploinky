@@ -16,25 +16,30 @@ function showHelp(args = []) {
 
 ▶ LOCAL DEVELOPMENT
   add repo <name> [url]          Add repository (basic/cloud/vibe/security/extra/demo)
-  
-  refresh agent <name>           Restart/remove agent container
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
-  console <agentName> <pwd> [port] Start WebTTY Console/Chat for an agent
-  set env <VAR> <VALUE>          Create or update a secret env variable
-  enable env <VAR> <agentName>   Attach env to agent (manifest.env)
+  webconsole [command...]            Start Console server (synonym: webtty)
+  webtty [command...]                Start Console server (xterm)
+  webchat [command...]               Start Chat server
+  dashboard                          Start Dashboard server
+  admin-mode [command...]            Start console+chat+dashboard servers
+  set <VAR> <$VAR|value>         Set a variable value or alias another variable
+  set                            List all variable names (no values)
+  echo <VAR|$VAR>                Print the resolved value of a variable
+  expose <ENV_NAME> <$VAR|value> [agent]  Expose to agent environment
   list agents | repos            List agents (manifests) or predefined repos
-  list current-agents            List workspace containers registered in .ploinky/agents
-  add env <name> <val>           Add secret | enable env <agent> <var>
+
 
 ▶ CLIENT OPERATIONS
   client task <agent>            Interactive: type command, then params; sends via RoutingServer
-  client methods <agent>         If supported by your agent (via RoutingServer)
-  client status <agent>          If supported by your agent
+  client methods <agent>         List methods (if supported)
+  client status <agent>          One-line status (HTTP code, parsed)
 
   status | restart               Show state | restart enabled agents + Router
   stop | shutdown | clean        Stop containers | remove containers
+  logs tail <router|webtty>      Follow server logs (router or webtty)
+  logs last <N> [router|webtty]  Show last N log lines (default router+webtty)
 
 ▶ FOR DETAILED HELP
   help <command>                 Show detailed help for a command
@@ -68,14 +73,17 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         'set': {
-            description: 'Set values (env, etc.)',
-            subcommands: {
-                'env': {
-                    syntax: 'set env <VAR> <VALUE>',
-                    description: 'Create or update a secret environment variable (stored in .ploinky/.secrets)',
-                    examples: [ 'set env API_KEY sk-1234567890' ]
-                }
-            }
+            description: 'Manage workspace variables (stored in .ploinky/.secrets)',
+            syntax: 'set <VAR> <$OTHER|value>',
+            examples: [
+                'set WEBTTY_PORT 9000  # Full UI port',
+                'set WEBCHAT_PORT 8080 # Chat-only port',
+                // 'set WEBTTY_TITLE' removed (title is auto-computed)
+                'set API_KEY sk-123456',
+                'set PROD_KEY $API_KEY',
+                'set'
+            ],
+            notes: 'Running set with no args lists variables. Predefined: WEBTTY_PORT, WEBCHAT_PORT.'
         },
         
         'new': {
@@ -109,16 +117,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 }
             }
         },
-        'refresh': {
-            description: 'Restart or remove agent container',
-            subcommands: {
-                'agent': {
-                    syntax: 'refresh agent <name>',
-                    description: 'If agent command exists, stop/remove/restart container; otherwise stop/remove only',
-                    examples: [ 'refresh agent MyAPI' ]
-                }
-            }
-        },
+        
         
         'shell': {
             description: 'Interactive shell session',
@@ -144,53 +143,38 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 }
             }
         },
-        'console': {
-            description: 'Start the Web Console (TTY + Chat) for an agent',
-            subcommands: {
-                'default': {
-                    syntax: 'console <agentName> <password> [port] [title] ',
-                    description: 'Starts a web UI on localhost:[port] (default 8089). Title is optional and shown in the header.',
-                    params: { '<agentName>': 'Agent name', '<password>': 'UI access password', '[port]': 'Port for web UI', '[title]': 'Header label' },
-                    examples: [ 'console MyAPI secret 8089 "My Local Agent"' ],
-                    notes: 'Works on first run by auto-creating/ enabling the agent and ensuring a container exists.'
-                }
-            }
+        'webconsole': {
+            description: 'Start Console server (xterm) attached to a local command',
+            syntax: 'webconsole <password> [command...]',
+            examples: [ 'webconsole secret /bin/bash', 'webconsole secret p-cli shell MyAgent' ],
+            notes: 'Default command is /bin/bash. Port via variable WEBTTY_PORT (default 9001).'
+        },
+        'webtty': {
+            description: 'Synonym for webconsole (console-only).',
+            syntax: 'webtty <password> [command...]',
+            examples: [ 'webtty secret /bin/bash' ],
+            notes: 'Port via WEBTTY_PORT (default 9001).'
+        },
+        'webchat': {
+            description: 'Start Chat server.',
+            syntax: 'webchat <password> [command...]',
+            examples: [ 'webchat secret /bin/bash' ],
+            notes: 'Port via WEBCHAT_PORT (default 8080).'
+        },
+        'dashboard': {
+            description: 'Start Dashboard server.',
+            syntax: 'dashboard <password>',
+            examples: [ 'dashboard secret' ],
+            notes: 'Port via WEBDASHBOARD_PORT (default 9001).'
+        },
+        'admin-mode': {
+            description: 'Start console, chat, and dashboard servers together.',
+            syntax: 'admin-mode <password> [command...]',
+            examples: [ 'admin-mode secret /bin/bash' ],
+            notes: 'Ports: Console WEBTTY_PORT (9001), Chat WEBCHAT_PORT (8080), Dashboard WEBDASHBOARD_PORT (9000).'
         },
         
-        'route': {
-            description: 'RoutingServer route management',
-            subcommands: {
-                'static': {
-                    syntax: 'route static <name> [port]',
-                    description: 'Start RoutingServer and serve static files from the agent\'s /code (host path)',
-                    examples: ['route static MyWeb 8088'],
-                    notes: 'Writes .ploinky/routing.json with static configuration and ensures the static agent container is running.'
-                },
-                'list': {
-                    syntax: 'route list',
-                    description: 'List current routes (same as: list routes)',
-                    examples: [ 'route list' ]
-                },
-                'delete': {
-                    syntax: 'route delete <name>',
-                    description: 'Delete a route from RoutingServer config (same as: delete route <name>)',
-                    examples: [ 'route delete MyAPI' ]
-                }
-            },
-            syntax: 'route <name>',
-            notes: 'Ensures the agent service listens on port 7000 in the container, mapped to a random host port (>10000). Registers /apis/<name> -> http://127.0.0.1:<hostPort>/api.',
-            examples: [ 'route MyAPI' ]
-        },
-        'probe': {
-            description: 'Send test payloads to RoutingServer endpoints',
-            subcommands: {
-                'route': {
-                    syntax: 'probe route <name> [jsonPayload] ',
-                    description: 'POSTs JSON to /apis/<name>; if no payload provided, uses {"command":"probe"}',
-                    examples: [ 'probe route MyAPI', "probe route MyAPI '{\"command\":\"hello\",\"args\":{}}'" ]
-                }
-            }
-        },
+        
         'shutdown': {
             description: 'Stop and remove containers recorded in .ploinky/agents',
             syntax: 'shutdown',
@@ -207,12 +191,6 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'enable': {
             description: 'Enable features for agents and repos',
             subcommands: {
-                'env': {
-                    syntax: 'enable env <VAR> <agentName>',
-                    description: 'Attach a secret environment variable to an agent (manifest.env)',
-                    examples: [ 'enable env API_KEY MyAPI' ],
-                    notes: 'Variable must be set with "set env" first'
-                },
                 'repo': {
                     syntax: 'enable repo <name>',
                     description: 'Enable a repository for agent listings (see list repos)',
@@ -225,11 +203,23 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 }
             }
         },
+        'expose': {
+            description: 'Expose variables to an agent as environment variables',
+            syntax: 'expose <ENV_NAME> <$VAR|value> [agentName] ',
+            examples: [ 'expose API_KEY $MY_API_KEY MyAPI', 'expose MODE prod MyAPI', 'expose API_KEY $MY_API_KEY' ],
+            notes: 'First arg is the environment variable name inside the container. If agentName omitted, uses static agent configured via start.'
+        },
+        'echo': {
+            description: 'Print the resolved value of a variable',
+            syntax: 'echo <VAR|$VAR> ',
+            examples: [ 'echo API_KEY', 'echo $PROD_KEY' ],
+            notes: 'Resolves chained aliases like VAR=$OTHER.'
+        },
         'start': {
             description: 'Start enabled agents and the local Router',
             syntax: 'start [staticAgent] [port] ',
             examples: [ 'start MyStaticAgent 8088', 'start' ],
-            notes: 'On first run, provide both staticAgent and port. Subsequent runs can use plain start.'
+            notes: 'Reads manifest of static agent: applies repos{} (clone+enable) and enable[] (enable agents). First run needs agent and port.'
         },
         'status': {
             description: 'Show enabled agents and router configuration',
@@ -242,6 +232,21 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             syntax: 'restart',
             examples: [ 'restart' ],
             notes: 'Fails if start was not configured yet (no staticAgent/port).'
+        },
+        'logs': {
+            description: 'Inspect server logs (RoutingServer and WebTTY)',
+            subcommands: {
+                'tail': {
+                    syntax: 'logs tail <router|webtty>',
+                    description: 'Follow logs for router or webtty',
+                    examples: [ 'logs tail router', 'logs tail webtty' ]
+                },
+                'last': {
+                    syntax: 'logs last <N> [router|webtty]',
+                    description: 'Show last N log lines. If no type, shows both router and webtty.',
+                    examples: [ 'logs last 200', 'logs last 100 webtty' ]
+                }
+            }
         },
         'disable': {
             description: 'Disable features',
@@ -266,11 +271,6 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'list repos',
                     description: 'List available repositories with URLs; mark installed and enabled. Use enable repo <name> to include in listings.',
                     examples: ['list repos']
-                },
-                'current-agents': {
-                    syntax: 'list current-agents',
-                    description: 'List current workspace containers from .ploinky/agents (with ports, binds, env count)',
-                    examples: ['list current-agents']
                 },
                 'routes': {
                     syntax: 'list routes',

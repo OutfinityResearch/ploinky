@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const { PLOINKY_DIR } = require('./config');
+const repos = require('./repos');
 
 const DEFAULT_REPO_URL = 'https://github.com/PloinkyRepos/Basic.git';
 
@@ -22,7 +23,15 @@ function ensureDefaultRepo() {
 
 function bootstrap() {
   ensureDefaultRepo();
+  // Ensure 'basic' is enabled by default if present
+  try {
+    const list = repos.loadEnabledRepos();
+    const basicPath = path.join(PLOINKY_DIR, 'repos', 'basic');
+    if (fs.existsSync(basicPath) && !list.includes('basic')) {
+      list.push('basic');
+      repos.saveEnabledRepos(list);
+    }
+  } catch (_) {}
 }
 
 module.exports = { bootstrap };
-

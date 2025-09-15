@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLI Reference - Ploinky</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="index.html" class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <span>Ploinky</span>
+                </a>
+                <nav>
+                    <ul>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="cli-reference.html" class="active">CLI Reference</a></li>
+                        <li><a href="architecture.html">Architecture</a></li>
+                        <li><a href="spec-agent.html">Agent Spec</a></li>
+                        <li><a href="webchat.html">WebChat</a></li>
+                        <li><button class="theme-toggle" id="themeToggle">🌙</button></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="doc-layout">
+                <aside class="sidebar">
+                    <h3>Quick Navigation</h3>
+                    <ul>
+                        <li><a href="#repository">Repository Management</a></li>
+                        <li><a href="#agent">Agent Operations</a></li>
+                        <li><a href="#workspace">Workspace Commands</a></li>
+                        <li><a href="#variables">Variables & Environment</a></li>
+                        <li><a href="#web">Web Interfaces</a></li>
+                        <li><a href="#client">Client Operations</a></li>
+                        <li><a href="#system">System Management</a></li>
+                        <li><a href="#logs">Logging & Monitoring</a></li>
+                    </ul>
+                </aside>
+
+                <div class="content-wrapper">
+                    <div class="doc-section">
+                        <h1>CLI Command Reference</h1>
+                        <p>Complete reference for all Ploinky CLI commands. Commands are organized by category for easy navigation.</p>
+                    </div>
+
+                    <div class="doc-section" id="repository">
+                        <h2>Repository Management</h2>
+                        
+                        <h3>add repo</h3>
+                        <p>Add a repository to your local environment.</p>
+                        <pre><code>ploinky add repo &lt;name&gt; [url]</code></pre>
+                        <table class="command-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;name&gt;</code></td>
+                                <td>Repository name (basic, cloud, vibe, security, extra, demo) or custom name</td>
+                            </tr>
+                            <tr>
+                                <td><code>[url]</code></td>
+                                <td>Git URL for custom repositories (optional for predefined repos)</td>
+                            </tr>
+                        </table>
+                        <div class="alert alert-info">
+                            <strong>Predefined repositories:</strong>
+                            <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+                                <li><strong>basic</strong> - Essential tools and shell environments</li>
+                                <li><strong>cloud</strong> - AWS, Azure, GCP integrations</li>
+                                <li><strong>vibe</strong> - Social media and communication tools</li>
+                                <li><strong>security</strong> - Authentication and encryption utilities</li>
+                                <li><strong>extra</strong> - Additional utilities and helpers</li>
+                                <li><strong>demo</strong> - Example agents and tutorials</li>
+                            </ul>
+                        </div>
+                        <pre><code># Examples
+ploinky add repo cloud                                    # Add predefined cloud repository
+ploinky add repo myrepo https://github.com/user/repo.git  # Add custom repository</code></pre>
+
+                        <h3>enable repo</h3>
+                        <p>Enable a repository for agent listings.</p>
+                        <pre><code>ploinky enable repo &lt;name&gt;</code></pre>
+                        <pre><code># Example
+ploinky enable repo cloud</code></pre>
+
+                        <h3>disable repo</h3>
+                        <p>Disable a repository from agent listings.</p>
+                        <pre><code>ploinky disable repo &lt;name&gt;</code></pre>
+
+                        <h3>list repos</h3>
+                        <p>List all available repositories and their status.</p>
+                        <pre><code>ploinky list repos</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="agent">
+                        <h2>Agent Operations</h2>
+                        
+                        <h3>new agent</h3>
+                        <p>Create a new agent in a repository.</p>
+                        <pre><code>ploinky new agent &lt;repo&gt; &lt;name&gt; [image]</code></pre>
+                        <table class="command-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;repo&gt;</code></td>
+                                <td>Repository name where agent will be created</td>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;name&gt;</code></td>
+                                <td>Agent name (must be unique)</td>
+                            </tr>
+                            <tr>
+                                <td><code>[image]</code></td>
+                                <td>Container image (default: node:18-alpine)</td>
+                            </tr>
+                        </table>
+                        <pre><code># Examples
+ploinky new agent cloud MyAPI              # Node.js agent
+ploinky new agent cloud PyBot python:3.11  # Python agent
+ploinky new agent vibe WebApp nginx:alpine # Nginx agent</code></pre>
+
+                        <h3>enable agent</h3>
+                        <p>Register an agent in workspace registry for management.</p>
+                        <pre><code>ploinky enable agent &lt;name|repo/name&gt;</code></pre>
+                        <pre><code># Examples
+ploinky enable agent demo           # Enable demo agent from any repo
+ploinky enable agent cloud/MyAPI    # Enable specific agent from cloud repo</code></pre>
+
+                        <h3>update agent</h3>
+                        <p>Modify agent manifest fields interactively.</p>
+                        <pre><code>ploinky update agent &lt;name&gt;</code></pre>
+                        <div class="alert alert-info">
+                            Updates: container image, install commands, update commands, CLI command, agent command, and description.
+                        </div>
+
+                        <h3>refresh agent</h3>
+                        <p>Restart an agent container with updated configuration.</p>
+                        <pre><code>ploinky refresh agent &lt;name&gt;</code></pre>
+
+                        <h3>list agents</h3>
+                        <p>List all available agents from enabled repositories.</p>
+                        <pre><code>ploinky list agents</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="workspace">
+                        <h2>Workspace Commands</h2>
+                        
+                        <h3>start</h3>
+                        <p>Start agents from .ploinky/agents and launch Router.</p>
+                        <pre><code>ploinky start [staticAgent] [port]</code></pre>
+                        <table class="command-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><code>[staticAgent]</code></td>
+                                <td>Primary agent to serve static files (required first time)</td>
+                            </tr>
+                            <tr>
+                                <td><code>[port]</code></td>
+                                <td>Router port (default: 8088)</td>
+                            </tr>
+                        </table>
+                        <pre><code># First time setup
+ploinky start demo 8088
+
+# Subsequent starts (uses saved configuration)
+ploinky start</code></pre>
+
+                        <h3>shell</h3>
+                        <p>Open interactive shell session in agent container.</p>
+                        <pre><code>ploinky shell &lt;agentName&gt;</code></pre>
+                        <div class="alert alert-warning">
+                            Attaches to a persistent container with full TTY support. Exit shell to return to host.
+                        </div>
+
+                        <h3>cli</h3>
+                        <p>Run the agent's CLI command interactively.</p>
+                        <pre><code>ploinky cli &lt;agentName&gt; [args...]</code></pre>
+                        <pre><code># Examples
+ploinky cli MyAPI --help
+ploinky cli PyBot --version</code></pre>
+
+                        <h3>status</h3>
+                        <p>Show workspace status including agents, router, and web services.</p>
+                        <pre><code>ploinky status</code></pre>
+
+                        <h3>restart</h3>
+                        <p>Restart all agents and router or a specific agent.</p>
+                        <pre><code>ploinky restart [agentName]</code></pre>
+                        <pre><code># Examples
+ploinky restart          # Restart everything
+ploinky restart MyAPI    # Restart specific agent</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="variables">
+                        <h2>Variables & Environment</h2>
+                        
+                        <h3>set</h3>
+                        <p>Set or list workspace variables (stored in .ploinky/.secrets).</p>
+                        <pre><code>ploinky set &lt;VAR&gt; &lt;$OTHER|value&gt;
+ploinky set                        # List all variables</code></pre>
+                        <table class="command-table">
+                            <tr>
+                                <th>Variable</th>
+                                <th>Description</th>
+                                <th>Default</th>
+                            </tr>
+                            <tr>
+                                <td><code>WEBTTY_PORT</code></td>
+                                <td>WebConsole port</td>
+                                <td>9001</td>
+                            </tr>
+                            <tr>
+                                <td><code>WEBCHAT_PORT</code></td>
+                                <td>WebChat port</td>
+                                <td>8080</td>
+                            </tr>
+                            <tr>
+                                <td><code>WEBDASHBOARD_PORT</code></td>
+                                <td>Dashboard port</td>
+                                <td>9000</td>
+                            </tr>
+                            <tr>
+                                <td><code>WEBTTY_TITLE</code></td>
+                                <td>Console window title</td>
+                                <td>Local Console</td>
+                            </tr>
+                        </table>
+                        <pre><code># Examples
+ploinky set API_KEY sk-123456789
+ploinky set PROD_KEY $API_KEY      # Create alias
+ploinky set WEBTTY_PORT 9000
+ploinky set                        # List all</code></pre>
+
+                        <h3>echo</h3>
+                        <p>Print the resolved value of a variable.</p>
+                        <pre><code>ploinky echo &lt;VAR|$VAR&gt;</code></pre>
+                        <pre><code># Examples
+ploinky echo API_KEY      # Show raw value
+ploinky echo $PROD_KEY    # Show resolved alias</code></pre>
+
+                        <h3>expose</h3>
+                        <p>Expose variable to agent environment.</p>
+                        <pre><code>ploinky expose &lt;ENV_NAME&gt; &lt;$VAR|value&gt; [agent]</code></pre>
+                        <pre><code># Examples
+ploinky expose DATABASE_URL $DB_URL myAgent
+ploinky expose API_KEY $PROD_KEY            # Uses static agent</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="web">
+                        <h2>Web Interfaces</h2>
+                        
+                        <h3>webconsole / webtty</h3>
+                        <p>Start Console server with xterm interface (synonyms).</p>
+                        <pre><code>ploinky webconsole &lt;password&gt; [command...]
+ploinky webtty &lt;password&gt; [command...]</code></pre>
+                        <table class="command-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;password&gt;</code></td>
+                                <td>Password for web access (use 'null' for no auth)</td>
+                            </tr>
+                            <tr>
+                                <td><code>[command...]</code></td>
+                                <td>Command to run (default: /bin/bash)</td>
+                            </tr>
+                        </table>
+                        <pre><code># Examples
+ploinky webconsole secret /bin/bash
+ploinky webtty secret ploinky shell MyAgent</code></pre>
+                        <div class="alert alert-info">
+                            Access at: http://localhost:9001 (or configured WEBTTY_PORT)
+                        </div>
+
+                        <h3>webchat</h3>
+                        <p>Start Chat server with conversational interface.</p>
+                        <pre><code>ploinky webchat &lt;password&gt; [command...]</code></pre>
+                        <pre><code># Examples
+ploinky webchat secret /bin/bash
+ploinky webchat secret python assistant.py</code></pre>
+                        <div class="alert alert-info">
+                            Access at: http://localhost:8080 (or configured WEBCHAT_PORT)
+                        </div>
+
+                        <h3>dashboard</h3>
+                        <p>Start Dashboard server for workspace management.</p>
+                        <pre><code>ploinky dashboard &lt;password&gt;</code></pre>
+                        <div class="alert alert-info">
+                            Access at: http://localhost:9000 (or configured WEBDASHBOARD_PORT)
+                        </div>
+
+                        <h3>admin-mode</h3>
+                        <p>Start all web interfaces simultaneously.</p>
+                        <pre><code>ploinky admin-mode &lt;password&gt; [command...]</code></pre>
+                        <div class="alert alert-success">
+                            Starts Console (9001), Chat (8080), and Dashboard (9000) together.
+                        </div>
+                    </div>
+
+                    <div class="doc-section" id="client">
+                        <h2>Client Operations</h2>
+                        
+                        <h3>client task</h3>
+                        <p>Interactive mode: send commands to agent via RoutingServer.</p>
+                        <pre><code>ploinky client task &lt;agent&gt;</code></pre>
+                        <pre><code># Example
+ploinky client task MyAPI
+> getStatus
+> processData {"input": "test"}</code></pre>
+
+                        <h3>client methods</h3>
+                        <p>List available methods for an agent (if supported).</p>
+                        <pre><code>ploinky client methods &lt;agent&gt;</code></pre>
+
+                        <h3>client status</h3>
+                        <p>Check agent health status.</p>
+                        <pre><code>ploinky client status &lt;agent&gt;</code></pre>
+                    </div>
+
+                    <div class="doc-section" id="system">
+                        <h2>System Management</h2>
+                        
+                        <h3>stop</h3>
+                        <p>Stop all containers and services (preserves containers).</p>
+                        <pre><code>ploinky stop</code></pre>
+
+                        <h3>shutdown</h3>
+                        <p>Stop and remove all workspace containers.</p>
+                        <pre><code>ploinky shutdown</code></pre>
+
+                        <h3>clean / destroy</h3>
+                        <p>Remove all Ploinky containers from workspace.</p>
+                        <pre><code>ploinky clean
+ploinky destroy</code></pre>
+                        <div class="alert alert-danger">
+                            <strong>Warning:</strong> These commands are irreversible. All container data will be lost.
+                        </div>
+                    </div>
+
+                    <div class="doc-section" id="logs">
+                        <h2>Logging & Monitoring</h2>
+                        
+                        <h3>logs tail</h3>
+                        <p>Follow server logs in real-time.</p>
+                        <pre><code>ploinky logs tail &lt;router|webtty&gt;</code></pre>
+                        <pre><code># Examples
+ploinky logs tail router    # Follow router logs
+ploinky logs tail webtty    # Follow WebTTY logs</code></pre>
+
+                        <h3>logs last</h3>
+                        <p>Show last N log lines.</p>
+                        <pre><code>ploinky logs last &lt;N&gt; [router|webtty]</code></pre>
+                        <pre><code># Examples
+ploinky logs last 100           # Last 100 lines from all
+ploinky logs last 50 router     # Last 50 router lines</code></pre>
+                    </div>
+
+                    <div class="doc-section">
+                        <h2>Help System</h2>
+                        
+                        <h3>help</h3>
+                        <p>Show general help or detailed help for specific commands.</p>
+                        <pre><code>ploinky help [command]</code></pre>
+                        <pre><code># Examples
+ploinky help           # General help
+ploinky help add       # Help for add command
+ploinky help cli       # Help for cli command</code></pre>
+                    </div>
+
+                    <div class="doc-section">
+                        <h2>Configuration Files</h2>
+                        
+                        <h3>.ploinky Directory Structure</h3>
+                        <pre><code>.ploinky/
+├── agents/           # Agent registry
+├── repos/            # Downloaded repositories
+├── routing.json      # Router configuration
+├── .secrets          # Environment variables
+├── logs/             # Application logs
+│   ├── router.log
+│   └── webtty.log
+└── running/          # PID files
+    ├── router.pid
+    ├── webtty.pid
+    ├── webchat.pid
+    └── dashboard.pid</code></pre>
+
+                        <h3>Agent Manifest (manifest.json)</h3>
+                        <pre><code>{
+  "container": "node:18-alpine",     // Container image
+  "install": "npm install",          // Installation command
+  "update": "npm update",            // Update command
+  "cli": "node repl.js",            // CLI command for 'ploinky cli'
+  "agent": "node server.js",        // Service command
+  "about": "Description",           // Agent description
+  "env": ["API_KEY", "DB_URL"],    // Required environment variables
+  "enable": ["other-agent"],       // Auto-enable other agents
+  "repos": {                       // Auto-add repositories
+    "repo1": "https://..."
+  }
+}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2024 Ploinky Project. Built with security and simplicity in mind.</p>
+            <p>
+                <a href="https://github.com/ploinky/ploinky">GitHub</a> • 
+                <a href="index.html">Home</a> • 
+                <a href="architecture.html">Architecture</a>
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Theme toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+        
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        body.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+        
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+
+        // Highlight active section in sidebar
+        const sections = document.querySelectorAll('.doc-section[id]');
+        const navLinks = document.querySelectorAll('.sidebar a');
+        
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const rect = section.getBoundingClientRect();
+                if (rect.top <= 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === `#${current}`) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

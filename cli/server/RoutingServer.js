@@ -7,6 +7,29 @@ const querystring = require('querystring');
 
 const ROUTING_DIR = path.resolve('.ploinky');
 const ROUTING_FILE = path.join(ROUTING_DIR, 'routing.json');
+const LOG_DIR = path.join(ROUTING_DIR, 'logs');
+const LOG_PATH = path.join(LOG_DIR, 'router.log');
+function ts() {
+  const d = new Date();
+  const pad = (n)=> String(n).padStart(2,'0');
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+function rotateIfNeeded() {
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true });
+    if (fs.existsSync(LOG_PATH)) {
+      const st = fs.statSync(LOG_PATH);
+      if (st.size > 1_000_000) {
+        const base = path.basename(LOG_PATH, '.log');
+        const rotated = path.join(LOG_DIR, `${base}-${ts()}.log`);
+        fs.renameSync(LOG_PATH, rotated);
+      }
+    }
+  } catch (_) {}
+}
+function appendLog(type, data) {
+  try { rotateIfNeeded(); const rec = JSON.stringify({ ts: new Date().toISOString(), type, ...data }) + '\n'; fs.appendFileSync(LOG_PATH, rec); } catch (_) {}
+}
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')) || {}; } catch (_) { return {}; }
@@ -68,6 +91,8 @@ function start(port) {
   const server = http.createServer((req, res) => {
     const cfg = loadConfig();
     const u = url.parse(req.url || '/');
+    // Light request log for diagnostics
+    try { appendLog('http_request', { method: req.method, path: u.pathname }); } catch(_) {}
     // Health/inspection endpoint
     if (u.pathname === '/list-agents/' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -86,10 +111,17 @@ function start(port) {
     }
     return serveStatic(req, res, cfg);
   });
+  server.on('connection', (socket) => {
+    const ip = socket.remoteAddress;
+    appendLog('connection_open', { ip });
+    socket.on('close', () => appendLog('connection_close', { ip }));
+  });
   server.listen(port, () => {
     console.log(`[RoutingServer] listening on http://127.0.0.1:${port}`);
+    appendLog('server_start', { port });
   });
 }
 
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 8088;
 start(port);
+try { process.on('SIGINT', () => { appendLog('server_stop', { signal: 'SIGINT' }); process.exit(0); }); process.on('SIGTERM', () => { appendLog('server_stop', { signal: 'SIGTERM' }); process.exit(0); }); } catch(_) {}

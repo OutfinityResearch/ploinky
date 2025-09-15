@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { PLOINKY_DIR } = require('./config');
+const { execSync } = require('child_process');
 
 const ENABLED_REPOS_FILE = path.join(PLOINKY_DIR, 'enabled_repos.json');
 
@@ -29,3 +30,65 @@ function getActiveRepos(REPOS_DIR) {
 
 module.exports = { loadEnabledRepos, saveEnabledRepos, getInstalledRepos, getActiveRepos, ENABLED_REPOS_FILE };
 
+// --- Extended repo management ---
+
+// Central registry of predefined repos (used by commands and services)
+const PREDEFINED_REPOS = {
+  'basic':   { url: 'https://github.com/PloinkyRepos/Basic.git', description: 'Default base agents' },
+  'cloud':   { url: 'https://github.com/PloinkyRepos/cloud.git', description: 'Cloud infrastructure agents' },
+  'vibe':    { url: 'https://github.com/PloinkyRepos/vibe.git', description: 'Vibe coding agents' },
+  'security':{ url: 'https://github.com/PloinkyRepos/security.git', description: 'Security and scanning tools' },
+  'extra':   { url: 'https://github.com/PloinkyRepos/extra.git', description: 'Additional utility agents' },
+  'demo':    { url: 'https://github.com/PloinkyRepos/demo.git', description: 'Demo agents and examples' }
+};
+
+function getPredefinedRepos() { return PREDEFINED_REPOS; }
+
+function ensureReposDir() {
+  try { fs.mkdirSync(path.join(PLOINKY_DIR, 'repos'), { recursive: true }); } catch (_) {}
+  return path.join(PLOINKY_DIR, 'repos');
+}
+
+function resolveRepoUrl(name, url) {
+  if (url && url.trim()) return url;
+  const p = PREDEFINED_REPOS[String(name||'').toLowerCase()];
+  return p ? p.url : null;
+}
+
+function addRepo(name, url) {
+  if (!name) throw new Error('Missing repository name.');
+  const REPOS_DIR = ensureReposDir();
+  const repoPath = path.join(REPOS_DIR, name);
+  if (fs.existsSync(repoPath)) { return { status: 'exists', path: repoPath }; }
+  const actualUrl = resolveRepoUrl(name, url);
+  if (!actualUrl) throw new Error(`Missing repository URL for '${name}'.`);
+  execSync(`git clone ${actualUrl} ${repoPath}`, { stdio: 'inherit' });
+  return { status: 'cloned', path: repoPath };
+}
+
+function enableRepo(name) {
+  if (!name) throw new Error('Missing repository name.');
+  const list = loadEnabledRepos();
+  if (!list.includes(name)) { list.push(name); saveEnabledRepos(list); }
+  // Ensure installed
+  const REPOS_DIR = ensureReposDir();
+  const repoPath = path.join(REPOS_DIR, name);
+  if (!fs.existsSync(repoPath)) {
+    const url = resolveRepoUrl(name, null);
+    if (!url) throw new Error(`No URL configured for repo '${name}'.`);
+    execSync(`git clone ${url} ${repoPath}`, { stdio: 'inherit' });
+  }
+  return true;
+}
+
+function disableRepo(name) {
+  const list = loadEnabledRepos();
+  const filtered = list.filter(r => r !== name);
+  saveEnabledRepos(filtered);
+  return true;
+}
+
+module.exports.getPredefinedRepos = getPredefinedRepos;
+module.exports.addRepo = addRepo;
+module.exports.enableRepo = enableRepo;
+module.exports.disableRepo = disableRepo;
