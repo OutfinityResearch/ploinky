@@ -19,12 +19,11 @@ function showHelp(args = []) {
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
-  webconsole [command...]            Start Console server (synonym: webtty)
-  webtty [command...]                Start Console server (xterm)
-  webchat [command...]               Start Chat server
-  voicechat [agentName]              Start VoiceChat server (audio + chat)
-  dashboard                          Start Dashboard server
-  admin-mode [command...]            Start console+chat+dashboard servers
+  webconsole                         Regenerate WebTTY token (alias of webtty)
+  webtty                             Regenerate WebTTY token and print access URL
+  webchat                            Regenerate WebChat token and print access URL
+  webmeet [moderatorAgent]           Regenerate WebMeet token (stores optional moderator)
+  dashboard                          Regenerate Dashboard token and print access URL
   set <VAR> <$VAR|value>         Set a variable value or alias another variable
   set                            List all variable names (no values)
   echo <VAR|$VAR>                Print the resolved value of a variable
@@ -77,14 +76,13 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Manage workspace variables (stored in .ploinky/.secrets)',
             syntax: 'set <VAR> <$OTHER|value>',
             examples: [
-                'set WEBTTY_PORT 9000  # Full UI port',
-                'set WEBCHAT_PORT 8080 # Chat-only port',
-                // 'set WEBTTY_TITLE' removed (title is auto-computed)
+                'set WEBTTY_TOKEN deadbeef  # Override token manually (prefer using webtty command)',
+                'set WEBCHAT_TOKEN cafebabe # Rotate chat token manually',
                 'set API_KEY sk-123456',
                 'set PROD_KEY $API_KEY',
                 'set'
             ],
-            notes: 'Running set with no args lists variables. Predefined: WEBTTY_PORT, WEBCHAT_PORT.'
+            notes: 'Running set with no args lists variables. Tokens usually managed via webtty/webchat/webmeet/dashboard commands.'
         },
         
         'new': {
@@ -145,40 +143,40 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         'webconsole': {
-            description: 'Start Console server (xterm) attached to a local command',
-            syntax: 'webconsole <password> [command...]',
-            examples: [ 'webconsole secret /bin/bash', 'webconsole secret p-cli shell MyAgent' ],
-            notes: 'Default command is /bin/bash. Port via variable WEBTTY_PORT (default 9001).'
+            description: 'Alias of webtty. Refreshes the WebTTY access token.',
+            syntax: 'webconsole',
+            examples: [ 'webconsole' ],
+            notes: 'Outputs the new URL backed by the RoutingServer at /webtty.'
         },
         'webtty': {
-            description: 'Synonym for webconsole (console-only).',
-            syntax: 'webtty <password> [command...]',
-            examples: [ 'webtty secret /bin/bash' ],
-            notes: 'Port via WEBTTY_PORT (default 9001).'
+            description: 'Refresh the WebTTY token used by /webtty.',
+            syntax: 'webtty',
+            examples: [ 'webtty' ],
+            notes: 'Writes the token to .ploinky/.secrets and prints a one-time URL with the token parameter.'
         },
         'webchat': {
-            description: 'Start Chat server.',
-            syntax: 'webchat <password> [command...]',
-            examples: [ 'webchat secret /bin/bash' ],
-            notes: 'Port via WEBCHAT_PORT (default 8080).'
+            description: 'Refresh the WebChat token used by /webchat.',
+            syntax: 'webchat',
+            examples: [ 'webchat' ],
+            notes: 'Tokens are stored in .ploinky/.secrets (WEBCHAT_TOKEN).'
         },
-        'voicechat': {
-            description: 'Start VoiceChat server (audio chat with speaking queue).',
-            syntax: 'voicechat [agentName]',
-            examples: [ 'voicechat', 'voicechat MyAgent' ],
-            notes: 'Port via VOICECHAT_PORT (default 8180). Auth via VOICECHAT_TOKEN link.'
+        'webmeet': {
+            description: 'Refresh the WebMeet token served at /webmeet.',
+            syntax: 'webmeet [moderatorAgent]',
+            examples: [ 'webmeet', 'webmeet ModeratorAgent' ],
+            notes: 'Stores optional moderator agent in WEBMEET_AGENT and prints the invite URL with the new token.'
         },
         'dashboard': {
-            description: 'Start Dashboard server.',
-            syntax: 'dashboard <password>',
-            examples: [ 'dashboard secret' ],
-            notes: 'Port via WEBDASHBOARD_PORT (default 9001).'
+            description: 'Refresh the Dashboard token used by /dashboard.',
+            syntax: 'dashboard',
+            examples: [ 'dashboard' ],
+            notes: 'Token stored as WEBDASHBOARD_TOKEN; no separate server is launched.'
         },
         'admin-mode': {
-            description: 'Start console, chat, and dashboard servers together.',
-            syntax: 'admin-mode <password> [command...]',
-            examples: [ 'admin-mode secret /bin/bash' ],
-            notes: 'Ports: Console WEBTTY_PORT (9001), Chat WEBCHAT_PORT (8080), Dashboard WEBDASHBOARD_PORT (9000).'
+            description: 'Dashboard/Admin tools now live behind the router.',
+            syntax: 'admin-mode',
+            examples: [ 'admin-mode' ],
+            notes: 'Use the /dashboard endpoint after running `dashboard` to refresh the token.'
         },
         
         
@@ -225,7 +223,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'start': {
             description: 'Start enabled agents and the local Router',
             syntax: 'start [staticAgent] [port] ',
-            examples: [ 'start MyStaticAgent 8088', 'start' ],
+            examples: [ 'start MyStaticAgent 8080', 'start' ],
             notes: 'Reads manifest of static agent: applies repos{} (clone+enable) and enable[] (enable agents). First run needs agent and port.'
         },
         'status': {

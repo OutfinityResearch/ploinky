@@ -41,6 +41,18 @@ function setEnvVar(name, value) {
   fs.writeFileSync(SECRETS_FILE, lines.filter(x => x !== undefined).join('\n'));
 }
 
+function deleteVar(name) {
+  if (!name) return;
+  ensureSecretsFile();
+  let lines = [];
+  try { lines = (fs.readFileSync(SECRETS_FILE,'utf8').split('\n')); } catch(_) { lines = []; }
+  const idx = lines.findIndex(l => String(l).startsWith(name + '='));
+  if (idx >= 0) {
+    lines.splice(idx, 1);
+    fs.writeFileSync(SECRETS_FILE, lines.join('\n'));
+  }
+}
+
 function declareVar(name) {
   return setEnvVar(name, '');
 }
@@ -152,6 +164,7 @@ function updateAgentExpose(manifestPath, exposedName, src) {
 module.exports = {
   parseSecrets,
   setEnvVar,
+  deleteVar,
   declareVar,
   buildEnvFlags,
   updateAgentExpose,

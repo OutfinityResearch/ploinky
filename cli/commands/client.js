@@ -30,7 +30,7 @@ class ClientCommands {
         }
         const routingFile = path.resolve('.ploinky/routing.json');
         let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
-        const port = cfg.port || 8088;
+        const port = cfg.port || 8080;
         const payload = { command: 'methods' };
         const result = await new Promise((resolve, reject) => {
             const req = http.request({ hostname: '127.0.0.1', port, path: `/apis/${agentName}`, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (r) => {
@@ -69,7 +69,7 @@ class ClientCommands {
         }
         const routingFile = path.resolve('.ploinky/routing.json');
         let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
-        const port = cfg.port || 8088;
+        const port = cfg.port || 8080;
         const payload = { command: 'status' };
         const result = await new Promise((resolve, reject) => {
             const req = http.request({ hostname: '127.0.0.1', port, path: `/apis/${agentName}`, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (r) => {
@@ -100,7 +100,7 @@ class ClientCommands {
     async sendTaskPayload(agentName, payloadObj) {
         const routingFile = path.resolve('.ploinky/routing.json');
         let cfg = {}; try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {}; } catch (_) { cfg = {}; }
-        const port = cfg.port || 8088;
+        const port = cfg.port || 8080;
         if (!agentName) {
             console.error('Missing agent name and no static agent configured.');
             console.error('Usage: client task <agentName> <json>  OR  client task <json> (uses static agent)');

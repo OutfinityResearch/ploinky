@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ploinky VoiceChat</title>
-  <link rel="stylesheet" href="/assets/webtty.css" />
+  <title>Ploinky WebMeet</title>
+  <link rel="icon" type="image/svg+xml" href="__ASSET_BASE__/webmeet-favicon.svg" />
+  <link rel="stylesheet" href="__ASSET_BASE__/webmeet.css" />
   <style>
     .wa-header-actions .wa-icon-btn#participantsBtn{margin-left:6px}
     .vc-hint{color:#9aa0a6;font-size:12px}
@@ -39,6 +40,15 @@
     .wa-message.in { display: flex; align-items: center; gap: 8px; }
     .wa-message.in .wa-tts-btn { opacity: 0; }
     .wa-message.in:hover .wa-tts-btn { opacity: 0.7; }
+    .wa-message.moderator .wa-message-bubble { border-color: var(--wa-accent); background: rgba(75,158,255,0.12); }
+    .wa-message.moderator .wa-message-author { color: var(--wa-accent); }
+    .wa-message.command .wa-message-bubble { font-style: italic; opacity: 0.85; }
+    .wa-message.forbidden .wa-message-bubble { border-color: var(--wa-danger); background: rgba(255,75,75,0.08); color: var(--wa-danger); }
+    .wa-message.forbidden .wa-message-author { color: var(--wa-danger); }
+    .wa-message-bubble.is-forbidden .wa-message-time { color: var(--wa-danger); }
+    .wa-message-bubble.moderated { border-color: var(--wa-accent); box-shadow: 0 0 0 1px rgba(75,158,255,0.2); }
+    .wa-moderation-note { font-size: 11px; color: var(--wa-accent); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .wa-moderation-detail { font-size: 12px; color: var(--wa-text-secondary); margin-bottom: 6px; }
     
     /* Toolbar styles */
     .vc-toolbar { display: flex !important; gap: 4px; margin-top: 8px; padding: 4px; background: var(--wa-bg-hover); border-radius: 8px; flex-wrap: wrap; }
@@ -93,13 +103,13 @@
     }
   </style>
 </head>
-<body data-page="chat" data-theme="dark" data-auth="true">
+<body data-page="chat" data-theme="light" data-auth="true">
   <div class="wa-header">
     <div class="wa-header-avatar">
       <span>V</span>
     </div>
     <div class="wa-header-info">
-      <div class="wa-header-title" id="titleBar">VoiceChat</div>
+      <div class="wa-header-title" id="titleBar">WebMeet</div>
       <div class="wa-header-status" id="status">
         <span class="wa-status-dot offline"></span>
         <span id="statusText">disconnected</span>
@@ -110,7 +120,7 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
       </button>
       <button class="wa-icon-btn" id="themeToggle" title="Toggle theme">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 18c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6zm0-10c-2.2 0-4 1.8-4 4s1.8 4 4 4-1.8 4-4-1.8-4-4-4z"/><path d="M13 4h-2v-2h2v2zm0 18h-2v-2h2v2zm9-11h-2v-2h2v2zm-18 0h-2v-2h2v2z"/></svg>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3a7 7 0 1 1 0 14 7 7 0 0 1 0-14z" opacity="0.4"/><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></svg>
       </button>
     </div>
   </div>
@@ -258,6 +268,6 @@
 
   <!-- Participants view moved inside chat container above -->
 
-  <script src="/assets/voice.js"></script>
+  <script src="__ASSET_BASE__/webmeet.js"></script>
 </body>
 </html>

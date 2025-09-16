@@ -1,127 +1,275 @@
-// Moved from cloud/RoutingServer.js
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const querystring = require('querystring');
+// Handlers for each application
+const { handleWebTTY } = require('./handlers/webtty.js');
+const { handleWebChat } = require('./handlers/webchat.js');
+const { handleDashboard } = require('./handlers/dashboard.js');
+const { handleWebMeet } = require('./handlers/webmeet.js');
+const { handleStatus } = require('./handlers/status.js');
+const staticSrv = require('./static');
+
+// TTY dependencies
+const pty = (() => { try { return require('node-pty'); } catch { console.warn('node-pty not found, TTY features will be disabled.'); return null; } })();
+function loadTTYFactory(modulePath, legacyPath) {
+  try {
+    return require(modulePath);
+  } catch (err) {
+    if (legacyPath) {
+      try { return require(legacyPath); } catch (_) {}
+    }
+    throw err;
+  }
+}
+
+const webttyTTYModule = pty
+  ? (() => {
+      try { return loadTTYFactory('./webtty/tty.js', './webtty/webtty-ttyFactory.js'); }
+      catch (_) { console.warn('WebTTY TTY factory unavailable.'); return {}; }
+    })()
+  : {};
+
+const webchatTTYModule = pty
+  ? (() => {
+      try { return loadTTYFactory('./webchat/tty.js', './webchat/webchat-ttyFactory.js'); }
+      catch (_) { console.warn('WebChat TTY factory unavailable.'); return {}; }
+    })()
+  : {};
+
+const {
+  createTTYFactory: createWebTTYTTYFactory,
+  createLocalTTYFactory: createWebTTYLocalFactory
+} = webttyTTYModule;
+const {
+  createTTYFactory: createWebChatTTYFactory,
+  createLocalTTYFactory: createWebChatLocalFactory
+} = webchatTTYModule;
+
+function buildLocalFactory(createFactoryFn, defaults = {}) {
+  if (!pty || !createFactoryFn) return null;
+  return createFactoryFn({ ptyLib: pty, workdir: process.cwd(), ...defaults });
+}
+
+const webttyFactory = (() => {
+  if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
+  if (createWebTTYLocalFactory) {
+    const command = process.env.WEBTTY_COMMAND || '';
+    return {
+      factory: buildLocalFactory(createWebTTYLocalFactory, { command }),
+      label: command ? command : 'local shell',
+      runtime: 'local'
+    };
+  }
+  if (createWebTTYTTYFactory) {
+    const containerName = process.env.WEBTTY_CONTAINER || 'ploinky_interactive';
+    return {
+      factory: createWebTTYTTYFactory({ ptyLib: pty, runtime: 'docker', containerName }),
+      label: containerName,
+      runtime: 'docker'
+    };
+  }
+  return { factory: null, label: '-', runtime: 'disabled' };
+})();
+
+const webchatFactory = (() => {
+  if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
+  if (createWebChatLocalFactory) {
+    const command = process.env.WEBCHAT_COMMAND || '';
+    return {
+      factory: buildLocalFactory(createWebChatLocalFactory, { command }),
+      label: command ? command : 'local shell',
+      runtime: 'local'
+    };
+  }
+  if (createWebChatTTYFactory) {
+    const containerName = process.env.WEBCHAT_CONTAINER || 'ploinky_chat';
+    return {
+      factory: createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName }),
+      label: containerName,
+      runtime: 'docker'
+    };
+  }
+  return { factory: null, label: '-', runtime: 'disabled' };
+})();
 
 const ROUTING_DIR = path.resolve('.ploinky');
 const ROUTING_FILE = path.join(ROUTING_DIR, 'routing.json');
 const LOG_DIR = path.join(ROUTING_DIR, 'logs');
 const LOG_PATH = path.join(LOG_DIR, 'router.log');
-function ts() {
-  const d = new Date();
-  const pad = (n)=> String(n).padStart(2,'0');
-  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-}
-function rotateIfNeeded() {
+
+// --- General Utils ---
+function appendLog(type, data) {
   try {
     fs.mkdirSync(LOG_DIR, { recursive: true });
-    if (fs.existsSync(LOG_PATH)) {
-      const st = fs.statSync(LOG_PATH);
-      if (st.size > 1_000_000) {
-        const base = path.basename(LOG_PATH, '.log');
-        const rotated = path.join(LOG_DIR, `${base}-${ts()}.log`);
-        fs.renameSync(LOG_PATH, rotated);
-      }
-    }
+    const rec = JSON.stringify({ ts: new Date().toISOString(), type, ...data }) + '\n';
+    fs.appendFileSync(LOG_PATH, rec);
   } catch (_) {}
 }
-function appendLog(type, data) {
-  try { rotateIfNeeded(); const rec = JSON.stringify({ ts: new Date().toISOString(), type, ...data }) + '\n'; fs.appendFileSync(LOG_PATH, rec); } catch (_) {}
-}
 
-function loadConfig() {
-  try { return JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')) || {}; } catch (_) { return {}; }
-}
-function saveConfig(cfg) {
-  try { fs.mkdirSync(ROUTING_DIR, { recursive: true }); fs.writeFileSync(ROUTING_FILE, JSON.stringify(cfg, null, 2)); } catch (_) {}
-}
-
-function serveStatic(req, res, cfg) {
-  const base = (cfg.static && cfg.static.hostPath) ? cfg.static.hostPath : process.cwd();
-  const parsed = url.parse(req.url);
-  let rel = decodeURIComponent(parsed.pathname || '/');
-  if (rel === '/') rel = '/index.html';
-  const filePath = path.join(base, rel);
-  if (!filePath.startsWith(base)) { res.statusCode = 403; return res.end('Forbidden'); }
+// --- Config ---
+function loadApiRoutes() {
   try {
-    const data = fs.readFileSync(filePath);
-    res.writeHead(200); res.end(data);
-  } catch (e) {
-    res.statusCode = 404; res.end('Not found');
+    return JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')).routes || {};
+  } catch (_) {
+    return {};
   }
 }
 
-function postJsonToAgent(port, json, cb) {
-  const data = Buffer.from(JSON.stringify(json||{}), 'utf8');
-  const out = http.request({ hostname: '127.0.0.1', port, path: '/api', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': data.length } }, (r) => {
-    const chunks = [];
-    r.on('data', d => chunks.push(d));
-    r.on('end', () => cb(null, r, Buffer.concat(chunks)));
-  });
-  out.on('error', (e) => cb(e));
-  out.write(data);
-  out.end();
+const config = {
+    webtty: {
+        ttyFactory: webttyFactory.factory,
+        agentName: 'Router',
+        containerName: webttyFactory.label,
+        runtime: webttyFactory.runtime
+    },
+    webchat: {
+        ttyFactory: webchatFactory.factory,
+        agentName: 'ChatAgent',
+        containerName: webchatFactory.label,
+        runtime: webchatFactory.runtime
+    },
+    dashboard: {
+        agentName: 'Dashboard',
+        containerName: '-',
+        runtime: 'local'
+    },
+    webmeet: {
+        agentName: 'WebMeet',
+        containerName: '-',
+        runtime: 'local'
+    },
+    status: {
+        agentName: 'Status',
+        containerName: '-',
+        runtime: 'local'
+    }
+};
+
+// --- State ---
+const globalState = {
+    webtty: { sessions: new Map() },
+    webchat: { sessions: new Map() },
+    dashboard: { sessions: new Map() },
+    webmeet: {
+        sessions: new Map(),
+        participants: new Map(),
+        chatHistory: [],
+        privateHistory: new Map(),
+        nextMsgId: 1,
+        queue: [],
+        currentSpeaker: null
+    },
+    status: { sessions: new Map() }
+};
+
+// --- API Proxy ---
+function postJsonToAgent(targetPort, payload, res) {
+    try {
+        const data = Buffer.from(JSON.stringify(payload || {}));
+        const opts = {
+            hostname: '127.0.0.1',
+            port: targetPort,
+            path: '/api',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': data.length
+            }
+        };
+        const upstream = http.request(opts, upstreamRes => {
+            res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
+            upstreamRes.pipe(res, { end: true });
+        });
+        upstream.on('error', err => {
+            res.statusCode = 502;
+            res.end(JSON.stringify({ ok: false, error: 'upstream error', detail: String(err) }));
+        });
+        upstream.end(data);
+    } catch (err) {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ ok: false, error: 'proxy failure', detail: String(err) }));
+    }
 }
 
 function proxyApi(req, res, targetPort) {
-  // For POST: stream to upstream as JSON; for GET, convert query params to JSON and POST
-  if (req.method === 'GET') {
-    const u = url.parse(req.url);
-    const params = querystring.parse(u.query || '');
-    return postJsonToAgent(targetPort, params, (err, r, body) => {
-      if (err) { res.statusCode = 502; return res.end(JSON.stringify({ ok: false, error: 'upstream error', detail: String(err) })); }
-      res.writeHead(r.statusCode || 200, r.headers);
-      res.end(body);
+    const method = (req.method || 'GET').toUpperCase();
+    if (method === 'GET') {
+        const parsed = url.parse(req.url);
+        const params = querystring.parse(parsed.query || '');
+        return postJsonToAgent(targetPort, params, res);
+    }
+
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+        const body = Buffer.concat(chunks);
+        const data = body.length ? body : Buffer.from('{}');
+        const opts = {
+            hostname: '127.0.0.1',
+            port: targetPort,
+            path: '/api',
+            method: 'POST',
+            headers: {
+                'Content-Type': req.headers['content-type'] || 'application/json',
+                'Content-Length': data.length
+            }
+        };
+        const upstream = http.request(opts, upstreamRes => {
+            res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
+            upstreamRes.pipe(res, { end: true });
+        });
+        upstream.on('error', err => {
+            res.statusCode = 502;
+            res.end(JSON.stringify({ ok: false, error: 'upstream error', detail: String(err) }));
+        });
+        upstream.end(data);
     });
-  }
-  // Default: POST/others pipe through
-  const opts = { hostname: '127.0.0.1', port: targetPort, path: '/api', method: 'POST', headers: { 'Content-Type': 'application/json' } };
-  const out = http.request(opts, (r) => {
-    let buf = [];
-    r.on('data', d => buf.push(d));
-    r.on('end', () => { const body = Buffer.concat(buf); res.writeHead(r.statusCode || 200, r.headers); res.end(body); });
-  });
-  out.on('error', (e) => { res.statusCode = 502; res.end(JSON.stringify({ ok: false, error: 'upstream error', detail: String(e) })); });
-  req.pipe(out);
+    req.on('error', err => {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ ok: false, error: 'request error', detail: String(err) }));
+    });
 }
 
-function start(port) {
-  const server = http.createServer((req, res) => {
-    const cfg = loadConfig();
-    const u = url.parse(req.url || '/');
-    // Light request log for diagnostics
-    try { appendLog('http_request', { method: req.method, path: u.pathname }); } catch(_) {}
-    // Health/inspection endpoint
-    if (u.pathname === '/list-agents/' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ ok: true, port, static: cfg.static || null, routes: cfg.routes || {} }));
+// --- Main Server ---
+const server = http.createServer((req, res) => {
+    const parsedUrl = url.parse(req.url);
+    const pathname = parsedUrl.pathname;
+    appendLog('http_request', { method: req.method, path: pathname });
+
+    if (pathname.startsWith('/webtty')) {
+        return handleWebTTY(req, res, config.webtty, globalState.webtty);
+    } else if (pathname.startsWith('/webchat')) {
+        return handleWebChat(req, res, config.webchat, globalState.webchat);
+    } else if (pathname.startsWith('/dashboard')) {
+        return handleDashboard(req, res, config.dashboard, globalState.dashboard);
+    } else if (pathname.startsWith('/webmeet')) {
+        return handleWebMeet(req, res, config.webmeet, globalState.webmeet);
+    } else if (pathname.startsWith('/status')) {
+        return handleStatus(req, res, config.status, globalState.status);
+    } else if (pathname.startsWith('/apis/')) {
+        const apiRoutes = loadApiRoutes();
+        const agent = pathname.split('/')[2];
+        const route = apiRoutes[agent];
+        if (route && route.hostPort) {
+            req.url = req.url.replace(`/apis/${agent}`, '');
+            return proxyApi(req, res, route.hostPort);
+        }
+        res.writeHead(404); return res.end('API Route not found');
+    } else {
+        if (staticSrv.serveStaticRequest(req, res)) return;
+        res.writeHead(404); return res.end('Not Found');
     }
-    // API routing: /apis/:agent -> proxy to hostPort
-    if (u.pathname && u.pathname.startsWith('/apis/')) {
-      const agent = u.pathname.split('/')[2];
-      const route = (cfg.routes && cfg.routes[agent]) || null;
-      if (!route || !route.hostPort) {
-        const keys = Object.keys((cfg.routes)||{});
-        res.statusCode = 404;
-        return res.end(JSON.stringify({ ok: false, error: 'route not found', agent, available: keys }));
-      }
-      return proxyApi(req, res, route.hostPort);
-    }
-    return serveStatic(req, res, cfg);
-  });
-  server.on('connection', (socket) => {
-    const ip = socket.remoteAddress;
-    appendLog('connection_open', { ip });
-    socket.on('close', () => appendLog('connection_close', { ip }));
-  });
-  server.listen(port, () => {
-    console.log(`[RoutingServer] listening on http://127.0.0.1:${port}`);
+});
+
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
+server.listen(port, () => {
+    console.log(`[RoutingServer] Ploinky server running on http://127.0.0.1:${port}`);
+    console.log('  Dashboard: /dashboard');
+    console.log('  WebTTY:    /webtty');
+    console.log('  WebChat:   /webchat');
+    console.log('  WebMeet:   /webmeet');
+    console.log('  Status:    /status');
     appendLog('server_start', { port });
-  });
-}
-
-const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 8088;
-start(port);
-try { process.on('SIGINT', () => { appendLog('server_stop', { signal: 'SIGINT' }); process.exit(0); }); process.on('SIGTERM', () => { appendLog('server_stop', { signal: 'SIGTERM' }); process.exit(0); }); } catch(_) {}
+});

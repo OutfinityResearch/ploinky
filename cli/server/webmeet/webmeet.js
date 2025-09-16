@@ -1,5 +1,5 @@
 (() => {
-  const dlog = (...a) => console.log('[voice]', ...a);
+  const dlog = (...a) => console.log('[webmeet]', ...a);
   const TAB_ID = (()=>{ try { let v = sessionStorage.getItem('vc_tab'); if (!v) { v = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2); sessionStorage.setItem('vc_tab', v); } return v; } catch(_) { return String(Math.random()).slice(2); } })();
 
   // DOM
@@ -54,12 +54,12 @@
   let isDeafened = false; // State for muting incoming audio
 
   // Theme
-  function getTheme() { return localStorage.getItem('webtty_theme') || 'dark'; }
-  function setTheme(t) { document.body.setAttribute('data-theme', t); localStorage.setItem('webtty_theme', t); }
+  function getTheme() { return localStorage.getItem('webmeet_theme') || 'light'; }
+  function setTheme(t) { document.body.setAttribute('data-theme', t); localStorage.setItem('webmeet_theme', t); }
   themeToggle.onclick = () => { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); };
   setTheme(getTheme());
-  titleBar.textContent = 'VoiceChat';
-  (async () => { if (requiresAuth && !(await fetch('/whoami').then(r => r.ok).catch(()=>false))) location.href = '/'; })();
+  titleBar.textContent = 'WebMeet';
+  (async () => { if (requiresAuth && !(await fetch('whoami').then(r => r.ok).catch(()=>false))) location.href = '.'; })();
 
   function showBanner(text, cls) { banner.className = 'wa-connection-banner show'; if (cls === 'ok') banner.classList.add('success'); else if (cls === 'err') banner.classList.add('error'); bannerText.textContent = text; }
   function hideBanner() { banner.classList.remove('show'); }
@@ -177,7 +177,15 @@
   (function initResizer(){ if (!sidePanelResizer) return; let dragging=false; let startX=0; let containerW=0; let startPanelW=0; let raf=0; let nextPct=null; function scheduleApply(p){ nextPct=p; if (raf) return; raf=requestAnimationFrame(()=>{ if (nextPct!=null) applyPanelSize(nextPct); raf=0; nextPct=null; }); } function onDown(e){ try{e.preventDefault();}catch(_){} dragging=true; chatContainer.classList.add('dragging'); startX=e.clientX; try{ sidePanelResizer.setPointerCapture(e.pointerId);}catch(_){} const rects=chatContainer.getBoundingClientRect(); containerW=rects.width; startPanelW=sidePanel.getBoundingClientRect().width; window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp, { once:true }); window.addEventListener('pointercancel', onUp, { once:true }); } function onMove(e){ if (!dragging) return; try{e.preventDefault();}catch(_){} const dx=e.clientX-startX; const newWidth=clamp(startPanelW - dx, containerW*0.2, containerW*0.8); const pct=(newWidth/containerW)*100; scheduleApply(pct); } function onUp(e){ if (!dragging) return; dragging=false; chatContainer.classList.remove('dragging'); try{ sidePanelResizer.releasePointerCapture(e.pointerId);}catch(_){} window.removeEventListener('pointermove', onMove); try { const panelRect=sidePanel.getBoundingClientRect(); const contRect=chatContainer.getBoundingClientRect(); const pct=clamp((panelRect.width/contRect.width)*100, 20,80); localStorage.setItem(PANEL_SIZE_KEY, String(pct.toFixed(1))); } catch(_){} } sidePanelResizer.addEventListener('pointerdown', onDown); })();
 
   // Linkify + view more
-  function openSidePanel(bubble, fullText){ showTextInPanel(fullText); }
+  function openSidePanel(bubble, fullText){
+    const original = bubble && bubble.dataset ? bubble.dataset.originalText : null;
+    if (original && original !== fullText) {
+      const combined = `Current message:\n\n${fullText}\n\nOriginal submission:\n\n${original}`;
+      showTextInPanel(combined);
+    } else {
+      showTextInPanel(fullText);
+    }
+  }
   function linkify(text){ const frag = document.createDocumentFragment(); const urlRe = /(https?:\/\/[\w\-._~:\/?#\[\]@!$&'()*+,;=%]+)/gi; let last = 0; let m; while ((m = urlRe.exec(text))){ const before=text.slice(last, m.index); if (before) frag.appendChild(document.createTextNode(before)); const raw=m[0]; const a=document.createElement('a'); a.href=raw; a.textContent=raw; a.title=raw; a.style.color='var(--wa-accent)'; a.style.textDecoration='underline'; a.addEventListener('click', (e)=>{ e.preventDefault(); showTextInPanel(raw); }); frag.appendChild(a); last=m.index+raw.length; } const rest=text.slice(last); if (rest) frag.appendChild(document.createTextNode(rest)); return frag; }
   function updateBubbleContent(bubble, fullText){ const lines=(fullText||'').split('\n'); const preview=lines.slice(0,6).join('\n'); const hasMore=lines.length>6; const textDiv=bubble.querySelector('.wa-message-text'); const moreDiv=bubble.querySelector('.wa-message-more'); textDiv.innerHTML=''; textDiv.appendChild(linkify(preview)); if (hasMore && !moreDiv){ const more=document.createElement('div'); more.className='wa-message-more'; more.textContent='View more'; more.onclick=()=>openSidePanel(bubble, fullText); bubble.appendChild(more); } else if (hasMore && moreDiv) { moreDiv.onclick=()=>openSidePanel(bubble, fullText); } }
 
@@ -185,52 +193,87 @@
   function authorLabelForSelf(){
     try { return localStorage.getItem('vc_email') || 'You'; } catch(_) { return 'You'; }
   }
-  function addOutgoing(text){
-    const msgDiv=document.createElement('div'); msgDiv.className='wa-message out';
-    const bubble=document.createElement('div'); bubble.className='wa-message-bubble';
-    bubble.innerHTML='<div class="wa-message-author"></div><div class="wa-message-text"></div><span class="wa-message-time"></span>';
-    msgDiv.appendChild(bubble);
-    bubble.querySelector('.wa-message-author').textContent = authorLabelForSelf();
-    updateBubbleContent(bubble, text);
-    bubble.querySelector('.wa-message-time').textContent = formatTime();
-    chatList.appendChild(msgDiv);
-    chatList.scrollTop=chatList.scrollHeight;
-    lastOutgoingBubble = bubble;
-  }
-  function addIncoming(text, who){
+  function renderChatMessage(msg, opts = {}){
+    if (!msg) return;
+    const isSelf = msg.from && msg.from.tabId === TAB_ID;
+    const role = msg.role || msg.type || 'text';
+    const isModerator = role === 'moderator';
+    const isCommand = role === 'command';
+    const isTranscript = msg.type === 'transcript';
+    const isForbidden = opts.private || msg.state === 'forbidden';
+    const text = String(msg.text || '');
+    const who = isSelf ? authorLabelForSelf() : (msg.from?.email || msg.from?.name || 'Guest');
+    const moderatedBy = msg.meta && msg.meta.moderatedBy ? msg.meta.moderatedBy : null;
+    const originalText = msg.meta && msg.meta.originalText ? String(msg.meta.originalText) : null;
+    const moderationCommand = msg.meta && msg.meta.moderationCommand ? msg.meta.moderationCommand : null;
+    const moderatorNote = msg.meta && msg.meta.moderatorNote ? msg.meta.moderatorNote : null;
+    const moderatorReason = msg.meta && msg.meta.moderatorReason ? msg.meta.moderatorReason : null;
+
     const msgDiv=document.createElement('div');
-    msgDiv.className='wa-message in';
+    msgDiv.className='wa-message ' + (isSelf ? 'out' : 'in');
+    if (isModerator) msgDiv.classList.add('moderator');
+    if (isCommand) msgDiv.classList.add('command');
+    if (isForbidden) msgDiv.classList.add('forbidden');
 
     const bubble=document.createElement('div');
     bubble.className='wa-message-bubble';
+    if (isModerator) bubble.classList.add('is-moderator');
+    if (isCommand) bubble.classList.add('is-command');
+    if (isTranscript) bubble.classList.add('is-transcript');
+    if (isForbidden) bubble.classList.add('is-forbidden');
+    if (moderatedBy) bubble.classList.add('moderated');
     bubble.innerHTML='<div class="wa-message-author"></div><div class="wa-message-text"></div><span class="wa-message-time"></span>';
 
-    const ttsBtn = document.createElement('button');
-    ttsBtn.className = 'wa-tts-btn';
-    ttsBtn.title = 'Read aloud';
-    ttsBtn.innerHTML = '🔈';
-    ttsBtn.onclick = ()=>{ 
-      try { 
-        const u=new SpeechSynthesisUtterance(text); 
-        // Use the currently selected language
-        const currentLang = document.getElementById('speakLang')?.value || 
-                           document.getElementById('prepLang')?.value || 
-                           sttLang || 'en-US';
-        u.lang = currentLang; 
-        speechSynthesis.speak(u);
-      } catch(_){} 
-    };
+    if (!isSelf) {
+      const ttsBtn = document.createElement('button');
+      ttsBtn.className = 'wa-tts-btn';
+      ttsBtn.title = 'Read aloud';
+      ttsBtn.innerHTML = '🔈';
+      ttsBtn.onclick = ()=>{ 
+        try { 
+          const u=new SpeechSynthesisUtterance(text); 
+          const currentLang = document.getElementById('speakLang')?.value || document.getElementById('prepLang')?.value || sttLang || 'en-US';
+          u.lang = currentLang; 
+          speechSynthesis.speak(u);
+        } catch(_){} 
+      };
+      msgDiv.appendChild(bubble);
+      msgDiv.appendChild(ttsBtn);
+    } else {
+      msgDiv.appendChild(bubble);
+    }
 
-    msgDiv.appendChild(bubble);
-    msgDiv.appendChild(ttsBtn);
-
-    bubble.querySelector('.wa-message-author').textContent = who || 'Guest';
+    bubble.querySelector('.wa-message-author').textContent = who;
+    const textWrapper = bubble.querySelector('.wa-message-text');
+    if (moderatedBy) {
+      const note = document.createElement('div');
+      note.className = 'wa-moderation-note';
+      const parts = [`Moderated by ${moderatedBy}`];
+      if (moderationCommand && moderationCommand !== 'allow') parts.push(`(${moderationCommand})`);
+      if (originalText && originalText !== text) parts.push('• text updated');
+      note.textContent = parts.join(' ');
+      bubble.insertBefore(note, textWrapper);
+      if (moderatorNote || moderatorReason) {
+        const detail = document.createElement('div');
+        detail.className = 'wa-moderation-detail';
+        detail.textContent = moderatorNote || moderatorReason;
+        bubble.insertBefore(detail, textWrapper);
+      }
+    }
     updateBubbleContent(bubble, text);
-    bubble.querySelector('.wa-message-time').textContent = formatTime();
-    
+    if (originalText && originalText !== text) {
+      bubble.dataset.originalText = originalText;
+    }
+    const ts = msg.ts ? new Date(msg.ts) : new Date();
+    const hh = String(ts.getHours()).padStart(2,'0');
+    const mm = String(ts.getMinutes()).padStart(2,'0');
+    bubble.querySelector('.wa-message-time').textContent = `${hh}:${mm}`;
+
     chatList.appendChild(msgDiv);
     chatList.scrollTop=chatList.scrollHeight;
-    lastIncomingBubble = bubble; lastIncomingText = text;
+
+    if (isSelf) lastOutgoingBubble = bubble;
+    else { lastIncomingBubble = bubble; lastIncomingText = text; }
   }
 
   // Composer
@@ -261,7 +304,7 @@
   async function startDemo(){
     try {
       if (connected || demoTimer) return;
-      const r = await fetch('/demo').then(r=>r.json()).catch(()=>null);
+      const r = await fetch('demo').then(r=>r.json()).catch(()=>null);
       demoScript = (r && r.script) ? r.script : [];
       chatList.innerHTML = '';
       demoIndex = 0;
@@ -559,7 +602,7 @@
   // SSE
   function connectSSE(){
     if (esConn) { try { esConn.close(); } catch(_){} }
-    const es = new EventSource(`/events?tabId=${encodeURIComponent(TAB_ID)}`);
+    const es = new EventSource(`events?tabId=${encodeURIComponent(TAB_ID)}`);
     esConn = es;
     es.addEventListener('open', async () => {
       connected = true; stopDemo(); chatList.innerHTML=''; updateConnectionUI();
@@ -588,7 +631,9 @@
     es.addEventListener('init', (ev)=>{
       const data = JSON.parse(ev.data||'{}');
       participants = data.participants||[]; queue = data.queue||[]; currentSpeaker = data.currentSpeaker||null;
-      (data.history||[]).forEach(m => { const who = (m.from?.email || m.from?.name || 'Guest'); if (m.from && m.from.tabId === TAB_ID) addOutgoing(m.text||''); else addIncoming(m.text||'', who); });
+      const combined = [...(data.history||[]), ...(data.privateHistory||[])];
+      combined.sort((a,b) => (a.ts||0) - (b.ts||0));
+      combined.forEach(m => renderChatMessage(m, { private: m.state === 'forbidden' }));
       renderParticipantsList(); statusEl.textContent='online'; statusDot.classList.remove('offline'); statusDot.classList.add('online');
       showBanner('Connected','ok'); setTimeout(hideBanner, 700);
     });
@@ -623,14 +668,15 @@
         }, 500); 
       } 
     });
-    es.addEventListener('chat', (ev)=>{ const msg = JSON.parse(ev.data||'{}'); const who = (msg?.from?.email || msg?.from?.name || 'Guest'); if (msg && msg.from && msg.from.tabId === TAB_ID) { addOutgoing(msg.text||''); } else { addIncoming(msg.text||'', who); } });
+    es.addEventListener('chat', (ev)=>{ const msg = JSON.parse(ev.data||'{}'); renderChatMessage(msg); });
+    es.addEventListener('chat_private', (ev)=>{ const msg = JSON.parse(ev.data||'{}'); renderChatMessage(msg, { private: true }); });
     es.addEventListener('signal', (ev)=>{ const { from, payload } = JSON.parse(ev.data||'{}'); onSignal(from, payload); });
     es.onerror = ()=>{ statusEl.textContent='offline'; statusDot.classList.remove('online'); statusDot.classList.add('offline'); };
     return es;
   }
   function disconnectSSE(){ try { esConn?.close?.(); } catch(_){} esConn = null; connected = false; joined = false; try { if (pingTimer) clearInterval(pingTimer); } catch(_){} pingTimer = null; try { statusEl.textContent='offline'; statusDot.classList.remove('online'); statusDot.classList.add('offline'); } catch(_){} updateConnectionUI(); updateComposerEnabled(); renderParticipantsList(); startDemo(); }
 
-  async function postAction(payload){ payload.tabId = TAB_ID; const res = await fetch('/action', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); return res.json().catch(()=>({ok:false})); }
+  async function postAction(payload){ payload.tabId = TAB_ID; const res = await fetch('action', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); return res.json().catch(()=>({ok:false})); }
 
   // Speak overlay controls
   if (speakSend) speakSend.onclick = async ()=>{

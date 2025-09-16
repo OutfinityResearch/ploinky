@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ploinky Console</title>
+  <title>Ploinky Web TTY</title>
   <link rel="stylesheet" href="https://unpkg.com/xterm/css/xterm.css" />
-  <link rel="stylesheet" href="/assets/webtty.css" />
+  <link rel="stylesheet" href="__ASSET_BASE__/webtty.css" />
   <style>
     .wa-terminal-container {
       height: calc(100vh - var(--wa-header-height));
@@ -60,13 +60,13 @@
   <script src="https://unpkg.com/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
   <script src="https://unpkg.com/xterm-addon-web-links/lib/xterm-addon-web-links.js"></script>
 </head>
-<body data-page="console" data-theme="dark" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__">
+<body data-page="webtty" data-theme="light" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__">
   <div class="wa-header">
     <div class="wa-header-avatar">
       <span>⚡</span>
     </div>
     <div class="wa-header-info">
-      <div class="wa-header-title" id="titleBar">Console</div>
+      <div class="wa-header-title" id="titleBar">WebTTY</div>
       <div class="wa-header-status">
         <span class="wa-status-dot offline"></span>
         <span id="status">disconnected</span>
@@ -112,6 +112,6 @@
     </div>
   </div>
 
-  <script src="/assets/console.js"></script>
+  <script src="__ASSET_BASE__/webtty.js"></script>
 </body>
 </html>

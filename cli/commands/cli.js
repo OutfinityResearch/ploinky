@@ -2,7 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { execSync, execFileSync, spawn } = require('child_process');
-let pty; // lazy require to enable TTY resize if available
+const crypto = require('crypto');
+// Web console components now served via RoutingServer; local PTY handled there when available.
 const { PLOINKY_DIR } = require('../services/config');
 const { debugLog } = require('../services/utils');
 // AgentCoreClient is required lazily only by runTask to avoid hard dependency for other commands
@@ -14,6 +15,48 @@ const reposSvc = require('../services/repos');
 const envSvc = require('../services/secretVars');
 const agentsSvc = require('../services/agents');
 const { applyManifestDirectives } = require('../services/bootstrapManifest');
+
+const COMPONENTS = {
+    webtty: { varName: 'WEBTTY_TOKEN', label: 'WebTTY', path: '/webtty' },
+    webchat: { varName: 'WEBCHAT_TOKEN', label: 'WebChat', path: '/webchat' },
+    dashboard: { varName: 'WEBDASHBOARD_TOKEN', label: 'Dashboard', path: '/dashboard' },
+    webmeet: { varName: 'WEBMEET_TOKEN', label: 'WebMeet', path: '/webmeet' }
+};
+
+function getRouterPort() {
+    let port = null;
+    try {
+        const routing = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'), 'utf8'));
+        if (routing && routing.port) {
+            const candidate = parseInt(routing.port, 10);
+            if (!Number.isNaN(candidate) && candidate > 0) port = candidate;
+        }
+    } catch (_) {}
+    if (!port) {
+        try {
+            const val = parseInt(envSvc.resolveVarValue('ROUTER_PORT'), 10);
+            if (!Number.isNaN(val) && val > 0) port = val;
+        } catch (_) {}
+    }
+    if (!port) {
+        const envPort = parseInt(process.env.ROUTER_PORT || '', 10);
+        if (!Number.isNaN(envPort) && envPort > 0) port = envPort;
+    }
+    return port || 8080;
+}
+
+function refreshComponentToken(component, { quiet } = {}) {
+    const spec = COMPONENTS[component];
+    if (!spec) throw new Error(`Unknown component '${component}'`);
+    const token = crypto.randomBytes(32).toString('hex');
+    envSvc.setEnvVar(spec.varName, token);
+    if (!quiet) {
+        const port = getRouterPort();
+        console.log(`✓ ${spec.label} token refreshed.`);
+        console.log(`  Visit: http://127.0.0.1:${port}${spec.path}?token=${token}`);
+    }
+    return token;
+}
 
 // --- Start of Original Functions ---
 
@@ -226,36 +269,29 @@ async function statusWorkspace() {
     } catch(_) {}
     const effectiveStatic = (cfg && cfg.static)
         ? cfg.static
-        : (staticAgentName ? { agent: staticAgentName, port: (function(){ try { const r = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'),'utf8'))||{}; return r.port||8088; } catch(_) { return 8088; } })() } : null);
+        : (staticAgentName ? { agent: staticAgentName, port: (function(){ try { const r = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'),'utf8'))||{}; return r.port||8080; } catch(_) { return 8080; } })() } : null);
     if (effectiveStatic && effectiveStatic.agent) {
         console.log(`- Static: agent=${colorize(effectiveStatic.agent,'cyan')} port=${colorize(effectiveStatic.port,'yellow')}`);
     } else {
         console.log(colorize('- Static: (not configured)', 'yellow'));
         console.log('  Tip: start <staticAgent> <port> to configure.');
     }
-    // Web servers status (Console/Chat/Dashboard)
+    // Web interfaces summary (served via Router)
     try {
         const env = require('../services/secretVars');
-        const webPorts = {
-            console: (function(){ const v = parseInt(env.resolveVarValue('WEBTTY_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:9001; })(),
-            chat: (function(){ const v = parseInt(env.resolveVarValue('WEBCHAT_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:8080; })(),
-            dashboard: (function(){ const v = parseInt(env.resolveVarValue('WEBDASHBOARD_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:9000; })(),
+        const read = (name) => {
+            const val = env.resolveVarValue(name);
+            return (typeof val === 'string' && val.trim()) ? 'configured' : 'default token';
         };
-        const check = (name, file, port) => {
-            try {
-                const pidFile = path.resolve('.ploinky/running/'+file);
-                if (fs.existsSync(pidFile)) {
-                    const pid = parseInt(fs.readFileSync(pidFile,'utf8').trim(),10);
-                    if (pid && !Number.isNaN(pid)) {
-                        try { process.kill(pid, 0); console.log(`- ${name}: running (pid ${pid}) on port ${port}`); }
-                        catch { console.log(`- ${name}: not running (stale pid ${pid}); expected port ${port}`); }
-                    } else { console.log(`- ${name}: (no pid); expected port ${port}`); }
-                } else { console.log(`- ${name}: (not running); expected port ${port}`); }
-            } catch(_) { console.log(`- ${name}: (unknown); expected port ${port}`); }
-        };
-        check('Dashboard', 'dashboard.pid', webPorts.dashboard);
-        check('Console', 'webtty.pid', webPorts.console);
-        check('Chat', 'webchat.pid', webPorts.chat);
+        console.log(colorize('- Interfaces:', 'bold'));
+        console.log(`  • Dashboard: served via router (${read('WEBDASHBOARD_TOKEN')})`);
+        console.log(`  • Web Console: served via router (${read('WEBTTY_TOKEN')})`);
+        console.log(`  • WebChat: served via router (${read('WEBCHAT_TOKEN')})`);
+        const meetAgent = env.resolveVarValue('WEBMEET_AGENT');
+        const meetStatus = (typeof meetAgent === 'string' && meetAgent.trim())
+            ? `moderator ${meetAgent}`
+            : 'run "webmeet <agent>" to set moderator';
+        console.log(`  • WebMeet: served via router (${meetStatus})`);
     } catch(_) {}
 
     // Router status
@@ -355,7 +391,7 @@ function killRouterIfRunning() {
 
         // 2) Fallback: detect by configured port in .ploinky/routing.json
         if (!stopped) {
-            let port = 8088;
+            let port = 8080;
             try {
                 const routing = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'), 'utf8')) || {};
                 if (routing.port) port = parseInt(routing.port, 10) || port;
@@ -474,51 +510,17 @@ function getCliCmd(manifest) {
 
 
 
-async function runConsole(...cmdTokens) {
-    // Require node-pty for a proper interactive TTY
-    try { pty = require('node-pty'); } catch (e) { throw new Error("'node-pty' is required for WebTTY. Install it with: (cd cli && npm install node-pty)"); }
-    const command = (cmdTokens && cmdTokens.length) ? cmdTokens.join(' ') : (process.env.SHELL || '/bin/bash');
-    const mode = (process.env.WEBTTY_MODE || 'console');
-    // Internal config-driven ports
-    let port;
-    try {
-        const env = require('../services/secretVars');
-        if (mode === 'chat') {
-            const v = parseInt(env.resolveVarValue('WEBCHAT_PORT'), 10);
-            port = (!Number.isNaN(v) && v > 0) ? v : 8080;
-        } else { // console
-            const v = parseInt(env.resolveVarValue('WEBTTY_PORT'), 10);
-            port = (!Number.isNaN(v) && v > 0) ? v : 9001;
-        }
-    } catch(_) { port = (mode === 'chat') ? 8080 : 9001; }
-    const title = '';
-
-    const { createLocalTTYFactory } = require('../webtty/tty');
-    const { startWebTTYServer } = require('../webtty/server');
-    console.log(`[console] local command: ${command}`);
-    const ttyFactory = createLocalTTYFactory({ ptyLib: pty, workdir: process.cwd(), command });
-    const srv = startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory, password: null, workdir: process.cwd(), entry: command, title, mode });
-    try {
-        srv.on('listening', () => {
-            try {
-                const runningDir = path.resolve('.ploinky/running');
-                fs.mkdirSync(runningDir, { recursive: true });
-                const pidName = (mode === 'chat') ? 'webchat.pid' : 'webtty.pid';
-                fs.writeFileSync(path.join(runningDir, pidName), String(process.pid));
-            } catch(_) {}
-        });
-        srv.on('error', (e) => {
-            console.error(`[webtty] Failed to start on port ${port}: ${e?.message || e}`);
-            console.error('Tip: set WEBTTY_PORT to a free port or stop the existing server.');
-        });
-    } catch(_) {}
-}
-
 async function startWorkspace(staticAgentArg, portArg) {
     try {
         const ws = require('../services/workspace');
         if (staticAgentArg) {
-            const portNum = parseInt(portArg || '0', 10) || 8088;
+            try {
+                await enableAgent(staticAgentArg);
+            } catch (e) {
+                console.error(`start: failed to enable agent '${staticAgentArg}': ${e?.message || e}`);
+                return;
+            }
+            const portNum = parseInt(portArg || '0', 10) || 8080;
             const cfg = ws.getConfig() || {};
             cfg.static = { agent: staticAgentArg, port: portNum };
             ws.setConfig(cfg);
@@ -527,6 +529,14 @@ async function startWorkspace(staticAgentArg, portArg) {
         if (!cfg0.static || !cfg0.static.agent || !cfg0.static.port) {
             console.error('start: missing static agent or port. Usage: start <staticAgent> <port> (first time).');
             return;
+        }
+        try {
+            refreshComponentToken('webtty', { quiet: true });
+            refreshComponentToken('webchat', { quiet: true });
+            refreshComponentToken('dashboard', { quiet: true });
+            refreshComponentToken('webmeet', { quiet: true });
+        } catch (e) {
+            debugLog('Failed to refresh component tokens:', e.message);
         }
         // New: apply manifest directives from static agent (repos + enable)
         try { await applyManifestDirectives(cfg0.static.agent); } catch (_) {}
@@ -547,6 +557,25 @@ async function startWorkspace(staticAgentArg, portArg) {
         const dedup = Object.fromEntries(Object.values(byAgent).map(({key, rec}) => [key, rec]));
         const preservedCfg = ws.getConfig();
         if (preservedCfg && Object.keys(preservedCfg).length) dedup._config = preservedCfg;
+        const staticAgentName0 = cfg0?.static?.agent;
+        const staticManifestPath0 = staticAgentName0 ? (function(){ try { const { manifestPath } = require('../services/utils').findAgent(staticAgentName0); return manifestPath; } catch(_) { return null; } })() : null;
+        if (staticManifestPath0) {
+            try {
+                const manifest = JSON.parse(fs.readFileSync(staticManifestPath0, 'utf8'));
+                if (Array.isArray(manifest.enable)) {
+                    for (const agentRef of manifest.enable) {
+                        try {
+                            const info = agentsSvc.enableAgent(agentRef);
+                            if (info && info.containerName) {
+                                const regMap = ws.loadAgents();
+                                const record = regMap[info.containerName];
+                                if (record) dedup[info.containerName] = record;
+                            }
+                        } catch (_) {}
+                    }
+                }
+            } catch (_) {}
+        }
         ws.saveAgents(dedup);
         reg = dedup;
         const names = Object.keys(reg || {});
@@ -609,7 +638,7 @@ async function startWorkspace(staticAgentArg, portArg) {
         // Start RoutingServer attached
         // Ensure any previously running router is stopped to avoid EADDRINUSE
         try { killRouterIfRunning(); } catch(_) {}
-        const port = parseInt(cfg.port || process.env.ROUTER_PORT || '8088', 10);
+        const port = parseInt(cfg.port || process.env.ROUTER_PORT || '8080', 10);
         console.log(`[Ploinky] Starting RoutingServer on port ${port}`);
         const serverPath = path.resolve(__dirname, '../server/RoutingServer.js');
         const child = require('child_process').spawn('node', [serverPath], { stdio: 'inherit', env: { ...process.env, PORT: String(port) } });
@@ -751,7 +780,7 @@ async function handleCommand(args) {
             else showHelp();
             break;
         case 'set': {
-            const defaults = ['WEBTTY_PORT', 'WEBCHAT_PORT', 'WEBDASHBOARD_PORT', 'APP_NAME', 'WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
+            const defaults = ['APP_NAME', 'WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
             if (!options[0]) {
                 try {
                     const env = require('../services/secretVars');
@@ -763,11 +792,6 @@ async function handleCommand(args) {
                         try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch(_) {}
                     }
                     // Ensure default ports if missing
-                    const portDefaults = { WEBTTY_PORT: '9001', WEBCHAT_PORT: '8080', WEBDASHBOARD_PORT: '9000' };
-                    for (const [k, v] of Object.entries(portDefaults)) {
-                        if (!secrets[k] || !String(secrets[k]).trim()) { try { env.setEnvVar(k, v); } catch(_) {}
-                        }
-                    }
                     // Ensure persistent tokens if missing
                     const tokens = ['WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
                     for (const t of tokens) {
@@ -777,7 +801,7 @@ async function handleCommand(args) {
                     }
                     // Reload and print
                     const merged = env.parseSecrets();
-                    const printOrder = ['APP_NAME', 'VOICECHAT_PORT', 'VOICECHAT_TOKEN', 'WEBCHAT_PORT', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_PORT', 'WEBDASHBOARD_TOKEN', 'WEBTTY_PORT', 'WEBTTY_TOKEN'];
+                    const printOrder = ['APP_NAME', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN', 'WEBTTY_TOKEN'];
                     const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
                     keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
                 } catch (e) { console.error('Failed to list variables:', e.message); }
@@ -785,9 +809,7 @@ async function handleCommand(args) {
                 const name = options[0];
                 const value = options.slice(1).join(' ');
                 setVar(name, value);
-                if (name === 'WEBTTY_PORT' || name === 'WEBCHAT_PORT' || name === 'WEBDASHBOARD_PORT' || name === 'VOICECHAT_PORT') {
-                    console.log(`Hint: restart the respective server to apply ${name}.`);
-                }
+                // no extra port hints needed; router serves these interfaces
             }
             break; }
         case 'echo':
@@ -820,73 +842,38 @@ async function handleCommand(args) {
             break;
         // 'route' and 'probe' commands removed (replaced by start/status and client commands)
         case 'webconsole':
-            // Synonym for 'webtty' (console-only server)
-            process.env.WEBTTY_MODE = 'console';
-            await runConsole(...options);
+            await refreshComponentToken('webtty');
             break;
         case 'webchat':
-            process.env.WEBTTY_MODE = 'chat';
-            await runConsole(...options);
+            await refreshComponentToken('webchat');
             break;
         case 'webtty':
-            process.env.WEBTTY_MODE = 'console';
-            await runConsole(...options);
+            await refreshComponentToken('webtty');
             break;
-        case 'voicechat': {
-            // Start the VoiceChat HTTP server (separate stack from webtty)
-            const agentName = options[0] || null; // optional target agent for command forwarding
-            let port;
-            try { const env = require('../services/secretVars'); const v = parseInt(env.resolveVarValue('VOICECHAT_PORT'), 10); port = (!Number.isNaN(v) && v > 0) ? v : 8180; } catch(_) { port = 8180; }
-            const { startVoiceChatServer } = require('../voicechat/server');
-            const srv = startVoiceChatServer({ port, agentName, workdir: process.cwd() });
-            try {
-                srv.on('listening', () => {
-                    try {
-                        const runningDir = path.resolve('.ploinky/running');
-                        fs.mkdirSync(runningDir, { recursive: true });
-                        fs.writeFileSync(path.join(runningDir, 'voicechat.pid'), String(process.pid));
-                    } catch(_) {}
-                });
-            } catch(_) {}
+        case 'voicechat':
+            console.log('voicechat: feature removed; use /webmeet instead.');
+            break;
+        case 'dashboard':
+            await refreshComponentToken('dashboard');
+            break;
+        case 'webmeet': {
+            const moderator = options[0];
+            if (moderator) {
+                try {
+                    await enableAgent(moderator);
+                    envSvc.setEnvVar('WEBMEET_AGENT', moderator);
+                    console.log(`✓ Stored WebMeet moderator agent: ${moderator}`);
+                    await refreshComponentToken('webmeet');
+                } catch (e) {
+                    console.error(`webmeet: failed to configure agent '${moderator}': ${e?.message || e}`);
+                }
+            } else {
+                await refreshComponentToken('webmeet');
+            }
             break; }
-        case 'dashboard': {
-            const mode = 'dashboard';
-            let port;
-            try { const env = require('../services/secretVars'); const v = parseInt(env.resolveVarValue('WEBDASHBOARD_PORT'), 10); port = (!Number.isNaN(v) && v > 0) ? v : 9000; } catch(_) { port = 9000; }
-            const { startWebTTYServer } = require('../webtty/server');
-            const srv = startWebTTYServer({ agentName: 'local', runtime: 'local', containerName: '-', port, ttyFactory: null, password: null, workdir: process.cwd(), entry: '', title: 'Dashboard', mode });
-            try {
-                srv.on('listening', () => {
-                    try {
-                        const runningDir = path.resolve('.ploinky/running');
-                        fs.mkdirSync(runningDir, { recursive: true });
-                        fs.writeFileSync(path.join(runningDir, 'dashboard.pid'), String(process.pid));
-                    } catch(_) {}
-                });
-            } catch(_) {}
-            break; }
-        case 'admin-mode': {
-            const sub = options[0];
-            if (sub === 'task') { const ClientCommands = require('./client'); await new ClientCommands().handleClientCommand(['task', ...options.slice(1)]); break; }
-            const cmd = (options.length ? options : [(process.env.SHELL || '/bin/bash')]);
-            const nodeBin = process.argv[0];
-            const cliPath = path.resolve(__dirname, '../index.js');
-            const env = require('../services/secretVars');
-            const ports = {
-                webtty: (()=>{ const v = parseInt(env.resolveVarValue('WEBTTY_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:9001; })(),
-                webchat: (()=>{ const v = parseInt(env.resolveVarValue('WEBCHAT_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:8080; })(),
-                dashboard: (()=>{ const v = parseInt(env.resolveVarValue('WEBDASHBOARD_PORT'),10); return (!Number.isNaN(v)&&v>0)?v:9000; })(),
-            };
-            const procs = [];
-            const spawnOne = (args, extraEnv = {}) => {
-                const p = spawn(nodeBin, [cliPath, ...args], { stdio: 'inherit', env: { ...process.env, ...extraEnv } });
-                procs.push(p);
-                return p;
-            };
-            spawnOne(['webtty', ...cmd], { WEBTTY_PORT: String(ports.webtty) });
-            spawnOne(['webchat', ...cmd], { WEBCHAT_PORT: String(ports.webchat) });
-            spawnOne(['dashboard'], { WEBDASHBOARD_PORT: String(ports.dashboard) });
-            break; }
+        case 'admin-mode':
+            console.log('admin-mode is handled via the router dashboard at /dashboard.');
+            break;
         case 'list':
             if (options[0] === 'agents') listAgents();
             else if (options[0] === 'repos') listRepos();

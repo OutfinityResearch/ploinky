@@ -5,13 +5,13 @@
   const title = body.dataset.title || 'Dashboard';
   titleBar.textContent = title;
 
-  function getTheme() { 
-    return localStorage.getItem('webtty_theme') || 'dark'; 
+  function getTheme() {
+    return localStorage.getItem('dashboard_theme') || 'light';
   }
   
   function setTheme(t) { 
     document.body.setAttribute('data-theme', t); 
-    localStorage.setItem('webtty_theme', t); 
+    localStorage.setItem('dashboard_theme', t); 
   }
   
   themeToggle.onclick = () => { 
@@ -26,14 +26,14 @@
     const loc = window.location;
     const host = loc.hostname || 'localhost';
     const proto = loc.protocol || 'http:';
-    const consolePort = (document.body.dataset.ttyPort || localStorage.getItem('WEBTTY_PORT') || '9001');
-    const chatPort = (document.body.dataset.chatPort || localStorage.getItem('WEBCHAT_PORT') || '8080');
+    const consolePort = document.body.dataset.ttyPort || '';
+    const chatPort = document.body.dataset.chatPort || '';
     const consoleToken = document.body.dataset.ttyToken || '';
     const chatToken = document.body.dataset.chatToken || '';
     const lnkConsole = document.getElementById('lnkConsole');
     const lnkChat = document.getElementById('lnkChat');
-    if (lnkConsole) lnkConsole.href = `${proto}//${host}:${consolePort}/` + (consoleToken ? `?token=${consoleToken}` : '');
-    if (lnkChat) lnkChat.href = `${proto}//${host}:${chatPort}/` + (chatToken ? `?token=${chatToken}` : '');
+    if (lnkConsole && consolePort) lnkConsole.href = `${proto}//${host}:${consolePort}/` + (consoleToken ? `?token=${consoleToken}` : '');
+    if (lnkChat && chatPort) lnkChat.href = `${proto}//${host}:${chatPort}/` + (chatToken ? `?token=${chatToken}` : '');
   } catch(_) {}
 
   // Tab navigation
@@ -52,7 +52,7 @@
 
   // /run helper
   async function run(cmd) { 
-    const res = await fetch('/run', { 
+    const res = await fetch('run', { 
       method: 'POST', 
       headers: {'Content-Type': 'application/json'}, 
       body: JSON.stringify({ cmd }) 
@@ -78,8 +78,8 @@
   const logCount = document.getElementById('logCount');
   
   async function refreshLogs() { 
-    const n = Math.max(1, parseInt(logCount.value || '200', 10)); 
-    const j = await run(`last ${n}`); 
+    const n = Math.max(1, parseInt(logCount.value || '200', 10));
+    const j = await run(`logs last ${n}`);
     logsOut.textContent = j.stdout || j.stderr || '[no output]'; 
   }
   
@@ -89,13 +89,13 @@
   // Agents
   const agentsList = document.getElementById('agentsList');
   
-  function parseAgentNames(text) { 
-    const names = new Set(); 
-    (text || '').split('\n').forEach(line => { 
-      const m = line.match(/\b([A-Za-z0-9_.-]{2,})\b/); 
-      if (m) names.add(m[1]); 
-    }); 
-    return Array.from(names); 
+  function parseAgentNames(text) {
+    const names = new Set();
+    (text || '').split('\n').forEach(line => {
+      const match = line.match(/agent:\s*([A-Za-z0-9_.-]+)/i);
+      if (match && match[1]) names.add(match[1]);
+    });
+    return Array.from(names);
   }
   
   async function refreshAgents() { 
@@ -142,25 +142,25 @@
       const actions = document.createElement('div');
       actions.className = 'wa-agent-actions';
       
-      const btn = document.createElement('button'); 
+      const btn = document.createElement('button');
       btn.className = 'wa-agent-btn';
-      btn.textContent = 'Start'; 
-      btn.onclick = async () => { 
-        btn.disabled = true; 
-        btn.textContent = 'Starting...';
-        status.textContent = 'Starting...';
-        
-        const r = await run(`start ${name}`); 
-        
-        if (r.stdout && r.stdout.includes('started')) {
+      btn.textContent = 'Restart';
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = 'Restarting…';
+        status.textContent = 'Restarting…';
+
+        const r = await run(`restart ${name}`);
+        if (r.stdout && r.stdout.includes('restarted')) {
           status.textContent = 'Running';
-          btn.textContent = 'Started';
+          btn.textContent = 'Restart';
+          btn.disabled = false;
         } else {
-          status.textContent = 'Failed to start';
+          status.textContent = 'Check output';
           btn.textContent = 'Retry';
           btn.disabled = false;
         }
-      }; 
+      };
       
       actions.appendChild(btn);
       item.appendChild(avatar);

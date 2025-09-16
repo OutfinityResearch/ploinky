@@ -575,9 +575,32 @@ function stopAndRemove(name) {
         execSync(`${runtime} rm -f ${name}`, { stdio: 'ignore' });
         console.log(`[destroy] ✓ removed ${name}`);
     } catch (e) {
-        console.log(`[destroy] rm -f failed for ${name}: ${e.message}. Trying stop then rm...`);
-        try { console.log(`[destroy] - stopping ${name}...`); execSync(`${runtime} stop ${name}`, { stdio: 'ignore' }); console.log(`[destroy] - stopped ${name}`); } catch (e2) { console.log(`[destroy] - stop failed for ${name}: ${e2.message}`); }
-        try { console.log(`[destroy] - removing ${name}...`); execSync(`${runtime} rm ${name}`, { stdio: 'ignore' }); console.log(`[destroy] - removed ${name}`); } catch (e3) { console.log(`[destroy] - rm failed for ${name}: ${e3.message}`); }
+        console.log(`[destroy] rm -f failed for ${name}: ${e.message}. Trying graceful stop...`);
+        let stopped = false;
+        try {
+            console.log(`[destroy] - stopping ${name}...`);
+            execSync(`${runtime} stop ${name}`, { stdio: 'ignore' });
+            stopped = true;
+            console.log(`[destroy] - stopped ${name}`);
+        } catch (e2) {
+            console.log(`[destroy] - stop failed for ${name}: ${e2.message}`);
+        }
+        if (!stopped) {
+            try {
+                console.log(`[destroy] - killing ${name}...`);
+                execSync(`${runtime} kill ${name}`, { stdio: 'ignore' });
+                console.log(`[destroy] - killed ${name}`);
+            } catch (e3) {
+                console.log(`[destroy] - kill failed for ${name}: ${e3.message}`);
+            }
+        }
+        try {
+            console.log(`[destroy] - removing ${name}...`);
+            execSync(`${runtime} rm ${name}`, { stdio: 'ignore' });
+            console.log(`[destroy] - removed ${name}`);
+        } catch (e4) {
+            console.log(`[destroy] - rm failed for ${name}: ${e4.message}`);
+        }
     }
 }
 
@@ -633,7 +656,9 @@ module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContaine
 // Returns an array suitable to be used with spawn/spawnSync: [ 'exec', '-it', <container>, 'sh', '-lc', <cmd> ]
 function buildExecArgs(containerName, workdir, entryCommand, interactive = true) {
     const wd = workdir || process.cwd();
-    const cmd = entryCommand && String(entryCommand).trim() ? entryCommand : 'exec sh';
+    const cmd = entryCommand && String(entryCommand).trim()
+        ? entryCommand
+        : 'exec /bin/bash || exec /bin/sh';
     const args = ['exec'];
     if (interactive) args.push('-it');
     args.push(containerName, 'sh', '-lc', `cd '${wd}' && ${cmd}`);

@@ -15,13 +15,13 @@
   runtime.textContent = body.dataset.runtime || '-';
   titleBar.textContent = title;
 
-  function getTheme() { 
-    return localStorage.getItem('webtty_theme') || 'dark'; 
+  function getTheme() {
+    return localStorage.getItem('webtty_theme') || 'light';
   }
-  
-  function setTheme(t) { 
-    document.body.setAttribute('data-theme', t); 
-    localStorage.setItem('webtty_theme', t); 
+
+  function setTheme(t) {
+    document.body.setAttribute('data-theme', t);
+    localStorage.setItem('webtty_theme', t);
     try {
       term?.setOption('theme', t === 'dark' ? darkTheme : lightTheme);
     } catch(_) {}
@@ -38,7 +38,7 @@
   async function ensureAuth() { 
     if (!requiresAuth) return true; 
     try { 
-      const res = await fetch('/whoami'); 
+    const res = await fetch('whoami'); 
       return res.ok; 
     } catch(_) { 
       return false; 
@@ -46,7 +46,7 @@
   }
   
   (async () => { 
-    if (!(await ensureAuth())) location.href = '/'; 
+    if (!(await ensureAuth())) location.href = '.'; 
   })();
 
   const banner = document.getElementById('connBanner');
@@ -163,7 +163,7 @@
     const rows = term.rows; 
     sizeEl.textContent = rows + ' × ' + cols; 
     
-    fetch(`/resize?tabId=${TAB_ID}`, { 
+    fetch(`resize?tabId=${TAB_ID}`, { 
       method: 'POST', 
       headers: {'Content-Type': 'application/json'}, 
       body: JSON.stringify({ cols, rows }) 
@@ -175,7 +175,7 @@
     setTimeout(sendResize, 120); 
     
     term.onData(data => { 
-      fetch(`/input?tabId=${TAB_ID}`, { 
+      fetch(`input?tabId=${TAB_ID}`, { 
         method: 'POST', 
         headers: {'Content-Type': 'text/plain'}, 
         body: data 
@@ -192,7 +192,7 @@
       es?.close?.(); 
     } catch(_) {} 
     
-    es = new EventSource(`/stream?tabId=${TAB_ID}`); 
+    es = new EventSource(`stream?tabId=${TAB_ID}`); 
     
     es.onopen = () => { 
       statusEl.textContent = 'connected';

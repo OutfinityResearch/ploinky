@@ -28,7 +28,7 @@ const COMMANDS = {
     'list': ['agents', 'repos'],
     'webconsole': [],
     'webtty': [],
-    'voicechat': [],
+    'webmeet': [],
     'admin-mode': [],
     'client': ['methods', 'status', 'list', 'task', 'task-status'],
     'logs': ['tail', 'last'],

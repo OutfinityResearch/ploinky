@@ -39,12 +39,12 @@
 
   function hideBanner() { banner.classList.remove('show'); }
 
-  function getTheme() { return localStorage.getItem('webtty_theme') || 'dark'; }
-  function setTheme(t) { document.body.setAttribute('data-theme', t); localStorage.setItem('webtty_theme', t); }
+  function getTheme() { return localStorage.getItem('webchat_theme') || 'light'; }
+  function setTheme(t) { document.body.setAttribute('data-theme', t); localStorage.setItem('webchat_theme', t); }
   themeToggle.onclick = () => { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); };
   setTheme(getTheme());
 
-  (async () => { if (requiresAuth && !(await fetch('/whoami').then(r => r.ok).catch(()=>false))) location.href = '/'; })();
+  (async () => { if (requiresAuth && !(await fetch('whoami').then(r => r.ok).catch(()=>false))) location.href = '.'; })();
 
   // --- Side Panel Logic ---
   function getPanelWrapper() { return document.querySelector('.wa-side-panel-content'); }
@@ -482,7 +482,7 @@
     userInputSent = true;
     cmdInput.value = '';
     autoResize();
-    fetch(`/input?tabId=${TAB_ID}`, {
+    fetch(`input?tabId=${TAB_ID}`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: cmd + '\n'
@@ -593,7 +593,7 @@
     showBanner('Connecting…');
     try { es?.close?.(); } catch (_) {}
 
-    es = new EventSource(`/stream?tabId=${TAB_ID}`);
+    es = new EventSource(`stream?tabId=${TAB_ID}`);
 
     es.onopen = () => {
       statusEl.textContent = 'online';
