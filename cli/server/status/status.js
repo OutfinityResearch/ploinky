@@ -2,15 +2,13 @@
   const body = document.body;
   const titleBar = document.getElementById('titleBar');
   const themeToggle = document.getElementById('themeToggle');
-  const statusOut = document.getElementById('statusOut');
   const statusLabel = document.getElementById('statusLabel');
   const statusDot = document.getElementById('statusDot');
-  const serversList = document.getElementById('serversList');
-  const agentsList = document.getElementById('agentsList');
+  const componentsList = document.getElementById('componentsList');
   const linksList = document.getElementById('linksList');
 
   const agentName = body.dataset.agent || 'Status';
-  titleBar.textContent = `${agentName} Status`;
+  titleBar.textContent = agentName === 'Status' ? 'Public Ploinky Status' : `${agentName} Status`;
 
   const basePath = String(body.dataset.base || '').replace(/\/$/, '');
   const toEndpoint = (path) => {
@@ -39,46 +37,56 @@
       const res = await fetch(toEndpoint('data'));
       if (!res.ok) throw new Error('Request failed');
       const data = await res.json();
-      const output = data.output || '[no output]';
-      statusOut.textContent = output;
-      statusLabel.textContent = data.code === 0 ? 'ok' : 'check output';
-      statusDot.style.background = data.code === 0 ? '#00a884' : '#ffb020';
-      renderServers(data.servers || {}, data.static || {});
+      statusLabel.textContent = 'online';
+      statusDot.style.background = '#00a884';
+      renderComponents(data.servers || {}, data.static || {}, data.agents || []);
       renderLinks(data.servers || {}, data.static || {});
-      renderAgents(data.agents || []);
     } catch (err) {
       statusLabel.textContent = 'error';
       statusDot.style.background = '#f15c6d';
-      statusOut.textContent = `Failed to retrieve status.\n${err?.message || err}`;
-      if (serversList) serversList.innerHTML = '<div class="ps-item">No data</div>';
-      if (agentsList) agentsList.innerHTML = '<div class="ps-item">No data</div>';
+      if (componentsList) componentsList.innerHTML = '<div class="ps-item">Failed to retrieve status</div>';
     }
   }
 
-  function renderServers(servers, staticInfo) {
-    if (!serversList) return;
+  function renderComponents(servers, staticInfo, agents) {
+    if (!componentsList) return;
+    const cards = [];
+
+    // Add server components
     const entries = Object.entries(servers || {});
-    const cards = entries.map(([key, info]) => {
+    entries.forEach(([key, info]) => {
       const name = info.displayName || key;
       const configured = Boolean(info.hasToken || info.agent || info.command || info.port);
       const pillClass = configured ? '' : ' default';
-      const label = configured ? 'configured' : 'default (built-in)';
-      const details = [];
-      if (info.port) details.push(`port ${info.port}`);
-      if (info.pid) details.push(`pid ${info.pid}`);
-      return `<div class="ps-item"><div class="ps-item-title">${name}<span class="ps-pill${pillClass}">${label}</span></div><div class="ps-item-status">${details.join(' • ') || 'no extra details'}</div></div>`;
+      const label = configured ? 'service' : 'built-in';
+      let details = '';
+      if (key === 'webmeet' && info.agent) {
+        details = `moderator: ${info.agent}`;
+      }
+      cards.push(`<div class="ps-item"><div class="ps-item-title">${name}<span class="ps-pill${pillClass}">${label}</span></div><div class="ps-item-status">${details || ''}</div></div>`);
     });
-    if (staticInfo && (staticInfo.agent || staticInfo.hostPath)) {
-      const extras = [];
-      if (staticInfo.agent) extras.push(`agent ${staticInfo.agent}`);
-      if (staticInfo.hostPath) extras.push(staticInfo.hostPath);
-      cards.push(`<div class="ps-item"><div class="ps-item-title">Static Assets</div><div class="ps-item-status">${extras.join(' • ') || 'not configured'}</div></div>`);
+
+    // Add static agent if present
+    if (staticInfo && staticInfo.agent) {
+      const agentName = staticInfo.agent;
+      const repoName = staticInfo.repo || 'unknown';
+      cards.push(`<div class="ps-item"><div class="ps-item-title">Agent "${agentName}"<span class="ps-pill">static</span></div><div class="ps-item-status">from repo ${repoName}</div></div>`);
     }
+
+    // Add enabled agents
+    agents.forEach(info => {
+      const name = info.agentName || info.container;
+      const repo = info.repoName || 'unknown';
+      // Skip if this is the static agent (already shown above)
+      if (staticInfo && staticInfo.agent === name) return;
+      cards.push(`<div class="ps-item"><div class="ps-item-title">Agent "${name}"</div><div class="ps-item-status">from repo ${repo}</div></div>`);
+    });
+
     if (!cards.length) {
-      serversList.innerHTML = '<div class="ps-item">No servers tracked</div>';
+      componentsList.innerHTML = '<div class="ps-item">No components or agents active</div>';
       return;
     }
-    serversList.innerHTML = cards.join('');
+    componentsList.innerHTML = cards.join('');
   }
 
  function renderLinks(servers, staticInfo) {
@@ -97,20 +105,6 @@
     )).join('');
   }
 
-  function renderAgents(list) {
-    if (!agentsList) return;
-    if (!list.length) {
-      agentsList.innerHTML = '<div class="ps-item">No agents enabled</div>';
-      return;
-    }
-    agentsList.innerHTML = list.map(info => {
-      const name = info.agentName || info.container;
-      const repo = info.repoName ? `repo: ${info.repoName}` : 'no repo info';
-      const image = info.image ? `image: ${info.image}` : '';
-      const meta = [repo, image].filter(Boolean).join(' • ');
-      return `<div class="ps-item"><div class="ps-item-title">${name}</div><div class="ps-item-status">${meta}</div></div>`;
-    }).join('');
-  }
 
   setInterval(refreshStatus, 4000);
   refreshStatus();

@@ -44,8 +44,8 @@ function saveAgentsMap(map) { return workspace.saveAgents(map); }
 
 
 function getAgentContainerName(agentName, repoName) {
-    const safeAgentName = agentName.replace(/[^a-zA-Z0-9_.-]/g, '_');
-    const safeRepoName = repoName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const safeAgentName = String(agentName || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const safeRepoName = String(repoName || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
     
     // Include a short hash of the current working directory for uniqueness
     const cwdHash = crypto.createHash('sha256')
@@ -61,7 +61,7 @@ function getAgentContainerName(agentName, repoName) {
 }
 
 function getServiceContainerName(agentName) {
-    const safeAgentName = agentName.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const safeAgentName = String(agentName || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
     const projectDir = path.basename(process.cwd()).replace(/[^a-zA-Z0-9_.-]/g, '_');
     const cwdHash = crypto.createHash('sha256')
         .update(process.cwd())
@@ -398,20 +398,84 @@ function startConfiguredAgents() {
 }
 
 // Stop (but do not remove) all containers recorded in workspace registry
+function gracefulStopContainer(name, { prefix = '[destroy]' } = {}) {
+    const runtime = containerRuntime;
+    const exists = containerExists(name);
+    if (!exists) return false;
+
+    const log = (msg) => console.log(`${prefix} ${msg}`);
+    let stopped = false;
+
+    if (isContainerRunning(name)) {
+        try {
+            log(`Sending SIGTERM to ${name}...`);
+            execSync(`${runtime} kill --signal SIGTERM ${name}`, { stdio: 'ignore' });
+        } catch (e) {
+            debugLog(`gracefulStopContainer SIGTERM ${name}: ${e?.message || e}`);
+        }
+
+        for (let attempt = 0; attempt < 5; attempt++) {
+            if (!isContainerRunning(name)) break;
+            try { execSync('sleep 1', { stdio: 'ignore' }); } catch (_) {}
+        }
+    }
+
+    if (isContainerRunning(name)) {
+        try {
+            log(`Stopping ${name}...`);
+            execSync(`${runtime} stop ${name}`, { stdio: 'ignore' });
+        } catch (e) {
+            debugLog(`gracefulStopContainer stop ${name}: ${e?.message || e}`);
+        }
+    }
+
+    if (isContainerRunning(name)) {
+        try {
+            log(`Forcing kill for ${name}...`);
+            execSync(`${runtime} kill ${name}`, { stdio: 'ignore' });
+        } catch (e) {
+            debugLog(`gracefulStopContainer kill ${name}: ${e?.message || e}`);
+        }
+    }
+
+    stopped = !isContainerRunning(name);
+    if (stopped) log(`Stopped ${name}`);
+    else log(`${name} did not respond to stop sequence.`);
+    return stopped;
+}
+
+function getContainerCandidates(name, rec) {
+    const candidates = new Set();
+    if (name) candidates.add(name);
+    if (rec && rec.agentName) {
+        try { candidates.add(getServiceContainerName(rec.agentName)); } catch (_) {}
+        try {
+            const repoName = rec.repoName || '';
+            candidates.add(getAgentContainerName(rec.agentName, repoName));
+        } catch (_) {}
+    }
+    return Array.from(candidates);
+}
+
 function stopConfiguredAgents() {
     const agents = workspace.loadAgents();
-    const names = Object.entries(agents || {})
-        .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'))
-        .map(([name]) => name);
+    const entries = Object.entries(agents || {})
+        .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'));
     const stoppedList = [];
-    for (const name of names) {
-        try {
-            console.log(`[stop] Stopping container: ${name}...`);
-            execSync(`${containerRuntime} stop ${name}`, { stdio: 'ignore' });
-            console.log(`[stop] ✓ stopped ${name}`);
-            stoppedList.push(name);
-        } catch (e) {
-            console.log(`[stop] ${name}: ${e?.message||e}`);
+    for (const [name, rec] of entries) {
+        const candidates = getContainerCandidates(name, rec);
+        let stoppedAny = false;
+        for (const candidate of candidates) {
+            if (!candidate || !containerExists(candidate)) continue;
+            const stopped = gracefulStopContainer(candidate, { prefix: '[stop]' });
+            if (stopped) {
+                stoppedList.push(candidate);
+                stoppedAny = true;
+            }
+        }
+        if (!stoppedAny) {
+            const label = rec?.agentName ? `${rec.agentName}` : name;
+            console.log(`[stop] ${label}: no running container found.`);
         }
     }
     return stoppedList;
@@ -569,37 +633,29 @@ function startAgentContainer(agentName, manifest, agentPath) {
 
 function stopAndRemove(name) {
     const runtime = containerRuntime;
-    try {
-        console.log(`[destroy] Removing container: ${name}`);
-        // Most robust: rm -f (forces stop + remove)
-        execSync(`${runtime} rm -f ${name}`, { stdio: 'ignore' });
-        console.log(`[destroy] ✓ removed ${name}`);
-    } catch (e) {
-        console.log(`[destroy] rm -f failed for ${name}: ${e.message}. Trying graceful stop...`);
-        let stopped = false;
+    const agents = workspace.loadAgents();
+    const rec = agents ? agents[name] : null;
+    const candidates = getContainerCandidates(name, rec);
+
+    for (const candidate of candidates) {
+        if (!candidate || !containerExists(candidate)) continue;
+
+        gracefulStopContainer(candidate, { prefix: '[destroy]' });
+
         try {
-            console.log(`[destroy] - stopping ${name}...`);
-            execSync(`${runtime} stop ${name}`, { stdio: 'ignore' });
-            stopped = true;
-            console.log(`[destroy] - stopped ${name}`);
-        } catch (e2) {
-            console.log(`[destroy] - stop failed for ${name}: ${e2.message}`);
-        }
-        if (!stopped) {
+            console.log(`[destroy] Removing container: ${candidate}`);
+            execSync(`${runtime} rm ${candidate}`, { stdio: 'ignore' });
+            console.log(`[destroy] ✓ removed ${candidate}`);
+            return;
+        } catch (e) {
+            console.log(`[destroy] rm failed for ${candidate}: ${e.message}. Trying force removal...`);
             try {
-                console.log(`[destroy] - killing ${name}...`);
-                execSync(`${runtime} kill ${name}`, { stdio: 'ignore' });
-                console.log(`[destroy] - killed ${name}`);
-            } catch (e3) {
-                console.log(`[destroy] - kill failed for ${name}: ${e3.message}`);
+                execSync(`${runtime} rm -f ${candidate}`, { stdio: 'ignore' });
+                console.log(`[destroy] ✓ force removed ${candidate}`);
+                return;
+            } catch (e2) {
+                console.log(`[destroy] force remove failed for ${candidate}: ${e2.message}`);
             }
-        }
-        try {
-            console.log(`[destroy] - removing ${name}...`);
-            execSync(`${runtime} rm ${name}`, { stdio: 'ignore' });
-            console.log(`[destroy] - removed ${name}`);
-        } catch (e4) {
-            console.log(`[destroy] - rm failed for ${name}: ${e4.message}`);
         }
     }
 }

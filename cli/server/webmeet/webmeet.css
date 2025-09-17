@@ -123,9 +123,9 @@ body {
 /* Layout */
 .wa-main-content { flex: 1; display: flex; overflow: hidden; }
 .wa-chat-container { flex: 1; display: flex; flex-direction: row; min-width: 0; }
-.wa-chat-area { flex: 1; display: flex; flex-direction: column; background: var(--wa-bg-chat); min-width: 0; }
-.wa-chat-bg { flex: 1; background: transparent; }
-.wa-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+.wa-chat-area { flex: 1; display: flex; flex-direction: column; background: var(--wa-bg-chat); min-width: 0; position: relative; }
+.wa-chat-bg { position: absolute; inset: 0; background: transparent; pointer-events: none; z-index: 0; }
+.wa-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; position: relative; z-index: 1; }
 
 .wa-resizer { width: 6px; cursor: col-resize; background: var(--wa-bg-panel); opacity: 0.4; transition: opacity 0.2s; }
 .wa-resizer:hover { opacity: 0.8; }

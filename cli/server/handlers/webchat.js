@@ -35,9 +35,14 @@ async function handleAuth(req, res, appConfig, appState) {
         if (body && body.token && String(body.token).trim() === token) {
             const sid = require('crypto').randomBytes(16).toString('hex');
             appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
+            // Save both session and token in cookies for persistence
+            const cookies = [
+                buildCookie(`${appName}_sid`, sid, req, `/${appName}`),
+                buildCookie(`${appName}_token`, token, req, `/${appName}`, { maxAge: 7 * 24 * 60 * 60 }) // 7 days
+            ];
             res.writeHead(200, {
                 'Content-Type': 'application/json',
-                'Set-Cookie': buildCookie(`${appName}_sid`, sid, req, `/${appName}`)
+                'Set-Cookie': cookies
             });
             res.end(JSON.stringify({ ok: true }));
         } else {
@@ -66,6 +71,21 @@ function handleWebChat(req, res, appConfig, appState) {
         if (assetPath && staticSrv.sendFile(res, assetPath)) return;
     }
     
+    // Check if user has valid token in cookie
+    const cookies = parseCookies(req);
+    const savedToken = cookies.get(`${appName}_token`);
+    const currentToken = loadToken(appName);
+
+    // If saved token matches current token and no session, create a new session
+    if (savedToken && savedToken === currentToken && !authorized(req, appState)) {
+        const sid = require('crypto').randomBytes(16).toString('hex');
+        appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
+        // Set session cookie and continue
+        res.setHeader('Set-Cookie', buildCookie(`${appName}_sid`, sid, req, `/${appName}`));
+        // Mark as authorized for this request
+        req.headers.cookie = `${req.headers.cookie || ''}; ${appName}_sid=${sid}`;
+    }
+
     if (!authorized(req, appState)) {
         const html = renderTemplate(['login.html', 'index.html'], {
             '__ASSET_BASE__': `/${appName}/assets`,

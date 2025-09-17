@@ -266,6 +266,7 @@
     <div id="view-agents" class="wa-dashboard-view">
       <div class="wa-dashboard-actions">
         <button class="wa-dashboard-btn" id="refreshAgents">Refresh Agents</button>
+        <button class="wa-dashboard-btn" id="debugBtn" style="margin-left:8px">Debug Agent</button>
       </div>
       <div class="wa-dashboard-card">
         <div class="wa-dashboard-card-title">Active Agents</div>
@@ -280,6 +281,33 @@
       <div class="wa-dashboard-card">
         <div class="wa-dashboard-card-title">Control Output</div>
         <pre class="wa-dashboard-pre" id="ctrlOut">Ready for commands</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Debug Popup -->
+  <div id="debugPopup" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100;">
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(800px, 90vw); max-height:80vh; background:var(--wa-bg-panel); border:1px solid var(--wa-border); border-radius:12px; padding:20px; display:flex; flex-direction:column;">
+      <h3 style="margin:0 0 16px 0; color:var(--wa-text-primary)">Debug Agent API</h3>
+
+      <div style="display:flex; gap:12px; margin-bottom:12px;">
+        <input type="text" id="debugAgentName" placeholder="Agent name" style="flex:1; padding:8px; border:1px solid var(--wa-border); border-radius:6px; background:var(--wa-bg-input); color:var(--wa-text-primary)">
+        <input type="number" id="debugAgentPort" placeholder="Port (optional)" style="width:120px; padding:8px; border:1px solid var(--wa-border); border-radius:6px; background:var(--wa-bg-input); color:var(--wa-text-primary)">
+      </div>
+
+      <textarea id="debugJson" style="flex:1; min-height:300px; padding:12px; border:1px solid var(--wa-border); border-radius:6px; background:var(--wa-bg-input); color:var(--wa-text-primary); font-family:monospace; font-size:13px; resize:vertical;">{
+  "action": "test",
+  "data": "your data here"
+}</textarea>
+
+      <div id="debugError" style="color:var(--wa-danger); margin-top:8px; min-height:20px;"></div>
+
+      <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end;">
+        <button id="debugSend" style="padding:8px 16px; background:var(--wa-accent); color:white; border:none; border-radius:6px; cursor:pointer;">Send</button>
+        <button id="debugClose" style="padding:8px 16px; background:var(--wa-bg-hover); color:var(--wa-text-primary); border:1px solid var(--wa-border); border-radius:6px; cursor:pointer;">Close</button>
+      </div>
+
+      <div id="debugResponse" style="margin-top:16px; padding:12px; border:1px solid var(--wa-border); border-radius:6px; background:var(--wa-bg-primary); color:var(--wa-text-secondary); font-family:monospace; font-size:12px; max-height:200px; overflow-y:auto; display:none;">
       </div>
     </div>
   </div>

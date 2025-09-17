@@ -179,6 +179,11 @@
     sidePanel.style.display = 'none';
     chatContainer.classList.remove('side-panel-open');
     activeSidePanelBubble = null;
+    // Reset chat area styles to allow it to expand fully
+    if (chatArea) {
+      chatArea.style.width = '';
+      chatArea.style.flex = '';
+    }
   }
 
   sidePanelClose.onclick = closeSidePanel;

@@ -2,6 +2,14 @@
   const dlog = (...a) => console.log('[webmeet]', ...a);
   const TAB_ID = (()=>{ try { let v = sessionStorage.getItem('vc_tab'); if (!v) { v = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2); sessionStorage.setItem('vc_tab', v); } return v; } catch(_) { return String(Math.random()).slice(2); } })();
 
+  // Wait for DOM and modules to be ready
+  window.addEventListener('DOMContentLoaded', () => {
+    // Initialize modules after DOM is ready
+    if (window.webMeetPopups) window.webMeetPopups.init();
+    if (window.webMeetDemo) window.webMeetDemo.init(document.getElementById('chatList'));
+    if (window.webMeetAudio) window.webMeetAudio.init();
+  });
+
   // DOM
   const body = document.body;
   const titleBar = document.getElementById('titleBar');
@@ -13,10 +21,7 @@
   const chatList = document.getElementById('chatList');
   const cmdInput = document.getElementById('cmd');
   const sendBtn = document.getElementById('send');
-  const prepOverlay = document.getElementById('prepOverlay');
-  const prepText = document.getElementById('prepText');
-  const prepSend = document.getElementById('prepSend');
-  const prepCancel = document.getElementById('prepCancel');
+  // Prepare overlay elements now managed by popups.js
   const chatContainer = document.getElementById('chatContainer');
   const chatArea = document.getElementById('chatArea');
   const sidePanel = document.getElementById('sidePanel');
@@ -24,15 +29,7 @@
   const sidePanelClose = document.getElementById('sidePanelClose');
   const sidePanelTitle = document.querySelector('.wa-side-panel-title');
   const sidePanelResizer = document.getElementById('sidePanelResizer');
-  const speakOverlay = document.getElementById('speakOverlay');
-  const speakText = document.getElementById('speakText');
-  const speakLang = document.getElementById('speakLang');
-  const speakSend = document.getElementById('speakSend');
-  const speakLive = document.getElementById('speakLive');
-  const speakStop = document.getElementById('speakStop');
-  const speakCancel = document.getElementById('speakCancel');
-  const speakTitle = document.getElementById('speakTitle');
-  const speakRequestBtn = document.getElementById('speakRequestBtn');
+  // Speak overlay elements now managed by popups.js
   const disconnectMask = document.getElementById('disconnectMask');
 
   // State
@@ -48,8 +45,6 @@
   let esConn = null;
   let myEmail = '';
   let speakMode = 'prep'; // 'prep' or 'live'
-  let liveTargets = [];
-  let sttLang = localStorage.getItem('vc_stt_lang') || 'en-US';
   let pingTimer = null;
   let isDeafened = false; // State for muting incoming audio
 
@@ -109,7 +104,9 @@
       <ul id="vc_q_list" style="margin:0; padding-left:18px"></ul>
     `;
     wrap.appendChild(form);
-    try { myEmail = localStorage.getItem('vc_email')||''; } catch(_){}
+    try {
+      myEmail = localStorage.getItem('webmeet_last_email') || localStorage.getItem('vc_email') || '';
+    } catch(_){}
     const emailEl = document.getElementById('vc_reg_email');
     if (emailEl) {
       emailEl.value = myEmail;
@@ -117,8 +114,15 @@
       emailEl.addEventListener('keydown', async (e)=>{
         if (e.key==='Enter') {
           const val=(emailEl.value||'').trim();
-          if (!/^\S+@\S+\.\S+$/.test(val)) { alert('Please enter a valid email'); return; }
-          try { localStorage.setItem('vc_email', val); } catch(_){}
+          if (!/^\S+@\S+\.\S+$/.test(val)) {
+            showErrorPopup('Please enter a valid email address');
+            emailEl.focus();
+            return;
+          }
+          try {
+            localStorage.setItem('webmeet_last_email', val);
+            localStorage.setItem('vc_email', val);
+          } catch(_){}
           myEmail = val;
           await postAction({ type:'hello', email: myEmail, name: myEmail });
           joined = true;
@@ -134,7 +138,7 @@
         connectSSE();
         // Auto-join if we have an email
         const emailEl = document.getElementById('vc_reg_email');
-        const email = emailEl?.value?.trim() || localStorage.getItem('vc_email') || '';
+        const email = emailEl?.value?.trim() || localStorage.getItem('webmeet_last_email') || localStorage.getItem('vc_email') || '';
         if (email && /^\S+@\S+\.\S+$/.test(email)) {
           myEmail = email;
           setTimeout(async () => {
@@ -154,9 +158,24 @@
       updateComposerEnabled();
       renderParticipantsList();
     };
-    document.getElementById('vc_btn_req').onclick = ()=> postAction({ type:'request_speak' });
-    const prepBtn = document.getElementById('vc_btn_prep'); if (prepBtn) prepBtn.onclick = ()=>{ try { prepText.value = ''; } catch(_){} try { prepOverlay.style.display='block'; } catch(_){} };
-    document.getElementById('vc_btn_stop').onclick = ()=> postAction({ type:'stop_speaking' });
+    document.getElementById('vc_btn_req').onclick = ()=> postAction({
+      from: myEmail,
+      to: 'moderator',
+      command: 'wantToSpeak',
+      text: ''
+    });
+    const prepBtn = document.getElementById('vc_btn_prep');
+    if (prepBtn) prepBtn.onclick = ()=>{
+      if (window.webMeetPopups) {
+        window.webMeetPopups.showPrepOverlay();
+      }
+    };
+    document.getElementById('vc_btn_stop').onclick = ()=> postAction({
+      from: myEmail,
+      to: 'moderator',
+      command: 'endSpeak',
+      text: ''
+    });
     renderParticipantsList();
     setPanelTitleText('Participants'); sidePanel.style.display='flex'; chatContainer.classList.add('side-panel-open'); applyPanelSizeFromStorage();
   }
@@ -195,14 +214,16 @@
   }
   function renderChatMessage(msg, opts = {}){
     if (!msg) return;
-    const isSelf = msg.from && msg.from.tabId === TAB_ID;
+    // Handle new JSON format
+    const isSelf = msg.from === myEmail || (msg.from && msg.from.tabId === TAB_ID);
     const role = msg.role || msg.type || 'text';
     const isModerator = role === 'moderator';
-    const isCommand = role === 'command';
+    const isCommand = msg.command ? true : false;
     const isTranscript = msg.type === 'transcript';
     const isForbidden = opts.private || msg.state === 'forbidden';
-    const text = String(msg.text || '');
-    const who = isSelf ? authorLabelForSelf() : (msg.from?.email || msg.from?.name || 'Guest');
+    const text = String(msg.message || msg.text || '');
+    // For transcript messages, show the speaker's email in the who field
+    const who = isSelf ? authorLabelForSelf() : (typeof msg.from === 'string' ? msg.from : (msg.from?.email || msg.from?.name || 'Guest'));
     const moderatedBy = msg.meta && msg.meta.moderatedBy ? msg.meta.moderatedBy : null;
     const originalText = msg.meta && msg.meta.originalText ? String(msg.meta.originalText) : null;
     const moderationCommand = msg.meta && msg.meta.moderationCommand ? msg.meta.moderationCommand : null;
@@ -214,6 +235,7 @@
     if (isModerator) msgDiv.classList.add('moderator');
     if (isCommand) msgDiv.classList.add('command');
     if (isForbidden) msgDiv.classList.add('forbidden');
+    if (isTranscript) msgDiv.classList.add('transcript');
 
     const bubble=document.createElement('div');
     bubble.className='wa-message-bubble';
@@ -225,20 +247,11 @@
     bubble.innerHTML='<div class="wa-message-author"></div><div class="wa-message-text"></div><span class="wa-message-time"></span>';
 
     if (!isSelf) {
-      const ttsBtn = document.createElement('button');
-      ttsBtn.className = 'wa-tts-btn';
-      ttsBtn.title = 'Read aloud';
-      ttsBtn.innerHTML = '🔈';
-      ttsBtn.onclick = ()=>{ 
-        try { 
-          const u=new SpeechSynthesisUtterance(text); 
-          const currentLang = document.getElementById('speakLang')?.value || document.getElementById('prepLang')?.value || sttLang || 'en-US';
-          u.lang = currentLang; 
-          speechSynthesis.speak(u);
-        } catch(_){} 
-      };
       msgDiv.appendChild(bubble);
-      msgDiv.appendChild(ttsBtn);
+      if (window.webMeetAudio) {
+        const ttsBtn = window.webMeetAudio.createTTSButton(text);
+        msgDiv.appendChild(ttsBtn);
+      }
     } else {
       msgDiv.appendChild(bubble);
     }
@@ -299,115 +312,70 @@
       }
     } catch(_){} 
   }
-  function updateConnectionUI(){ try { disconnectMask.style.display = connected ? 'none' : 'block'; disconnectMask.classList.toggle('show', !connected); } catch(_){} }
-  let demoTimer = null; let demoIndex = 0; let demoScript = [];
-  async function startDemo(){
+  function updateConnectionUI(){
     try {
-      if (connected || demoTimer) return;
-      const r = await fetch('demo').then(r=>r.json()).catch(()=>null);
-      demoScript = (r && r.script) ? r.script : [];
-      chatList.innerHTML = '';
-      demoIndex = 0;
-      const playOne = () => {
-        if (connected) { stopDemo(); return; }
-        const item = demoScript[demoIndex % (demoScript.length||1)] || { who:'User', text:'...' };
-        const who = item?.who || 'User'; const text = item?.text || '';
-        const msgDiv=document.createElement('div'); msgDiv.className='wa-message in vc-demo';
-        const bubble=document.createElement('div'); bubble.className='wa-message-bubble';
-        bubble.innerHTML='<div class="wa-message-author"></div><div class="wa-message-text"></div><span class="wa-message-time"></span>';
-        msgDiv.appendChild(bubble);
-        bubble.querySelector('.wa-message-author').textContent = who;
-        bubble.querySelector('.wa-message-text').textContent = text;
-        bubble.querySelector('.wa-message-time').textContent = formatTime();
-        chatList.appendChild(msgDiv);
-        chatList.scrollTop = chatList.scrollHeight;
-        demoIndex++;
-        const delay = Math.max(600, Math.min(3000, item?.delayMs || 1200));
-        demoTimer = setTimeout(playOne, delay);
-      };
-      demoTimer = setTimeout(playOne, 400);
+      disconnectMask.style.display = connected ? 'none' : 'block';
+      disconnectMask.classList.toggle('show', !connected);
     } catch(_){}
   }
-  function stopDemo(){ try { clearTimeout(demoTimer); } catch(_){} demoTimer=null; }
+  // Demo functionality now managed by showdemo.js
   cmdInput.addEventListener('input', autoResize);
-  function sendText(){ if (!joined) return; const t = (cmdInput.value||'').trim(); if (!t) return; cmdInput.value=''; autoResize(); postAction({ type:'chat', text: t }).catch(()=>{}); }
+  function sendText(){
+    if (!joined) return;
+    const t = (cmdInput.value||'').trim();
+    if (!t) return;
+    cmdInput.value='';
+    autoResize();
+    // Send message in new JSON format
+    const message = {
+      from: myEmail,
+      to: 'all',
+      command: 'broadcast',
+      text: t
+    };
+    postAction(message).catch(()=>{});
+  }
   sendBtn.onclick = (e)=>{ e.preventDefault(); sendText(); };
   cmdInput.addEventListener('keydown', (e)=>{ if (!joined) { if (e.key==='Enter') e.preventDefault(); return; } if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendText(); } });
-  // Prepare overlay is opened from Participants button (vc_btn_prep)
-  const prepEnableSTT = document.getElementById('prepEnableSTT');
-  const prepRecord = document.getElementById('prepRecord');
-  const prepStatus = document.getElementById('prepStatus');
-  let prepRecognition = null;
-  let prepRecording = false;
-  let finalTranscript = '';
-  let prepFinalTranscript = ''; // Separate transcript for prepare overlay
-  
-  if (prepRecord) prepRecord.onclick = ()=>{
-    if (!prepRecording) {
-      // Start recording
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SR) { alert('Speech recognition not supported'); return; }
-      if (!prepEnableSTT?.checked) return;
+  // Prepare overlay functionality now managed by popups.js
+  // Prepare overlay handlers now managed by popups.js
 
-      prepFinalTranscript = ''; // Always start fresh
-      prepRecognition = new SR();
-      // Always get the current selected language from the dropdown
-      const currentPrepLang = document.getElementById('prepLang')?.value || sttLang || 'en-US';
-      prepRecognition.lang = currentPrepLang;
-      prepRecognition.continuous = true;
-      prepRecognition.interimResults = true;
-      prepRecognition.onresult = (event) => {
-        let interim_transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            prepFinalTranscript += event.results[i][0].transcript + ' ';
-          } else {
-            interim_transcript += event.results[i][0].transcript;
-          }
-        }
-        prepText.value = prepFinalTranscript + interim_transcript;
-      };
-      prepRecognition.onerror = (e)=>{ prepStatus.textContent = `Error: ${e.error}`; };
-      prepRecognition.onend = ()=>{
-        // Don't save old transcript
-        prepRecording = false;
-        prepRecord.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>';
-        prepRecord.title = 'Start Recording';
-        prepRecord.classList.remove('active', 'danger');
-        prepStatus.textContent = 'Ready';
-      };
-      
-      try {
-        prepRecognition.start();
-        prepRecording = true;
-        prepRecord.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>';
-        prepRecord.title = 'Stop Recording';
-        prepRecord.classList.add('active', 'danger');
-        prepStatus.textContent = 'Listening...';
-      } catch(e){ alert(`Could not start STT: ${e.message}`); }
-    } else {
-      // Stop recording
-      try { prepRecognition?.stop?.(); } catch(_){}
-      // onend will handle the rest of the state change
-    }
-  };
-  
-  if (prepCancel) prepCancel.onclick = ()=>{ 
-    try { prepRecognition?.stop?.(); } catch(_){}
-    prepRecording = false;
-    try { prepOverlay.style.display='none'; } catch(_){} 
-  };
-  if (prepSend) prepSend.onclick = async ()=>{ 
-    try { prepRecognition?.stop?.(); } catch(_){}
-    prepRecording = false;
-    const t=(prepText?.value||'').trim(); 
-    if (t && joined) { await postAction({ type:'chat', text: t }); } 
-    try { 
-      prepOverlay.style.display='none'; 
-      prepText.value = ''; // Clear the text
-      prepFinalTranscript = ''; // Reset prep transcript
-    } catch(_){} 
-  };
+  // Helper function to show error popup
+  function showErrorPopup(message) {
+    const popup = document.createElement('div');
+    popup.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #dc3545;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 10000;
+      font-size: 14px;
+      font-weight: 500;
+      animation: fadeIn 0.2s ease-in;
+    `;
+    popup.textContent = message;
+    document.body.appendChild(popup);
+    setTimeout(() => {
+      popup.style.animation = 'fadeOut 0.2s ease-out';
+      setTimeout(() => popup.remove(), 200);
+    }, 3000);
+  }
+
+  // Add CSS animations if not already present
+  if (!document.getElementById('webmeet-animations')) {
+    const style = document.createElement('style');
+    style.id = 'webmeet-animations';
+    style.textContent = `
+      @keyframes fadeIn { from { opacity: 0; transform: translate(-50%, -45%); } to { opacity: 1; transform: translate(-50%, -50%); } }
+      @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+    `;
+    document.head.appendChild(style);
+  }
 
   // Participants modal/panel
   const participantsPanel = document.getElementById('participantsPanel');
@@ -438,17 +406,30 @@
   }
   
   if (vcEmailInput) {
-    try { vcEmailInput.value = localStorage.getItem('vc_email')||''; } catch(_){}
+    // Load last used email from localStorage
+    try {
+      const savedEmail = localStorage.getItem('webmeet_last_email') || '';
+      if (savedEmail) vcEmailInput.value = savedEmail;
+    } catch(_){}
+
     vcEmailInput.addEventListener('keydown', async (e)=>{
       if (e.key==='Enter') {
         if (joined) return; // Don't re-join
         if (!connected) {
-          alert('Please press the Connect button first.');
+          showErrorPopup('Please press the Connect button first.');
           return;
         }
         const val=(vcEmailInput.value||'').trim();
-        if (!/^\S+@\S+\.\S+$/.test(val)) { alert('Please enter a valid email'); return; }
-        try { localStorage.setItem('vc_email', val); } catch(_){}
+        if (!/^\S+@\S+\.\S+$/.test(val)) {
+          showErrorPopup('Please enter a valid email address');
+          vcEmailInput.focus();
+          return;
+        }
+        // Save email to localStorage for next time
+        try {
+          localStorage.setItem('webmeet_last_email', val);
+          localStorage.setItem('vc_email', val); // Keep backward compatibility
+        } catch(_){}
         myEmail = val;
         
         // Perform the join action
@@ -470,15 +451,18 @@
   
   // Setup toolbar buttons
   if (vcMicBtn) vcMicBtn.onclick = ()=> {
-    if (!queue.includes(TAB_ID)) {
-      queue.push(TAB_ID);
-      renderParticipantsList();
-    }
-    postAction({ type:'request_speak' });
+    // Send request to speak as JSON command to moderator
+    postAction({
+      from: myEmail,
+      to: 'moderator',
+      command: 'wantToSpeak',
+      text: ''
+    });
   };
-  if (vcPrepareBtn) vcPrepareBtn.onclick = ()=>{ 
-    try { prepText.value = ''; } catch(_){} 
-    try { prepOverlay.style.display='block'; } catch(_){} 
+  if (vcPrepareBtn) vcPrepareBtn.onclick = ()=>{
+    if (window.webMeetPopups) {
+      window.webMeetPopups.showPrepOverlay();
+    }
   };
   
   // Deafen button - mutes all incoming audio
@@ -504,19 +488,37 @@
   
 
   function renderParticipantsList(){
+    // Update panel title based on state
+    const panelTitle = document.getElementById('participantsPanelTitle');
+    if (panelTitle) {
+      if (joined) {
+        panelTitle.textContent = 'Joined';
+      } else {
+        panelTitle.textContent = 'Register';
+      }
+    }
+
     // Get all UI elements that need updating
     const pList = document.getElementById('vc_participants_list');
     const qList = document.getElementById('vc_queue_list');
-    
+
     // Update participant list
     if (pList) {
-      pList.innerHTML=''; 
+      pList.innerHTML='';
       participants.forEach(p => {
         const div = document.createElement('div');
         div.className = 'wa-participant-item';
-        const isYou = p.tabId === TAB_ID ? ' (you)' : '';
-        const isSpeaking = p.tabId === currentSpeaker ? '<span class="wa-speaking-icon" title="Speaking">🔊</span>' : '';
-        div.innerHTML = `<span class="wa-participant-name">${p.name}${isYou}</span><span class="wa-participant-icons">${isSpeaking}</span>`;
+
+        // Check if participant is in the queue and get their position
+        const queuePosition = queue.indexOf(p.email || p.name || p.tabId);
+        const queueNumber = queuePosition >= 0 ? `[${queuePosition + 1}] ` : '';
+
+        const isYou = p.tabId === TAB_ID || p.email === myEmail ? ' (you)' : '';
+        const isSpeaking = (typeof currentSpeaker === 'string' && p.email === currentSpeaker) ||
+                          p.tabId === currentSpeaker ?
+                          '<span class="wa-speaking-icon" title="Speaking">🔊</span>' : '';
+
+        div.innerHTML = `<span class="wa-participant-name">${queueNumber}${p.name || p.email || 'Guest'}${isYou}</span><span class="wa-participant-icons">${isSpeaking}</span>`;
         pList.appendChild(div);
       });
     }
@@ -527,11 +529,14 @@
       if (queue.length === 0) {
         qList.innerHTML = '<div class="vc-hint" style="padding: 8px;">Nobody in queue.</div>';
       } else {
-        queue.forEach((id, idx) => {
-          const p = participants.find(x => x.tabId === id);
+        queue.forEach((email, idx) => {
+          // Find participant by email
+          const p = participants.find(x => x.email === email || x.name === email);
           const div = document.createElement('div');
           div.className = 'wa-participant-item';
-          div.innerHTML = `<span class="wa-participant-name"><span class="wa-queue-icon">✋</span> ${idx + 1}. ${p ? p.name : 'Unknown'}</span>`;
+          const displayName = p ? (p.name || p.email) : email;
+          const isYou = email === myEmail ? ' (you)' : '';
+          div.innerHTML = `<span class="wa-participant-name"><span class="wa-queue-icon">✋</span> ${idx + 1}. ${displayName}${isYou}</span>`;
           qList.appendChild(div);
         });
       }
@@ -553,11 +558,17 @@
     // Update button visibility based on connection state
     if (vcMicBtn) {
       vcMicBtn.style.display = (connected && joined) ? 'flex' : 'none';
-      vcMicBtn.disabled = !joined || !connected || (currentSpeaker === TAB_ID) || queue.includes(TAB_ID);
-      if (queue.includes(TAB_ID)) {
+      // Disable if we're speaking or already in queue
+      const inQueue = queue.includes(myEmail);
+      const isSpeaking = currentSpeaker === TAB_ID || currentSpeaker === myEmail;
+      vcMicBtn.disabled = !joined || !connected || isSpeaking || inQueue;
+
+      if (inQueue) {
         vcMicBtn.classList.add('active');
+        vcMicBtn.title = 'Already in queue';
       } else {
         vcMicBtn.classList.remove('active');
+        vcMicBtn.title = 'Request to speak';
       }
     }
     if (vcPrepareBtn) {
@@ -581,7 +592,6 @@
     }
     
     // Update main header status
-    const cur = participants.find(p => p.tabId === currentSpeaker);
     if (!connected) {
       statusEl.textContent = 'offline';
       statusDot.className = 'wa-status-dot offline';
@@ -589,23 +599,42 @@
       statusDot.className = 'wa-status-dot online';
       if (!joined) {
         statusEl.textContent = 'Connected - Enter email to join';
-      } else if (currentSpeaker === TAB_ID) {
+      } else if (currentSpeaker === TAB_ID || currentSpeaker === myEmail) {
         statusEl.textContent = 'online — You are speaking';
-      } else if (cur) {
-        statusEl.textContent = `online — ${cur.name} is speaking`;
+      } else if (currentSpeaker === 'none' || !currentSpeaker) {
+        statusEl.textContent = 'online — Nobody is speaking';
+      } else if (typeof currentSpeaker === 'string') {
+        // currentSpeaker is an email
+        const cur = participants.find(p => p.email === currentSpeaker);
+        statusEl.textContent = `online — ${cur ? (cur.name || cur.email) : currentSpeaker} is speaking`;
       } else {
-        statusEl.textContent = 'online';
+        // Legacy: currentSpeaker might be a tabId
+        const cur = participants.find(p => p.tabId === currentSpeaker);
+        statusEl.textContent = cur ? `online — ${cur.name || cur.email} is speaking` : 'online';
       }
     }
   }
 
   // SSE
   function connectSSE(){
+    // Don't create multiple connections
+    if (esConn && esConn.readyState !== EventSource.CLOSED) {
+      console.log('[WebMeet] SSE already connected or connecting');
+      return;
+    }
     if (esConn) { try { esConn.close(); } catch(_){} }
+
+    console.log('[WebMeet] Establishing SSE connection...');
     const es = new EventSource(`events?tabId=${encodeURIComponent(TAB_ID)}`);
     esConn = es;
     es.addEventListener('open', async () => {
-      connected = true; stopDemo(); chatList.innerHTML=''; updateConnectionUI();
+      connected = true;
+      if (window.webMeetDemo) {
+        window.webMeetDemo.setConnected(true);
+        window.webMeetDemo.stopDemo();
+      }
+      chatList.innerHTML='';
+      updateConnectionUI();
       const email = vcEmailInput?.value?.trim() || localStorage.getItem('vc_email') || '';
       if (email && /^\S+@\S+\.\S+$/.test(email)) {
         myEmail = email;
@@ -626,7 +655,26 @@
       updateComposerEnabled(); 
       renderParticipantsList();
       try { if (pingTimer) clearInterval(pingTimer); } catch(_){}
-      try { pingTimer = setInterval(()=>{ postAction({ type:'ping' }).catch(()=>{}); }, 5000); } catch(_){}
+      // Ping every 30 seconds instead of 5 seconds
+      try {
+        pingTimer = setInterval(async ()=>{
+          try {
+            const result = await postAction({ type:'ping' });
+            if (result.ok) {
+              // Ping successful, ensure we're shown as online
+              if (!connected) {
+                connected = true;
+                updateConnectionUI();
+                renderParticipantsList();
+              }
+            }
+          } catch(err) {
+            // Ping failed, mark as disconnected
+            console.error('[WebMeet] Ping failed:', err);
+            handleDisconnect();
+          }
+        }, 30000); // 30 seconds
+      } catch(_){}
     });
     es.addEventListener('init', (ev)=>{
       const data = JSON.parse(ev.data||'{}');
@@ -640,324 +688,216 @@
     es.addEventListener('participant_join', (ev)=>{ const { participant } = JSON.parse(ev.data||'{}'); if (participant && !participants.find(p=>p.tabId===participant.tabId)) participants.push(participant); renderParticipantsList(); });
     es.addEventListener('participant_leave', (ev)=>{ const { tabId } = JSON.parse(ev.data||'{}'); participants = participants.filter(p=>p.tabId!==tabId); renderParticipantsList(); });
     es.addEventListener('queue', (ev)=>{ const { queue:q } = JSON.parse(ev.data||'{}'); queue = q||[]; renderParticipantsList(); });
-    es.addEventListener('current_speaker', (ev)=>{ const { tabId } = JSON.parse(ev.data||'{}'); currentSpeaker = tabId||null; if (currentSpeaker !== TAB_ID) { stopMic(); try { speakOverlay.style.display='none'; } catch(_){} speakMode='prep'; } renderParticipantsList(); });
-    es.addEventListener('start_speaking', (ev)=>{ 
-      const { targets } = JSON.parse(ev.data||'{}'); 
-      if (currentSpeaker === TAB_ID) { 
-        // Transfer text from prepare overlay if it's open
-        let transferredText = '';
-        if (prepOverlay && prepOverlay.style.display === 'block') {
-          transferredText = prepText?.value || '';
-          try { prepOverlay.style.display = 'none'; } catch(_){}
-          try { prepRecognition?.stop?.(); } catch(_){}
-          prepRecording = false;
-        }
-        
-        try { showBanner("It's your turn to speak", 'ok'); setTimeout(hideBanner, 1200); } catch(_){}
-        // Removed audio announcement to prevent it from being picked up by STT
-        liveTargets = targets||[]; 
-        speakMode='prep'; 
-        try { 
-          speakText.value = transferredText; // Transfer the prepared text
-          speakOverlay.style.display='block'; 
-        } catch(_){}
-        // Delay STT start slightly to avoid picking up any system sounds
-        setTimeout(async ()=>{ 
-          try { await startMic(); } catch(e) { alert('Microphone access denied'); return; } 
-          startSTT(); 
-        }, 500); 
-      } 
+    es.addEventListener('current_speaker', (ev)=>{
+      const { tabId } = JSON.parse(ev.data||'{}');
+      currentSpeaker = tabId||null;
+      if (currentSpeaker !== TAB_ID) {
+        if (window.webMeetWebRTC) window.webMeetWebRTC.stopMic();
+        if (window.webMeetPopups) window.webMeetPopups.hideSpeakOverlay();
+        speakMode='prep';
+      }
+      renderParticipantsList();
     });
-    es.addEventListener('chat', (ev)=>{ const msg = JSON.parse(ev.data||'{}'); renderChatMessage(msg); });
+    // Keep old start_speaking listener for backward compatibility
+    es.addEventListener('start_speaking', (ev)=>{
+      const { targets } = JSON.parse(ev.data||'{}');
+      if (currentSpeaker === TAB_ID) {
+        handleStartSpeaking(targets);
+      }
+    });
+    es.addEventListener('chat', (ev)=>{
+      const msg = JSON.parse(ev.data||'{}');
+      // Check if this is a moderator command
+      if (msg.from === 'moderator' && msg.command === 'speak') {
+        // Update current speaker and queue from moderator message
+        currentSpeaker = msg.who === myEmail ? TAB_ID : (msg.who || 'none');
+        queue = msg.waiting || [];
+
+        if (msg.who === myEmail) {
+          // It's our turn to speak!
+          handleStartSpeaking();
+        } else if (currentSpeaker === TAB_ID && msg.who !== myEmail) {
+          // We were speaking but now someone else is
+          if (window.webMeetWebRTC) window.webMeetWebRTC.stopMic();
+          if (window.webMeetPopups) window.webMeetPopups.hideSpeakOverlay();
+          speakMode = 'prep';
+        }
+
+        renderParticipantsList();
+      } else {
+        renderChatMessage(msg);
+      }
+    });
     es.addEventListener('chat_private', (ev)=>{ const msg = JSON.parse(ev.data||'{}'); renderChatMessage(msg, { private: true }); });
     es.addEventListener('signal', (ev)=>{ const { from, payload } = JSON.parse(ev.data||'{}'); onSignal(from, payload); });
-    es.onerror = ()=>{ statusEl.textContent='offline'; statusDot.classList.remove('online'); statusDot.classList.add('offline'); };
+    es.onerror = (err)=>{
+      console.error('[WebMeet] SSE error:', err);
+      handleDisconnect();
+    };
+
+    es.onclose = ()=>{
+      console.log('[WebMeet] SSE connection closed');
+      handleDisconnect();
+    };
     return es;
   }
-  function disconnectSSE(){ try { esConn?.close?.(); } catch(_){} esConn = null; connected = false; joined = false; try { if (pingTimer) clearInterval(pingTimer); } catch(_){} pingTimer = null; try { statusEl.textContent='offline'; statusDot.classList.remove('online'); statusDot.classList.add('offline'); } catch(_){} updateConnectionUI(); updateComposerEnabled(); renderParticipantsList(); startDemo(); }
-
-  async function postAction(payload){ payload.tabId = TAB_ID; const res = await fetch('action', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); return res.json().catch(()=>({ok:false})); }
-
-  // Speak overlay controls
-  if (speakSend) speakSend.onclick = async ()=>{
-    const text = (speakText?.value || '').trim();
-    if (text) await postAction({ type:'chat', text });
-    try { 
-      speakText.value = ''; 
-      // Reset the transcript so old text doesn't come back
-      finalTranscript = '';
-    } catch(_){}
-    // Don't close overlay or stop speaking - let user decide
-  };
-  if (speakLive) speakLive.onclick = async ()=>{
-    // Start streaming audio to peers (WebRTC)
-    speakMode = 'live';
-    // Update UI to show we're live
-    try { 
-      speakTitle.textContent = 'Speak Now - LIVE 🔴';
-      speakLive.style.display = 'none';
-      speakStop.style.display = 'flex';
-    } catch(_){}
-    
-    // Make sure microphone is started before connecting
+  function disconnectSSE(){
+    try { esConn?.close?.(); } catch(_){}
+    esConn = null;
+    connected = false;
+    joined = false;
+    try { if (pingTimer) clearInterval(pingTimer); } catch(_){}
+    pingTimer = null;
     try {
-      if (!micStream) {
-        await startMic();
-      }
-      
-      // Connect to all other participants
-      console.log('Going live, connecting to targets:', liveTargets);
-      for (const t of (liveTargets||[])) { 
-        console.log('Connecting to peer:', t);
-        await connectToPeer(t); 
-      }
-      
-      // If no targets, at least inform user
-      if (!liveTargets || liveTargets.length === 0) {
-        console.log('No other participants to broadcast to');
-      }
-    } catch(e) {
-      console.error('Error going live:', e);
-      alert('Could not start live mode: ' + e.message);
-      // Reset UI on error
-      try { 
-        speakTitle.textContent = 'Speak Now';
-        speakLive.style.display = 'flex';
-        speakStop.style.display = 'none';
-      } catch(_){}
+      statusEl.textContent='offline';
+      statusDot.classList.remove('online');
+      statusDot.classList.add('offline');
+    } catch(_){}
+    updateConnectionUI();
+    updateComposerEnabled();
+    renderParticipantsList();
+    if (window.webMeetDemo) {
+      window.webMeetDemo.setConnected(false);
+      window.webMeetDemo.startDemo();
     }
-  };
-  if (speakStop) speakStop.onclick = async ()=>{
-    // Stop live mode but stay in overlay
-    speakMode = 'prep';
-    stopMic();
-    // Reset UI
-    try { 
-      speakTitle.textContent = 'Speak Now';
-      speakLive.style.display = 'flex';
-      speakStop.style.display = 'none';
-    } catch(_){}
-    // Restart STT for prep mode
-    (async ()=>{ 
-      try { await startMic(); } catch(e) { alert('Microphone access denied'); return; } 
-      startSTT(); 
-    })();
-  };
-  if (speakCancel) speakCancel.onclick = async ()=>{
-    // Cancel exits from speaker mode completely
-    try { speakOverlay.style.display='none'; } catch(_){}
-    await postAction({ type:'stop_speaking' });
-    stopMic(); speakMode='prep';
-    // Reset UI
-    try { 
-      speakTitle.textContent = 'Speak Now';
-      speakLive.style.display = 'flex';
-      speakStop.style.display = 'none';
-    } catch(_){}
-  };
-  if (speakRequestBtn) speakRequestBtn.onclick = ()=>{
-    postAction({ type:'request_speak' });
-    try { speakRequestBtn.classList.add('active'); } catch(_){}
-  };
+  }
 
-  // WebRTC + STT
-  const peers = new Map(); let micStream = null; let recognition = null;
-  async function startMic(){ if (micStream) return micStream; micStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false }); return micStream; }
-  function stopMic(){ try{ recognition?.stop?.(); }catch(_){} recognition=null; if (micStream) { micStream.getTracks().forEach(t=>{ try{t.stop();}catch(_){} }); micStream=null; } for (const pc of peers.values()) { try{pc.close();}catch(_){} } peers.clear(); }
-  async function startMicAndConnect(targets){ try { await startMic(); } catch (e) { alert('Microphone access denied'); return; } for (const t of targets) await connectToPeer(t); startSTT(); }
-  async function connectToPeer(id){ 
-    if (peers.has(id)) {
-      console.log('Already connected to peer:', id);
-      return peers.get(id); 
-    }
-    console.log('Creating new connection to peer:', id);
-    const pc=new RTCPeerConnection({ iceServers: [{ urls:'stun:stun.l.google.com:19302' }] }); 
-    peers.set(id, pc); 
-    
-    // Add microphone tracks to the connection
-    if (micStream) {
-      console.log('Adding mic tracks to peer connection');
-      micStream.getTracks().forEach(tr=>pc.addTrack(tr, micStream)); 
-    } else {
-      console.warn('No microphone stream available for peer connection');
-    }
-    
-    pc.onicecandidate=(e)=>{ 
-      if (e.candidate) {
-        console.log('Sending ICE candidate to:', id);
-        postAction({ type:'signal', target:id, payload:{ type:'ice', candidate:e.candidate } }); 
+  // Handle unexpected disconnection
+  function handleDisconnect() {
+    if (connected) {
+      connected = false;
+      console.log('[WebMeet] Connection lost');
+      try {
+        statusEl.textContent='offline - connection lost';
+        statusDot.classList.remove('online');
+        statusDot.classList.add('offline');
+      } catch(_){}
+      updateConnectionUI();
+      updateComposerEnabled();
+      renderParticipantsList();
+
+      // Try to reconnect SSE if it's not already trying
+      if (esConn && esConn.readyState === EventSource.CLOSED) {
+        console.log('[WebMeet] Attempting to reconnect...');
+        setTimeout(() => {
+          if (!connected) { // Only reconnect if still disconnected
+            disconnectSSE();
+            connectSSE();
+          }
+        }, 5000); // Wait 5 seconds before reconnecting
       }
-    }; 
-    pc.ontrack=(e)=>{ 
-      console.log('Received remote track from:', id);
-      attachRemoteAudio(id, e.streams[0]); 
-    }; 
-    
-    const offer=await pc.createOffer(); 
-    await pc.setLocalDescription(offer); 
-    console.log('Sending offer to:', id);
-    await postAction({ type:'signal', target:id, payload:{ type:'offer', sdp: pc.localDescription } }); 
-    return pc;
+    }
   }
-  async function onSignal(from, payload){ 
-    console.log('Received signal from:', from, 'type:', payload.type);
-    let pc = peers.get(from); 
-    if (!pc){ 
-      console.log('Creating new peer connection for incoming signal from:', from);
-      pc=new RTCPeerConnection({ iceServers: [{ urls:'stun:stun.l.google.com:19302' }] }); 
-      peers.set(from, pc); 
-      pc.onicecandidate=(e)=>{ 
-        if (e.candidate) {
-          console.log('Sending ICE candidate back to:', from);
-          postAction({ type:'signal', target: from, payload: { type:'ice', candidate:e.candidate } }); 
+
+  async function postAction(payload){
+    payload.tabId = TAB_ID;
+    // Add email if it's a command-based message
+    if (payload.command && !payload.from) {
+      payload.from = myEmail;
+    }
+    // Only log non-ping messages
+    if (payload.type !== 'ping') {
+      console.log('[WebMeet] Sending:', payload);
+    }
+
+    try {
+      const res = await fetch('action', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      return await res.json();
+    } catch(err) {
+      console.error('[WebMeet] Request failed:', err);
+      // If we can't reach the server, mark as disconnected
+      if (payload.type !== 'ping') { // Don't disconnect on every ping fail
+        handleDisconnect();
+      }
+      throw err; // Re-throw to let caller handle it
+    }
+  }
+
+  // Handle when we get permission to speak
+  function handleStartSpeaking(targets) {
+    // Transfer text from prepare overlay if it's open
+    let transferredText = '';
+    if (window.webMeetPopups) {
+      transferredText = window.webMeetPopups.getPreparedText();
+      window.webMeetPopups.hidePrepOverlay();
+    }
+
+    try { showBanner("It's your turn to speak", 'ok'); setTimeout(hideBanner, 1200); } catch(_){}
+
+    if (window.webMeetWebRTC) {
+      window.webMeetWebRTC.setLiveTargets(targets||[]);
+    }
+    speakMode='prep';
+
+    if (window.webMeetPopups) {
+      window.webMeetPopups.showSpeakOverlay(transferredText);
+    }
+
+    // Delay STT start slightly to avoid picking up any system sounds
+    setTimeout(async ()=>{
+      try {
+        if (window.webMeetWebRTC) await window.webMeetWebRTC.startMic();
+        if (window.webMeetAudio) {
+          const speakText = document.getElementById('speakText');
+          window.webMeetAudio.startSTT(speakText);
         }
-      }; 
-      pc.ontrack=(e)=>{ 
-        console.log('Received remote audio track from:', from);
-        attachRemoteAudio(from, e.streams[0]); 
-      }; 
-      if (micStream) {
-        console.log('Adding mic tracks for incoming connection');
-        micStream.getTracks().forEach(tr=>pc.addTrack(tr, micStream)); 
-      }
-    } 
-    
-    if (payload.type==='offer'){ 
-      console.log('Processing offer from:', from);
-      await pc.setRemoteDescription(payload.sdp); 
-      const answer=await pc.createAnswer(); 
-      await pc.setLocalDescription(answer); 
-      console.log('Sending answer to:', from);
-      await postAction({ type:'signal', target: from, payload:{ type:'answer', sdp: pc.localDescription } }); 
-    } else if (payload.type==='answer'){ 
-      console.log('Processing answer from:', from);
-      await pc.setRemoteDescription(payload.sdp); 
-    } else if (payload.type==='ice'){ 
-      try { 
-        console.log('Adding ICE candidate from:', from);
-        await pc.addIceCandidate(payload.candidate); 
       } catch(e) {
-        console.error('Error adding ICE candidate:', e);
-      } 
-    } 
+        alert('Microphone access denied');
+      }
+    }, 500);
   }
-  function attachRemoteAudio(id, stream){ 
-    let el=document.getElementById('audio_'+id); 
-    if (!el){ 
-      el=document.createElement('audio'); 
-      el.id='audio_'+id; 
-      el.autoplay=true; 
-      el.playsInline=true; 
-      el.muted = isDeafened; // Apply deafen state to new audio elements
-      document.body.appendChild(el); 
-    } 
-    el.srcObject = stream; 
-  }
+
+  // Speak overlay controls now managed by popups.js
+
+  // WebRTC functionality now managed by webrtc-room.js
   // Footer prepare button
   if (footerPrepareBtn) {
-    footerPrepareBtn.onclick = ()=>{ 
-      if (joined && connected) {
-        try { prepText.value = ''; } catch(_){} 
-        try { prepOverlay.style.display='block'; } catch(_){}
+    footerPrepareBtn.onclick = ()=>{
+      if (joined && connected && window.webMeetPopups) {
+        window.webMeetPopups.showPrepOverlay();
       }
     };
   }
-  
-  function startSTT(){
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      try { speakText.value = 'Speech Recognition API not supported in this browser.'; } catch(_){}
-      return;
-    }
-    
-    // Always start fresh with current text, don't append old transcript
-    finalTranscript = '';
-    recognition = new SR();
-    // Always get the current selected language from the dropdown
-    const currentSpeakLang = speakLang?.value || sttLang || 'en-US';
-    recognition.lang = currentSpeakLang;
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event) => {
-      let interim_transcript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const transcriptPart = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcriptPart;
-          // Check for "stop" command
-          if (/stop/i.test(transcriptPart.trim())) {
-            try { speakStop.click(); } catch(_){}
-          }
-        } else {
-          interim_transcript += transcriptPart;
-        }
-      }
-      speakText.value = finalTranscript + interim_transcript;
-    };
-    recognition.onend = () => {
-      // Don't persist old transcript
-    };
-    recognition.onerror = (e) => {
-      try { speakText.value += `\n\n[STT Error: ${e.error}]`; } catch(_){}
-    };
-    
-    try {
-      recognition.start();
-    } catch(e) {
-      alert(`Could not start STT: ${e.message}`);
-    }
-  }
+  // STT functionality now managed by audio.js
 
   // Start disconnected; user must press Connect
-  updateConnectionUI(); startDemo();
-  // Populate language selector from TTS voices (approximate supported langs)
-  try {
-    function fillLangs() {
-      const list = (window.speechSynthesis?.getVoices?.() || []).map(v => v.lang).filter(Boolean);
-      // Put English first, then other languages
-      const common = ['en-US', 'en-GB', 'ro-RO', 'fr-FR', 'de-DE', 'es-ES', 'it-IT', 'pt-PT', 'pt-BR', 'nl-NL', 'pl-PL', 'tr-TR', 'ru-RU', 'zh-CN', 'ja-JP', 'ko-KR'];
-      const allLangs = Array.from(new Set([...(list || []), ...common]));
-      // Sort but keep English variants first
-      const langs = allLangs.sort((a, b) => {
-        if (a.startsWith('en-') && !b.startsWith('en-')) return -1;
-        if (!a.startsWith('en-') && b.startsWith('en-')) return 1;
-        return a.localeCompare(b);
-      });
-      
-      const prepLang = document.getElementById('prepLang');
-      
-      // Clear existing options
-      if (speakLang) speakLang.innerHTML = '';
-      if (prepLang) prepLang.innerHTML = '';
-
-      langs.forEach(code => {
-        const opt = document.createElement('option');
-        opt.value = code;
-        opt.textContent = code;
-        if (code === sttLang) opt.selected = true;
-        
-        if (speakLang) speakLang.appendChild(opt.cloneNode(true));
-        if (prepLang) prepLang.appendChild(opt);
-      });
-    }
-
-    fillLangs();
-    window.speechSynthesis?.addEventListener?.('voiceschanged', fillLangs);
-
-    const langChangeHandler = (e) => {
-      sttLang = e.target.value || 'en-US';
-      localStorage.setItem('vc_stt_lang', sttLang);
-      // Reselect in the other dropdown to keep them in sync
-      const otherSelect = e.target.id === 'speakLang' ? document.getElementById('prepLang') : speakLang;
-      if (otherSelect) otherSelect.value = sttLang;
-    };
-
-    if (speakLang) speakLang.addEventListener('change', langChangeHandler);
-    const prepLang = document.getElementById('prepLang');
-    if (prepLang) prepLang.addEventListener('change', langChangeHandler);
-  } catch (_) {}
+  updateConnectionUI();
+  if (window.webMeetDemo) {
+    window.webMeetDemo.startDemo();
+  }
   try { if (!myEmail) { myEmail = localStorage.getItem('vc_email')||''; } } catch(_) {}
+
+  // Export client instance for modules to use
+  window.webMeetClient = {
+    TAB_ID,
+    joined,
+    connected,
+    isDeafened,
+    myEmail,
+    speakMode,
+    postAction
+  };
+
   updateComposerEnabled();
+
+  // Update client object when state changes
+  const originalUpdateComposerEnabled = updateComposerEnabled;
+  updateComposerEnabled = function() {
+    originalUpdateComposerEnabled();
+    if (window.webMeetClient) {
+      window.webMeetClient.joined = joined;
+      window.webMeetClient.connected = connected;
+    }
+  };
   // Show participants panel by default on desktop; ensure Full Message panel is hidden
   if (participantsPanel && window.innerWidth > 768) {
     participantsPanel.classList.add('show');

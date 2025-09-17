@@ -148,7 +148,7 @@
       <!-- Participants panel moved inside chat-container to sit beside side panel -->
       <div id="participantsPanel" class="wa-participants-panel">
         <div class="wa-participants-header">
-          <h3 style="margin:0;font-size:16px">Status</h3>
+          <h3 id="participantsPanelTitle" style="margin:0;font-size:16px">Register</h3>
           <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
             <input id="vc_email_input" type="email" placeholder="Enter email and press Enter to join" style="flex:1;padding:8px;border:1px solid var(--wa-border);border-radius:6px;background:var(--wa-bg-input);color:var(--wa-text-primary)" />
             <button class="vc-toolbar-btn" id="vc_connect_btn" title="Connect" style="margin:0;">
@@ -222,6 +222,12 @@
           <button class="vc-toolbar-btn" id="speakLive" title="Go Live">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
           </button>
+          <button class="vc-toolbar-btn" id="speakPause" title="Pause Broadcasting" style="display:none">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <button class="vc-toolbar-btn" id="speakResume" title="Resume Broadcasting" style="display:none">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
           <button class="vc-toolbar-btn" id="speakStop" title="Stop Live" style="display:none">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
           </button>
@@ -268,6 +274,11 @@
 
   <!-- Participants view moved inside chat container above -->
 
-  <script src="__ASSET_BASE__/webmeet.js"></script>
+  <!-- Load modular scripts -->
+  <script src="__ASSET_BASE__/audio.js"></script>
+  <script src="__ASSET_BASE__/popups.js"></script>
+  <script src="__ASSET_BASE__/showdemo.js"></script>
+  <script src="__ASSET_BASE__/webrtc-room.js"></script>
+  <script src="__ASSET_BASE__/webmeet-client.js"></script>
 </body>
 </html>

@@ -161,6 +161,46 @@ function updateAgentExpose(manifestPath, exposedName, src) {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 }
 
+function echoVar(nameOrAlias) {
+  if (!nameOrAlias) return '';
+  const isAlias = String(nameOrAlias).startsWith('$');
+  const varName = isAlias ? String(nameOrAlias).slice(1) : String(nameOrAlias);
+  if (!varName) return '';
+  try {
+    if (isAlias) {
+      return resolveVarValue(varName) ?? '';
+    }
+    const rawMap = parseSecrets();
+    const raw = rawMap[varName];
+    return `${varName}=${raw ?? ''}`;
+  } catch (_) {
+    return '';
+  }
+}
+
+function resolveAgentName(agentNameOpt) {
+  if (agentNameOpt) return agentNameOpt;
+  try {
+    const workspaceSvc = require('./workspace');
+    const cfg = workspaceSvc.getConfig();
+    if (cfg && cfg.static && cfg.static.agent) {
+      return cfg.static.agent;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function exposeEnv(exposedName, valueOrRef, agentNameOpt) {
+  const agentName = resolveAgentName(agentNameOpt);
+  if (!agentName) {
+    throw new Error('Missing agent name. Provide [agentName] or configure static with start <agent> <port>.');
+  }
+  const { findAgent } = require('./utils');
+  const { manifestPath } = findAgent(agentName);
+  updateAgentExpose(manifestPath, exposedName, valueOrRef);
+  return { agentName, manifestPath };
+}
+
 module.exports = {
   parseSecrets,
   setEnvVar,
@@ -171,4 +211,6 @@ module.exports = {
   resolveVarValue,
   getExposedNames,
   buildEnvMap,
+  echoVar,
+  exposeEnv,
 };

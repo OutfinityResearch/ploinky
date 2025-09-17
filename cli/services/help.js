@@ -16,13 +16,14 @@ function showHelp(args = []) {
 
 ▶ LOCAL DEVELOPMENT
   add repo <name> [url]          Add repository (basic/cloud/vibe/security/extra/demo)
+  update repo <name>             Pull latest changes from remote for a repository
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
   webconsole                         Regenerate WebTTY token (alias of webtty)
   webtty                             Regenerate WebTTY token and print access URL
-  webchat                            Regenerate WebChat token and print access URL
-  webmeet [moderatorAgent]           Regenerate WebMeet token (stores optional moderator)
+  webchat [--rotate]                 Show or rotate WebChat token and print access URL
+  webmeet [moderatorAgent]           Show WebMeet token; use --rotate to mint a new one
   dashboard                          Regenerate Dashboard token and print access URL
   set <VAR> <$VAR|value>         Set a variable value or alias another variable
   set                            List all variable names (no values)
@@ -113,6 +114,12 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'update agent <name>',
                     description: 'Modify container, install, update, cli, agent, about',
                     examples: [ 'update agent MyAPI' ]
+                },
+                'repo': {
+                    syntax: 'update repo <name>',
+                    description: 'Run git pull --rebase --autostash inside the repository to fetch latest changes',
+                    examples: [ 'update repo basic' ],
+                    notes: 'Autostash preserves local changes; resolve conflicts if git reports them.'
                 }
             }
         },
@@ -155,16 +162,16 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Writes the token to .ploinky/.secrets and prints a one-time URL with the token parameter.'
         },
         'webchat': {
-            description: 'Refresh the WebChat token used by /webchat.',
-            syntax: 'webchat',
-            examples: [ 'webchat' ],
-            notes: 'Tokens are stored in .ploinky/.secrets (WEBCHAT_TOKEN).'
+            description: 'Display or rotate the WebChat token used by /webchat.',
+            syntax: 'webchat [--rotate]',
+            examples: [ 'webchat', 'webchat --rotate' ],
+            notes: 'Output now masks the token. Retrieve the full value with `echo $WEBCHAT_TOKEN` if you need to share it.'
         },
         'webmeet': {
-            description: 'Refresh the WebMeet token served at /webmeet.',
-            syntax: 'webmeet [moderatorAgent]',
-            examples: [ 'webmeet', 'webmeet ModeratorAgent' ],
-            notes: 'Stores optional moderator agent in WEBMEET_AGENT and prints the invite URL with the new token.'
+            description: 'Display or rotate the WebMeet token served at /webmeet, optionally storing a moderator agent.',
+            syntax: 'webmeet [moderatorAgent] [--rotate]',
+            examples: [ 'webmeet', 'webmeet ModeratorAgent', 'webmeet --rotate' ],
+            notes: 'Output now masks the token. Use `echo $WEBMEET_TOKEN` if you need to copy it. Without --rotate it reuses the current token; pass --rotate to mint a new one.'
         },
         'dashboard': {
             description: 'Refresh the Dashboard token used by /dashboard.',

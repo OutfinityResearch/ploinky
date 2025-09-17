@@ -88,26 +88,38 @@
 
   // Agents
   const agentsList = document.getElementById('agentsList');
-  
-  function parseAgentNames(text) {
-    const names = new Set();
-    (text || '').split('\n').forEach(line => {
-      const match = line.match(/agent:\s*([A-Za-z0-9_.-]+)/i);
-      if (match && match[1]) names.add(match[1]);
+
+  // Parse active agents from status command output
+  function parseActiveAgents(text) {
+    const agents = [];
+    const lines = (text || '').split('\n');
+
+    lines.forEach(line => {
+      // Look for patterns like "Agent: agentName (port: 12345)"
+      const match = line.match(/Agent:\s*([A-Za-z0-9_.-]+)\s*\(port:\s*(\d+)\)/i);
+      if (match) {
+        agents.push({
+          name: match[1],
+          port: match[2],
+          status: 'running'
+        });
+      }
     });
-    return Array.from(names);
+
+    return agents;
   }
   
-  async function refreshAgents() { 
-    agentsList.innerHTML = '<div style="color: var(--wa-text-secondary);">Loading agents...</div>';
-    
-    const j = await run('list agents'); 
-    const out = j.stdout || j.stderr || ''; 
-    const names = parseAgentNames(out); 
+  async function refreshAgents() {
+    agentsList.innerHTML = '<div style="color: var(--wa-text-secondary);">Loading active agents...</div>';
+
+    // Get active agents from status command
+    const j = await run('status');
+    const out = j.stdout || j.stderr || '';
+    const agents = parseActiveAgents(out); 
     
     agentsList.innerHTML = ''; 
     
-    if (!names.length) { 
+    if (!agents.length) { 
       const d = document.createElement('div'); 
       d.textContent = 'No agents found'; 
       d.style.color = 'var(--wa-text-secondary)';
@@ -117,24 +129,24 @@
       return; 
     } 
     
-    names.forEach(name => { 
+    agents.forEach(agent => { 
       const item = document.createElement('div'); 
       item.className = 'wa-agent-item'; 
       
       const avatar = document.createElement('div');
       avatar.className = 'wa-agent-avatar';
-      avatar.textContent = name.charAt(0).toUpperCase();
+      avatar.textContent = agent.name.charAt(0).toUpperCase();
       
       const info = document.createElement('div');
       info.className = 'wa-agent-info';
       
       const agentName = document.createElement('div');
       agentName.className = 'wa-agent-name';
-      agentName.textContent = name;
+      agentName.textContent = agent.name;
       
       const status = document.createElement('div');
       status.className = 'wa-agent-status';
-      status.textContent = 'Ready to start';
+      status.textContent = `Running on port ${agent.port}`;
       
       info.appendChild(agentName);
       info.appendChild(status);
@@ -150,9 +162,9 @@
         btn.textContent = 'Restarting…';
         status.textContent = 'Restarting…';
 
-        const r = await run(`restart ${name}`);
-        if (r.stdout && r.stdout.includes('restarted')) {
-          status.textContent = 'Running';
+        const r = await run(`restart ${agent.name}`);
+        if (r.stdout) {
+          status.textContent = `Running on port ${agent.port}`;
           btn.textContent = 'Restart';
           btn.disabled = false;
         } else {
@@ -172,6 +184,109 @@
   
   document.getElementById('refreshAgents').onclick = refreshAgents;
   refreshAgents();
+
+  // Debug Popup
+  const debugPopup = document.getElementById('debugPopup');
+  const debugBtn = document.getElementById('debugBtn');
+  const debugClose = document.getElementById('debugClose');
+  const debugSend = document.getElementById('debugSend');
+  const debugJson = document.getElementById('debugJson');
+  const debugError = document.getElementById('debugError');
+  const debugResponse = document.getElementById('debugResponse');
+  const debugAgentName = document.getElementById('debugAgentName');
+  const debugAgentPort = document.getElementById('debugAgentPort');
+
+  // Store current active agents for debug
+  let activeAgents = [];
+
+  // Update active agents when refreshing
+  const originalRefreshAgents = refreshAgents;
+  refreshAgents = async function() {
+    await originalRefreshAgents();
+    // Re-parse to get the list for debug
+    const j = await run('status');
+    activeAgents = parseActiveAgents(j.stdout || '');
+  };
+
+  debugBtn.onclick = () => {
+    debugPopup.style.display = 'block';
+    debugError.textContent = '';
+    debugResponse.style.display = 'none';
+    debugResponse.textContent = '';
+
+    // Pre-fill with first active agent if available
+    if (activeAgents.length > 0) {
+      debugAgentName.value = activeAgents[0].name;
+      debugAgentPort.value = activeAgents[0].port;
+    }
+  };
+
+  debugClose.onclick = () => {
+    debugPopup.style.display = 'none';
+  };
+
+  debugSend.onclick = async () => {
+    debugError.textContent = '';
+    debugResponse.style.display = 'none';
+
+    const agentName = debugAgentName.value.trim();
+    const port = debugAgentPort.value || '';
+    const jsonText = debugJson.value;
+
+    if (!agentName) {
+      debugError.textContent = 'Please enter an agent name';
+      return;
+    }
+
+    // Validate JSON
+    let jsonData;
+    try {
+      jsonData = JSON.parse(jsonText);
+    } catch(e) {
+      debugError.textContent = `Invalid JSON: ${e.message}`;
+      return;
+    }
+
+    // Send to agent
+    debugSend.disabled = true;
+    debugSend.textContent = 'Sending...';
+
+    try {
+      // Use port if provided, otherwise let routing handle it
+      const endpoint = port ? `http://localhost:${port}/api` : `/api/${agentName}`;
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'dashboard-debug',
+          agent: agentName,
+          ...jsonData
+        })
+      });
+
+      const result = await response.text();
+
+      debugResponse.style.display = 'block';
+      debugResponse.textContent = `Response (${response.status}):\n${result}`;
+
+      // Try to pretty print if it's JSON
+      try {
+        const parsed = JSON.parse(result);
+        debugResponse.textContent = `Response (${response.status}):\n${JSON.stringify(parsed, null, 2)}`;
+      } catch(e) {
+        // Keep as plain text
+      }
+
+    } catch(error) {
+      debugError.textContent = `Error: ${error.message}`;
+      debugResponse.style.display = 'block';
+      debugResponse.textContent = `Connection error: ${error.message}`;
+    } finally {
+      debugSend.disabled = false;
+      debugSend.textContent = 'Send';
+    }
+  };
 
   // Control
   const ctrlOut = document.getElementById('ctrlOut');

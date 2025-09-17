@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { PLOINKY_DIR } = require('./config');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 const ENABLED_REPOS_FILE = path.join(PLOINKY_DIR, 'enabled_repos.json');
 
@@ -88,7 +88,22 @@ function disableRepo(name) {
   return true;
 }
 
+function updateRepo(name, { rebase = true, autostash = true } = {}) {
+  if (!name) throw new Error('Missing repository name.');
+  const REPOS_DIR = ensureReposDir();
+  const repoPath = path.join(REPOS_DIR, name);
+  if (!fs.existsSync(repoPath)) {
+    throw new Error(`Repository '${name}' is not installed.`);
+  }
+  const args = ['-C', repoPath, 'pull'];
+  if (rebase) args.push('--rebase');
+  if (autostash) args.push('--autostash');
+  execFileSync('git', args, { stdio: 'inherit' });
+  return true;
+}
+
 module.exports.getPredefinedRepos = getPredefinedRepos;
 module.exports.addRepo = addRepo;
 module.exports.enableRepo = enableRepo;
 module.exports.disableRepo = disableRepo;
+module.exports.updateRepo = updateRepo;

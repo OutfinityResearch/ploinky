@@ -58,7 +58,7 @@ function parseCookies(req) {
   return map;
 }
 
-function buildCookie(name, value, req, pathPrefix) {
+function buildCookie(name, value, req, pathPrefix, options = {}) {
   const parts = [`${name}=${value}`];
   const prefix = pathPrefix || '/';
   parts.push(`Path=${prefix}`);
@@ -67,8 +67,9 @@ function buildCookie(name, value, req, pathPrefix) {
   const secure = Boolean(req.socket && req.socket.encrypted) ||
     String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
   if (secure) parts.push('Secure');
-  // Keep sessions for 7 days by default
-  parts.push('Max-Age=604800');
+  // Use custom maxAge if provided, otherwise default to 7 days
+  const maxAge = options.maxAge || 604800;
+  parts.push(`Max-Age=${maxAge}`);
   return parts.join('; ');
 }
 

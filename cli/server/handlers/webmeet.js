@@ -6,6 +6,7 @@ const http = require('http');
 const { loadToken, parseCookies, buildCookie, readJsonBody } = require('./common');
 const staticSrv = require('../static');
 const secretVars = require('../../services/secretVars');
+const { findAgent } = require('../../services/utils');
 
 const appName = 'webmeet';
 const fallbackAppPath = path.join(__dirname, '../', appName);
@@ -40,14 +41,40 @@ function extractAgentMessage(payload) {
     return JSON.stringify(payload);
 }
 
+function resolveAgentRoute(rawName, routes) {
+    const candidates = [];
+    if (rawName && typeof rawName === 'string') {
+        candidates.push(rawName);
+        try {
+            const info = findAgent(rawName);
+            if (info && info.shortAgentName) {
+                candidates.unshift(info.shortAgentName);
+            }
+        } catch (_) {}
+
+        if (rawName.includes(':') || rawName.includes('/')) {
+            const parts = rawName.split(/[:/]/);
+            const short = parts[parts.length - 1];
+            if (short) candidates.push(short);
+        }
+    }
+
+    for (const name of candidates) {
+        if (name && routes[name]) {
+            return { agentName: name, route: routes[name] };
+        }
+    }
+    return { agentName: rawName, route: null };
+}
+
 function callAgent(agentName, data) {
     return new Promise((resolve, reject) => {
         const routes = loadRoutes();
-        const route = routes[agentName];
+        const { agentName: effectiveName, route } = resolveAgentRoute(agentName, routes);
         if (!route || !route.hostPort) {
             return reject(new Error('agent-not-available'));
         }
-        const body = Buffer.from(JSON.stringify({ source: 'webmeet', agent: agentName, ...data }), 'utf8');
+        const body = Buffer.from(JSON.stringify({ source: 'webmeet', agent: effectiveName, ...data }), 'utf8');
         const req = http.request({
             hostname: '127.0.0.1',
             port: route.hostPort,
@@ -64,7 +91,7 @@ function callAgent(agentName, data) {
                 const raw = Buffer.concat(chunks).toString('utf8');
                 let parsed = raw;
                 try { parsed = JSON.parse(raw); } catch (_) {}
-                resolve({ status: resp.statusCode || 200, raw, parsed });
+                resolve({ status: resp.statusCode || 200, raw, parsed, agentName: effectiveName });
             });
         });
         req.on('error', reject);
@@ -74,8 +101,16 @@ function callAgent(agentName, data) {
 }
 
 const DEFAULT_DEMO_SCRIPT = [
-    { who: 'Moderator', text: 'Welcome to WebMeet! Paste your invite token to join.' },
-    { who: 'Agent', text: 'Hello everyone, feel free to request the floor if you want to demo something.' }
+    { who: 'Moderator', text: 'Welcome to WebMeet! Please register with your email to join the meeting.', delayMs: 1500 },
+    { who: 'Agent', text: 'Hello! I\'m here to help facilitate the discussion. Feel free to ask questions.', delayMs: 2000 },
+    { who: 'Me', text: 'Hi everyone! I\'d like to present my project update.', delayMs: 2500 },
+    { who: 'Moderator', text: 'Sure! Please request to speak using the microphone button.', delayMs: 2000 },
+    { who: 'Me', text: 'Just clicked the button. Waiting for my turn...', delayMs: 1800 },
+    { who: 'Agent', text: 'I see your request. Let me check the queue.', delayMs: 1500 },
+    { who: 'Moderator', text: 'You\'re next in line. Get ready to present!', delayMs: 2200 },
+    { who: 'Agent', text: 'Remember, you can use speech-to-text or type your message.', delayMs: 2000 },
+    { who: 'Me', text: 'Thanks! I\'ll share my screen and start the presentation.', delayMs: 1800 },
+    { who: 'Moderator', text: 'Your turn to speak is now active. Go ahead!', delayMs: 2500 }
 ];
 
 // --- Auth ---
@@ -96,9 +131,14 @@ async function handleAuth(req, res, appConfig, appState) {
         if (body && body.token && String(body.token).trim() === token) {
             const sid = require('crypto').randomBytes(16).toString('hex');
             appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
+            // Save both session and token in cookies for persistence
+            const cookies = [
+                buildCookie(`${appName}_sid`, sid, req, `/${appName}`),
+                buildCookie(`${appName}_token`, token, req, `/${appName}`, { maxAge: 7 * 24 * 60 * 60 }) // 7 days
+            ];
             res.writeHead(200, {
                 'Content-Type': 'application/json',
-                'Set-Cookie': buildCookie(`${appName}_sid`, sid, req, `/${appName}`)
+                'Set-Cookie': cookies
             });
             res.end(JSON.stringify({ ok: true }));
         } else {
@@ -174,6 +214,21 @@ function handleWebMeet(req, res, appConfig, appState) {
         const rel = pathname.substring('/assets/'.length);
         const assetPath = staticSrv.resolveAssetPath(appName, fallbackAppPath, rel);
         if (assetPath && staticSrv.sendFile(res, assetPath)) return;
+    }
+
+    // Check if user has valid token in cookie
+    const cookies = parseCookies(req);
+    const savedToken = cookies.get(`${appName}_token`);
+    const currentToken = loadToken(appName);
+
+    // If saved token matches current token and no session, create a new session
+    if (savedToken && savedToken === currentToken && !authorized(req, appState)) {
+        const sid = require('crypto').randomBytes(16).toString('hex');
+        appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
+        // Set session cookie and continue
+        res.setHeader('Set-Cookie', buildCookie(`${appName}_sid`, sid, req, `/${appName}`));
+        // Mark as authorized for this request
+        req.headers.cookie = `${req.headers.cookie || ''}; ${appName}_sid=${sid}`;
     }
 
     if (!authorized(req, appState)) {
@@ -261,12 +316,12 @@ function handleWebMeet(req, res, appConfig, appState) {
         req.on('end', async () => {
             try {
                 const payload = JSON.parse(body);
-                const { type, tabId } = payload;
+                const { type, tabId, from, to, command, text } = payload;
 
                 if (!tabId) {
                     res.writeHead(400); return res.end(JSON.stringify({ok: false, error: 'missing-tabId'}));
                 }
-                
+
                 const reply = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj||{ok:true})); };
 
                 if (type === 'hello') {
@@ -282,25 +337,77 @@ function handleWebMeet(req, res, appConfig, appState) {
                     return reply({ ok: true });
                 }
 
-                if (type === 'chat') {
-                    const text = String(payload.text || '');
-                    addChatMessage({ appState, fromTabId: tabId, text });
+                // Handle both old 'type' format and new 'command' format
+                if (type === 'chat' || command === 'broadcast') {
+                    const messageText = String(text || payload.text || '');
+                    addChatMessage({ appState, fromTabId: tabId, text: messageText });
 
+                    // Forward to moderator agent if message is for moderator
+                    if (to === 'moderator' || command === 'wantToSpeak' || command === 'endSpeak') {
+                        const agentName = getMeetingAgent();
+                        if (agentName) {
+                            try {
+                                // Send full message structure to agent
+                                const agentData = {
+                                    from: from || tabId,
+                                    to: to || 'all',
+                                    command: command || 'broadcast',
+                                    text: messageText,
+                                    tabId
+                                };
+                                const result = await callAgent(agentName, agentData);
+                                if (result && result.status >= 200 && result.status < 300) {
+                                    const message = extractAgentMessage(result.parsed);
+                                    if (message) {
+                                        const sender = result.agentName || agentName;
+                                        addChatMessage({ appState, fromTabId: `agent:${sender}`, text: message, role: 'agent' });
+                                    }
+                                } else {
+                                    const errMsg = result ? result.raw : 'unknown error';
+                                    addChatMessage({ appState, fromTabId: 'system', text: `Agent '${agentName}' error: ${errMsg}`, role: 'system' });
+                                }
+                            } catch (err) {
+                                addChatMessage({ appState, fromTabId: 'system', text: `Agent '${agentName}' unavailable (${err.message || err})`, role: 'system' });
+                            }
+                        }
+                    }
+                    return reply({ ok: true });
+                }
+
+                // Handle command-based messages
+                if (command === 'wantToSpeak') {
+                    if (!appState.queue.includes(from || tabId)) {
+                        appState.queue.push(from || tabId);
+                    }
+                    broadcast(appState, 'queue', { queue: appState.queue });
+
+                    // Forward to moderator
                     const agentName = getMeetingAgent();
                     if (agentName) {
                         try {
-                            const result = await callAgent(agentName, { text, tabId });
-                            if (result && result.status >= 200 && result.status < 300) {
-                                const message = extractAgentMessage(result.parsed);
-                                if (message) {
-                                    addChatMessage({ appState, fromTabId: `agent:${agentName}`, text: message, role: 'agent' });
-                                }
-                            } else {
-                                const errMsg = result ? result.raw : 'unknown error';
-                                addChatMessage({ appState, fromTabId: 'system', text: `Agent '${agentName}' error: ${errMsg}`, role: 'system' });
-                            }
+                            const agentData = { from, to, command, text, tabId };
+                            await callAgent(agentName, agentData);
                         } catch (err) {
-                            addChatMessage({ appState, fromTabId: 'system', text: `Agent '${agentName}' unavailable (${err.message || err})`, role: 'system' });
+                            console.error('Failed to notify moderator:', err);
+                        }
+                    }
+                    return reply({ ok: true });
+                }
+
+                if (command === 'endSpeak') {
+                    if (appState.currentSpeaker === tabId || appState.currentSpeaker === from) {
+                        appState.currentSpeaker = null;
+                        broadcast(appState, 'current_speaker', { tabId: null });
+                    }
+
+                    // Forward to moderator
+                    const agentName = getMeetingAgent();
+                    if (agentName) {
+                        try {
+                            const agentData = { from, to, command, text, tabId };
+                            await callAgent(agentName, agentData);
+                        } catch (err) {
+                            console.error('Failed to notify moderator:', err);
                         }
                     }
                     return reply({ ok: true });
@@ -313,6 +420,17 @@ function handleWebMeet(req, res, appConfig, appState) {
                     return reply({ ok: true });
                 }
 
+                // Handle ping (don't forward to agent)
+                if (type === 'ping') {
+                    // Just update last activity, don't forward to agent
+                    const participant = appState.participants.get(tabId);
+                    if (participant) {
+                        participant.lastAt = Date.now();
+                    }
+                    return reply({ ok: true });
+                }
+
+                // Keep backward compatibility with old type-based format
                 if (type === 'request_speak') {
                     if (!appState.queue.includes(tabId)) {
                         appState.queue.push(tabId);
@@ -328,7 +446,7 @@ function handleWebMeet(req, res, appConfig, appState) {
                     }
                     return reply({ ok: true });
                 }
-                
+
                 return reply({ ok: false, error: 'unknown-action' });
 
             } catch (e) {
