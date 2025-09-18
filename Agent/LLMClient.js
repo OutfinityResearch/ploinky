@@ -17,13 +17,28 @@ const providers = {
 };
 const llmCalls = []; // Array to store active AbortControllers
 const DEFAULT_MODEL = "gpt-4o-mini"
+function getModelMetadata(modelName) {
+    const entry = modelConfig.models?.[modelName];
+    if (!entry) {
+        return null;
+    }
+    if (typeof entry === 'string') {
+        return { provider: entry };
+    }
+    if (typeof entry === 'object' && entry !== null) {
+        return { provider: entry.provider };
+    }
+    return null;
+}
+
 async function callLLM(historyArray, prompt) {
     try {
         let modelName = process.env.LLM_MODEL;
         if(!modelName){
             modelName = DEFAULT_MODEL;
         }
-        const providerName = modelConfig.models[modelName];
+        const modelMeta = getModelMetadata(modelName);
+        const providerName = modelMeta?.provider;
 
         if (!providerName) {
             throw new Error(`Model "${modelName}" not found in models.json`);
@@ -53,7 +68,8 @@ async function callLLMWithModel(modelName, historyArray, prompt){
     }
 
     try {
-        const providerName = modelConfig.models[modelName];
+        const modelMeta = getModelMetadata(modelName);
+        const providerName = modelMeta?.provider;
         if (!providerName) {
             throw new Error(`Model "${modelName}" not found in models.json`);
         }
