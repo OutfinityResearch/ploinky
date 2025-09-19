@@ -22,6 +22,12 @@ function renderTemplate(filenames, replacements) {
 
 function runStatusCommand() {
   return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (payload) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(payload);
+    };
     try {
       const proc = spawn('ploinky', ['status'], { cwd: process.cwd() });
       let out = '';
@@ -29,10 +35,14 @@ function runStatusCommand() {
       proc.stdout.on('data', chunk => out += chunk.toString('utf8'));
       proc.stderr.on('data', chunk => err += chunk.toString('utf8'));
       proc.on('close', (code) => {
-        resolve({ code, stdout: out, stderr: err });
+        finish({ code, stdout: out, stderr: err });
+      });
+      proc.on('error', (error) => {
+        const message = error && error.message ? error.message : String(error || 'spawn error');
+        finish({ code: -1, stdout: out, stderr: message });
       });
     } catch (e) {
-      resolve({ code: -1, stdout: '', stderr: e?.message || String(e) });
+      finish({ code: -1, stdout: '', stderr: e?.message || String(e) });
     }
   });
 }
