@@ -610,7 +610,7 @@ function startAgentContainer(agentName, manifest, agentPath) {
     // Inject environment for exposed variables
     const envFlags = flagsToArgs(buildEnvFlags(manifest));
     if (envFlags.length) args.push(...envFlags);
-    const entry = agentCmd ? agentCmd : 'sh /Agent/AgentServer.sh';
+    const entry = agentCmd ? agentCmd : 'sh /Agent/server/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', entry);
     const { spawnSync } = require('child_process');
     const res = spawnSync(runtime, args, { stdio: 'inherit' });
@@ -807,7 +807,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     ];
     const envFlags2 = flagsToArgs(buildEnvFlags(manifest));
     if (envFlags2.length) args.push(...envFlags2);
-    const cmd = agentCmd || 'sh /Agent/AgentServer.sh';
+    const cmd = agentCmd || 'sh /Agent/server/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', cmd);
     const { spawnSync } = require('child_process');
     const runRes = spawnSync(runtime, args, { stdio: 'inherit' });
