@@ -404,44 +404,40 @@ function gracefulStopContainer(name, { prefix = '[destroy]' } = {}) {
     if (!exists) return false;
 
     const log = (msg) => console.log(`${prefix} ${msg}`);
-    let stopped = false;
-
-    if (isContainerRunning(name)) {
-        try {
-            log(`Sending SIGTERM to ${name}...`);
-            execSync(`${runtime} kill --signal SIGTERM ${name}`, { stdio: 'ignore' });
-        } catch (e) {
-            debugLog(`gracefulStopContainer SIGTERM ${name}: ${e?.message || e}`);
-        }
-
-        for (let attempt = 0; attempt < 5; attempt++) {
-            if (!isContainerRunning(name)) break;
-            try { execSync('sleep 1', { stdio: 'ignore' }); } catch (_) {}
-        }
+    if (!isContainerRunning(name)) {
+        log(`${name} already stopped.`);
+        return true;
     }
 
-    if (isContainerRunning(name)) {
-        try {
-            log(`Stopping ${name}...`);
-            execSync(`${runtime} stop ${name}`, { stdio: 'ignore' });
-        } catch (e) {
-            debugLog(`gracefulStopContainer stop ${name}: ${e?.message || e}`);
-        }
+    try {
+        log(`Sending SIGTERM to ${name}...`);
+        execSync(`${runtime} kill --signal SIGTERM ${name}`, { stdio: 'ignore' });
+    } catch (e) {
+        debugLog(`gracefulStopContainer SIGTERM ${name}: ${e?.message || e}`);
     }
+    return true;
+}
 
-    if (isContainerRunning(name)) {
+function waitForContainers(names, timeoutSec = 5) {
+    const deadline = Date.now() + timeoutSec * 1000;
+    while (Date.now() < deadline) {
+        const stillRunning = names.filter(name => isContainerRunning(name));
+        if (!stillRunning.length) return [];
+        try { execSync('sleep 1', { stdio: 'ignore' }); } catch (_) {}
+    }
+    return names.filter(name => isContainerRunning(name));
+}
+
+function forceStopContainers(names, { prefix } = {}) {
+    const runtime = containerRuntime;
+    for (const name of names) {
         try {
-            log(`Forcing kill for ${name}...`);
+            console.log(`${prefix} Forcing kill for ${name}...`);
             execSync(`${runtime} kill ${name}`, { stdio: 'ignore' });
         } catch (e) {
-            debugLog(`gracefulStopContainer kill ${name}: ${e?.message || e}`);
+            debugLog(`forceStopContainers kill ${name}: ${e?.message||e}`);
         }
     }
-
-    stopped = !isContainerRunning(name);
-    if (stopped) log(`Stopped ${name}`);
-    else log(`${name} did not respond to stop sequence.`);
-    return stopped;
 }
 
 function getContainerCandidates(name, rec) {
@@ -461,24 +457,29 @@ function stopConfiguredAgents() {
     const agents = workspace.loadAgents();
     const entries = Object.entries(agents || {})
         .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'));
-    const stoppedList = [];
+    const candidateSet = new Set();
     for (const [name, rec] of entries) {
-        const candidates = getContainerCandidates(name, rec);
-        let stoppedAny = false;
-        for (const candidate of candidates) {
-            if (!candidate || !containerExists(candidate)) continue;
-            const stopped = gracefulStopContainer(candidate, { prefix: '[stop]' });
-            if (stopped) {
-                stoppedList.push(candidate);
-                stoppedAny = true;
-            }
-        }
-        if (!stoppedAny) {
+        const candidates = getContainerCandidates(name, rec).filter(candidate => candidate && containerExists(candidate));
+        if (!candidates.length) {
             const label = rec?.agentName ? `${rec.agentName}` : name;
             console.log(`[stop] ${label}: no running container found.`);
         }
+        for (const c of candidates) candidateSet.add(c);
     }
-    return stoppedList;
+
+    const allCandidates = Array.from(candidateSet);
+    if (!allCandidates.length) return [];
+
+    allCandidates.forEach(name => gracefulStopContainer(name, { prefix: '[stop]' }));
+    const remaining = waitForContainers(allCandidates, 5);
+    if (remaining.length) {
+        forceStopContainers(remaining, { prefix: '[stop]' });
+        waitForContainers(remaining, 2);
+    }
+
+    const stopped = allCandidates.filter(name => !isContainerRunning(name));
+    stopped.forEach(name => console.log(`[stop] Stopped ${name}`));
+    return stopped;
 }
 function parseHostPort(output) {
     try {
@@ -590,7 +591,7 @@ async function ensureAgentCore(manifest, agentPath) {
 // - Working directory: current project root (process.cwd()), mounted RW at the same path inside container.
 // - Map Ploinky's Agent tools directory (repository 'Agent') read-only into /Agent inside the container.
 // - If manifest.agent is provided (non-empty), run it via /bin/sh -lc <agentCmd>.
-// - If manifest.agent is missing/empty, run fallback supervisor '/Agent/AgentServer.sh' which loops and restarts AgentServer.js.
+// - If manifest.agent is missing/empty, run fallback supervisor 'AgentServer.sh' which loops and restarts AgentServer.js.
 // - Always keep the container running; do not auto-stop on exit.
 function startAgentContainer(agentName, manifest, agentPath) {
     const runtime = containerRuntime;
@@ -610,7 +611,7 @@ function startAgentContainer(agentName, manifest, agentPath) {
     // Inject environment for exposed variables
     const envFlags = flagsToArgs(buildEnvFlags(manifest));
     if (envFlags.length) args.push(...envFlags);
-    const entry = agentCmd ? agentCmd : 'sh /Agent/AgentServer.sh';
+    const entry = agentCmd ? agentCmd : 'sh /Agent/server/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', entry);
     const { spawnSync } = require('child_process');
     const res = spawnSync(runtime, args, { stdio: 'inherit' });
@@ -637,22 +638,26 @@ function stopAndRemove(name) {
     const rec = agents ? agents[name] : null;
     const candidates = getContainerCandidates(name, rec);
 
-    for (const candidate of candidates) {
-        if (!candidate || !containerExists(candidate)) continue;
+    const existing = candidates.filter(candidate => candidate && containerExists(candidate));
+    if (!existing.length) return;
 
-        gracefulStopContainer(candidate, { prefix: '[destroy]' });
+    existing.forEach(candidate => gracefulStopContainer(candidate, { prefix: '[destroy]' }));
+    const remaining = waitForContainers(existing, 5);
+    if (remaining.length) {
+        forceStopContainers(remaining, { prefix: '[destroy]' });
+        waitForContainers(remaining, 2);
+    }
 
+    for (const candidate of existing) {
         try {
             console.log(`[destroy] Removing container: ${candidate}`);
             execSync(`${runtime} rm ${candidate}`, { stdio: 'ignore' });
             console.log(`[destroy] ✓ removed ${candidate}`);
-            return;
         } catch (e) {
             console.log(`[destroy] rm failed for ${candidate}: ${e.message}. Trying force removal...`);
             try {
                 execSync(`${runtime} rm -f ${candidate}`, { stdio: 'ignore' });
                 console.log(`[destroy] ✓ force removed ${candidate}`);
-                return;
             } catch (e2) {
                 console.log(`[destroy] force remove failed for ${candidate}: ${e2.message}`);
             }
@@ -756,7 +761,7 @@ function getContainerLabel(containerName, key) {
 
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000)
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000).
-// Uses the same mounting strategy as startAgentContainer. Falls back to /Agent/AgentServer.sh if no agent command set.
+// Uses the same mounting strategy as startAgentContainer. Falls back to AgentServer.sh if no agent command set.
 function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const runtime = containerRuntime;
     const repoName = path.basename(path.dirname(agentPath));
@@ -807,7 +812,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     ];
     const envFlags2 = flagsToArgs(buildEnvFlags(manifest));
     if (envFlags2.length) args.push(...envFlags2);
-    const cmd = agentCmd || 'sh /Agent/AgentServer.sh';
+    const cmd = agentCmd || 'sh /Agent/server/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', cmd);
     const { spawnSync } = require('child_process');
     const runRes = spawnSync(runtime, args, { stdio: 'inherit' });

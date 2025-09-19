@@ -48,6 +48,49 @@
   let pingTimer = null;
   let isDeafened = false; // State for muting incoming audio
 
+  const EMAIL_STORAGE_KEY = 'webmeet_saved_email';
+  const LEGACY_EMAIL_KEYS = ['webmeet_last_email', 'vc_email'];
+  const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
+
+  function getStoredEmail() {
+    try {
+      const direct = localStorage.getItem(EMAIL_STORAGE_KEY);
+      if (direct && direct.trim()) return direct.trim();
+      for (const key of LEGACY_EMAIL_KEYS) {
+        const legacy = localStorage.getItem(key);
+        if (legacy && legacy.trim()) return legacy.trim();
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  function storeEmail(value) {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return;
+    try {
+      localStorage.setItem(EMAIL_STORAGE_KEY, trimmed);
+      LEGACY_EMAIL_KEYS.forEach(key => {
+        try { localStorage.setItem(key, trimmed); } catch (_) {}
+      });
+    } catch (_) {}
+  }
+
+  function isValidEmail(val) {
+    return EMAIL_REGEX.test(String(val || '').trim());
+  }
+
+  function setEmailError(msg) {
+    const el = document.getElementById('vc_email_error');
+    if (!el) return;
+    if (msg) {
+      el.textContent = msg;
+      el.style.display = 'block';
+    } else {
+      el.textContent = '';
+      el.style.display = 'none';
+    }
+  }
+
   // Theme
   function getTheme() { return localStorage.getItem('webmeet_theme') || 'light'; }
   function setTheme(t) { document.body.setAttribute('data-theme', t); localStorage.setItem('webmeet_theme', t); }
@@ -87,9 +130,10 @@
     const form = document.createElement('div');
     form.innerHTML = `
       <div id="vc_current_speaker" style="margin-bottom:8px; font-size:13px; color:#9aa0a6;"></div>
-      <div style="display:flex; gap:8px; margin-bottom:8px">
-        <input id="vc_reg_email" type="email" placeholder="Your email" />
-      </div>
+      <form autocomplete="on" onsubmit="return false;" style="display:flex; gap:8px; margin-bottom:6px">
+        <input id="vc_reg_email" type="email" name="email" autocomplete="email" placeholder="Your email" />
+      </form>
+      <div id="vc_email_error" style="display:none; font-size:12px; color:var(--wa-error,#d93025); margin:-2px 0 8px 2px;"></div>
       <div style="display:flex; gap:8px; margin-bottom:8px">
         <button class="wa-btn" id="vc_btn_conn">Connect</button>
         <button class="wa-btn" id="vc_btn_req" style="display:none">Request to speak</button>
@@ -104,25 +148,29 @@
       <ul id="vc_q_list" style="margin:0; padding-left:18px"></ul>
     `;
     wrap.appendChild(form);
-    try {
-      myEmail = localStorage.getItem('webmeet_last_email') || localStorage.getItem('vc_email') || '';
-    } catch(_){}
     const emailEl = document.getElementById('vc_reg_email');
     if (emailEl) {
-      emailEl.value = myEmail;
+      setTimeout(() => {
+        try {
+          const stored = getStoredEmail();
+          if (!emailEl.value && stored) {
+            emailEl.value = stored;
+          }
+        } catch(_){}
+      }, 100);
       emailEl.readOnly = !!joined;
+      emailEl.addEventListener('input', () => setEmailError(''));
       emailEl.addEventListener('keydown', async (e)=>{
         if (e.key==='Enter') {
           const val=(emailEl.value||'').trim();
-          if (!/^\S+@\S+\.\S+$/.test(val)) {
+          if (!isValidEmail(val)) {
+            setEmailError('Please enter a valid email address.');
             showErrorPopup('Please enter a valid email address');
             emailEl.focus();
             return;
           }
-          try {
-            localStorage.setItem('webmeet_last_email', val);
-            localStorage.setItem('vc_email', val);
-          } catch(_){}
+          setEmailError('');
+          storeEmail(val);
           myEmail = val;
           await postAction({ type:'hello', email: myEmail, name: myEmail });
           joined = true;
@@ -138,8 +186,26 @@
         connectSSE();
         // Auto-join if we have an email
         const emailEl = document.getElementById('vc_reg_email');
-        const email = emailEl?.value?.trim() || localStorage.getItem('webmeet_last_email') || localStorage.getItem('vc_email') || '';
-        if (email && /^\S+@\S+\.\S+$/.test(email)) {
+        const rawInput = emailEl?.value?.trim() || '';
+        let email = '';
+        if (rawInput) {
+          if (!isValidEmail(rawInput)) {
+            setEmailError('Please enter a valid email address.');
+          } else {
+            setEmailError('');
+            storeEmail(rawInput);
+            email = rawInput;
+          }
+        }
+        if (!email) {
+          const stored = getStoredEmail();
+          if (isValidEmail(stored)) {
+            setEmailError('');
+            email = stored;
+            if (emailEl && !emailEl.value) emailEl.value = email;
+          }
+        }
+        if (email && isValidEmail(email)) {
           myEmail = email;
           setTimeout(async () => {
             await postAction({ type:'hello', email: myEmail, name: myEmail });
@@ -148,12 +214,15 @@
             updateComposerEnabled();
             renderParticipantsList();
           }, 500);
+        } else {
+          if (emailEl) emailEl.focus();
         }
       } else {
         // If connected, disconnect
         try { if (joined) await postAction({ type:'leave' }); } catch(_){}
         joined = false;
         disconnectSSE();
+        setEmailError('');
       }
       updateComposerEnabled();
       renderParticipantsList();
@@ -387,6 +456,17 @@
   const vcParticipantsList = document.getElementById('vc_participants_list');
   const participantsToggle = document.getElementById('participantsToggle');
   const footerPrepareBtn = document.getElementById('footerPrepareBtn');
+
+  // Immediately restore saved email on page load
+  if (vcEmailInput && !vcEmailInput.value) {
+    try {
+      const savedEmail = getStoredEmail();
+      if (savedEmail) {
+        vcEmailInput.value = savedEmail;
+        myEmail = savedEmail;
+      }
+    } catch(_){}
+  }
   
   
   
@@ -406,11 +486,23 @@
   }
   
   if (vcEmailInput) {
-    // Load last used email from localStorage
-    try {
-      const savedEmail = localStorage.getItem('webmeet_last_email') || '';
-      if (savedEmail) vcEmailInput.value = savedEmail;
-    } catch(_){}
+    // Try to restore immediately and after delays
+    const restoreEmail = () => {
+      try {
+        if (!vcEmailInput.value && !joined) {
+          const savedEmail = getStoredEmail();
+          if (savedEmail) {
+            vcEmailInput.value = savedEmail;
+            myEmail = savedEmail;
+          }
+        }
+      } catch(_){}
+    };
+
+    restoreEmail(); // Immediately
+    setTimeout(restoreEmail, 100);
+    setTimeout(restoreEmail, 300);
+    setTimeout(restoreEmail, 500);
 
     vcEmailInput.addEventListener('keydown', async (e)=>{
       if (e.key==='Enter') {
@@ -420,16 +512,13 @@
           return;
         }
         const val=(vcEmailInput.value||'').trim();
-        if (!/^\S+@\S+\.\S+$/.test(val)) {
+        if (!isValidEmail(val)) {
           showErrorPopup('Please enter a valid email address');
           vcEmailInput.focus();
           return;
         }
         // Save email to localStorage for next time
-        try {
-          localStorage.setItem('webmeet_last_email', val);
-          localStorage.setItem('vc_email', val); // Keep backward compatibility
-        } catch(_){}
+        storeEmail(val);
         myEmail = val;
         
         // Perform the join action
@@ -641,16 +730,24 @@
         console.log('Auto-joining with email:', myEmail);
         const joinResult = await postAction({ type:'hello', email: myEmail, name: myEmail });
         if (joinResult && joinResult.ok !== false) {
-          joined = true; 
+          joined = true;
           if (vcEmailInput) vcEmailInput.readOnly = true;
           console.log('Joined successfully');
         } else {
           joined = false;
+          showErrorPopup('Failed to join the meeting. Please try again.');
           console.log('Failed to join:', joinResult);
         }
       } else {
-        console.log('No email found for auto-join, user needs to enter email');
+        // Show user-friendly message about needing valid email
+        if (email && !isValidEmail(email)) {
+          showErrorPopup('Please enter a valid email address to join');
+        } else {
+          showErrorPopup('Please enter your email to join the meeting');
+        }
         joined = false;
+        // Focus the email input for user convenience
+        if (vcEmailInput) vcEmailInput.focus();
       }
       updateComposerEnabled(); 
       renderParticipantsList();
@@ -908,6 +1005,19 @@
   }
   // Refresh participants/queue view periodically
   setInterval(()=>{ try { renderParticipantsList(); } catch(_){} }, 1000);
+
+  // Restore email periodically in case elements are recreated
+  setInterval(() => {
+    const inputs = [document.getElementById('vc_email_input'), document.getElementById('vc_reg_email')];
+    inputs.forEach(input => {
+      if (input && !input.value && !window.webMeetClient?.joined) {
+        try {
+          const savedEmail = getStoredEmail();
+          if (savedEmail) input.value = savedEmail;
+        } catch(_){}
+      }
+    });
+  }, 1500);
 
   
   // Toggle participants panel

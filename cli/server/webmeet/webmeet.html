@@ -149,12 +149,12 @@
       <div id="participantsPanel" class="wa-participants-panel">
         <div class="wa-participants-header">
           <h3 id="participantsPanelTitle" style="margin:0;font-size:16px">Register</h3>
-          <div style="margin-top:12px; display:flex; gap:8px; align-items:center;">
-            <input id="vc_email_input" type="email" placeholder="Enter email and press Enter to join" style="flex:1;padding:8px;border:1px solid var(--wa-border);border-radius:6px;background:var(--wa-bg-input);color:var(--wa-text-primary)" />
-            <button class="vc-toolbar-btn" id="vc_connect_btn" title="Connect" style="margin:0;">
+          <form style="margin-top:12px; display:flex; gap:8px; align-items:center;" autocomplete="on" onsubmit="return false;">
+            <input id="vc_email_input" type="email" name="email" autocomplete="email" placeholder="Enter email and press Enter to join" style="flex:1;padding:8px;border:1px solid var(--wa-border);border-radius:6px;background:var(--wa-bg-input);color:var(--wa-text-primary)" />
+            <button type="button" class="vc-toolbar-btn" id="vc_connect_btn" title="Connect" style="margin:0;">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/></svg>
             </button>
-          </div>
+          </form>
           <div class="vc-toolbar" style="margin-top:8px">
             <button class="vc-toolbar-btn" id="vc_mic_btn" title="Request to speak" style="display:none">
               <span style="font-size: 18px;">✌️</span>
