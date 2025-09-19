@@ -1,97 +1,95 @@
-const fs = require('fs');
-const path = require('path');
-const google = require('./providers/google.js');
-const openai = require('./providers/openai.js');
-const anthropic = require('./providers/anthropic.js');
-const huggingFace = require('./providers/huggingFace.js');
+const { loadModelsConfiguration } = require('./modelsConfigLoader');
+const { registerBuiltInProviders } = require('./providers');
+const { registerProvidersFromConfig } = require('./providerBootstrap');
+const { ensureProvider } = require('./providerRegistry');
 
-const modelConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'models.json'), 'utf-8'));
+const modelsConfiguration = loadModelsConfiguration();
 
-const providers = {
-    openai,
-    google,
-    anthropic,
-    huggingface: huggingFace, // Match the key in models.json
-    openrouter: openai, // OpenRouter uses the OpenAI format
-    custom: openai,     // Custom providers can also use the OpenAI format
-};
-const llmCalls = []; // Array to store active AbortControllers
-const DEFAULT_MODEL = "gpt-4o-mini"
+registerBuiltInProviders();
+registerProvidersFromConfig(modelsConfiguration);
+
+const llmCalls = [];
+const DEFAULT_MODEL = 'gpt-4o-mini';
+
 function getModelMetadata(modelName) {
-    const entry = modelConfig.models?.[modelName];
-    if (!entry) {
+    const modelDescriptor = modelsConfiguration.models.get(modelName);
+    if (!modelDescriptor) {
         return null;
     }
-    if (typeof entry === 'string') {
-        return { provider: entry };
-    }
-    if (typeof entry === 'object' && entry !== null) {
-        return { provider: entry.provider };
-    }
-    return null;
+    const providerConfig = modelsConfiguration.providers.get(modelDescriptor.providerKey) || null;
+    return {
+        model: modelDescriptor,
+        provider: providerConfig,
+    };
 }
 
-async function callLLM(historyArray, prompt) {
+function resolveProviderKey(modelName, invocationOptions, metadata) {
+    if (invocationOptions.providerKey) {
+        return invocationOptions.providerKey;
+    }
+    if (metadata?.model?.providerKey) {
+        return metadata.model.providerKey;
+    }
+    if (metadata?.provider?.providerKey) {
+        return metadata.provider.providerKey;
+    }
+    throw new Error(`Model "${modelName}" is not configured with a provider.`);
+}
+
+async function callLLM(historyArray, prompt, options = {}) {
     try {
-        let modelName = process.env.LLM_MODEL;
-        if(!modelName){
-            modelName = DEFAULT_MODEL;
-        }
-        const modelMeta = getModelMetadata(modelName);
-        const providerName = modelMeta?.provider;
-
-        if (!providerName) {
-            throw new Error(`Model "${modelName}" not found in models.json`);
-        }
-
-        const providerConfig = modelConfig.providers[providerName];
-        if (!providerConfig) {
-            throw new Error(`Provider "${providerName}" for model "${modelName}" not found in models.json`);
-        }
-
-        const provider = providers[providerName];
-        if (!provider) {
-            throw new Error(`Provider implementation for "${providerName}" not found in LLMClient.js`);
-        }
-        // The callLLMWithModel function contains the core logic
-        return await callLLMWithModel(modelName, historyArray, prompt);
+        const modelName = options.model || DEFAULT_MODEL;
+        return await callLLMWithModel(modelName, historyArray, prompt, options);
     } catch (error) {
-        throw error; // Re-throw the error to be caught by the outer .catch
+        throw error;
     }
 }
 
-async function callLLMWithModel(modelName, historyArray, prompt){
+async function callLLMWithModel(modelName, historyArray, prompt, invocationOptions = {}) {
     const controller = new AbortController();
     llmCalls.push(controller);
-    if(prompt){
-        historyArray.push({ role: 'human', message: prompt });
+
+    const history = Array.isArray(historyArray) ? historyArray.slice() : [];
+    if (prompt) {
+        history.push({ role: 'human', message: prompt });
+    }
+
+    const externalSignal = invocationOptions.signal;
+    if (externalSignal && typeof externalSignal.addEventListener === 'function') {
+        const abortHandler = () => controller.abort();
+        externalSignal.addEventListener('abort', abortHandler, { once: true });
     }
 
     try {
-        const modelMeta = getModelMetadata(modelName);
-        const providerName = modelMeta?.provider;
-        if (!providerName) {
-            throw new Error(`Model "${modelName}" not found in models.json`);
+        const metadata = getModelMetadata(modelName);
+        const providerKey = resolveProviderKey(modelName, invocationOptions, metadata);
+        const provider = ensureProvider(providerKey);
+
+        const baseURL = invocationOptions.baseURL
+            || metadata?.model?.baseURL
+            || metadata?.provider?.baseURL;
+
+        if (!baseURL) {
+            throw new Error(`Missing base URL for provider "${providerKey}" and model "${modelName}".`);
         }
 
-        const providerConfig = modelConfig.providers[providerName];
-        if (!providerConfig) {
-            throw new Error(`Provider "${providerName}" for model "${modelName}" not found in models.json`);
+        const apiKey = invocationOptions.apiKey || process.env.LLM_API_KEY;
+        if (!apiKey && providerKey !== 'huggingface') {
+            throw new Error(`Missing API key for provider "${providerKey}".`);
         }
 
-        const provider = providers[providerName];
-        if (!provider) {
-            throw new Error(`Provider implementation for "${providerName}" not found in LLMClient.js`);
-        }
-        process.env.LLM_BASE_URL = providerConfig.baseURL;
-        process.env.LLM_MODEL = modelName;
-        process.env.LLM_PROVIDER = providerName;
-
-        return await provider.callLLM(historyArray, controller.signal);
+        return await provider.callLLM(history, {
+            model: modelName,
+            providerKey,
+            apiKey,
+            baseURL,
+            signal: controller.signal,
+            params: invocationOptions.params || {},
+            headers: invocationOptions.headers || {},
+        });
     } catch (error) {
-        throw error; // Re-throw the error to be caught by the outer .catch
+        throw error;
     } finally {
-        // Remove the controller from the list when the call is finished
         const index = llmCalls.indexOf(controller);
         if (index > -1) {
             llmCalls.splice(index, 1);
@@ -99,9 +97,9 @@ async function callLLMWithModel(modelName, historyArray, prompt){
     }
 }
 
-async function cancelRequests(){
+async function cancelRequests() {
     llmCalls.forEach(controller => controller.abort());
-    llmCalls.length = 0; // Clear the array
+    llmCalls.length = 0;
 }
 
 module.exports = { callLLM, callLLMWithModel, cancelRequests };

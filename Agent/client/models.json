@@ -1,33 +1,45 @@
 {
     "providers": {
         "openai": {
-            "baseURL": "https://api.openai.com/v1/chat/completions"
+            "baseURL": "https://api.openai.com/v1/chat/completions",
+            "apiKeyEnv": "OPENAI_API_KEY",
+            "defaultModel": "gpt-5-mini",
+            "module": "./providers/openai.js"
         },
         "anthropic": {
-            "baseURL": "https://api.anthropic.com/v1/messages"
+            "baseURL": "https://api.anthropic.com/v1/messages",
+            "apiKeyEnv": "ANTHROPIC_API_KEY",
+            "module": "./providers/anthropic.js"
         },
         "google": {
-            "baseURL": "https://generativelanguage.googleapis.com/v1beta/models/"
+            "baseURL": "https://generativelanguage.googleapis.com/v1beta/models/",
+            "apiKeyEnv": "GEMINI_API_KEY",
+            "module": "./providers/google.js"
         },
         "huggingface": {
-            "baseURL": "https://api-inference.huggingface.co/models"
+            "baseURL": "https://api-inference.huggingface.co/models",
+            "apiKeyEnv": "HUGGINGFACE_API_KEY",
+            "module": "./providers/huggingFace.js"
         },
         "openrouter": {
-            "baseURL": "https://openrouter.ai/api/v1/chat/completions"
+            "baseURL": "https://openrouter.ai/api/v1/chat/completions",
+            "apiKeyEnv": "OPENROUTER_API_KEY",
+            "module": "./providers/openai.js"
         }
     },
     "models": {
-        "gpt-5": { "provider": "openai", "modes": ["deep"] },
-        "gpt-4o-mini": { "provider": "openai", "modes": ["fast"] },
-        "gpt-5-mini": { "provider": "openai", "modes": ["fast", "deep"] },
-        "gpt-4.1": { "provider": "openai", "modes": ["deep"] },
-        "claude-opus-4-1-20250805": { "provider": "anthropic", "modes": ["deep"] },
-        "claude-opus-4-20250514": { "provider": "anthropic", "modes": ["deep"] },
-        "claude-sonnet-4-20250514": { "provider": "anthropic", "modes": ["fast", "deep"] },
-        "gemini-2.5-pro": { "provider": "google", "modes": ["deep"] },
-        "gemini-2.5-flash": { "provider": "google", "modes": ["fast"] },
-        "google/gemini-2.5-flash": { "provider": "openrouter", "modes": ["fast"] },
-        "anthropic/claude-sonnet-4": { "provider": "openrouter", "modes": ["deep"] },
-        "google/gemini-2.5-pro": { "provider": "openrouter", "modes": ["deep"] }
+        "gpt-5": { "provider": "openai", "mode": "deep" },
+        "gpt-4o-mini": { "provider": "openai", "mode": "fast" },
+        "gpt-5-mini": { "provider": "openai", "mode": "fast" },
+        "gpt-4.1": { "provider": "openai", "mode": "deep" },
+        "claude-opus-4-1-20250805": { "provider": "anthropic", "mode": "deep" },
+        "claude-opus-4-20250514": { "provider": "anthropic", "mode": "deep" },
+        "claude-sonnet-4-20250514": { "provider": "anthropic", "mode": "fast" },
+        "gemini-2.5-pro": { "provider": "google", "mode": "deep" },
+        "gemini-2.5-flash": { "provider": "google", "mode": "fast" },
+        "google/gemini-2.5-flash": { "provider": "openrouter", "mode": "fast" },
+        "anthropic/claude-sonnet-4": { "provider": "openrouter", "mode": "fast" },
+        "google/gemini-2.5-pro": { "provider": "openrouter", "mode": "deep" },
+        "mistralai/Mistral-7B-Instruct-v0.1": { "provider": "huggingface", "mode": "fast" }
     }
 }

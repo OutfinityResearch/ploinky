@@ -1,7 +1,10 @@
 const { callLLMWithModel, cancelRequests } = require('../../Agent/LLMClient.js');
 
-// Set your API key for the test.
-process.env.LLM_API_KEY = "";
+const options = {
+    providerKey: 'openai',
+    baseURL: 'https://api.openai.com/v1/chat/completions',
+    apiKey: process.env.OPENAI_API_KEY || 'set-your-openai-key',
+};
 
 /**
  * This test demonstrates starting two LLM calls in parallel and then cancelling them.
@@ -14,10 +17,10 @@ async function runParallelCancellationTest() {
     const historyArray = [];
 
     console.log(`Starting call to ${model1}...`);
-    const promise1 = callLLMWithModel(model1, historyArray, "hello");
+    const promise1 = callLLMWithModel(model1, historyArray, 'hello', options);
 
     console.log(`Starting call to ${model1}...`);
-    const promise2 = callLLMWithModel(model1, historyArray, "hello");
+    const promise2 = callLLMWithModel(model1, historyArray, 'hello', options);
 
     // After a short delay, cancel all in-flight requests.
     setTimeout(() => {

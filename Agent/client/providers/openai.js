@@ -1,38 +1,52 @@
-function convertContext(chatContext) {
-    let convertedContext = [];
-    for (let reply of chatContext) {
-        let convertedReply = {
-            content: reply.message
-        }
-        if(reply.role === "human") {
-            convertedReply.role = "user";
-        } else if(reply.role === "ai") {
-            convertedReply.role = "assistant";
-        } else if(reply.role === "system") {
-            convertedReply.role = "developer";
-        }
-        convertedContext.push(convertedReply);
+const { toOpenAIChatMessages } = require('../messageAdapters/openAIChat');
+
+async function callLLM(chatContext, options) {
+    if (!options || typeof options !== 'object') {
+        throw new Error('OpenAI provider requires invocation options.');
     }
-    return convertedContext;
-}
-async function callLLM(chatContext, signal) {
-    let convertedContext = convertContext(chatContext);
-    const response = await fetch(process.env.LLM_BASE_URL, {
-        method: "POST",
+
+    const { model, apiKey, baseURL, signal, params, headers } = options;
+    if (!model) {
+        throw new Error('OpenAI provider requires a model name.');
+    }
+    if (!apiKey) {
+        throw new Error('OpenAI provider requires an API key.');
+    }
+    if (!baseURL) {
+        throw new Error('OpenAI provider requires a baseURL.');
+    }
+
+    const convertedContext = toOpenAIChatMessages(chatContext);
+    const payload = {
+        model,
+        messages: convertedContext,
+    };
+
+    if (params && typeof params === 'object') {
+        Object.assign(payload, params);
+    }
+
+    const response = await fetch(baseURL, {
+        method: 'POST',
         headers: {
-            "Authorization": `Bearer ${process.env.LLM_API_KEY}`,
-            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            ...(headers || {}),
         },
-        body: JSON.stringify({
-            model: process.env.LLM_MODEL,
-            messages: convertedContext,
-        }),
+        body: JSON.stringify(payload),
         signal,
     });
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`OpenAI API Error (${response.status}): ${errorBody}`);
+    }
+
     const data = await response.json();
-    if(data.error){
+    if (data.error) {
         throw new Error(JSON.stringify(data.error));
     }
-    return data.choices[0].message.content;
+    return data.choices?.[0]?.message?.content;
 }
+
 module.exports = { callLLM };

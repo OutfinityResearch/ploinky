@@ -1,165 +1,197 @@
-const fs = require('fs');
-const path = require('path');
 const readline = require('readline');
 
 // The low-level LLM client used for all model invocations.
 const { callLLMWithModel, cancelRequests: cancelLLMRequests } = require('./LLMClient');
+const { loadModelsConfiguration } = require('./modelsConfigLoader');
 
 const operatorRegistry = new Map();
 let agentRegistry = null;
 let modelAliasRegistry = null;
 let defaultAgentName = null;
+let providerRegistrySummary = null;
+let customAgentSummaries = null;
 
-const modelsConfig = loadModelsConfig();
-const modelInventory = computeModelInventory();
-const SUPPORTED_MODELS = modelInventory.supportedModels;
+const modelsConfiguration = loadModelsConfiguration();
+const SUPPORTED_MODELS = new Set(modelsConfiguration.models.keys());
 
 const PROVIDER_PRIORITY = ['openai', 'gemini', 'anthropic', 'openrouter', 'mistral', 'deepseek', 'huggingface'];
 
-const PREDEFINED_PROVIDERS = [
-    {
-        name: 'openai',
-        providerKey: 'openai',
-        apiKeyEnv: 'OPENAI_API_KEY',
-        modelEnv: 'OPENAI_MODEL',
-    },
-    {
-        name: 'gemini',
-        providerKey: 'google',
-        apiKeyEnv: 'GEMINI_API_KEY',
-        modelEnv: 'GEMINI_MODEL',
-    },
-    {
-        name: 'anthropic',
-        providerKey: 'anthropic',
-        apiKeyEnv: 'ANTHROPIC_API_KEY',
-        modelEnv: 'ANTHROPIC_MODEL',
-    },
-    {
-        name: 'mistral',
-        providerKey: 'mistral',
-        apiKeyEnv: 'MISTRAL_API_KEY',
-        modelEnv: 'MISTRAL_MODEL',
-    },
-    {
-        name: 'openrouter',
-        providerKey: 'openrouter',
-        apiKeyEnv: 'OPENROUTER_API_KEY',
-        modelEnv: 'OPENROUTER_MODEL',
-    },
-    {
-        name: 'deepseek',
-        providerKey: 'deepseek',
-        apiKeyEnv: 'DEEPSEEK_API_KEY',
-        modelEnv: 'DEEPSEEK_MODEL',
-    },
-    {
-        name: 'huggingface',
-        providerKey: 'huggingface',
-        apiKeyEnv: 'HUGGINGFACE_API_KEY',
-        modelEnv: 'HUGGINGFACE_MODEL',
-    }
-];
+let configurationDiagnosticsEmitted = false;
 
-function loadModelsConfig() {
-    const configPath = path.join(__dirname, 'models.json');
-    if (!fs.existsSync(configPath)) {
-        return { models: {}, providers: {} };
+function emitConfigurationDiagnostics() {
+    if (configurationDiagnosticsEmitted) {
+        return;
     }
-    try {
-        const raw = fs.readFileSync(configPath, 'utf-8');
-        return JSON.parse(raw);
-    } catch (error) {
-        throw new Error(`Failed to read models.json: ${error.message}`);
+    configurationDiagnosticsEmitted = true;
+
+    for (const error of modelsConfiguration.issues.errors) {
+        console.error(`LLMAgentClient: ${error}`);
+    }
+    for (const warning of modelsConfiguration.issues.warnings) {
+        console.warn(`LLMAgentClient: ${warning}`);
     }
 }
 
-function computeModelInventory() {
-    const supportedModels = new Set();
-    const modelsByProvider = new Map();
-    const modelsByName = new Map();
-    const models = modelsConfig.models || {};
+function getProviderConfig(providerKey) {
+    return modelsConfiguration.providers.get(providerKey) || null;
+}
 
-    for (const [modelName, entry] of Object.entries(models)) {
-        let providerKey = null;
-        let modes = ['fast'];
+function getModelDescriptor(modelName) {
+    return modelsConfiguration.models.get(modelName) || null;
+}
 
-        if (typeof entry === 'string') {
-            providerKey = entry;
-        } else if (entry && typeof entry === 'object') {
-            providerKey = entry.provider || entry.providerKey || null;
-            modes = normalizeModes(entry.modes ?? entry.mode);
-        } else {
-            console.warn(`LLMAgentClient: Invalid configuration for model "${modelName}" in models.json.`);
-            continue;
-        }
-
-        if (!providerKey) {
-            console.warn(`LLMAgentClient: Model "${modelName}" is missing a provider in models.json.`);
-            continue;
-        }
-
-        supportedModels.add(modelName);
-
-        const record = {
-            name: modelName,
-            providerKey,
-            modes,
-        };
-
-        modelsByName.set(modelName, record);
-
-        if (!modelsByProvider.has(providerKey)) {
-            modelsByProvider.set(providerKey, []);
-        }
-        modelsByProvider.get(providerKey).push(record);
+function createAgentModelRecord(providerConfig, modelDescriptor) {
+    if (!providerConfig || !modelDescriptor) {
+        return null;
     }
 
+    const apiKeyEnv = modelDescriptor.apiKeyEnv || providerConfig.apiKeyEnv || null;
+    const baseURL = modelDescriptor.baseURL || providerConfig.baseURL || null;
+    const mode = modelDescriptor.mode || 'fast';
+
     return {
-        supportedModels,
-        modelsByProvider,
-        modelsByName,
+        name: modelDescriptor.name,
+        providerKey: modelDescriptor.providerKey,
+        apiKeyEnv,
+        baseURL,
+        mode,
+        alias: modelDescriptor.alias || null,
     };
 }
 
-function normalizeModes(rawModes) {
-    if (rawModes === undefined || rawModes === null) {
-        return ['fast'];
-    }
-
-    const valueArray = Array.isArray(rawModes) ? rawModes : [rawModes];
-    const normalized = Array.from(new Set(valueArray
-        .map(mode => typeof mode === 'string' ? mode.toLowerCase() : '')
-        .filter(mode => mode === 'fast' || mode === 'deep')));
-
-    if (!normalized.length) {
-        console.warn('LLMAgentClient: Model modes must be "fast" or "deep". Defaulting to "fast".');
-        return ['fast'];
-    }
-
-    return normalized;
-}
-
-function cloneModelRecord(record) {
+function cloneAgentModelRecord(record) {
     return {
         name: record.name,
         providerKey: record.providerKey,
-        modes: Array.isArray(record.modes) ? record.modes.slice() : ['fast'],
+        apiKeyEnv: record.apiKeyEnv,
+        baseURL: record.baseURL,
+        mode: record.mode || 'fast',
+        alias: record.alias || null,
     };
 }
 
-function getModelInfo(modelName) {
-    return modelInventory.modelsByName.get(modelName) || null;
-}
-
-function buildModelsByProvider() {
-    const mapping = new Map();
-
-    for (const [providerKey, records] of modelInventory.modelsByProvider.entries()) {
-        mapping.set(providerKey, records.map(cloneModelRecord));
+function selectDefaultModelRecord(providerConfig, availableModels) {
+    if (!availableModels || !availableModels.length) {
+        return null;
     }
 
-    return mapping;
+    const pickByName = (name) => availableModels.find(model => model.name === name);
+
+    if (providerConfig?.defaultModel) {
+        const preferred = pickByName(providerConfig.defaultModel);
+        if (preferred) {
+            return preferred;
+        }
+    }
+
+    const deepModel = availableModels.find(model => model.mode === 'deep');
+    if (deepModel) {
+        return deepModel;
+    }
+
+    const fastModel = availableModels.find(model => model.mode === 'fast');
+    if (fastModel) {
+        return fastModel;
+    }
+
+    return availableModels[0];
+}
+
+function registerProviderAgent(providerConfig) {
+    if (!providerConfig) {
+        return;
+    }
+
+    const summary = {
+        providerKey: providerConfig.providerKey,
+        baseURL: providerConfig.baseURL || null,
+        availableModels: [],
+    };
+
+    const modelDescriptors = modelsConfiguration.providerModels.get(providerConfig.providerKey) || [];
+    if (!modelDescriptors.length) {
+        summary.status = 'inactive';
+        summary.reason = 'no models configured';
+        providerRegistrySummary?.inactive.push(summary);
+        console.warn(`LLMAgentClient: No models configured in models.json for provider "${providerConfig.providerKey}".`);
+        return;
+    }
+
+    const resolvedModels = modelDescriptors
+        .map(descriptor => createAgentModelRecord(providerConfig, descriptor))
+        .filter(record => record && record.apiKeyEnv);
+
+    summary.availableModels = resolvedModels.map(record => ({
+        name: record.name,
+        apiKeyEnv: record.apiKeyEnv,
+        mode: record.mode,
+    }));
+
+    if (!resolvedModels.length) {
+        summary.status = 'inactive';
+        summary.reason = 'models missing apiKeyEnv';
+        providerRegistrySummary?.inactive.push(summary);
+        console.warn(`LLMAgentClient: Provider "${providerConfig.providerKey}" has no models with configured apiKeyEnv.`);
+        return;
+    }
+
+    const availableModels = resolvedModels.filter(record => Boolean(process.env[record.apiKeyEnv]));
+    if (!availableModels.length) {
+        summary.status = 'inactive';
+        summary.reason = 'missing API keys';
+        providerRegistrySummary?.inactive.push(summary);
+        console.warn(`LLMAgentClient: Provider "${providerConfig.providerKey}" has no models with available API keys.`);
+        return;
+    }
+
+    const selectedModel = selectDefaultModelRecord(providerConfig, availableModels);
+    if (!selectedModel) {
+        summary.status = 'inactive';
+        summary.reason = 'no default model available';
+        providerRegistrySummary?.inactive.push(summary);
+        console.warn(`LLMAgentClient: Provider "${providerConfig.providerKey}" could not determine a default model.`);
+        return;
+    }
+
+    const canonicalName = providerConfig.providerKey;
+    const agentName = canonicalName;
+
+    const agentRecord = {
+        name: agentName,
+        canonicalName,
+        providerKey: providerConfig.providerKey,
+        apiKeyEnv: selectedModel.apiKeyEnv,
+        baseURL: selectedModel.baseURL,
+        model: selectedModel.name,
+        modelMode: selectedModel.mode,
+        availableModels: availableModels.map(model => model.name),
+        availableModelRecords: availableModels.map(cloneAgentModelRecord),
+        supportedModes: Array.from(new Set(availableModels.map(model => model.mode).filter(Boolean))),
+    };
+
+    summary.status = 'active';
+    summary.defaultModel = selectedModel.name;
+    summary.availableModels = availableModels.map(model => ({
+        name: model.name,
+        apiKeyEnv: model.apiKeyEnv,
+        mode: model.mode,
+        isDefault: model.name === selectedModel.name,
+    }));
+    providerRegistrySummary?.active.push(summary);
+
+    const registryKeys = new Set([
+        canonicalName,
+        agentName,
+    ]);
+
+    for (const key of registryKeys) {
+        if (!key) {
+            continue;
+        }
+        agentRegistry.set(key.toLowerCase(), agentRecord);
+    }
+
+    registerModelAliases(agentRecord, availableModels);
 }
 
 function ensureAgentRegistry() {
@@ -167,77 +199,24 @@ function ensureAgentRegistry() {
         return agentRegistry;
     }
 
+    emitConfigurationDiagnostics();
+
     agentRegistry = new Map();
     modelAliasRegistry = new Map();
+    providerRegistrySummary = { active: [], inactive: [] };
+    customAgentSummaries = [];
 
-    const providersConfig = modelsConfig.providers || {};
-    const modelsByProvider = buildModelsByProvider();
-
-    for (const provider of PREDEFINED_PROVIDERS) {
-        const apiKey = process.env[provider.apiKeyEnv];
-        if (!apiKey) {
-            continue;
-        }
-
-        const availableModelRecords = modelsByProvider.get(provider.providerKey) || [];
-        if (!availableModelRecords.length) {
-            console.warn(`LLMAgentClient: No models configured in models.json for provider "${provider.providerKey}".`);
-            continue;
-        }
-
-        const selectedModel = resolveModelRecord(provider, availableModelRecords);
-        if (!selectedModel) {
-            continue;
-        }
-
-        const baseURL = providersConfig?.[provider.providerKey]?.baseURL;
-        const record = {
-            name: provider.name,
-            canonicalName: provider.name,
-            providerKey: provider.providerKey,
-            apiKeyEnv: provider.apiKeyEnv,
-            baseURL,
-            model: selectedModel.name,
-            modelModes: selectedModel.modes.slice(),
-            availableModels: availableModelRecords.map(model => model.name),
-            availableModelRecords: availableModelRecords.map(cloneModelRecord),
-        };
-
-        const registryKey = provider.name.toLowerCase();
-        agentRegistry.set(registryKey, record);
-        const providerAliasKey = provider.providerKey.toLowerCase();
-        if (!agentRegistry.has(providerAliasKey)) {
-            agentRegistry.set(providerAliasKey, record);
-        }
-
-        registerModelAliases(record, record.availableModelRecords);
+    for (const providerConfig of modelsConfiguration.providers.values()) {
+        registerProviderAgent(providerConfig);
     }
 
-    registerCustomAgents(agentRegistry, providersConfig);
+    registerCustomAgents(agentRegistry);
 
     determineDefaultAgent();
     return agentRegistry;
 }
 
-function resolveModelRecord(provider, availableModelRecords) {
-    const fromEnv = provider.modelEnv ? process.env[provider.modelEnv] : undefined;
-    if (fromEnv) {
-        const match = availableModelRecords.find(model => model.name === fromEnv);
-        if (match) {
-            return match;
-        }
-        console.warn(`LLMAgentClient: Model "${fromEnv}" is not listed for provider "${provider.name}". Falling back to models.json.`);
-    }
-
-    const deepModel = availableModelRecords.find(model => model.modes.includes('deep'));
-    if (deepModel) {
-        return deepModel;
-    }
-
-    return availableModelRecords[0] || null;
-}
-
-function registerCustomAgents(registry, providersConfig) {
+function registerCustomAgents(registry) {
     const envEntries = Object.keys(process.env);
     const apiKeyPattern = /^CUSTOM_LLM_([A-Z0-9_]+)_API_KEY$/;
 
@@ -254,9 +233,15 @@ function registerCustomAgents(registry, providersConfig) {
         const baseURL = process.env[baseUrlKey];
         const apiKeyEnv = key;
         const modelName = process.env[modelKey];
+        const apiKeyValue = process.env[apiKeyEnv];
 
-        if (!baseURL || !modelName) {
-            console.warn(`LLMAgentClient: Missing base URL or model configuration for custom provider "${agentName}".`);
+        if (!apiKeyValue) {
+            console.warn(`LLMAgentClient: API key environment variable "${apiKeyEnv}" is not set for custom agent "${agentName}".`);
+            continue;
+        }
+
+        if (!modelName) {
+            console.warn(`LLMAgentClient: Missing model name for custom agent "${agentName}". Set ${modelKey}.`);
             continue;
         }
 
@@ -265,30 +250,54 @@ function registerCustomAgents(registry, providersConfig) {
             continue;
         }
 
-        const modelInfo = getModelInfo(modelName);
-        if (!modelInfo) {
+        const modelDescriptor = getModelDescriptor(modelName);
+        if (!modelDescriptor) {
             console.warn(`LLMAgentClient: models.json does not include details for model "${modelName}". Skipping custom agent "${agentName}".`);
             continue;
         }
-        const providerKey = modelInfo.providerKey;
+        const providerKey = modelDescriptor.providerKey;
         if (!providerKey) {
             console.warn(`LLMAgentClient: models.json does not map "${modelName}" to a provider. Skipping custom agent "${agentName}".`);
             continue;
         }
+
+        const providerConfig = getProviderConfig(providerKey);
+        const resolvedBaseURL = baseURL || modelDescriptor.baseURL || providerConfig?.baseURL || null;
+
+        const mode = modelDescriptor.mode || 'fast';
+
+        const modelRecord = {
+            name: modelName,
+            providerKey,
+            apiKeyEnv,
+            baseURL: resolvedBaseURL,
+            mode,
+            alias: modelDescriptor.alias || null,
+        };
+
         const agent = {
             name: agentName,
             canonicalName: agentName,
             model: modelName,
             apiKeyEnv,
             providerKey,
-            baseURL: baseURL || providersConfig?.[providerKey]?.baseURL,
-            modelModes: modelInfo.modes.slice(),
+            baseURL: modelRecord.baseURL,
+            modelMode: mode,
             availableModels: [modelName],
-            availableModelRecords: [cloneModelRecord(modelInfo)],
+            availableModelRecords: [cloneAgentModelRecord(modelRecord)],
+            supportedModes: [mode],
         };
         const registryKey = agentName.toLowerCase();
         registry.set(registryKey, agent);
         registerModelAliases(agent, agent.availableModelRecords);
+
+        customAgentSummaries?.push({
+            name: agentName,
+            model: modelName,
+            providerKey,
+            apiKeyEnv,
+            baseURL: modelRecord.baseURL,
+        });
     }
 }
 
@@ -298,31 +307,37 @@ function registerModelAliases(agentRecord, modelRecords) {
     }
 
     const canonicalName = agentRecord.canonicalName || agentRecord.name;
-    let records = modelRecords;
+    const recordsSource = Array.isArray(modelRecords) && modelRecords.length
+        ? modelRecords
+        : (agentRecord.availableModelRecords || []).map(cloneAgentModelRecord);
 
-    if (!Array.isArray(records) || !records.length) {
-        records = (agentRecord.availableModelRecords || []).map(cloneModelRecord);
-    }
-
-    for (const modelRecord of records) {
+    for (const modelRecord of recordsSource) {
         if (!modelRecord || !modelRecord.name) {
             continue;
         }
-        const aliasKey = modelRecord.name.toLowerCase();
-        if (modelAliasRegistry.has(aliasKey)) {
-            continue;
+
+        const aliasCandidates = new Set([modelRecord.name, modelRecord.alias].filter(Boolean));
+
+        for (const alias of aliasCandidates) {
+            const aliasKey = alias.toLowerCase();
+            if (modelAliasRegistry.has(aliasKey)) {
+                continue;
+            }
+
+            modelAliasRegistry.set(aliasKey, {
+                name: alias,
+                canonicalName,
+                providerKey: agentRecord.providerKey,
+                apiKeyEnv: modelRecord.apiKeyEnv || agentRecord.apiKeyEnv,
+                baseURL: modelRecord.baseURL || agentRecord.baseURL,
+                model: modelRecord.name,
+                mode: modelRecord.mode || agentRecord.modelMode,
+                modelMode: modelRecord.mode || agentRecord.modelMode,
+                supportedModes: Array.isArray(agentRecord.supportedModes) ? agentRecord.supportedModes.slice() : [agentRecord.modelMode || 'fast'],
+                availableModels: agentRecord.availableModels ? agentRecord.availableModels.slice() : [modelRecord.name],
+                availableModelRecords: agentRecord.availableModelRecords ? agentRecord.availableModelRecords.map(cloneAgentModelRecord) : [cloneAgentModelRecord(modelRecord)],
+            });
         }
-        modelAliasRegistry.set(aliasKey, {
-            name: modelRecord.name,
-            canonicalName,
-            providerKey: agentRecord.providerKey,
-            apiKeyEnv: agentRecord.apiKeyEnv,
-            baseURL: agentRecord.baseURL,
-            model: modelRecord.name,
-            modelModes: Array.isArray(modelRecord.modes) ? modelRecord.modes.slice() : ['fast'],
-            availableModels: agentRecord.availableModels ? agentRecord.availableModels.slice() : [modelRecord.name],
-            availableModelRecords: agentRecord.availableModelRecords ? agentRecord.availableModelRecords.map(cloneModelRecord) : [cloneModelRecord(modelRecord)],
-        });
     }
 }
 
@@ -593,7 +608,10 @@ function normalizeTaskMode(mode, outputSchema, agent, fallback = 'fast') {
         return normalized;
     }
 
-    const agentModes = Array.isArray(agent?.modelModes) ? agent.modelModes : [];
+    const agentModes = Array.isArray(agent?.supportedModes) ? agent.supportedModes.slice() : [];
+    if (!agentModes.length && agent?.modelMode) {
+        agentModes.push(agent.modelMode);
+    }
 
     if (normalized === 'any' || normalized === '') {
         if (outputSchema && agentModes.includes('deep')) {
@@ -736,42 +754,21 @@ function buildEvaluationContext(question, generationResults, reviewCriteria) {
 }
 
 async function invokeAgent(agent, history) {
-    const apiKey = process.env[agent.apiKeyEnv];
-    if (!apiKey) {
+    const apiKey = agent.apiKeyEnv ? process.env[agent.apiKeyEnv] : null;
+    if (!apiKey && agent.providerKey !== 'huggingface') {
         throw new Error(`Missing API key for agent "${agent.name}" (${agent.apiKeyEnv}).`);
     }
 
-    const previousKey = process.env.LLM_API_KEY;
-    const previousModel = process.env.LLM_MODEL;
-    const previousProvider = process.env.LLM_PROVIDER;
-    const previousBaseUrl = process.env.LLM_BASE_URL;
-
-    process.env.LLM_API_KEY = apiKey;
-
-    try {
-        return await callLLMWithModel(agent.model, [...history]);
-    } finally {
-        if (previousKey === undefined) {
-            delete process.env.LLM_API_KEY;
-        } else {
-            process.env.LLM_API_KEY = previousKey;
-        }
-        if (previousModel === undefined) {
-            delete process.env.LLM_MODEL;
-        } else {
-            process.env.LLM_MODEL = previousModel;
-        }
-        if (previousProvider === undefined) {
-            delete process.env.LLM_PROVIDER;
-        } else {
-            process.env.LLM_PROVIDER = previousProvider;
-        }
-        if (previousBaseUrl === undefined) {
-            delete process.env.LLM_BASE_URL;
-        } else {
-            process.env.LLM_BASE_URL = previousBaseUrl;
-        }
+    const baseURL = agent.baseURL || getProviderConfig(agent.providerKey)?.baseURL;
+    if (!baseURL) {
+        throw new Error(`Missing base URL for agent "${agent.name}" (${agent.providerKey}).`);
     }
+
+    return callLLMWithModel(agent.model, [...history], null, {
+        apiKey,
+        baseURL,
+        providerKey: agent.providerKey,
+    });
 }
 
 function buildTaskResult(raw, outputSchema) {
@@ -808,6 +805,55 @@ function promptUser(query) {
     });
 }
 
+function cloneProviderSummary(summary) {
+    return {
+        providerKey: summary.providerKey,
+        baseURL: summary.baseURL || null,
+        status: summary.status,
+        reason: summary.reason,
+        defaultModel: summary.defaultModel,
+        availableModels: Array.isArray(summary.availableModels)
+            ? summary.availableModels.map(model => ({
+                name: model.name,
+                apiKeyEnv: model.apiKeyEnv,
+                mode: model.mode || 'fast',
+                isDefault: Boolean(model.isDefault),
+            }))
+            : [],
+    };
+}
+
+function listAgents() {
+    ensureAgentRegistry();
+
+    const providers = providerRegistrySummary || { active: [], inactive: [] };
+    const customAgents = customAgentSummaries || [];
+
+    return {
+        defaultAgent: defaultAgentName,
+        providers: {
+            active: providers.active.map(cloneProviderSummary),
+            inactive: providers.inactive.map(cloneProviderSummary),
+        },
+        customAgents: customAgents.map(entry => ({
+            name: entry.name,
+            model: entry.model,
+            providerKey: entry.providerKey,
+            apiKeyEnv: entry.apiKeyEnv,
+            baseURL: entry.baseURL || null,
+        })),
+    };
+}
+
+function resetForTests() {
+    agentRegistry = null;
+    modelAliasRegistry = null;
+    defaultAgentName = null;
+    providerRegistrySummary = null;
+    customAgentSummaries = null;
+    configurationDiagnosticsEmitted = false;
+}
+
 module.exports = {
     registerOperator,
     callOperator,
@@ -817,4 +863,6 @@ module.exports = {
     brainstorm,
     chooseOperator,
     cancelTasks,
+    listAgents,
+    __resetForTests: resetForTests,
 };

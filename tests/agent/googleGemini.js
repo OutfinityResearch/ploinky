@@ -1,12 +1,18 @@
 const { callLLM } = require('../../Agent/LLMClient.js');
-const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/`;
-process.env.LLM_MODEL = "gemini-2.5-flash";
-process.env.LLM_API_KEY = "";
-process.env.LLM_PROVIDER = "google";
-process.env.LLM_BASE_URL = apiUrl + `${process.env.LLM_MODEL}:generateContent?key=${process.env.LLM_API_KEY}`;
 
+const options = {
+    model: 'gemini-2.5-flash',
+    providerKey: 'google',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/models/',
+    apiKey: process.env.GEMINI_API_KEY || 'set-your-gemini-key',
+};
 
-let context = []
-callLLM(context, "hello").then((aiResponse)=>{
-    console.log(aiResponse);
-});
+const context = [];
+
+callLLM(context, 'hello', options)
+    .then((aiResponse) => {
+        console.log(aiResponse);
+    })
+    .catch((error) => {
+        console.error('Google Gemini call failed:', error.message);
+    });

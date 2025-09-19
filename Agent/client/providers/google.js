@@ -1,37 +1,52 @@
-function convertContext(chatContext) {
-    let convertedContext = [];
-    let systemInstruction = {parts:[]}
-    for (let reply of chatContext) {
-        let convertedReply = {
-            parts: [{text: reply.message}]
-        }
-        if (reply.role === "human") {
-            convertedReply.role = "user";
-        } else if (reply.role === "ai") {
-            convertedReply.role = "model";
-        } else if (reply.role === "system") {
-            systemInstruction.parts.push({text: reply.message});
-            continue;
-        }
-        convertedContext.push(convertedReply);
+const { toGeminiPayload } = require('../messageAdapters/googleGemini');
+
+async function callLLM(chatContext, options) {
+    if (!options || typeof options !== 'object') {
+        throw new Error('Google provider requires invocation options.');
     }
-    return {contents: convertedContext, systemInstruction:systemInstruction};
-}
-async function callLLM(chatContext) {
-    let convertedContext = convertContext(chatContext);
-    let result;
-    result = await fetch(process.env.LLM_BASE_URL, {
+
+    const { model, apiKey, baseURL, signal, params, headers } = options;
+
+    if (!model) {
+        throw new Error('Google provider requires a model name.');
+    }
+    if (!apiKey) {
+        throw new Error('Google provider requires an API key.');
+    }
+    if (!baseURL) {
+        throw new Error('Google provider requires a baseURL.');
+    }
+
+    const convertedContext = toGeminiPayload(chatContext);
+    const payload = { ...convertedContext };
+    if (params && typeof params === 'object') {
+        Object.assign(payload, params);
+    }
+
+    const normalizedBase = baseURL.endsWith('/') ? baseURL : `${baseURL}/`;
+    const url = `${normalizedBase}${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            ...(headers || {}),
         },
-        body: JSON.stringify(convertedContext)
+        body: JSON.stringify(payload),
+        signal,
     });
-    let responseJSON = await result.json();
-    if(responseJSON.error){
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`Google Generative API Error (${response.status}): ${errorBody}`);
+    }
+
+    const responseJSON = await response.json();
+    if (responseJSON.error) {
         throw new Error(JSON.stringify(responseJSON.error));
     }
-    let textResponse = responseJSON.candidates[0].content.parts[0].text;
-    return textResponse;
+
+    return responseJSON.candidates?.[0]?.content?.parts?.[0]?.text;
 }
+
 module.exports = { callLLM };

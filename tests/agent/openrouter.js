@@ -1,10 +1,18 @@
 const { callLLM } = require('../../Agent/LLMClient.js');
-process.env.LLM_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
-process.env.LLM_API_KEY = "";
-process.env.LLM_MODEL = "gpt-4o-mini";
-process.env.LLM_PROVIDER = "openrouter";
 
-let context = []
-callLLM(context, "hello").then((aiResponse)=>{
-    console.log(aiResponse);
-});
+const options = {
+    model: 'gpt-4o-mini',
+    providerKey: 'openrouter',
+    baseURL: 'https://openrouter.ai/api/v1/chat/completions',
+    apiKey: process.env.OPENROUTER_API_KEY || 'set-your-openrouter-key',
+};
+
+const context = [];
+
+callLLM(context, 'hello', options)
+    .then((aiResponse) => {
+        console.log(aiResponse);
+    })
+    .catch((error) => {
+        console.error('OpenRouter call failed:', error.message);
+    });
