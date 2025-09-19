@@ -26,7 +26,9 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ ok: true }));
   }
-  if (req.url === '/api') {
+  const urlPath = req.url || '/';
+  const isApiRequest = urlPath === '/api' || urlPath.startsWith('/api?') || urlPath.startsWith('/api/');
+  if (isApiRequest) {
     const chunks = [];
     req.on('data', c => chunks.push(c));
     req.on('end', () => {

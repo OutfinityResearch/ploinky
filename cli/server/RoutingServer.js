@@ -165,13 +165,20 @@ const globalState = {
 };
 
 // --- API Proxy ---
-function postJsonToAgent(targetPort, payload, res) {
+function buildAgentPath(parsedUrl, includeSearch = true) {
+    if (!parsedUrl || typeof parsedUrl !== 'object') return '/api';
+    const pathname = parsedUrl.pathname && parsedUrl.pathname !== '/' ? parsedUrl.pathname : '';
+    const search = includeSearch && parsedUrl.search ? parsedUrl.search : '';
+    return `/api${pathname}${search}`;
+}
+
+function postJsonToAgent(targetPort, payload, res, agentPath) {
     try {
         const data = Buffer.from(JSON.stringify(payload || {}));
         const opts = {
             hostname: '127.0.0.1',
             port: targetPort,
-            path: '/api',
+            path: agentPath && agentPath.length ? agentPath : '/api',
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -195,10 +202,14 @@ function postJsonToAgent(targetPort, payload, res) {
 
 function proxyApi(req, res, targetPort) {
     const method = (req.method || 'GET').toUpperCase();
+    const parsed = url.parse(req.url || '', true);
+    const includeSearch = method !== 'GET';
+    const agentPath = buildAgentPath(parsed, includeSearch);
     if (method === 'GET') {
-        const parsed = url.parse(req.url);
-        const params = querystring.parse(parsed.query || '');
-        return postJsonToAgent(targetPort, params, res);
+        const params = parsed && parsed.query && typeof parsed.query === 'object'
+            ? parsed.query
+            : querystring.parse(parsed ? parsed.query : '');
+        return postJsonToAgent(targetPort, params, res, agentPath);
     }
 
     const chunks = [];
@@ -209,8 +220,8 @@ function proxyApi(req, res, targetPort) {
         const opts = {
             hostname: '127.0.0.1',
             port: targetPort,
-            path: '/api',
-            method: 'POST',
+            path: agentPath,
+            method: method,
             headers: {
                 'Content-Type': req.headers['content-type'] || 'application/json',
                 'Content-Length': data.length
@@ -248,12 +259,24 @@ const server = http.createServer((req, res) => {
         return handleWebMeet(req, res, config.webmeet, globalState.webmeet);
     } else if (pathname.startsWith('/status')) {
         return handleStatus(req, res, config.status, globalState.status);
-    } else if (pathname.startsWith('/apis/')) {
+    } else if (pathname.startsWith('/apis/') || pathname.startsWith('/api/')) {
         const apiRoutes = loadApiRoutes();
-        const agent = pathname.split('/')[2];
+        const parts = pathname.split('/');
+        const agent = parts[2];
+        if (!agent) {
+            res.writeHead(404); return res.end('API Route not found');
+        }
         const route = apiRoutes[agent];
         if (route && route.hostPort) {
-            req.url = req.url.replace(`/apis/${agent}`, '');
+            const prefix = pathname.startsWith('/apis/') ? '/apis' : '/api';
+            const base = `${prefix}/${agent}`;
+            let suffix = req.url.slice(base.length) || '';
+            if (!suffix) {
+                req.url = '/';
+            } else {
+                if (!suffix.startsWith('/')) suffix = `/${suffix}`;
+                req.url = suffix;
+            }
             return proxyApi(req, res, route.hostPort);
         }
         res.writeHead(404); return res.end('API Route not found');

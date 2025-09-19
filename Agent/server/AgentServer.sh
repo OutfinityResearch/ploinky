@@ -13,7 +13,7 @@ else
 fi
 
 while :; do
-  node /Agent/AgentServer.js
+  node /Agent/server/AgentServer.js
   code=$?
   echo "[AgentServer.sh] AgentServer.js exited with code $code. Restarting in 60s..."
   sleep 60
