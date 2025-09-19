@@ -32,9 +32,10 @@ function normalizeConfig(rawConfig, options = {}) {
     const providers = new Map();
     const models = new Map();
     const providerModels = new Map();
+    const orderedModelNames = [];
 
     const rawProviders = rawConfig?.providers && typeof rawConfig.providers === 'object' ? rawConfig.providers : {};
-    const rawModels = rawConfig?.models && typeof rawConfig.models === 'object' ? rawConfig.models : {};
+    const rawModels = Array.isArray(rawConfig?.models) ? rawConfig.models : [];
 
     for (const [providerKey, entry] of Object.entries(rawProviders)) {
         const normalized = normalizeProvider(providerKey, entry, issues, options);
@@ -42,13 +43,14 @@ function normalizeConfig(rawConfig, options = {}) {
         providerModels.set(providerKey, []);
     }
 
-    for (const [modelName, entry] of Object.entries(rawModels)) {
-        const normalized = normalizeModel(modelName, entry, providers, issues, options);
+    for (const entry of rawModels) {
+        const normalized = normalizeModel(entry, providers, issues, options);
         if (!normalized) {
             continue;
         }
-
+        const modelName = normalized.name;
         models.set(modelName, normalized);
+        orderedModelNames.push(modelName);
 
         if (!providerModels.has(normalized.providerKey)) {
             providerModels.set(normalized.providerKey, []);
@@ -64,6 +66,7 @@ function normalizeConfig(rawConfig, options = {}) {
         providerModels,
         issues,
         raw: rawConfig,
+        orderedModels: orderedModelNames,
     };
 }
 
@@ -97,23 +100,25 @@ function normalizeProvider(providerKey, entry, issues, options) {
     };
 }
 
-function normalizeModel(modelName, entry, providers, issues, options) {
+function normalizeModel(entry, providers, issues, options) {
+    const modelName = selectString(entry && typeof entry === 'object' ? entry.name : null, null);
     let providerKey = null;
     let mode = 'fast';
     let apiKeyEnvOverride = null;
     let baseURLOverride = null;
-    let alias = null;
 
-    if (typeof entry === 'string') {
-        providerKey = entry;
-    } else if (entry && typeof entry === 'object') {
+    if (!modelName) {
+        issues.warnings.push('Model entry is missing required "name" property.');
+        return null;
+    }
+
+    if (entry && typeof entry === 'object') {
         providerKey = entry.provider || entry.providerKey || null;
         mode = normalizeMode(entry.mode ?? entry.modes, issues, `model "${modelName}"`);
         apiKeyEnvOverride = selectString(entry.apiKeyEnv, null);
         baseURLOverride = selectString(entry.baseURL, null);
-        alias = selectString(entry.alias, null);
     } else {
-        issues.warnings.push(`Model "${modelName}" configuration must be a string or object.`);
+        issues.warnings.push(`Model "${modelName}" configuration must be an object.`);
         return null;
     }
 
@@ -132,7 +137,6 @@ function normalizeModel(modelName, entry, providers, issues, options) {
         mode,
         apiKeyEnv: apiKeyEnvOverride,
         baseURL: baseURLOverride,
-        alias,
     };
 }
 

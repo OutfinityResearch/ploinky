@@ -77,17 +77,18 @@ function createFixture() {
                 module: './providers/not-found.js',
             },
         },
-        models: {
-            'model-a-fast': { provider: 'stuba', mode: 'fast' },
-            'model-a-deep': { provider: 'stuba', mode: 'deep' },
-            'model-b-fast': {
+        models: [
+            { name: 'model-a-fast', provider: 'stuba', mode: 'fast' },
+            { name: 'model-a-deep', provider: 'stuba', mode: 'deep' },
+            {
+                name: 'model-b-fast',
                 provider: 'stubb',
                 mode: 'fast',
                 baseURL: 'https://stubb.example/model-fast',
                 apiKeyEnv: 'STUBB_MODEL_KEY',
             },
-            'model-b-invalid': { provider: 'stubb', mode: 'fastest' },
-        },
+            { name: 'model-b-invalid', provider: 'stubb', mode: 'fastest' },
+        ],
     };
 
     fs.writeFileSync(path.join(clientDir, 'models.json'), JSON.stringify(config, null, 4));
@@ -128,7 +129,7 @@ function summarizeAgents(llmAgent) {
 }
 
 function findProvider(summary, key, bucket = 'active') {
-    return summary.providers[bucket]?.find(entry => entry.providerKey === key) || null;
+    return summary.agents[bucket]?.find(entry => entry.name === key || entry.providerKey === key) || null;
 }
 
 (async () => {
@@ -175,57 +176,52 @@ function findProvider(summary, key, bucket = 'active') {
             STUBB_API_KEY: 'token-b',
             STUBB_MODEL_KEY: 'token-bm',
         });
-        let summary = summarizeAgents(llmAgent);
+    let summary = summarizeAgents(llmAgent);
 
-        assert.deepStrictEqual(
-            summary.providers.active.map(provider => provider.providerKey).sort(),
-            ['stuba', 'stubb'],
-            'Both providers should be active when all keys are present.'
-        );
-        assert.strictEqual(summary.defaultAgent, 'stuba', 'Default agent should prefer stuba when active.');
+    assert.deepStrictEqual(
+        summary.agents.active.map(agent => agent.name).sort(),
+        ['default', 'stuba', 'stubb'],
+        'Both providers should be active when all keys are present.'
+    );
+    assert.strictEqual(summary.defaultAgent, 'default', 'Default agent should be named "default".');
 
-        const stubbActive = findProvider(summary, 'stubb', 'active');
-        assert.ok(stubbActive, 'stubb provider should be active.');
-        assert.ok(
-            stubbActive.availableModels.some(model => model.name === 'model-b-fast' && model.mode === 'fast'),
-            'stubb should expose the fast model.'
-        );
+    const stubbActive = findProvider(summary, 'stubb', 'active');
+    assert.ok(stubbActive, 'stubb provider should be active.');
+    assert.ok(stubbActive.fastModels.includes('model-b-fast'), 'stubb should expose the fast model.');
 
-        await assert.rejects(
-            llmClient.callLLM([], 'hi there', { providerKey: 'stuba', baseURL: 'https://stuba.example/v1', apiKey: 'token-a' }),
-            /options\.model/,
-            'callLLM should require options.model to be specified.'
-        );
-
-        const stubMissingSummary = findProvider(summary, 'stubmissing', 'inactive');
-        assert.ok(stubMissingSummary, 'stubmissing provider should remain inactive.');
+    await assert.rejects(
+        llmClient.callLLM([], 'hi there', { providerKey: 'stuba', baseURL: 'https://stuba.example/v1', apiKey: 'token-a' }),
+        /options\.model/,
+        'callLLM should require options.model to be specified.'
+    );
+    const stubMissingSummary = findProvider(summary, 'stubmissing', 'inactive');
+    assert.ok(stubMissingSummary, 'stubmissing provider should remain inactive.');
 
         setProviderKeys({
             STUBA_API_KEY: 'token-a',
             STUBB_MODEL_KEY: 'token-bm',
         });
-        summary = summarizeAgents(llmAgent);
-        assert.deepStrictEqual(
-            summary.providers.active.map(provider => provider.providerKey).sort(),
-            ['stuba', 'stubb'],
-            'Model-specific keys should keep provider stubb active even without the provider key.'
-        );
+    summary = summarizeAgents(llmAgent);
+    assert.deepStrictEqual(
+        summary.agents.active.map(provider => provider.name).sort(),
+        ['default', 'stuba', 'stubb'],
+        'Model-specific keys should keep provider stubb active even without the provider key.'
+    );
 
         setProviderKeys({ STUBA_API_KEY: 'token-a' });
-        summary = summarizeAgents(llmAgent);
-        assert.deepStrictEqual(
-            summary.providers.active.map(provider => provider.providerKey),
-            ['stuba'],
-            'stubb should become inactive without any API keys.'
-        );
-        const stubbInactive = findProvider(summary, 'stubb', 'inactive');
-        assert.ok(stubbInactive, 'stubb should appear in inactive providers.');
-        assert.strictEqual(stubbInactive.reason, 'missing API keys');
+    summary = summarizeAgents(llmAgent);
+    const activeNames = summary.agents.active.map(provider => provider.name);
+    assert.ok(activeNames.includes('default'), 'default agent should remain available when some models have keys.');
+    assert.ok(activeNames.includes('stuba'), 'stuba should remain active when its key is present.');
+    assert.ok(!activeNames.includes('stubb'), 'stubb should become inactive without any API keys.');
+    const stubbInactive = findProvider(summary, 'stubb', 'inactive');
+    assert.ok(stubbInactive, 'stubb should appear in inactive providers.');
+    assert.strictEqual(stubbInactive.reason, 'missing API keys');
 
         setProviderKeys({});
-        summary = summarizeAgents(llmAgent);
-        assert.strictEqual(summary.providers.active.length, 0, 'No providers should remain active when keys are cleared.');
-        assert.strictEqual(summary.defaultAgent, null, 'Default agent should be null when registry is empty.');
+    summary = summarizeAgents(llmAgent);
+    assert.strictEqual(summary.agents.active.length, 0, 'No agents should remain active when keys are cleared.');
+    assert.strictEqual(summary.defaultAgent, null, 'Default agent should be null when registry is empty.');
 
         console.log('autoconfig behaviour test passed');
     } finally {
