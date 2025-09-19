@@ -10,7 +10,6 @@ let defaultAgentName = null;
 let agentRegistrySummary = null;
 
 const modelsConfiguration = loadModelsConfiguration();
-const SUPPORTED_MODELS = new Set(modelsConfiguration.models.keys());
 
 const PROVIDER_PRIORITY = ['openai', 'gemini', 'anthropic', 'openrouter', 'mistral', 'deepseek', 'huggingface'];
 
@@ -28,6 +27,36 @@ function emitConfigurationDiagnostics() {
     for (const warning of modelsConfiguration.issues.warnings) {
         console.warn(`LLMAgentClient: ${warning}`);
     }
+}
+
+function normalizeAgentKind(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'chat' ? 'chat' : 'task';
+}
+
+function buildAgentDescription(agent) {
+    const kind = normalizeAgentKind(agent?.kind);
+    const isChat = kind === 'chat';
+    const classification = isChat ? 'Expert Conversationalist' : 'Expert Task Executor';
+    const role = agent?.role ? String(agent.role).trim() : '';
+    const job = agent?.job ? String(agent.job).trim() : '';
+    const expertise = agent?.expertise ? String(agent.expertise).trim() : '';
+    const instructions = agent?.instructions ? String(agent.instructions).trim() : '';
+    const details = [
+        `Type: ${kind}`,
+        `Classification: ${classification}`,
+        role && `Role: ${role}`,
+        job && `Job: ${job}`,
+        expertise && `Expertise: ${expertise}`,
+        instructions && `Guidance: ${instructions}`,
+    ].filter(Boolean).join(' | ');
+    return details;
+}
+
+function combineAgentDescriptionWithContext(agent, context) {
+    const description = buildAgentDescription(agent);
+    const trimmedContext = context ? String(context).trim() : '';
+    return trimmedContext ? `${description}\n\n${trimmedContext}` : description;
 }
 
 function getProviderConfig(providerKey) {
@@ -112,7 +141,7 @@ function commitAgentRecord({
     job = '',
     expertise = '',
     instructions = '',
-    kind = 'chat',
+    kind = 'task',
     configuredRecords = [],
     fastModelNames = [],
     deepModelNames = [],
@@ -235,7 +264,7 @@ function registerLLMAgent(options = {}) {
         instructions = '',
         fastModels = [],
         deepModels = [],
-        kind = 'chat',
+        kind = 'task',
         modelOrder = [],
         origin = 'registerLLMAgent',
     } = options;
@@ -295,10 +324,10 @@ function registerLLMAgent(options = {}) {
 function registerDefaultLLMAgent(options = {}) {
     const {
         role = 'General-purpose assistant',
-        job = 'Handle a broad range of conversational tasks.',
+        job = 'Plan and execute tasks accurately and reliably.',
         expertise = 'Generalist',
         instructions = 'Select the most capable model for each request.',
-        kind = 'chat',
+        kind = 'task',
     } = options;
 
     const orderedNames = Array.isArray(modelsConfiguration.orderedModels)
@@ -344,13 +373,13 @@ function autoRegisterProviders() {
 
         if (!descriptors.length) {
             console.warn(`LLMAgentClient: No models configured in models.json for provider "${providerKey}".`);
-            commitAgentRecord({
+        commitAgentRecord({
                 name: providerKey,
                 role: `${providerKey} agent`,
                 job: `Handle requests using ${providerKey} models.`,
                 expertise: 'General',
                 instructions: '',
-                kind: 'chat',
+            kind: 'task',
                 configuredRecords: [],
                 origin: 'provider',
             });
@@ -378,7 +407,7 @@ function autoRegisterProviders() {
             job: providerConfig.extra?.job || `Handle requests routed to ${providerKey}.`,
             expertise: providerConfig.extra?.expertise || 'Provider specialist',
             instructions: providerConfig.extra?.instructions || '',
-            kind: providerConfig.extra?.kind || 'chat',
+            kind: providerConfig.extra?.kind || providerConfig.extra?.type || 'task',
             configuredRecords,
             fastModelNames: fastNames,
             deepModelNames: deepNames,
@@ -714,9 +743,10 @@ function normalizeTaskMode(mode, outputSchema, agent, fallback = 'fast') {
 }
 
 async function executeFastTask(agent, context, description, outputSchema) {
+    const combinedContext = combineAgentDescriptionWithContext(agent, context);
     const history = buildSystemHistory(agent, {
         instruction: 'Complete the task in a single response.',
-        context,
+        context: combinedContext,
         description,
         outputSchema,
     });
@@ -726,9 +756,10 @@ async function executeFastTask(agent, context, description, outputSchema) {
 
 async function executeDeepTask(agent, context, description, outputSchema) {
     const plan = await generatePlan(agent, context, description);
+    const combinedContext = combineAgentDescriptionWithContext(agent, context);
     const executionHistory = buildSystemHistory(agent, {
         instruction: 'Follow the plan and produce a final answer. Iterate internally as needed.',
-        context: `${context || ''}\nPlan: ${JSON.stringify(plan)}`,
+        context: `${combinedContext || ''}\nPlan: ${JSON.stringify(plan)}`,
         description,
         outputSchema,
     });
@@ -739,7 +770,8 @@ async function executeDeepTask(agent, context, description, outputSchema) {
 async function executeIteration(agent, context, description, outputSchema, iteration, feedback, plan) {
     const pieces = [];
     if (context) {
-        pieces.push(`Context:\n${context}`);
+        const combinedContext = combineAgentDescriptionWithContext(agent, context);
+        pieces.push(`Context:\n${combinedContext}`);
     }
     pieces.push(`Task:\n${description}`);
     pieces.push(`Iteration: ${iteration}`);
@@ -762,9 +794,10 @@ async function executeIteration(agent, context, description, outputSchema, itera
 }
 
 async function reviewCandidate(agent, context, description, candidate, outputSchema, iteration) {
+    const combinedContext = combineAgentDescriptionWithContext(agent, context || 'N/A');
     const reviewHistory = buildSystemHistory(agent, {
         instruction: 'Review the candidate solution for quality, correctness, and alignment with the task.',
-        context: `Context:\n${context || 'N/A'}\nTask:\n${description}\nIteration: ${iteration}\nCandidate:\n${candidate}`,
+        context: `Context:\n${combinedContext}\nTask:\n${description}\nIteration: ${iteration}\nCandidate:\n${candidate}`,
         description: 'Return JSON: {"approved": boolean, "feedback": string}.',
         outputSchema: null,
     });
@@ -780,9 +813,10 @@ async function reviewCandidate(agent, context, description, candidate, outputSch
 }
 
 async function generatePlan(agent, context, description) {
+    const combinedContext = combineAgentDescriptionWithContext(agent, context);
     const history = buildSystemHistory(agent, {
         instruction: 'Create a concise step-by-step plan for the task before solving it.',
-        context,
+        context: combinedContext,
         description,
         outputSchema: { type: 'object', properties: { steps: { type: 'array' } }, required: ['steps'] },
     });
@@ -801,9 +835,10 @@ function buildSystemHistory(agent, { instruction, context, description, outputSc
     const history = [];
     const agentLabel = agent.canonicalName || agent.name;
     const modelDescriptor = agent.model ? ` using model "${agent.model}"` : '';
+    const agentDescription = buildAgentDescription(agent);
     history.push({
         role: 'system',
-        message: `You are the ${agentLabel} agent${modelDescriptor}. ${instruction}`.trim(),
+        message: `You are the ${agentLabel} agent${modelDescriptor}. ${agentDescription} ${instruction}`.trim(),
     });
 
     const parts = [];
