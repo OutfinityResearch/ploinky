@@ -23,7 +23,9 @@ const ENV_KEYS = [
     'STUBB_MODEL_KEY',
 ];
 
-const originalEnv = Object.fromEntries(ENV_KEYS.map(key => [key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined]));
+const originalEnv = Object.fromEntries(
+    ENV_KEYS.map(key => [key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined]),
+);
 
 function restoreEnv() {
     for (const key of ENV_KEYS) {
@@ -41,8 +43,8 @@ function clearModule(moduleId) {
         if (require.cache[resolved]) {
             delete require.cache[resolved];
         }
-    } catch (error) {
-        // Module may not have been loaded yet; ignore.
+    } catch (_) {
+        // Module may not have been required yet.
     }
 }
 
@@ -103,7 +105,7 @@ function createFixture() {
 }
 
 function cleanupFixture(fixture) {
-    if (fixture && fixture.root) {
+    if (fixture?.root) {
         fs.rmSync(fixture.root, { recursive: true, force: true });
     }
 }
@@ -129,112 +131,109 @@ function findProvider(summary, key, bucket = 'active') {
     return summary.providers[bucket]?.find(entry => entry.providerKey === key) || null;
 }
 
-let fixture;
+(async () => {
+    let fixture;
+    try {
+        fixture = createFixture();
 
-try {
-    fixture = createFixture();
+        process.env.LLM_MODELS_CONFIG_PATH = fixture.configPath;
+        process.env.PLOINKY_SKIP_BUILTIN_PROVIDERS = '1';
 
-    process.env.LLM_MODELS_CONFIG_PATH = fixture.configPath;
-    process.env.PLOINKY_SKIP_BUILTIN_PROVIDERS = '1';
+        resetModuleCaches();
 
-    resetModuleCaches();
+        const { loadModelsConfiguration } = require('../../Agent/client/modelsConfigLoader');
+        const { registerProvidersFromConfig } = require('../../Agent/client/providerBootstrap');
+        const providerRegistry = require('../../Agent/client/providerRegistry');
+        const providersIndex = require('../../Agent/client/providers');
 
-    const { loadModelsConfiguration } = require('../../Agent/client/modelsConfigLoader');
-    const { registerProvidersFromConfig } = require('../../Agent/client/providerBootstrap');
-    const providerRegistry = require('../../Agent/client/providerRegistry');
-    const providersIndex = require('../../Agent/client/providers');
+        providersIndex.resetBuiltInProviders?.();
+        providerRegistry.resetProviders?.();
 
-    if (typeof providersIndex.resetBuiltInProviders === 'function') {
-        providersIndex.resetBuiltInProviders();
+        const modelsConfiguration = loadModelsConfiguration({ configPath: fixture.configPath });
+        registerProvidersFromConfig(modelsConfiguration, { baseDir: fixture.baseDir });
+
+        const llmAgent = require('../../Agent/client/LLMAgentClient');
+        const llmClient = require('../../Agent/client/LLMClient');
+        if (typeof llmAgent.__resetForTests !== 'function') {
+            throw new Error('LLMAgentClient is missing __resetForTests export required for the test harness.');
+        }
+
+        const registeredProviders = providerRegistry.listProviders().sort();
+        assert.deepStrictEqual(registeredProviders, ['stuba', 'stubb'], 'Only stub providers should be registered');
+
+        const warningText = modelsConfiguration.issues.warnings.join(' \n');
+        assert.ok(
+            warningText.includes('Failed to register provider "stubmissing"'),
+            'Expected warning for provider with missing module.'
+        );
+
+        const invalidModel = modelsConfiguration.models.get('model-b-invalid');
+        assert.strictEqual(invalidModel.mode, 'fast', 'Invalid mode should normalize to fast');
+
+        setProviderKeys({
+            STUBA_API_KEY: 'token-a',
+            STUBB_API_KEY: 'token-b',
+            STUBB_MODEL_KEY: 'token-bm',
+        });
+        let summary = summarizeAgents(llmAgent);
+
+        assert.deepStrictEqual(
+            summary.providers.active.map(provider => provider.providerKey).sort(),
+            ['stuba', 'stubb'],
+            'Both providers should be active when all keys are present.'
+        );
+        assert.strictEqual(summary.defaultAgent, 'stuba', 'Default agent should prefer stuba when active.');
+
+        const stubbActive = findProvider(summary, 'stubb', 'active');
+        assert.ok(stubbActive, 'stubb provider should be active.');
+        assert.ok(
+            stubbActive.availableModels.some(model => model.name === 'model-b-fast' && model.mode === 'fast'),
+            'stubb should expose the fast model.'
+        );
+
+        await assert.rejects(
+            llmClient.callLLM([], 'hi there', { providerKey: 'stuba', baseURL: 'https://stuba.example/v1', apiKey: 'token-a' }),
+            /options\.model/,
+            'callLLM should require options.model to be specified.'
+        );
+
+        const stubMissingSummary = findProvider(summary, 'stubmissing', 'inactive');
+        assert.ok(stubMissingSummary, 'stubmissing provider should remain inactive.');
+
+        setProviderKeys({
+            STUBA_API_KEY: 'token-a',
+            STUBB_MODEL_KEY: 'token-bm',
+        });
+        summary = summarizeAgents(llmAgent);
+        assert.deepStrictEqual(
+            summary.providers.active.map(provider => provider.providerKey).sort(),
+            ['stuba', 'stubb'],
+            'Model-specific keys should keep provider stubb active even without the provider key.'
+        );
+
+        setProviderKeys({ STUBA_API_KEY: 'token-a' });
+        summary = summarizeAgents(llmAgent);
+        assert.deepStrictEqual(
+            summary.providers.active.map(provider => provider.providerKey),
+            ['stuba'],
+            'stubb should become inactive without any API keys.'
+        );
+        const stubbInactive = findProvider(summary, 'stubb', 'inactive');
+        assert.ok(stubbInactive, 'stubb should appear in inactive providers.');
+        assert.strictEqual(stubbInactive.reason, 'missing API keys');
+
+        setProviderKeys({});
+        summary = summarizeAgents(llmAgent);
+        assert.strictEqual(summary.providers.active.length, 0, 'No providers should remain active when keys are cleared.');
+        assert.strictEqual(summary.defaultAgent, null, 'Default agent should be null when registry is empty.');
+
+        console.log('autoconfig behaviour test passed');
+    } finally {
+        cleanupFixture(fixture);
+        resetModuleCaches();
+        restoreEnv();
     }
-    if (typeof providerRegistry.resetProviders === 'function') {
-        providerRegistry.resetProviders();
-    }
-
-    const modelsConfiguration = loadModelsConfiguration({ configPath: fixture.configPath });
-    registerProvidersFromConfig(modelsConfiguration, { baseDir: fixture.baseDir });
-
-    const llmAgent = require('../../Agent/client/LLMAgentClient');
-    if (typeof llmAgent.__resetForTests !== 'function') {
-        throw new Error('LLMAgentClient is missing __resetForTests export required for the test harness.');
-    }
-
-    // Provider registration sanity checks
-    const registeredProviders = providerRegistry.listProviders().sort();
-    assert.deepStrictEqual(registeredProviders, ['stuba', 'stubb'], 'Only stub providers should be registered');
-
-    const warningText = modelsConfiguration.issues.warnings.join(' \n');
-    assert.ok(
-        warningText.includes('Failed to register provider "stubmissing"'),
-        'Expected warning for provider with missing module.'
-    );
-
-    const invalidModel = modelsConfiguration.models.get('model-b-invalid');
-    assert.strictEqual(invalidModel.mode, 'fast', 'Invalid mode should normalize to fast');
-
-    // Scenario 1: all keys present
-    setProviderKeys({
-        STUBA_API_KEY: 'token-a',
-        STUBB_API_KEY: 'token-b',
-        STUBB_MODEL_KEY: 'token-bm',
-    });
-    let summary = summarizeAgents(llmAgent);
-
-    assert.deepStrictEqual(
-        summary.providers.active.map(provider => provider.providerKey).sort(),
-        ['stuba', 'stubb'],
-        'Both providers should be active when all keys are present.'
-    );
-    assert.strictEqual(summary.defaultAgent, 'stuba', 'Default agent should prefer stuba when active.');
-
-    const stubbActive = findProvider(summary, 'stubb', 'active');
-    assert.ok(stubbActive, 'stubb provider should be active.');
-    assert.ok(
-        stubbActive.availableModels.some(model => model.name === 'model-b-fast' && model.mode === 'fast'),
-        'stubb should expose the fast model.'
-    );
-
-    const stubMissingSummary = findProvider(summary, 'stubmissing', 'inactive');
-    assert.ok(stubMissingSummary, 'stubmissing provider should remain inactive.');
-
-    // Scenario 2: provider-level key missing, model override available
-    setProviderKeys({
-        STUBA_API_KEY: 'token-a',
-        STUBB_MODEL_KEY: 'token-bm',
-    });
-    summary = summarizeAgents(llmAgent);
-    assert.deepStrictEqual(
-        summary.providers.active.map(provider => provider.providerKey).sort(),
-        ['stuba', 'stubb'],
-        'Model-specific keys should keep provider stubb active even without the provider key.'
-    );
-
-    // Scenario 3: all stubb keys missing
-    setProviderKeys({ STUBA_API_KEY: 'token-a' });
-    summary = summarizeAgents(llmAgent);
-    assert.deepStrictEqual(
-        summary.providers.active.map(provider => provider.providerKey),
-        ['stuba'],
-        'stubb should become inactive without any API keys.'
-    );
-    const stubbInactive = findProvider(summary, 'stubb', 'inactive');
-    assert.ok(stubbInactive, 'stubb should appear in inactive providers.');
-    assert.strictEqual(stubbInactive.reason, 'missing API keys');
-
-    // Scenario 4: no providers active
-    setProviderKeys({});
-    summary = summarizeAgents(llmAgent);
-    assert.strictEqual(summary.providers.active.length, 0, 'No providers should remain active when keys are cleared.');
-    assert.strictEqual(summary.defaultAgent, null, 'Default agent should be null when registry is empty.');
-
-    console.log('autoconfig behaviour test passed');
-} catch (error) {
-    cleanupFixture(fixture);
-    resetModuleCaches();
-    restoreEnv();
-    throw error;
-} finally {
-    cleanupFixture(fixture);
-    resetModuleCaches();
-    restoreEnv();
-}
+})().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});

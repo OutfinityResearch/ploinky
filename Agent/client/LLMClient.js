@@ -9,7 +9,6 @@ registerBuiltInProviders();
 registerProvidersFromConfig(modelsConfiguration);
 
 const llmCalls = [];
-const DEFAULT_MODEL = 'gpt-4o-mini';
 
 function getModelMetadata(modelName) {
     const modelDescriptor = modelsConfiguration.models.get(modelName);
@@ -37,12 +36,11 @@ function resolveProviderKey(modelName, invocationOptions, metadata) {
 }
 
 async function callLLM(historyArray, prompt, options = {}) {
-    try {
-        const modelName = options.model || DEFAULT_MODEL;
-        return await callLLMWithModel(modelName, historyArray, prompt, options);
-    } catch (error) {
-        throw error;
+    const modelName = options?.model;
+    if (!modelName || typeof modelName !== 'string') {
+        throw new Error('callLLM requires options.model to be specified.');
     }
+    return callLLMWithModel(modelName, historyArray, prompt, options);
 }
 
 async function callLLMWithModel(modelName, historyArray, prompt, invocationOptions = {}) {
