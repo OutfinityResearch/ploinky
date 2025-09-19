@@ -152,15 +152,38 @@
 
             <div class="content-wrapper">
                 <div class="doc-section">
+                    <h2>Introduction to Agents</h2>
+                    <p>In Ploinky, an "agent" is a tool that you can use and modify. It's an abstract concept and doesn't necessarily refer to a Large Language Model (LLM). Agents can be anything from a simple script to a complex application.</p>
+                    <p>Agents are organized in repositories, which can contain multiple agents. You can easily add new repositories, and modify existing agents to fit your needs.</p>
+
+                    <h3>Using Agents</h3>
+                    <p>You can interact with agents in two main ways:</p>
+                    <ol style="margin-left: 2rem; line-height: 2;">
+                        <li><strong>Individually:</strong> You can run an agent's command-line interface directly using the <code>cli</code> command. For example: <code>cli my-agent --input "some data"</code>. Agents can be designed to accept various input formats, such as JSON, natural language, or any other convention.</li>
+                        <li><strong>Integrated with Ploinky:</strong> By enabling an agent, it becomes part of the Ploinky workspace. The Ploinky server will expose the agent on a local port, which allows you to build applications that interact with your agents through a simple API on localhost. When you open the web interface, you will need to provide a token, which can be found in <code>/.ploinky/.secrets</code>.</li>
+                    </ol>
+                </div>
+
+                <div class="doc-section">
                     <h2>Getting Started</h2>
                     
                     <h3>Installation</h3>
                     <pre><code>$ git clone https://github.com/ploinkyRepos/ploinky.git
 $ cd ploinky
 $ npm install
-$ npm link    # Makes 'ploinky' command available globally</code></pre>
+</code></pre>
 
-                    <h3>First Steps</h3>
+                    <div style="text-align: center; margin-top: 3rem;">
+                        <a href="cli-reference.html" class="btn btn-primary">View CLI Reference</a>
+                        <a href="architecture.html" class="btn btn-secondary">Learn Architecture</a>
+                    </div>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Usage</h2>
+
+                    <h3>From within the project directory</h3>
+                    <p>When you are in the project directory, you can use the <code>ploinky</code> command directly. Here are the first steps to get you started:</p>
                     <ol style="margin-left: 2rem; line-height: 2;">
                         <li>Run <code>ploinky</code> to initialize your workspace</li>
                         <li>Enable the demo repository: <code>enable repo demo</code></li>
@@ -168,10 +191,12 @@ $ npm link    # Makes 'ploinky' command available globally</code></pre>
                         <li>Launch admin mode: <code>admin-mode</code></li>
                     </ol>
 
-                    <div style="text-align: center; margin-top: 3rem;">
-                        <a href="cli-reference.html" class="btn btn-primary">View CLI Reference</a>
-                        <a href="architecture.html" class="btn btn-secondary">Learn Architecture</a>
-                    </div>
+                    <h3>Globally from any directory</h3>
+                    <p>To use <code>ploinky</code> from anywhere, you need to add its location to your shell's configuration file (e.g., <code>.bashrc</code>, <code>.zshrc</code>).</p>
+                    <p>Add the following line to your <code>~/.bashrc</code> or <code>~/.zshrc</code> file, replacing <code>~/path/to/ploinky</code> with the actual path to your ploinky directory:</p>
+                    <pre><code>export PATH="$PATH:~/path/to/ploinky/bin"</code></pre>
+                    <p>After adding the line, restart your shell or run <code>source ~/.bashrc</code> (or <code>source ~/.zshrc</code>). You can then use <code>p-cli</code> or <code>ploinky</code> from any directory. For example:</p>
+                    <pre><code>ploinky list agents</code></pre>
                 </div>
             </div>
         </div>

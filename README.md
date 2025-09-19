@@ -28,6 +28,28 @@ start my-agent 8088
 console my-agent myPassword
 ```
 
+## Usage
+
+You can use Ploinky in two ways:
+
+1.  **From within the project directory:**
+    As shown in the "Getting started" section, you can run `p-cli` from within the cloned project directory.
+
+2.  **Globally from any directory:**
+    To use `ploinky` from anywhere, you need to add its location to your shell's configuration file (e.g., `.bashrc`, `.zshrc`).
+
+    Add the following line to your `~/.bashrc` or `~/.zshrc` file, replacing `~/path/to/ploinky` with the actual path to your ploinky directory:
+
+    ```bash
+    export PATH="$PATH:~/path/to/ploinky/bin"
+    ```
+
+    After adding the line, restart your shell or run `source ~/.bashrc` (or `source ~/.zshrc`). You can then use `p-cli` or `ploinky` from any directory. For example:
+
+    ```bash
+    ploinky list agents
+    ```
+
 ## Core commands (in p-cli)
 
 - `enable agent <name>`: register an agent in `.ploinky/agents` (creates a minimal manifest if missing).

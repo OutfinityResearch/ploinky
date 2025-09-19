@@ -52,7 +52,7 @@ Ploinky is a lightweight multi-agent runtime that turns ordinary console program
 **User story:** As a maintainer, I want to adjust agent behaviour or recover failed installs so that containers stay in sync with manifests.
 
 **How to do it in Ploinky**
-1. Use `update agent <name>` to run the interactive manifest editor (container image, install script, CLI command, etc.).
+1. Edit the agent's `manifest.json` directly to adjust fields such as container image, install/update commands, CLI command, agent command, and description.
 2. Apply filesystem edits or dependency changes to your agent code as needed.
 3. Run `refresh agent <name>` to force the service container to stop, rebuild with the latest manifest, rerun `install`, and restart the long-lived command.
 4. For single-run CLI containers, re-run `cli` or `shell` after the refresh to pick up the new environment.
@@ -144,4 +144,3 @@ Ploinky is a lightweight multi-agent runtime that turns ordinary console program
 3. `.ploinky/.secrets` stores key-value pairs created by `set`, interface tokens, and other workspace secrets.
 4. The `Agent/` directory inside the codebase is mounted read-only at `/Agent` in every container, providing the default supervisor and boot scripts.
 5. Use `start` and `status` to regenerate derived files (`.ploinky/routing.json`, `.ploinky/running/router.pid`) instead of manual edits.
-

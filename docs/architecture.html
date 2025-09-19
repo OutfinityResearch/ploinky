@@ -354,12 +354,12 @@ observability.js    // Monitoring views</code></pre>
                         <h2>Data Flow Examples</h2>
                         
                         <h3>Starting an Agent</h3>
-                        <pre><code>1. User: ploinky enable agent demo
+                        <pre><code>1. User: enable agent demo
    → Find manifest in repos/demo/demo/manifest.json
    → Register in .ploinky/agents
    → Generate container name
 
-2. User: ploinky start demo 8088
+2. User: start demo 8088
    → Read agents registry
    → Start container for each agent
    → Map ports (container:7000 → host:7001)
@@ -388,7 +388,7 @@ observability.js    // Monitoring views</code></pre>
    → Forward response to client</code></pre>
 
                         <h3>WebChat Session</h3>
-                        <pre><code>1. User: ploinky webchat secret python bot.py
+                        <pre><code>1. User: webchat secret python bot.py
    
 2. WebTTY Server:
    → Start PTY with command: python bot.py

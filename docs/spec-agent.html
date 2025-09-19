@@ -65,8 +65,8 @@
   "update": "npm update",             // Run when agent needs updating
   
   // Execution modes
-  "cli": "node repl.js",              // Interactive CLI command (ploinky cli)
-  "agent": "node server.js",          // Long-running service (ploinky start)
+  "cli": "node repl.js",            // Interactive CLI command (cli)
+  "agent": "node server.js",          // Long-running service (start)
   
   // Metadata
   "about": "Express API server",      // Description shown in listings
@@ -141,7 +141,7 @@
                         
                         <h3>1. Creation</h3>
                         <pre><code># Create new agent
-ploinky new agent myrepo MyAgent node:20
+new agent myrepo MyAgent node:20
 
 # Creates:
 .ploinky/repos/myrepo/MyAgent/
@@ -158,7 +158,7 @@ docker run -v $PWD:$PWD node:18-alpine sh -c "npm install express body-parser"</
 
                         <h3>3. Enablement</h3>
                         <pre><code># Register agent in workspace
-ploinky enable agent MyAgent
+enable agent MyAgent
 
 # Creates entry in .ploinky/agents
 {
@@ -172,13 +172,7 @@ ploinky enable agent MyAgent
 
                         <h3>4. Startup</h3>
                         <pre><code># Start all enabled agents
-ploinky start
-
-# For each agent:
-1. Create/start container
-2. Mount volumes
-3. Set environment variables
-4. Execute agent command or supervisor</code></pre>
+start</code></pre>
 
                         <h3>5. Runtime</h3>
                         <p>During runtime, agents can be in different states:</p>
@@ -195,12 +189,8 @@ ploinky start
                         
                         <h3>CLI Command</h3>
                         <p>Interactive command for direct user interaction:</p>
-                        <pre><code># manifest.json
-"cli": "python -i assistant.py"
-
-# Usage
-ploinky cli MyAgent
-> # Interactive Python session</code></pre>
+                        <pre><code># Usage
+cli MyAgent</code></pre>
 
                         <h3>Agent Command</h3>
                         <p>Long-running service for API endpoints:</p>
@@ -359,8 +349,8 @@ http://localhost:8088/apis/MyAgent/status
 http://localhost:8088/apis/MyAgent/process
 
 # From client
-ploinky client status MyAgent
-ploinky client task MyAgent</code></pre>
+client status MyAgent
+client task MyAgent</code></pre>
                     </div>
 
                     <div class="doc-section" id="examples">
@@ -446,8 +436,8 @@ ploinky client task MyAgent</code></pre>
 
                         <h3>Development</h3>
                         <ul style="margin-left: 2rem;">
-                            <li>Test locally with <code>ploinky shell</code> first</li>
-                            <li>Use <code>ploinky cli</code> for interactive debugging</li>
+                            <li>Test locally with <code>shell</code> first</li>
+                            <li>Use <code>cli</code> for interactive debugging</li>
                             <li>Check logs with container runtime directly</li>
                             <li>Version control your agent code separately</li>
                         </ul>
@@ -481,7 +471,7 @@ ploinky client task MyAgent</code></pre>
                             <tr>
                                 <td>Environment variables not set</td>
                                 <td>Not exposed to agent</td>
-                                <td>Use <code>ploinky expose</code> command</td>
+                                <td>Use <code>expose</code> command</td>
                             </tr>
                             <tr>
                                 <td>API returns 404</td>
@@ -492,20 +482,7 @@ ploinky client task MyAgent</code></pre>
 
                         <h3>Debugging Commands</h3>
                         <pre><code># Check agent status
-ploinky status
-
-# View container logs
-docker logs ploinky_project_abc123_agent_MyAgent
-podman logs ploinky_project_abc123_agent_MyAgent
-
-# Enter container shell
-ploinky shell MyAgent
-
-# Test API directly
-curl http://localhost:7001/api/status
-
-# Check routing configuration
-cat .ploinky/routing.json</code></pre>
+status</code></pre>
 
                         <h3>Health Checks</h3>
                         <p>Implement health endpoints for monitoring:</p>

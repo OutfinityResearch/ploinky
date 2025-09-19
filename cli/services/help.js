@@ -108,13 +108,8 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         },
         
         'update': {
-            description: 'Update agent manifest fields interactively',
+            description: 'Update repositories',
             subcommands: {
-                'agent': {
-                    syntax: 'update agent <name>',
-                    description: 'Modify container, install, update, cli, agent, about',
-                    examples: [ 'update agent MyAPI' ]
-                },
                 'repo': {
                     syntax: 'update repo <name>',
                     description: 'Run git pull --rebase --autostash inside the repository to fetch latest changes',
