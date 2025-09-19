@@ -13,5 +13,7 @@ assert.ok(config.models.has('gpt-4o-mini'), 'gpt-4o-mini model should be defined
 
 const gpt4oMini = config.models.get('gpt-4o-mini');
 assert.strictEqual(gpt4oMini.mode, 'fast', 'gpt-4o-mini mode should normalize to fast');
+assert.ok(Array.isArray(config.orderedModels), 'orderedModels should be an array');
+assert.ok(config.orderedModels.includes('gpt-4o-mini'), 'orderedModels should preserve entries');
 
 console.log('modelsConfigLoader sanity check passed');

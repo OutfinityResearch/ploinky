@@ -27,19 +27,19 @@
             "module": "./providers/openai.js"
         }
     },
-    "models": {
-        "gpt-5": { "provider": "openai", "mode": "deep" },
-        "gpt-4o-mini": { "provider": "openai", "mode": "fast" },
-        "gpt-5-mini": { "provider": "openai", "mode": "fast" },
-        "gpt-4.1": { "provider": "openai", "mode": "deep" },
-        "claude-opus-4-1-20250805": { "provider": "anthropic", "mode": "deep" },
-        "claude-opus-4-20250514": { "provider": "anthropic", "mode": "deep" },
-        "claude-sonnet-4-20250514": { "provider": "anthropic", "mode": "fast" },
-        "gemini-2.5-pro": { "provider": "google", "mode": "deep" },
-        "gemini-2.5-flash": { "provider": "google", "mode": "fast" },
-        "google/gemini-2.5-flash": { "provider": "openrouter", "mode": "fast" },
-        "anthropic/claude-sonnet-4": { "provider": "openrouter", "mode": "fast" },
-        "google/gemini-2.5-pro": { "provider": "openrouter", "mode": "deep" },
-        "mistralai/Mistral-7B-Instruct-v0.1": { "provider": "huggingface", "mode": "fast" }
-    }
+    "models": [
+        { "name": "gpt-5", "provider": "openai", "mode": "deep" },
+        { "name": "gpt-4o-mini", "provider": "openai", "mode": "fast" },
+        { "name": "gpt-5-mini", "provider": "openai", "mode": "fast" },
+        { "name": "gpt-4.1", "provider": "openai", "mode": "deep" },
+        { "name": "claude-opus-4-1-20250805", "provider": "anthropic", "mode": "deep" },
+        { "name": "claude-opus-4-20250514", "provider": "anthropic", "mode": "deep" },
+        { "name": "claude-sonnet-4-20250514", "provider": "anthropic", "mode": "fast" },
+        { "name": "gemini-2.5-pro", "provider": "google", "mode": "deep" },
+        { "name": "gemini-2.5-flash", "provider": "google", "mode": "fast" },
+        { "name": "google/gemini-2.5-flash", "provider": "openrouter", "mode": "fast" },
+        { "name": "anthropic/claude-sonnet-4", "provider": "openrouter", "mode": "fast" },
+        { "name": "google/gemini-2.5-pro", "provider": "openrouter", "mode": "deep" },
+        { "name": "mistralai/Mistral-7B-Instruct-v0.1", "provider": "huggingface", "mode": "fast" }
+    ]
 }
