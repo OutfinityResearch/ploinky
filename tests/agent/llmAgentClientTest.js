@@ -4,7 +4,7 @@ const assert = require('assert');
 
 const { setupLLMStub, loadLLMAgentClient, reviewScenarios } = require('./helpers/reviewFixtures');
 
-const { resetCallHistory } = setupLLMStub();
+const { resetCallHistory, drainCallHistory } = setupLLMStub();
 const llmAgentClient = loadLLMAgentClient();
 
 const assertionsByScenario = {
@@ -58,6 +58,38 @@ const scenarios = reviewScenarios.filter((scenario) => assertionsByScenario[scen
 
         assertionsByScenario[scenario.key](fast, reviewed);
     }
+
+    resetCallHistory();
+    const messageContext = [
+        { role: 'system', message: 'Scenario: reasoning' },
+        { role: 'human', message: 'Story problem: twins share expenses' },
+    ];
+    const fastFromMessages = await llmAgentClient.doTask(
+        'openai',
+        messageContext,
+        'Solve the arithmetic word problem accurately.',
+        null,
+        'fast'
+    );
+    assert.ok(/11/.test(fastFromMessages.result));
+
+    const fastInvocationHistory = drainCallHistory();
+    assert.ok(fastInvocationHistory.length >= 1);
+    const { messages: fastMessages } = fastInvocationHistory[0];
+    assert.ok(fastMessages.length >= 3);
+    assert.strictEqual(fastMessages[1], 'Scenario: reasoning');
+    assert.strictEqual(fastMessages[2], 'Story problem: twins share expenses');
+
+    resetCallHistory();
+    const reviewedFromMessages = await llmAgentClient.doTaskWithReview(
+        'openai',
+        messageContext,
+        'Solve the arithmetic word problem accurately.',
+        null,
+        'deep',
+        2
+    );
+    assert.ok(/14/.test(reviewedFromMessages.result));
 
     llmAgentClient.registerOperator('summarizeNotes', 'Summarise meeting notes', ({ text }) => `summary:${text}`);
     const operatorResult = await llmAgentClient.callOperator('summarizeNotes', { text: 'hello' });

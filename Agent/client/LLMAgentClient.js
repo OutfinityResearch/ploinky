@@ -59,6 +59,58 @@ function combineAgentDescriptionWithContext(agent, context) {
     return trimmedContext ? `${description}\n\n${trimmedContext}` : description;
 }
 
+const VALID_CONTEXT_ROLES = new Set(['system', 'human', 'assistant']);
+
+function normalizeTaskContext(agent, context) {
+    if (Array.isArray(context)) {
+        const normalizedMessages = context
+            .map((entry) => {
+                if (!entry || typeof entry !== 'object') {
+                    return null;
+                }
+
+                const rawRole = typeof entry.role === 'string' ? entry.role.trim().toLowerCase() : '';
+                const role = rawRole === 'user' ? 'human' : rawRole;
+                if (!VALID_CONTEXT_ROLES.has(role)) {
+                    return null;
+                }
+
+                let message = entry.message;
+                if (typeof message === 'undefined' || message === null) {
+                    message = entry.content;
+                }
+                if (typeof message === 'undefined' || message === null) {
+                    return null;
+                }
+
+                return {
+                    role,
+                    message: String(message),
+                };
+            })
+            .filter(Boolean);
+
+        if (normalizedMessages.length) {
+            return {
+                type: 'messages',
+                messages: normalizedMessages,
+            };
+        }
+
+        return {
+            type: 'text',
+            text: combineAgentDescriptionWithContext(agent, ''),
+        };
+    }
+
+    const trimmed = context ? String(context).trim() : '';
+    const combined = combineAgentDescriptionWithContext(agent, trimmed);
+    return {
+        type: 'text',
+        text: combined,
+    };
+}
+
 function getProviderConfig(providerKey) {
     return modelsConfiguration.providers.get(providerKey) || null;
 }
@@ -677,11 +729,12 @@ async function chooseOperator(agentName, currentTaskDescription, mode = 'fast', 
         description: op.description,
     }));
 
+    const contextInfo = normalizeTaskContext(agent, JSON.stringify({ operators: operatorList }, null, 2));
     const history = buildSystemHistory(agent, {
         instruction: normalizedMode === 'deep'
             ? 'Review the operator catalog and select the functions that can help with the task.'
             : 'Quickly select operators that can solve the task.',
-        context: JSON.stringify({ operators: operatorList }, null, 2),
+        context: contextInfo,
         description: `Task description: ${currentTaskDescription}\nOnly return JSON: {"suitableOperators":[{"operatorName": string, "confidence": number}]}. Discard operators below confidence ${threshold}.`,
     });
 
@@ -743,10 +796,10 @@ function normalizeTaskMode(mode, outputSchema, agent, fallback = 'fast') {
 }
 
 async function executeFastTask(agent, context, description, outputSchema) {
-    const combinedContext = combineAgentDescriptionWithContext(agent, context);
+    const contextInfo = normalizeTaskContext(agent, context);
     const history = buildSystemHistory(agent, {
         instruction: 'Complete the task in a single response.',
-        context: combinedContext,
+        context: contextInfo,
         description,
         outputSchema,
     });
@@ -756,10 +809,11 @@ async function executeFastTask(agent, context, description, outputSchema) {
 
 async function executeDeepTask(agent, context, description, outputSchema) {
     const plan = await generatePlan(agent, context, description);
-    const combinedContext = combineAgentDescriptionWithContext(agent, context);
+    const contextInfo = normalizeTaskContext(agent, context);
     const executionHistory = buildSystemHistory(agent, {
         instruction: 'Follow the plan and produce a final answer. Iterate internally as needed.',
-        context: `${combinedContext || ''}\nPlan: ${JSON.stringify(plan)}`,
+        context: contextInfo,
+        extraContextParts: [`Plan:\n${JSON.stringify(plan)}`],
         description,
         outputSchema,
     });
@@ -768,23 +822,19 @@ async function executeDeepTask(agent, context, description, outputSchema) {
 }
 
 async function executeIteration(agent, context, description, outputSchema, iteration, feedback, plan) {
-    const pieces = [];
-    if (context) {
-        const combinedContext = combineAgentDescriptionWithContext(agent, context);
-        pieces.push(`Context:\n${combinedContext}`);
-    }
-    pieces.push(`Task:\n${description}`);
-    pieces.push(`Iteration: ${iteration}`);
+    const contextInfo = normalizeTaskContext(agent, context);
+    const extraParts = [`Task:\n${description}`, `Iteration: ${iteration}`];
     if (plan) {
-        pieces.push(`Plan:\n${JSON.stringify(plan)}`);
+        extraParts.push(`Plan:\n${JSON.stringify(plan)}`);
     }
     if (feedback) {
-        pieces.push(`Prior feedback:\n${feedback}`);
+        extraParts.push(`Prior feedback:\n${feedback}`);
     }
 
     const history = buildSystemHistory(agent, {
         instruction: 'Work step-by-step, applying the plan and feedback to improve the solution.',
-        context: pieces.join('\n\n'),
+        context: contextInfo,
+        extraContextParts: extraParts,
         description: 'Return only the updated solution, no commentary unless necessary.',
         outputSchema,
     });
@@ -794,10 +844,15 @@ async function executeIteration(agent, context, description, outputSchema, itera
 }
 
 async function reviewCandidate(agent, context, description, candidate, outputSchema, iteration) {
-    const combinedContext = combineAgentDescriptionWithContext(agent, context || 'N/A');
+    const contextInfo = normalizeTaskContext(agent, context || 'N/A');
     const reviewHistory = buildSystemHistory(agent, {
         instruction: 'Review the candidate solution for quality, correctness, and alignment with the task.',
-        context: `Context:\n${combinedContext}\nTask:\n${description}\nIteration: ${iteration}\nCandidate:\n${candidate}`,
+        context: contextInfo,
+        extraContextParts: [
+            `Task:\n${description}`,
+            `Iteration: ${iteration}`,
+            `Candidate:\n${candidate}`,
+        ],
         description: 'Return JSON: {"approved": boolean, "feedback": string}.',
         outputSchema: null,
     });
@@ -813,10 +868,10 @@ async function reviewCandidate(agent, context, description, candidate, outputSch
 }
 
 async function generatePlan(agent, context, description) {
-    const combinedContext = combineAgentDescriptionWithContext(agent, context);
+    const contextInfo = normalizeTaskContext(agent, context);
     const history = buildSystemHistory(agent, {
         instruction: 'Create a concise step-by-step plan for the task before solving it.',
-        context: combinedContext,
+        context: contextInfo,
         description,
         outputSchema: { type: 'object', properties: { steps: { type: 'array' } }, required: ['steps'] },
     });
@@ -831,7 +886,7 @@ async function generatePlan(agent, context, description) {
     return { steps: Array.from(String(raw).split('\n').filter(Boolean)).map((line, index) => ({ id: index + 1, action: line.trim() })) };
 }
 
-function buildSystemHistory(agent, { instruction, context, description, outputSchema }) {
+function buildSystemHistory(agent, { instruction, context, description, outputSchema, extraContextParts = [] }) {
     const history = [];
     const agentLabel = agent.canonicalName || agent.name;
     const modelDescriptor = agent.model ? ` using model "${agent.model}"` : '';
@@ -841,10 +896,29 @@ function buildSystemHistory(agent, { instruction, context, description, outputSc
         message: `You are the ${agentLabel} agent${modelDescriptor}. ${agentDescription} ${instruction}`.trim(),
     });
 
-    const parts = [];
-    if (context) {
-        parts.push(`Context:\n${context}`);
+    const normalizedContext = context && typeof context === 'object' && (context.type === 'text' || context.type === 'messages')
+        ? context
+        : normalizeTaskContext(agent, context);
+
+    if (normalizedContext.type === 'messages') {
+        for (const entry of normalizedContext.messages) {
+            history.push({ role: entry.role, message: entry.message });
+        }
     }
+
+    const parts = [];
+    if (normalizedContext.type === 'text' && normalizedContext.text) {
+        parts.push(`Context:\n${normalizedContext.text}`);
+    }
+
+    if (Array.isArray(extraContextParts) && extraContextParts.length) {
+        for (const part of extraContextParts) {
+            if (part) {
+                parts.push(part);
+            }
+        }
+    }
+
     if (description) {
         parts.push(`Task:\n${description}`);
     }
@@ -853,10 +927,12 @@ function buildSystemHistory(agent, { instruction, context, description, outputSc
         parts.push('Respond with JSON that strictly matches the schema.');
     }
 
-    history.push({
-        role: 'human',
-        message: parts.join('\n\n'),
-    });
+    if (parts.length) {
+        history.push({
+            role: 'human',
+            message: parts.join('\n\n'),
+        });
+    }
 
     return history;
 }
