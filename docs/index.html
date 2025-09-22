@@ -99,7 +99,6 @@
                     <button class="demo-tab active" data-demo="init">🚀 Initialize</button>
                     <button class="demo-tab" data-demo="repos">📦 List Repos</button>
                     <button class="demo-tab" data-demo="enable">✅ Enable Demo</button>
-                    <button class="demo-tab" data-demo="admin">🎛️ Admin Mode</button>
                     <button class="demo-tab" data-demo="start">▶️ Start Agent</button>
                     <button class="demo-tab" data-demo="status">📊 Status</button>
                 </div>
@@ -188,7 +187,6 @@ $ npm install
                         <li>Run <code>ploinky</code> to initialize your workspace</li>
                         <li>Enable the demo repository: <code>enable repo demo</code></li>
                         <li>Start demo agent: <code>start demo</code></li>
-                        <li>Launch admin mode: <code>admin-mode</code></li>
                     </ol>
 
                     <h3>Globally from any directory</h3>
@@ -275,21 +273,6 @@ $ npm install
                 { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' }
             ],
             admin: [
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' },
-                { type: 'command', text: 'admin-mode' },
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' },
-                { type: 'output', text: '[console] local command: /bin/bash' },
-                { type: 'output', text: 'Ploinky Dashboard ready on http://localhost:9000 (agent: local)' },
-                { type: 'info', text: 'Access URL: http://localhost:9000/?token=12db7b7ad0ae967a4d818e5fc8fc900d...' },
-                { type: 'output', text: 'Close with Ctrl+C' },
-                { type: 'output', text: 'Ploinky WebChat ready on http://localhost:8080 (agent: local)' },
-                { type: 'info', text: 'Access URL: http://localhost:8080/?token=918079319222ed91bb68777bf69a500a...' },
-                { type: 'output', text: 'Close with Ctrl+C' },
-                { type: 'output', text: 'Ploinky WebTTY ready on http://localhost:9001 (agent: local)' },
-                { type: 'info', text: 'Access URL: http://localhost:9001/?token=930c421ba50da4aca7afeae6aa0a02e3...' },
-                { type: 'output', text: 'Close with Ctrl+C' },
-                { type: 'output', text: '' },
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' }
             ],
             start: [
                 { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' },
