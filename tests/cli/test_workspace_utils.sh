@@ -6,7 +6,7 @@ if [ -z "${PLOINKY_CMD:-}" ]; then
   THIS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
   ROOT_DIR=$(cd "$THIS_DIR/../.." &>/dev/null && pwd)
   PLOINKY_CMD="$ROOT_DIR/bin/ploinky"
-  echo "Note: PLOINKY_CMD was not set. Using default: $PLOINKY_CMD"
+  echo "Using PLOINKY_CMD: $PLOINKY_CMD"
 fi
 
 # Function to initialize a temporary Ploinky workspace
