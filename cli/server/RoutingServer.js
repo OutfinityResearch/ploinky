@@ -98,6 +98,34 @@ const ROUTING_DIR = path.resolve('.ploinky');
 const ROUTING_FILE = path.join(ROUTING_DIR, 'routing.json');
 const LOG_DIR = path.join(ROUTING_DIR, 'logs');
 const LOG_PATH = path.join(LOG_DIR, 'router.log');
+const PID_FILE = process.env.PLOINKY_ROUTER_PID_FILE || null;
+
+function ensurePidFile() {
+    if (!PID_FILE) return;
+    try {
+        fs.mkdirSync(path.dirname(PID_FILE), { recursive: true });
+        fs.writeFileSync(PID_FILE, String(process.pid));
+    } catch (_) {}
+}
+
+function clearPidFile() {
+    if (!PID_FILE) return;
+    try { fs.unlinkSync(PID_FILE); }
+    catch (err) {
+        if (err && err.code !== 'ENOENT') {
+            console.warn(`Failed to remove router pid file: ${PID_FILE}`);
+        }
+    }
+}
+
+ensurePidFile();
+process.on('exit', clearPidFile);
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGQUIT']) {
+    process.on(sig, () => {
+        clearPidFile();
+        process.exit(0);
+    });
+}
 
 // --- General Utils ---
 function appendLog(type, data) {

@@ -157,12 +157,22 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
       fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
     };
     await updateRoutes();
-    const child = spawn(process.execPath, [routerPath], { stdio: 'inherit', env: { ...process.env, PORT: String(staticPort) } });
-    try { fs.writeFileSync(path.join(runningDir, 'router.pid'), String(child.pid)); } catch (_) {}
-    child.on('exit', (code) => {
-      try { fs.unlinkSync(path.join(runningDir, 'router.pid')); } catch (_) {}
-      debugLog(`Router exited with code ${code}`);
+    const routerPidFile = path.join(runningDir, 'router.pid');
+    const child = spawn(process.execPath, [routerPath], {
+      detached: true,
+      stdio: ['ignore', 'inherit', 'inherit'],
+      env: {
+        ...process.env,
+        PORT: String(staticPort),
+        PLOINKY_ROUTER_PID_FILE: routerPidFile
+      }
     });
+    try { fs.writeFileSync(routerPidFile, String(child.pid)); } catch (_) {}
+    // Detach so the CLI can exit while the router keeps running.
+    child.unref();
+    console.log(`[start] RoutingServer launched in background (pid ${child.pid}).`);
+    console.log(`[start] Logs: ${path.resolve('.ploinky/logs/router.log')}`);
+    console.log(`[start] Dashboard: http://127.0.0.1:${staticPort}/dashboard`);
   } catch (e) {
     console.error('start (workspace) failed:', e.message);
   }
