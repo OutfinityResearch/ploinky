@@ -61,6 +61,30 @@ function combineAgentDescriptionWithContext(agent, context) {
 
 const VALID_CONTEXT_ROLES = new Set(['system', 'human', 'assistant']);
 
+function getOrderedModelNames() {
+    if (Array.isArray(modelsConfiguration.orderedModels) && modelsConfiguration.orderedModels.length) {
+        return modelsConfiguration.orderedModels.slice();
+    }
+    return Array.from(modelsConfiguration.models.keys());
+}
+
+function categorizeModelsByMode(modelNames) {
+    const fast = [];
+    const deep = [];
+    for (const name of modelNames) {
+        const descriptor = getModelDescriptor(name);
+        if (!descriptor) {
+            continue;
+        }
+        if (descriptor.mode === 'deep') {
+            deep.push(name);
+        } else {
+            fast.push(name);
+        }
+    }
+    return { fast, deep };
+}
+
 function normalizeTaskContext(agent, context) {
     if (Array.isArray(context)) {
         const normalizedMessages = context
@@ -325,11 +349,14 @@ function registerLLMAgent(options = {}) {
         throw new Error('registerLLMAgent requires a non-empty "name".');
     }
 
-    const normalizedFast = normalizeModelNameList(fastModels);
-    const normalizedDeep = normalizeModelNameList(deepModels);
+    let normalizedFast = normalizeModelNameList(fastModels);
+    let normalizedDeep = normalizeModelNameList(deepModels);
 
     if (!normalizedFast.length && !normalizedDeep.length) {
-        throw new Error(`registerLLMAgent("${name}") requires at least one model in fastModels or deepModels.`);
+        const fallbackNames = getOrderedModelNames();
+        const categorized = categorizeModelsByMode(fallbackNames);
+        normalizedFast = categorized.fast;
+        normalizedDeep = categorized.deep;
     }
 
     const explicitOrder = normalizeModelNameList(modelOrder);
