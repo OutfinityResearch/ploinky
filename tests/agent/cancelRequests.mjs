@@ -1,4 +1,4 @@
-const { callLLMWithModel, cancelRequests } = require('../../Agent/LLMClient.js');
+import { callLLMWithModel, cancelRequests } from '../../Agent/client/LLMClient.mjs';
 
 const options = {
     providerKey: 'openai',

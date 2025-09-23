@@ -1,4 +1,4 @@
-const { callLLM, callLLMWithModel } = require('../../Agent/LLMClient.js');
+import { callLLM, callLLMWithModel } from '../../Agent/client/LLMClient.mjs';
 
 const options = {
     model: 'gpt-4o-mini',

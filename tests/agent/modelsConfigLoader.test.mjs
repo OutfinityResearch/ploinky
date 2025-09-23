@@ -1,8 +1,6 @@
-'use strict';
+import assert from 'node:assert';
 
-const assert = require('assert');
-
-const { loadModelsConfiguration } = require('../../Agent/client/modelsConfigLoader');
+import { loadModelsConfiguration } from '../../Agent/client/modelsConfigLoader.mjs';
 
 const config = loadModelsConfiguration();
 

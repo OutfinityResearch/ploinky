@@ -1,11 +1,19 @@
-const path = require('path');
-const { registerProvider } = require('./providerRegistry');
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-function resolveModuleExports(moduleId, baseDir) {
-    const resolvedId = moduleId.startsWith('.') || moduleId.startsWith('/')
-        ? path.resolve(baseDir, moduleId)
-        : moduleId;
-    const exports = require(resolvedId);
+import { registerProvider } from './providerRegistry.mjs';
+
+async function resolveModuleExports(moduleId, baseDir) {
+    const isRelativeOrAbsolute = moduleId.startsWith('.') || moduleId.startsWith('/');
+    const resolvedId = isRelativeOrAbsolute ? path.resolve(baseDir, moduleId) : moduleId;
+
+    if (isRelativeOrAbsolute) {
+        const moduleUrl = pathToFileURL(resolvedId).href;
+        const exports = await import(moduleUrl);
+        return { exports, resolvedId };
+    }
+
+    const exports = await import(resolvedId);
     return { exports, resolvedId };
 }
 
@@ -29,7 +37,7 @@ function extractHandler(exports) {
     return null;
 }
 
-function registerProvidersFromConfig(modelsConfiguration, options = {}) {
+export async function registerProvidersFromConfig(modelsConfiguration, options = {}) {
     const warnings = [];
     const baseDir = options.baseDir
         || (modelsConfiguration.path ? path.dirname(modelsConfiguration.path) : __dirname);
@@ -41,7 +49,7 @@ function registerProvidersFromConfig(modelsConfiguration, options = {}) {
         }
 
         try {
-            const { exports, resolvedId } = resolveModuleExports(moduleId, baseDir);
+            const { exports, resolvedId } = await resolveModuleExports(moduleId, baseDir);
             const handler = extractHandler(exports);
             if (!handler) {
                 warnings.push(`Provider "${provider.providerKey}" module "${moduleId}" does not export a callLLM handler.`);
@@ -68,7 +76,3 @@ function registerProvidersFromConfig(modelsConfiguration, options = {}) {
 
     return warnings;
 }
-
-module.exports = {
-    registerProvidersFromConfig,
-};

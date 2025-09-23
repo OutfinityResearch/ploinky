@@ -1,7 +1,8 @@
-const reblessed = require('reblessed');
+import reblessed from 'reblessed';
+import os from 'node:os';
 
 // Reblessed-compatible theme colors
-const theme = {
+export const theme = {
     secondary: 'grey',
     text: 'white',
     primary: 'bright-blue',
@@ -13,7 +14,7 @@ const theme = {
 
 
 // Constants for file reading animation
-const BOX_CHARS = {
+export const BOX_CHARS = {
     TL: '╭', TR: '╮', BL: '╰', BR: '╯', H: '─', V: '│'
 };
 
@@ -26,7 +27,7 @@ let loadingInterval = null;
  * @param {reblessed.Screen} screen The main screen object.
  * @param {string} text The text to display.
  */
-function showLoading(screen, text = 'Thinking...') {
+export function showLoading(screen, text = 'Thinking...') {
     if (thinkingWidget) {
         hideLoading(screen);
     }
@@ -75,7 +76,7 @@ function showLoading(screen, text = 'Thinking...') {
  * Hides the inline loading indicator and hint.
  * @param {reblessed.Screen} screen The main screen object.
  */
-function hideLoading(screen) {
+export function hideLoading(screen) {
     if (loadingInterval) {
         clearInterval(loadingInterval);
         loadingInterval = null;
@@ -92,10 +93,10 @@ function hideLoading(screen) {
 }
 
 // Helper to strip ANSI color codes to calculate visible string length
-const stripAnsi = (str) => str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+export const stripAnsi = (str) => str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
 
 // Helper to create a static boxed message
-function createBoxedMessage(content) {
+export function createBoxedMessage(content) {
     const padding = 2;
     const visibleContentLength = stripAnsi(content).length;
     const boxWidth = visibleContentLength + padding * 2;
@@ -118,7 +119,7 @@ function createBoxedMessage(content) {
  * Displays the application intro screen in the log widget.
  * @param {reblessed.Log} log The log widget to print to.
  */
-const displayIntro = (log) => {
+export const displayIntro = (log) => {
     const ploinkyArt = [
         ' ____  _      ____  ___  _   _  _  __ __   __',
         '|  _ \\| |    / __ \\|_ _|| \\ | || |/ / \\ \\ / /',
@@ -142,11 +143,11 @@ const displayIntro = (log) => {
  * @param {reblessed.Box} statusBar The status bar widget.
  * @param {object} config The application configuration.
  */
-const updateStatusBar = (statusBar, config) => {
+export const updateStatusBar = (statusBar, config) => {
     const provider = config?.provider || 'N/A';
     const model = config?.model || 'N/A';
     const CWD = process.cwd();
-    const homeDir = require('os').homedir();
+    const homeDir = os.homedir();
     let displayPath = CWD;
     if (displayPath.startsWith(homeDir)) {
         displayPath = '~' + displayPath.substring(homeDir.length);
@@ -168,7 +169,7 @@ const updateStatusBar = (statusBar, config) => {
  * @param {reblessed.Screen} options.screen The main screen object.
  * @returns {Promise<Object|null>} The selected item or null if cancelled
  */
-const createInteractiveMenu = (options) => {
+export const createInteractiveMenu = (options) => {
     return new Promise((resolve) => {
         const {
             title,
@@ -214,16 +215,4 @@ const createInteractiveMenu = (options) => {
         list.focus();
         screen.render();
     });
-};
-
-module.exports = {
-    displayIntro,
-    showLoading,
-    hideLoading,
-    theme,
-    BOX_CHARS,
-    stripAnsi,
-    updateStatusBar,
-    createBoxedMessage,
-    createInteractiveMenu,
 };

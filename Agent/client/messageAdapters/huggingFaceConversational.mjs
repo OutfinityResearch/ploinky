@@ -1,4 +1,4 @@
-function toHuggingFacePrompt(chatContext = []) {
+export function toHuggingFacePrompt(chatContext = []) {
     const lines = chatContext.map(reply => {
         const role = reply.role === 'human'
             ? 'User'
@@ -11,7 +11,3 @@ function toHuggingFacePrompt(chatContext = []) {
     lines.push('Assistant: ');
     return `${lines.join('\n')}\n`;
 }
-
-module.exports = {
-    toHuggingFacePrompt,
-};

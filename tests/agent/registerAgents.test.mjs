@@ -1,8 +1,6 @@
-'use strict';
+import assert from 'node:assert';
 
-const assert = require('assert');
-
-const llmAgentClient = require('../../Agent/client/LLMAgentClient');
+import * as llmAgentClient from '../../Agent/client/LLMAgentClient.mjs';
 
 const TRACKED_KEYS = [
     'OPENAI_API_KEY',
@@ -13,7 +11,7 @@ const TRACKED_KEYS = [
 ];
 
 const originalEnv = Object.fromEntries(
-    TRACKED_KEYS.map((key) => [key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined]),
+    TRACKED_KEYS.map(key => [key, Object.prototype.hasOwnProperty.call(process.env, key) ? process.env[key] : undefined]),
 );
 
 function restoreTrackedEnv() {
@@ -55,7 +53,7 @@ function resetAgentState(envOverrides = {}) {
         assert.strictEqual(customRegistration.agent.name, 'customTasker');
 
         const activeSummary = llmAgentClient.listAgents();
-        const customAgent = activeSummary.agents.active.find((agent) => agent.name === 'customTasker');
+        const customAgent = activeSummary.agents.active.find(agent => agent.name === 'customTasker');
         assert.ok(customAgent, 'Expected custom agent to appear in active list.');
         assert.strictEqual(customAgent.providerKey, 'openai');
         assert.ok(customAgent.fastModels.includes('gpt-4o-mini'));
@@ -71,7 +69,7 @@ function resetAgentState(envOverrides = {}) {
         assert.strictEqual(inactiveRegistration.agent.providerKey, 'huggingface');
 
         const fallbackSummary = llmAgentClient.listAgents();
-        const activeAgent = fallbackSummary.agents.active.find((agent) => agent.name === 'needsKeys');
+        const activeAgent = fallbackSummary.agents.active.find(agent => agent.name === 'needsKeys');
         assert.ok(activeAgent, 'Expected agent without other keys to fall back to Hugging Face.');
         assert.strictEqual(activeAgent.providerKey, 'huggingface');
 
@@ -84,15 +82,15 @@ function resetAgentState(envOverrides = {}) {
             new Set(autoRegistration.agent.availableModels),
             new Set(['gpt-4o-mini', 'gpt-5-mini', 'gpt-5', 'gpt-4.1', 'mistralai/Mistral-7B-Instruct-v0.1'])
         );
-        ['gpt-4o-mini', 'gpt-5-mini'].forEach((model) => {
+        ['gpt-4o-mini', 'gpt-5-mini'].forEach(model => {
             assert.ok(autoRegistration.agent.fastModels.includes(model), `Expected fast model ${model}`);
         });
-        ['gpt-5', 'gpt-4.1'].forEach((model) => {
+        ['gpt-5', 'gpt-4.1'].forEach(model => {
             assert.ok(autoRegistration.agent.deepModels.includes(model), `Expected deep model ${model}`);
         });
 
         const autoSummary = llmAgentClient.listAgents();
-        const autoAgent = autoSummary.agents.active.find((agent) => agent.name === 'autoDefaults');
+        const autoAgent = autoSummary.agents.active.find(agent => agent.name === 'autoDefaults');
         assert.ok(autoAgent, 'Expected auto-configured agent to be active.');
         assert.strictEqual(autoAgent.providerKey, 'openai');
 
@@ -101,7 +99,7 @@ function resetAgentState(envOverrides = {}) {
         llmAgentClient.registerDefaultLLMAgent({});
 
         const defaultSummary = llmAgentClient.listAgents();
-        const defaultAgent = defaultSummary.agents.active.find((agent) => agent.name === 'default');
+        const defaultAgent = defaultSummary.agents.active.find(agent => agent.name === 'default');
         assert.ok(defaultAgent, 'Expected default agent to be active.');
         assert.ok(defaultAgent.fastModels.includes('gpt-4o-mini'));
         assert.ok(defaultAgent.availableModels.includes('gpt-4o-mini'));
@@ -111,7 +109,7 @@ function resetAgentState(envOverrides = {}) {
         restoreTrackedEnv();
         llmAgentClient.__resetForTests();
     }
-})().catch((error) => {
+})().catch(error => {
     console.error(error);
     process.exit(1);
 });

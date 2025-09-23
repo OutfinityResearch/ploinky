@@ -1,11 +1,9 @@
-'use strict';
+import assert from 'node:assert';
 
-const assert = require('assert');
+import { setupLLMStub, loadLLMAgentClient, reviewScenarios } from './helpers/reviewFixtures.mjs';
 
-const { setupLLMStub, loadLLMAgentClient, reviewScenarios } = require('./helpers/reviewFixtures');
-
-const { resetCallHistory, drainCallHistory } = setupLLMStub();
-const llmAgentClient = loadLLMAgentClient();
+const { resetCallHistory, drainCallHistory, restore } = setupLLMStub();
+const llmAgentClient = await loadLLMAgentClient();
 
 function formatExcerpt(value) {
     const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -41,8 +39,8 @@ function assertCallSequence(scenarioKey, fastCalls, reviewCalls) {
         `${scenarioKey}: fast call should mention the scenario`
     );
 
-    const planCalls = reviewCalls.filter((entry) =>
-        Array.isArray(entry.messages) && entry.messages.some((msg) => msg.includes('Create a concise step-by-step plan'))
+    const planCalls = reviewCalls.filter(
+        entry => Array.isArray(entry.messages) && entry.messages.some(msg => msg.includes('Create a concise step-by-step plan'))
     );
     assert.strictEqual(
         planCalls.length,
@@ -50,21 +48,21 @@ function assertCallSequence(scenarioKey, fastCalls, reviewCalls) {
         `${scenarioKey}: expected exactly one planning call, saw ${planCalls.length}`
     );
 
-    const reviewVotes = reviewCalls.filter((entry) => entry.lastMessage.includes('Return JSON: {"approved"'));
+    const reviewVotes = reviewCalls.filter(entry => entry.lastMessage.includes('Return JSON: {"approved"'));
     assert.strictEqual(
         reviewVotes.length,
         1,
         `${scenarioKey}: expected exactly one reviewer vote, saw ${reviewVotes.length}`
     );
 
-    const iterationPrompts = reviewCalls.filter((entry) => /Iteration:\s*1/.test(entry.lastMessage));
+    const iterationPrompts = reviewCalls.filter(entry => /Iteration:\s*1/.test(entry.lastMessage));
     assert.ok(
         iterationPrompts.length >= 1,
         `${scenarioKey}: expected at least one iteration prompt during review`
     );
 }
 
-(async () => {
+try {
     const TOTAL_DELTA_THRESHOLD = 4;
     const perScenarioResults = [];
 
@@ -109,14 +107,19 @@ function assertCallSequence(scenarioKey, fastCalls, reviewCalls) {
         `aggregate: total delta ${totalDelta} below threshold ${TOTAL_DELTA_THRESHOLD}`
     );
 
-    const summaryLines = perScenarioResults.map((entry) => {
+    const summaryLines = perScenarioResults.map(entry => {
         const { scenario, score } = entry;
         return `${scenario.key.padEnd(9)} | fast=${score.fastMetric} review=${score.reviewMetric} delta=${score.delta} :: ${score.rationale}`;
     });
 
     console.log('Review improvement scorecard');
-    summaryLines.forEach((line) => console.log(` - ${line}`));
+    summaryLines.forEach(line => console.log(` - ${line}`));
 
     const totalAttempts = perScenarioResults.reduce((sum, entry) => sum + entry.reviewCalls.length, 0);
     console.log(`Total review LLM calls: ${totalAttempts}`);
-})();
+} catch (error) {
+    console.error(error);
+    process.exit(1);
+} finally {
+    restore();
+}

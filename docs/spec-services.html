@@ -159,7 +159,7 @@ function ensureAgentService(agentName, manifest, agentPath) {
                 `/Agent:/Agent`
             ],
             ports: [`${hostPort}:7000`],
-            command: manifest.agent || '/Agent/AgentServer.js'
+            command: manifest.agent || '/Agent/AgentServer.mjs'
         });
     }
     

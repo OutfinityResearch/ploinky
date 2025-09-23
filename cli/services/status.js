@@ -250,7 +250,7 @@ async function statusWorkspace() {
     }
     if (!running && statusText && /exited/i.test(statusText)) {
       console.log(colorize('    hint: container exited. Check your agent command or base image.', 'yellow'));
-      console.log(colorize('          - If using default supervisor, ensure the image provides `node` for /Agent/AgentServer.js', 'yellow'));
+      console.log(colorize('          - If using default supervisor, ensure the image provides `node` for /Agent/AgentServer.mjs', 'yellow'));
       console.log(colorize('          - Or set `agent` in manifest.json to a valid long-running command', 'yellow'));
       console.log(colorize('          - Debug with: p-cli cli <agentName> or p-cli shell <agentName>', 'yellow'));
       const rt = require('./docker').getRuntime();

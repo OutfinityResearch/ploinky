@@ -1,7 +1,11 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const DEFAULT_PROVIDER_ENV_MAP = {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export const DEFAULT_PROVIDER_ENV_MAP = {
     openai: 'OPENAI_API_KEY',
     google: 'GEMINI_API_KEY',
     anthropic: 'ANTHROPIC_API_KEY',
@@ -13,7 +17,7 @@ const DEFAULT_PROVIDER_ENV_MAP = {
 
 const VALID_MODES = new Set(['fast', 'deep']);
 
-function loadRawConfig(configPath = path.join(__dirname, 'models.json')) {
+export function loadRawConfig(configPath = path.join(__dirname, 'models.json')) {
     if (!fs.existsSync(configPath)) {
         return { raw: { providers: {}, models: {} }, issues: { errors: [`models.json not found at ${configPath}`], warnings: [] } };
     }
@@ -27,7 +31,7 @@ function loadRawConfig(configPath = path.join(__dirname, 'models.json')) {
     }
 }
 
-function normalizeConfig(rawConfig, options = {}) {
+export function normalizeConfig(rawConfig, options = {}) {
     const issues = { errors: [], warnings: [] };
     const providers = new Map();
     const models = new Map();
@@ -201,7 +205,7 @@ function selectString(preferred, fallback) {
     return null;
 }
 
-function loadModelsConfiguration(options = {}) {
+export function loadModelsConfiguration(options = {}) {
     const configPath = options.configPath
         || process.env.LLM_MODELS_CONFIG_PATH
         || path.join(__dirname, 'models.json');
@@ -213,10 +217,3 @@ function loadModelsConfiguration(options = {}) {
     normalized.path = configPath;
     return normalized;
 }
-
-module.exports = {
-    loadModelsConfiguration,
-    normalizeConfig,
-    loadRawConfig,
-    DEFAULT_PROVIDER_ENV_MAP,
-};

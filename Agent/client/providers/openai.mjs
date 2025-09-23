@@ -1,6 +1,6 @@
-const { toOpenAIChatMessages } = require('../messageAdapters/openAIChat');
+import { toOpenAIChatMessages } from '../messageAdapters/openAIChat.mjs';
 
-async function callLLM(chatContext, options) {
+export async function callLLM(chatContext, options) {
     if (!options || typeof options !== 'object') {
         throw new Error('OpenAI provider requires invocation options.');
     }
@@ -48,5 +48,3 @@ async function callLLM(chatContext, options) {
     }
     return data.choices?.[0]?.message?.content;
 }
-
-module.exports = { callLLM };

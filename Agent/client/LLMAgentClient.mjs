@@ -1,8 +1,8 @@
-const readline = require('readline');
+import readline from 'node:readline';
 
 // The low-level LLM client used for all model invocations.
-const { callLLMWithModel, cancelRequests: cancelLLMRequests } = require('./LLMClient');
-const { loadModelsConfiguration } = require('./modelsConfigLoader');
+import { callLLMWithModel, cancelRequests as cancelLLMRequests } from './LLMClient.mjs';
+import { loadModelsConfiguration } from './modelsConfigLoader.mjs';
 
 const operatorRegistry = new Map();
 let agentRegistry = null;
@@ -707,8 +707,8 @@ function registerOperator(operatorName, description, executionCallback) {
     if (!operatorName || typeof operatorName !== 'string') {
         throw new Error('operatorName must be a non-empty string.');
     }
-    if (!/^[a-z][a-zA-Z0-9]*$/.test(operatorName)) {
-        throw new Error('operatorName must be camelCase and alphanumeric.');
+    if (!/^[a-z][a-zA-Z0-9-]*$/.test(operatorName)) {
+        throw new Error('operatorName must start with a lowercase letter and can only contain alphanumeric characters and dashes.');
     }
     if (!description || typeof description !== 'string') {
         throw new Error('description must be a non-empty string.');
@@ -1246,7 +1246,7 @@ function resetForTests() {
     configurationDiagnosticsEmitted = false;
 }
 
-module.exports = {
+export {
     registerLLMAgent,
     registerDefaultLLMAgent,
     registerOperator,
@@ -1258,5 +1258,6 @@ module.exports = {
     chooseOperator,
     cancelTasks,
     listAgents,
-    __resetForTests: resetForTests,
 };
+
+export const __resetForTests = resetForTests;

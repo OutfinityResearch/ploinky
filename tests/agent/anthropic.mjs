@@ -1,4 +1,4 @@
-const { callLLM } = require('../../Agent/LLMClient.js');
+import { callLLM } from '../../Agent/client/LLMClient.mjs';
 
 const options = {
     model: 'claude-sonnet-4-20250514',

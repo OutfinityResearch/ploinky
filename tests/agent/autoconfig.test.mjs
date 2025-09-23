@@ -1,19 +1,11 @@
-'use strict';
+import assert from 'node:assert';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const assert = require('assert');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-
-const MODULE_IDS = [
-    '../../Agent/client/LLMAgentClient',
-    '../../Agent/client/LLMClient',
-    '../../Agent/client/modelsConfigLoader',
-    '../../Agent/client/providerRegistry',
-    '../../Agent/client/providerBootstrap',
-    '../../Agent/client/providers',
-    '../../Agent/client/providers/index.js',
-];
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ENV_KEYS = [
     'LLM_MODELS_CONFIG_PATH',
@@ -37,21 +29,6 @@ function restoreEnv() {
     }
 }
 
-function clearModule(moduleId) {
-    try {
-        const resolved = require.resolve(moduleId);
-        if (require.cache[resolved]) {
-            delete require.cache[resolved];
-        }
-    } catch (_) {
-        // Module may not have been required yet.
-    }
-}
-
-function resetModuleCaches() {
-    MODULE_IDS.forEach(clearModule);
-}
-
 function createFixture() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-autoconfig-'));
     const clientDir = path.join(root, 'Agent', 'client');
@@ -64,17 +41,17 @@ function createFixture() {
                 baseURL: 'https://stuba.example/v1',
                 apiKeyEnv: 'STUBA_API_KEY',
                 defaultModel: 'model-a-fast',
-                module: './providers/stubProviderA.js',
+                module: './providers/stubProviderA.mjs',
             },
             stubb: {
                 baseURL: 'https://stubb.example/v1',
                 apiKeyEnv: 'STUBB_API_KEY',
-                module: './providers/stubProviderB.js',
+                module: './providers/stubProviderB.mjs',
             },
             stubmissing: {
                 baseURL: 'https://missing.example/v1',
                 apiKeyEnv: 'STUBM_API_KEY',
-                module: './providers/not-found.js',
+                module: './providers/not-found.mjs',
             },
         },
         models: [
@@ -93,10 +70,10 @@ function createFixture() {
 
     fs.writeFileSync(path.join(clientDir, 'models.json'), JSON.stringify(config, null, 4));
 
-    const stubModuleSource = `'use strict';\nconst calls = [];\nasync function callLLM(history, options) {\n    calls.push({ historyLength: Array.isArray(history) ? history.length : 0, model: options?.model, providerKey: options?.providerKey });\n    return JSON.stringify({ provider: options?.providerKey, model: options?.model });\n}\nmodule.exports = { callLLM, __calls: calls };\n`;
+    const stubModuleSource = `const calls = [];\nexport async function callLLM(history, options) {\n    calls.push({ historyLength: Array.isArray(history) ? history.length : 0, model: options?.model, providerKey: options?.providerKey });\n    return JSON.stringify({ provider: options?.providerKey, model: options?.model });\n}\nexport const __calls = calls;\nexport default { callLLM, __calls: calls };\n`;
 
-    fs.writeFileSync(path.join(providersDir, 'stubProviderA.js'), stubModuleSource);
-    fs.writeFileSync(path.join(providersDir, 'stubProviderB.js'), stubModuleSource);
+    fs.writeFileSync(path.join(providersDir, 'stubProviderA.mjs'), stubModuleSource);
+    fs.writeFileSync(path.join(providersDir, 'stubProviderB.mjs'), stubModuleSource);
 
     return {
         root,
@@ -121,15 +98,22 @@ function setProviderKeys(values) {
     });
 }
 
-function summarizeAgents(llmAgent) {
-    if (typeof llmAgent.__resetForTests === 'function') {
-        llmAgent.__resetForTests();
+function summarizeAgents(llmAgentModule) {
+    if (typeof llmAgentModule.__resetForTests === 'function') {
+        llmAgentModule.__resetForTests();
     }
-    return llmAgent.listAgents();
+    return llmAgentModule.listAgents();
 }
 
 function findProvider(summary, key, bucket = 'active') {
     return summary.agents[bucket]?.find(entry => entry.name === key || entry.providerKey === key) || null;
+}
+
+function freshImport(relativePath) {
+    const resolved = path.resolve(__dirname, relativePath);
+    const url = pathToFileURL(resolved);
+    url.searchParams.set('t', `${Date.now()}-${Math.random()}`);
+    return import(url.href);
 }
 
 (async () => {
@@ -140,21 +124,19 @@ function findProvider(summary, key, bucket = 'active') {
         process.env.LLM_MODELS_CONFIG_PATH = fixture.configPath;
         process.env.PLOINKY_SKIP_BUILTIN_PROVIDERS = '1';
 
-        resetModuleCaches();
-
-        const { loadModelsConfiguration } = require('../../Agent/client/modelsConfigLoader');
-        const { registerProvidersFromConfig } = require('../../Agent/client/providerBootstrap');
-        const providerRegistry = require('../../Agent/client/providerRegistry');
-        const providersIndex = require('../../Agent/client/providers');
+        const modelsModule = await freshImport('../../Agent/client/modelsConfigLoader.mjs');
+        const bootstrapModule = await freshImport('../../Agent/client/providerBootstrap.mjs');
+        const providerRegistry = await freshImport('../../Agent/client/providerRegistry.mjs');
+        const providersIndex = await freshImport('../../Agent/client/providers/index.mjs');
 
         providersIndex.resetBuiltInProviders?.();
         providerRegistry.resetProviders?.();
 
-        const modelsConfiguration = loadModelsConfiguration({ configPath: fixture.configPath });
-        registerProvidersFromConfig(modelsConfiguration, { baseDir: fixture.baseDir });
+        const modelsConfiguration = modelsModule.loadModelsConfiguration({ configPath: fixture.configPath });
+        await bootstrapModule.registerProvidersFromConfig(modelsConfiguration, { baseDir: fixture.baseDir });
 
-        const llmAgent = require('../../Agent/client/LLMAgentClient');
-        const llmClient = require('../../Agent/client/LLMClient');
+        const llmAgent = await freshImport('../../Agent/client/LLMAgentClient.mjs');
+        const llmClient = await freshImport('../../Agent/client/LLMClient.mjs');
         if (typeof llmAgent.__resetForTests !== 'function') {
             throw new Error('LLMAgentClient is missing __resetForTests export required for the test harness.');
         }
@@ -226,7 +208,6 @@ function findProvider(summary, key, bucket = 'active') {
         console.log('autoconfig behaviour test passed');
     } finally {
         cleanupFixture(fixture);
-        resetModuleCaches();
         restoreEnv();
     }
 })().catch(error => {
