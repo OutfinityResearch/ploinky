@@ -18,6 +18,7 @@ trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
 # This test assumes 'ploinky' is available in the system's PATH.
 # Navigate into the temporary workspace
 cd "$TEST_WORKSPACE_DIR"
+DIRNAME=$(basename "$TEST_WORKSPACE_DIR") # Extract dirname for process matching
 echo "Created temporary workspace at: $TEST_WORKSPACE_DIR"
 
 # --- Test Execution ---
@@ -36,27 +37,25 @@ ploinky start demo 8080
 echo "Waiting for services to start..."
 sleep 2
 
-# 3. Verify the router process is running directly
+# 3. Verify processes are running directly
 echo "Verifying the router process is running..."
+ROUTER_PID=$(pgrep -f "RoutingServer.js" || true)
 
-# Find the PID of the RoutingServer.js process directly.
-# pgrep -f matches against the full command line.
-ROUTER_PID=$(pgrep -f "RoutingServer.js")
-
-if [[ -n "$ROUTER_PID" && "$ROUTER_PID" -gt 0 ]]; then
-    echo "✓ Verification successful: Found router process with PID $ROUTER_PID."
-    # We can still run ploinky status for additional info/logging
-    echo "--- Ploinky Status ---"
-    ploinky status
-    echo "----------------------"
-else
+if [[ -z "$ROUTER_PID" ]]; then
     echo "✗ Verification failed: Could not find running router process."
-    # Print process list for debugging
-    echo "--- Current Processes ---"
-    ps aux | grep -i "node" || true
-    echo "-------------------------"
     exit 1
 fi
+echo "✓ Verification successful: Found router process with PID $ROUTER_PID."
+
+echo "Verifying the agent process is running..."
+pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Verification failed: Could not find running demo agent process." && exit 1)
+echo "✓ Verification successful: Found demo agent process."
+
+# We can still run ploinky status for additional info/logging
+echo "--- Ploinky Status ---"
+ploinky status
+echo "----------------------"
+
 
 # 4. Stop and clean up services
 echo "Stopping all services..."

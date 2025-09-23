@@ -18,6 +18,7 @@ trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
 # This test assumes 'ploinky' is available in the system's PATH.
 # Navigate into the temporary workspace
 cd "$TEST_WORKSPACE_DIR"
+DIRNAME=$(basename "$TEST_WORKSPACE_DIR") # Extract dirname for process matching
 echo "Created temporary workspace at: $TEST_WORKSPACE_DIR"
 
 # --- Test Execution ---
@@ -47,14 +48,9 @@ echo "Waiting for agent to restart..."
 sleep 2
 echo "✓ 'refresh agent' command executed successfully."
 
-# 5. Final status check
-echo -e "\n5. Final 'status' check..."
-STATUS_OUTPUT_FINAL=$(ploinky status)
-echo "$STATUS_OUTPUT_FINAL"
-if ! echo "$STATUS_OUTPUT_FINAL" | grep -q "demo" | grep -q "(running)"; then
-  echo "✗ Verification failed: 'demo' agent is not in a 'running' state after refresh."
-  exit 1
-fi
-echo "✓ Agent is running after refresh."
+# 5. Final process check
+echo -e "\n5. Final process check..."
+pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Verification failed: 'demo' agent process is not running after refresh." && exit 1)
+echo "✓ Agent process is running after refresh."
 
 # If the script reaches this point, it is considered a success.

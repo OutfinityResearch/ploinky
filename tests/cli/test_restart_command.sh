@@ -9,6 +9,7 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/testUtils.sh"
 
 TEST_WORKSPACE_DIR=$(mktemp -d -t ploinky-restart-test-XXXXXX)
+DIRNAME=$(basename "$TEST_WORKSPACE_DIR") # Extract dirname for process matching
 
 trap cleanup EXIT
 trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
@@ -34,9 +35,9 @@ sleep 5 # Give them time to start
 
 # 2. Verify they are running initially
 echo "Verifying initial state..."
-pgrep -f "ploinky_agent_demo" > /dev/null || (echo "✗ Demo agent process not running initially" && exit 1)
+pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Demo agent process not running initially" && exit 1)
 echo "✓ Demo agent process is running."
-pgrep -f "ploinky_agent_simulator" > /dev/null || (echo "✗ Simulator agent process not running initially" && exit 1)
+pgrep -f "ploinky_agent_simulator_$DIRNAME" > /dev/null || (echo "✗ Simulator agent process not running initially" && exit 1)
 echo "✓ Simulator agent process is running."
 ROUTER_PID=$(pgrep -f "RoutingServer.js" || true)
 assert_not_empty "$ROUTER_PID" "RoutingServer.js should be running initially"
@@ -49,9 +50,9 @@ sleep 5 # Give everything time to restart
 
 # 4. Verify they are all running again
 echo "Verifying state after full restart..."
-pgrep -f "ploinky_agent_demo" > /dev/null || (echo "✗ Demo agent not running after restart" && exit 1)
+pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Demo agent not running after restart" && exit 1)
 echo "✓ Demo agent is running after restart."
-pgrep -f "ploinky_agent_simulator" > /dev/null || (echo "✗ Simulator agent not running after restart" && exit 1)
+pgrep -f "ploinky_agent_simulator_$DIRNAME" > /dev/null || (echo "✗ Simulator agent not running after restart" && exit 1)
 echo "✓ Simulator agent is running after restart."
 ROUTER_PID_AFTER_RESTART=$(pgrep -f "RoutingServer.js" || true)
 assert_not_empty "$ROUTER_PID_AFTER_RESTART" "RoutingServer.js should be running after restart"
@@ -68,11 +69,11 @@ sleep 3 # Give them time to stop
 
 # 2. Verify they are stopped
 echo "Verifying stopped state..."
-if pgrep -f "ploinky_agent_demo" > /dev/null; then
+if pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null; then
   echo "✗ Demo agent process still running after stop"
   exit 1
 fi
-if pgrep -f "ploinky_agent_simulator" > /dev/null; then
+if pgrep -f "ploinky_agent_simulator_$DIRNAME" > /dev/null; then
   echo "✗ Simulator agent process still running after stop"
   exit 1
 fi
@@ -90,10 +91,10 @@ sleep 5 # Give it time to start
 
 # 4. Verify final state
 echo "Verifying state after 'restart demo'..."
-pgrep -f "ploinky_agent_demo" > /dev/null || (echo "✗ Demo agent not running after specific restart" && exit 1)
+pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Demo agent not running after specific restart" && exit 1)
 echo "✓ Demo agent is running."
 
-if pgrep -f "ploinky_agent_simulator" > /dev/null; then
+if pgrep -f "ploinky_agent_simulator_$DIRNAME" > /dev/null; then
   echo "✗ Simulator agent is running but should not be."
   exit 1
 fi
