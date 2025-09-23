@@ -67,13 +67,13 @@ function resetAgentState(envOverrides = {}) {
             name: 'needsKeys',
         });
 
-        assert.strictEqual(inactiveRegistration.status, 'inactive');
-        assert.strictEqual(inactiveRegistration.reason, 'missing API keys');
+        assert.strictEqual(inactiveRegistration.status, 'active');
+        assert.strictEqual(inactiveRegistration.agent.providerKey, 'huggingface');
 
-        const inactiveSummary = llmAgentClient.listAgents();
-        const inactiveAgent = inactiveSummary.agents.inactive.find((agent) => agent.name === 'needsKeys');
-        assert.ok(inactiveAgent, 'Expected agent without keys to appear in inactive list.');
-        assert.strictEqual(inactiveAgent.reason, 'missing API keys');
+        const fallbackSummary = llmAgentClient.listAgents();
+        const activeAgent = fallbackSummary.agents.active.find((agent) => agent.name === 'needsKeys');
+        assert.ok(activeAgent, 'Expected agent without other keys to fall back to Hugging Face.');
+        assert.strictEqual(activeAgent.providerKey, 'huggingface');
 
         resetAgentState({ OPENAI_API_KEY: 'stub-openai-key' });
 
@@ -82,7 +82,7 @@ function resetAgentState(envOverrides = {}) {
         assert.strictEqual(autoRegistration.status, 'active');
         assert.deepStrictEqual(
             new Set(autoRegistration.agent.availableModels),
-            new Set(['gpt-4o-mini', 'gpt-5-mini', 'gpt-5', 'gpt-4.1'])
+            new Set(['gpt-4o-mini', 'gpt-5-mini', 'gpt-5', 'gpt-4.1', 'mistralai/Mistral-7B-Instruct-v0.1'])
         );
         ['gpt-4o-mini', 'gpt-5-mini'].forEach((model) => {
             assert.ok(autoRegistration.agent.fastModels.includes(model), `Expected fast model ${model}`);

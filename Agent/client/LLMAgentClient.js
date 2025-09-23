@@ -11,7 +11,19 @@ let agentRegistrySummary = null;
 
 const modelsConfiguration = loadModelsConfiguration();
 
-const PROVIDER_PRIORITY = ['openai', 'gemini', 'anthropic', 'openrouter', 'mistral', 'deepseek', 'huggingface'];
+const PROVIDER_PRIORITY = ['openai', 'google', 'anthropic', 'openrouter', 'mistral', 'deepseek', 'huggingface'];
+
+const CONTEXT_ROLE_ALIASES = new Map([
+    ['system', 'system'],
+    ['user', 'human'],
+    ['human', 'human'],
+    ['assistant', 'assistant'],
+    ['tool', 'assistant'],
+    ['function', 'assistant'],
+    ['observation', 'assistant'],
+]);
+
+const TOOL_LIKE_ROLES = new Set(['tool', 'function', 'observation']);
 
 let configurationDiagnosticsEmitted = false;
 
@@ -53,14 +65,6 @@ function buildAgentDescription(agent) {
     return details;
 }
 
-function combineAgentDescriptionWithContext(agent, context) {
-    const description = buildAgentDescription(agent);
-    const trimmedContext = context ? String(context).trim() : '';
-    return trimmedContext ? `${description}\n\n${trimmedContext}` : description;
-}
-
-const VALID_CONTEXT_ROLES = new Set(['system', 'human', 'assistant']);
-
 function getOrderedModelNames() {
     if (Array.isArray(modelsConfiguration.orderedModels) && modelsConfiguration.orderedModels.length) {
         return modelsConfiguration.orderedModels.slice();
@@ -85,7 +89,7 @@ function categorizeModelsByMode(modelNames) {
     return { fast, deep };
 }
 
-function normalizeTaskContext(agent, context) {
+function normalizeTaskContext(_agent, context) {
     if (Array.isArray(context)) {
         const normalizedMessages = context
             .map((entry) => {
@@ -94,8 +98,8 @@ function normalizeTaskContext(agent, context) {
                 }
 
                 const rawRole = typeof entry.role === 'string' ? entry.role.trim().toLowerCase() : '';
-                const role = rawRole === 'user' ? 'human' : rawRole;
-                if (!VALID_CONTEXT_ROLES.has(role)) {
+                const role = CONTEXT_ROLE_ALIASES.get(rawRole);
+                if (!role) {
                     return null;
                 }
 
@@ -104,7 +108,26 @@ function normalizeTaskContext(agent, context) {
                     message = entry.content;
                 }
                 if (typeof message === 'undefined' || message === null) {
+                    message = entry.result;
+                }
+                if (typeof message === 'undefined' || message === null) {
+                    message = entry.output;
+                }
+                if (typeof message === 'undefined' || message === null) {
                     return null;
+                }
+
+                if (typeof message === 'object') {
+                    try {
+                        message = JSON.stringify(message, null, 2);
+                    } catch (error) {
+                        message = String(message);
+                    }
+                }
+
+                if (TOOL_LIKE_ROLES.has(rawRole)) {
+                    const label = entry.name ? `${rawRole}:${entry.name}` : rawRole;
+                    message = `[${label}] ${String(message)}`;
                 }
 
                 return {
@@ -123,15 +146,14 @@ function normalizeTaskContext(agent, context) {
 
         return {
             type: 'text',
-            text: combineAgentDescriptionWithContext(agent, ''),
+            text: '',
         };
     }
 
     const trimmed = context ? String(context).trim() : '';
-    const combined = combineAgentDescriptionWithContext(agent, trimmed);
     return {
         type: 'text',
-        text: combined,
+        text: trimmed,
     };
 }
 
@@ -171,11 +193,118 @@ function cloneAgentModelRecord(record) {
     };
 }
 
+function normalizeModePreference(value) {
+    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    return normalized === 'deep' || normalized === 'fast' ? normalized : null;
+}
+
+function normalizeInvocationRequest(input) {
+    if (typeof input === 'string') {
+        return { mode: normalizeModePreference(input), modelName: null };
+    }
+
+    if (!input || typeof input !== 'object') {
+        return { mode: null, modelName: null };
+    }
+
+    const mode = normalizeModePreference(input.mode || input.preferredMode || input.modePreference);
+    const modelRaw = input.modelName || input.model || input.preferredModel;
+    const modelName = typeof modelRaw === 'string' && modelRaw.trim() ? modelRaw.trim() : null;
+
+    return { mode, modelName };
+}
+
+function createAgentRuntime(record) {
+    const runtime = { ...record };
+
+    const recordsByMode = new Map();
+    for (const modelRecord of runtime.availableModelRecords) {
+        const mode = normalizeModePreference(modelRecord.mode) || 'fast';
+        if (!recordsByMode.has(mode)) {
+            recordsByMode.set(mode, []);
+        }
+        recordsByMode.get(mode).push(modelRecord);
+    }
+
+    const getRecordForMode = (mode) => {
+        const normalized = normalizeModePreference(mode);
+        if (normalized && recordsByMode.has(normalized)) {
+            return recordsByMode.get(normalized)[0];
+        }
+        if (normalized === 'deep' && recordsByMode.has('fast')) {
+            return recordsByMode.get('fast')[0];
+        }
+        if (normalized === 'fast' && recordsByMode.has('deep')) {
+            return recordsByMode.get('deep')[0];
+        }
+        if (runtime.model) {
+            const configured = runtime.availableModelRecords.find(modelRecord => modelRecord.name === runtime.model);
+            if (configured) {
+                return configured;
+            }
+        }
+        return runtime.availableModelRecords[0] || null;
+    };
+
+    runtime.supportedModes = Array.from(recordsByMode.keys());
+
+    runtime.supportsMode = function supportsMode(mode) {
+        const normalized = normalizeModePreference(mode);
+        return normalized ? recordsByMode.has(normalized) : false;
+    };
+
+    const findRecordByName = (modelName) => {
+        if (!modelName) {
+            return null;
+        }
+        return runtime.availableModelRecords.find(modelRecord => modelRecord.name === modelName) || null;
+    };
+
+    const resolveRecord = (request) => {
+        const recordByName = findRecordByName(request.modelName);
+        if (recordByName) {
+            return recordByName;
+        }
+        return getRecordForMode(request.mode);
+    };
+
+    runtime.selectModelRecord = function selectModelRecord(request) {
+        const normalizedRequest = normalizeInvocationRequest(request);
+        return resolveRecord(normalizedRequest);
+    };
+
+    runtime.getInvocationConfig = function getInvocationConfig(request) {
+        const normalizedRequest = normalizeInvocationRequest(request);
+        const record = resolveRecord(normalizedRequest);
+        if (!record) {
+            throw new Error(`Agent "${runtime.name}" has no available models.`);
+        }
+
+        const providerKey = record.providerKey || runtime.providerKey || null;
+        const apiKeyEnv = record.apiKeyEnv || runtime.apiKeyEnv || null;
+        const baseURL = record.baseURL
+            || runtime.baseURL
+            || (providerKey ? getProviderConfig(providerKey)?.baseURL : null);
+
+        return {
+            record,
+            providerKey,
+            apiKeyEnv,
+            baseURL,
+        };
+    };
+
+    return runtime;
+}
+
 function hasAvailableKey(record) {
     if (!record) {
         return false;
     }
     if (!record.apiKeyEnv) {
+        return true;
+    }
+    if ((record.providerKey || '').toLowerCase() === 'huggingface') {
         return true;
     }
     return Boolean(process.env[record.apiKeyEnv]);
@@ -277,8 +406,8 @@ function commitAgentRecord({
     const fastSet = new Set((fastModelNames || []).map(value => value?.toString().trim()).filter(Boolean));
     const deepSet = new Set((deepModelNames || []).map(value => value?.toString().trim()).filter(Boolean));
 
-    const fastRecords = orderedRecords.filter(record => fastSet.has(record.name) || (fastSet.size === 0 && record.mode === 'fast'));
-    const deepRecords = orderedRecords.filter(record => deepSet.has(record.name) || (deepSet.size === 0 && record.mode === 'deep'));
+    const fastRecords = availableRecords.filter(record => fastSet.has(record.name) || (fastSet.size === 0 && record.mode === 'fast'));
+    const deepRecords = availableRecords.filter(record => deepSet.has(record.name) || (deepSet.size === 0 && record.mode === 'deep'));
 
     const agentRecord = {
         name,
@@ -302,7 +431,9 @@ function commitAgentRecord({
         supportedModes: Array.from(new Set(availableRecords.map(record => record.mode).filter(Boolean))),
     };
 
-    agentRegistry.set(name.toLowerCase(), agentRecord);
+    const runtimeAgent = createAgentRuntime(agentRecord);
+
+    agentRegistry.set(name.toLowerCase(), runtimeAgent);
 
     summaryState.active.push({
         name,
@@ -312,14 +443,14 @@ function commitAgentRecord({
         expertise,
         instructions,
         origin,
-        providerKey: agentRecord.providerKey,
-        defaultModel: agentRecord.model,
-        availableModels: agentRecord.availableModels.slice(),
-        fastModels: agentRecord.fastModels.slice(),
-        deepModels: agentRecord.deepModels.slice(),
+        providerKey: runtimeAgent.providerKey,
+        defaultModel: runtimeAgent.model,
+        availableModels: runtimeAgent.availableModels.slice(),
+        fastModels: runtimeAgent.fastModels.slice(),
+        deepModels: runtimeAgent.deepModels.slice(),
     });
 
-    return { status: 'active', agent: agentRecord };
+    return { status: 'active', agent: runtimeAgent };
 }
 
 function normalizeModelNameList(list) {
@@ -452,13 +583,13 @@ function autoRegisterProviders() {
 
         if (!descriptors.length) {
             console.warn(`LLMAgentClient: No models configured in models.json for provider "${providerKey}".`);
-        commitAgentRecord({
+            commitAgentRecord({
                 name: providerKey,
                 role: `${providerKey} agent`,
                 job: `Handle requests using ${providerKey} models.`,
                 expertise: 'General',
                 instructions: '',
-            kind: 'task',
+                kind: 'task',
                 configuredRecords: [],
                 origin: 'provider',
             });
@@ -637,8 +768,8 @@ async function doTaskWithReview(agentName, context, description, outputSchema = 
 
     while (iteration < Math.max(maxIterations, 1)) {
         iteration += 1;
-        const candidate = await executeIteration(agent, context, description, outputSchema, iteration, feedback, plan);
-        const review = await reviewCandidate(agent, context, description, candidate.raw, outputSchema, iteration);
+        const candidate = await executeIteration(agent, context, description, outputSchema, iteration, feedback, plan, normalizedMode);
+        const review = await reviewCandidate(agent, context, description, candidate.raw, outputSchema, iteration, normalizedMode);
         if (review.approved) {
             return candidate.parsed ?? { result: candidate.raw };
         }
@@ -658,7 +789,7 @@ async function doTaskWithHumanReview(agentName, context, description, outputSche
     /* eslint-disable no-constant-condition */
     while (true) {
         iteration += 1;
-        const candidate = await executeIteration(agent, context, description, outputSchema, iteration, feedback || '', plan);
+        const candidate = await executeIteration(agent, context, description, outputSchema, iteration, feedback || '', plan, normalizedMode);
         const finalResult = candidate.parsed ?? { result: candidate.raw };
 
         console.log('----- Agent Result -----');
@@ -703,19 +834,21 @@ async function brainstorm(agentName, question, generationCount, returnCount, rev
             instruction: 'Generate one creative, self-contained answer option.',
             context: '',
             description: `Question: ${question}\nYou are variant #${i + 1}.`,
+            mode: 'fast',
         });
-        const raw = await invokeAgent(agent, history);
+        const raw = await invokeAgent(agent, history, { mode: 'fast' });
         generationResults.push({ index: i + 1, agent: agent.name, content: raw });
     }
 
     const evaluator = getAgent(agentName);
+    const evaluationMode = evaluator.supportsMode && evaluator.supportsMode('deep') ? 'deep' : 'fast';
     const evaluationHistory = buildSystemHistory(evaluator, {
         instruction: 'Evaluate brainstormed alternatives and return the top choices ranked by quality.',
         context: buildEvaluationContext(question, generationResults, reviewCriteria),
         description: 'Return JSON with property "ranked" listing objects {"index": number, "score": number, "rationale": string}.',
+        mode: evaluationMode,
     });
-
-    const evaluationRaw = await invokeAgent(evaluator, evaluationHistory);
+    const evaluationRaw = await invokeAgent(evaluator, evaluationHistory, { mode: evaluationMode });
     const evaluation = safeJsonParse(evaluationRaw);
 
     if (!evaluation?.ranked || !Array.isArray(evaluation.ranked)) {
@@ -763,9 +896,10 @@ async function chooseOperator(agentName, currentTaskDescription, mode = 'fast', 
             : 'Quickly select operators that can solve the task.',
         context: contextInfo,
         description: `Task description: ${currentTaskDescription}\nOnly return JSON: {"suitableOperators":[{"operatorName": string, "confidence": number}]}. Discard operators below confidence ${threshold}.`,
+        mode: normalizedMode,
     });
 
-    const raw = await invokeAgent(agent, history);
+    const raw = await invokeAgent(agent, history, { mode: normalizedMode });
     const parsed = safeJsonParse(raw);
 
     if (parsed?.suitableOperators) {
@@ -794,28 +928,38 @@ function cancelTasks() {
 
 function normalizeTaskMode(mode, outputSchema, agent, fallback = 'fast') {
     const normalized = (mode || '').toLowerCase();
-    if (normalized === 'deep' || normalized === 'fast') {
-        return normalized;
-    }
-
     const agentModes = Array.isArray(agent?.supportedModes) ? agent.supportedModes.slice() : [];
     if (!agentModes.length && agent?.modelMode) {
         agentModes.push(agent.modelMode);
     }
 
+    const supportsMode = (candidate) => {
+        if (!candidate) {
+            return false;
+        }
+        if (typeof agent?.supportsMode === 'function') {
+            return agent.supportsMode(candidate);
+        }
+        return agentModes.includes(candidate);
+    };
+
+    if (normalized === 'deep' || normalized === 'fast') {
+        return supportsMode(normalized) ? normalized : (supportsMode(fallback) ? fallback : (agentModes[0] || fallback));
+    }
+
     if (normalized === 'any' || normalized === '') {
-        if (outputSchema && agentModes.includes('deep')) {
+        if (outputSchema && supportsMode('deep')) {
             return 'deep';
         }
-        if (agentModes.includes('fast')) {
+        if (supportsMode('fast')) {
             return 'fast';
         }
-        if (agentModes.includes('deep')) {
+        if (supportsMode('deep')) {
             return 'deep';
         }
     }
 
-    if (agentModes.includes(fallback)) {
+    if (supportsMode(fallback)) {
         return fallback;
     }
 
@@ -829,8 +973,9 @@ async function executeFastTask(agent, context, description, outputSchema) {
         context: contextInfo,
         description,
         outputSchema,
+        mode: 'fast',
     });
-    const raw = await invokeAgent(agent, history);
+    const raw = await invokeAgent(agent, history, { mode: 'fast' });
     return buildTaskResult(raw, outputSchema);
 }
 
@@ -843,12 +988,13 @@ async function executeDeepTask(agent, context, description, outputSchema) {
         extraContextParts: [`Plan:\n${JSON.stringify(plan)}`],
         description,
         outputSchema,
+        mode: 'deep',
     });
-    const raw = await invokeAgent(agent, executionHistory);
+    const raw = await invokeAgent(agent, executionHistory, { mode: 'deep' });
     return buildTaskResult(raw, outputSchema);
 }
 
-async function executeIteration(agent, context, description, outputSchema, iteration, feedback, plan) {
+async function executeIteration(agent, context, description, outputSchema, iteration, feedback, plan, mode) {
     const contextInfo = normalizeTaskContext(agent, context);
     const extraParts = [`Task:\n${description}`, `Iteration: ${iteration}`];
     if (plan) {
@@ -864,13 +1010,14 @@ async function executeIteration(agent, context, description, outputSchema, itera
         extraContextParts: extraParts,
         description: 'Return only the updated solution, no commentary unless necessary.',
         outputSchema,
+        mode,
     });
-    const raw = await invokeAgent(agent, history);
+    const raw = await invokeAgent(agent, history, { mode });
     const parsed = buildTaskResult(raw, outputSchema);
     return { raw, parsed };
 }
 
-async function reviewCandidate(agent, context, description, candidate, outputSchema, iteration) {
+async function reviewCandidate(agent, context, description, candidate, outputSchema, iteration, mode) {
     const contextInfo = normalizeTaskContext(agent, context || 'N/A');
     const reviewHistory = buildSystemHistory(agent, {
         instruction: 'Review the candidate solution for quality, correctness, and alignment with the task.',
@@ -882,9 +1029,10 @@ async function reviewCandidate(agent, context, description, candidate, outputSch
         ],
         description: 'Return JSON: {"approved": boolean, "feedback": string}.',
         outputSchema: null,
+        mode,
     });
 
-    const reviewRaw = await invokeAgent(agent, reviewHistory);
+    const reviewRaw = await invokeAgent(agent, reviewHistory, { mode });
     const review = safeJsonParse(reviewRaw);
 
     if (typeof review?.approved !== 'boolean') {
@@ -901,9 +1049,10 @@ async function generatePlan(agent, context, description) {
         context: contextInfo,
         description,
         outputSchema: { type: 'object', properties: { steps: { type: 'array' } }, required: ['steps'] },
+        mode: 'deep',
     });
 
-    const raw = await invokeAgent(agent, history);
+    const raw = await invokeAgent(agent, history, { mode: 'deep' });
     const parsed = safeJsonParse(raw);
 
     if (parsed?.steps && Array.isArray(parsed.steps)) {
@@ -916,11 +1065,10 @@ async function generatePlan(agent, context, description) {
 function buildSystemHistory(agent, { instruction, context, description, outputSchema, extraContextParts = [] }) {
     const history = [];
     const agentLabel = agent.canonicalName || agent.name;
-    const modelDescriptor = agent.model ? ` using model "${agent.model}"` : '';
     const agentDescription = buildAgentDescription(agent);
     history.push({
         role: 'system',
-        message: `You are the ${agentLabel} agent${modelDescriptor}. ${agentDescription} ${instruction}`.trim(),
+        message: `You are the ${agentLabel} agent. ${agentDescription} ${instruction}`.trim(),
     });
 
     const normalizedContext = context && typeof context === 'object' && (context.type === 'text' || context.type === 'messages')
@@ -972,22 +1120,57 @@ function buildEvaluationContext(question, generationResults, reviewCriteria) {
     }, null, 2);
 }
 
-async function invokeAgent(agent, history) {
-    const apiKey = agent.apiKeyEnv ? process.env[agent.apiKeyEnv] : null;
-    if (!apiKey && agent.providerKey !== 'huggingface') {
-        throw new Error(`Missing API key for agent "${agent.name}" (${agent.apiKeyEnv}).`);
-    }
+async function invokeAgent(agent, history, options = {}) {
+    const request = normalizeInvocationRequest(options);
 
-    const baseURL = agent.baseURL || getProviderConfig(agent.providerKey)?.baseURL;
-    if (!baseURL) {
-        throw new Error(`Missing base URL for agent "${agent.name}" (${agent.providerKey}).`);
-    }
-
-    return callLLMWithModel(agent.model, [...history], null, {
-        apiKey,
+    const {
+        record,
+        providerKey,
+        apiKeyEnv,
         baseURL,
-        providerKey: agent.providerKey,
+    } = typeof agent.getInvocationConfig === 'function'
+        ? agent.getInvocationConfig(request)
+        : buildLegacyInvocationConfig(agent);
+
+    if (!record?.name) {
+        throw new Error(`Agent "${agent.name}" does not have a usable model.`);
+    }
+
+    const effectiveProviderKey = providerKey || record.providerKey;
+    const effectiveBaseURL = baseURL || getProviderConfig(effectiveProviderKey)?.baseURL;
+    if (!effectiveBaseURL) {
+        throw new Error(`Missing base URL for agent "${agent.name}" (${effectiveProviderKey || 'unknown provider'}).`);
+    }
+
+    const apiKeyName = apiKeyEnv || record.apiKeyEnv || agent.apiKeyEnv || null;
+    const apiKey = apiKeyName ? process.env[apiKeyName] : null;
+    if (!apiKey && effectiveProviderKey !== 'huggingface') {
+        throw new Error(`Missing API key for agent "${agent.name}" (${apiKeyName || 'unspecified env var'}).`);
+    }
+
+    return callLLMWithModel(record.name, [...history], null, {
+        apiKey,
+        baseURL: effectiveBaseURL,
+        providerKey: effectiveProviderKey,
     });
+}
+
+function buildLegacyInvocationConfig(agent) {
+    const providerKey = agent.providerKey || null;
+    const apiKeyEnv = agent.apiKeyEnv || null;
+    const baseURL = agent.baseURL || (providerKey ? getProviderConfig(providerKey)?.baseURL : null);
+    return {
+        record: {
+            name: agent.model,
+            providerKey,
+            apiKeyEnv,
+            baseURL,
+            mode: agent.modelMode || 'fast',
+        },
+        providerKey,
+        apiKeyEnv,
+        baseURL,
+    };
 }
 
 function buildTaskResult(raw, outputSchema) {

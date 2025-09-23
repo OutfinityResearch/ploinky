@@ -5,12 +5,26 @@ function toOpenAIChatMessages(chatContext = []) {
             content: reply.message,
         };
 
-        if (reply.role === 'human') {
-            normalized.role = 'user';
-        } else if (reply.role === 'ai') {
-            normalized.role = 'assistant';
-        } else if (reply.role === 'system') {
-            normalized.role = 'developer';
+        switch (reply.role) {
+            case 'system':
+                normalized.role = 'system';
+                break;
+            case 'assistant':
+            case 'ai':
+                normalized.role = 'assistant';
+                break;
+            case 'user':
+            case 'human':
+                normalized.role = 'user';
+                break;
+            case 'tool':
+            case 'function':
+            case 'observation':
+                normalized.role = 'tool';
+                break;
+            default:
+                normalized.role = 'user';
+                break;
         }
 
         convertedContext.push(normalized);

@@ -16,12 +16,16 @@ async function callLLM(chatContext, options) {
         throw new Error('Anthropic provider requires a baseURL.');
     }
 
-    const convertedContext = toAnthropicMessages(chatContext);
+    const { messages, system } = toAnthropicMessages(chatContext);
     const payload = {
         model,
         max_tokens: 1000,
-        messages: convertedContext,
+        messages,
     };
+
+    if (system) {
+        payload.system = system;
+    }
 
     if (params && typeof params === 'object') {
         Object.assign(payload, params);

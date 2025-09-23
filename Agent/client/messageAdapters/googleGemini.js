@@ -12,10 +12,14 @@ function toGeminiPayload(chatContext = []) {
             parts: [{ text: reply.message }],
         };
 
-        if (reply.role === 'human') {
+        if (reply.role === 'human' || reply.role === 'user') {
             message.role = 'user';
-        } else if (reply.role === 'ai') {
+        } else if (reply.role === 'assistant' || reply.role === 'ai') {
             message.role = 'model';
+        } else if (reply.role === 'tool' || reply.role === 'function' || reply.role === 'observation') {
+            message.role = 'model';
+        } else {
+            message.role = message.role || 'user';
         }
 
         contents.push(message);
