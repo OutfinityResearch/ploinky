@@ -46,7 +46,7 @@ function refreshComponentToken(component, { quiet } = {}) {
   if (!quiet) {
     const port = getRouterPort();
     console.log(`✓ ${spec.label} token refreshed (${maskToken(token)}…).`);
-    console.log(`  Visit: http://127.0.0.1:${port}${spec.path}?token=<stored in ${spec.varName}>`);
+    console.log(`  Visit: http://127.0.0.1:${port}${spec.path}?token=<stored in ${spec.varName} in .ploinky/.secrets>`);
   }
   return token;
 }
@@ -71,7 +71,7 @@ function ensureComponentToken(component, { quiet } = {}) {
     if (!quiet) {
       const port = getRouterPort();
       console.log(`✓ ${spec.label} token ready (${maskToken(existing)}…).`);
-      console.log(`  Visit: http://127.0.0.1:${port}${spec.path}?token=<stored in ${spec.varName}>`);
+      console.log(`  Visit: http://127.0.0.1:${port}${spec.path}?token=<stored in ${spec.varName} in .ploinky/.secrets>`);
     }
     return existing;
   }
