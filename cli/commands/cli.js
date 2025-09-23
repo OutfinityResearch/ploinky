@@ -258,10 +258,6 @@ async function handleCommand(args) {
             const output = envSvc.echoVar(options[0]);
             console.log(output);
             break; }
-        case 'new':
-            if (options[0] === 'agent') newAgent(options[1], options[2], options[3]);
-            else showHelp();
-            break;
         case 'update':
             if (options[0] === 'agent') await updateAgent(options[1]);
             else if (options[0] === 'repo') await updateRepo(options[1]);

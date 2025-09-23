@@ -112,32 +112,6 @@ update repo basic</code></pre>
 
                     <div class="doc-section" id="agent">
                         <h2>Agent Operations</h2>
-                        
-                        <h3>new agent</h3>
-                        <p>Create a new agent in a repository.</p>
-                        <pre><code>new agent &lt;repo&gt; &lt;name&gt; [image]</code></pre>
-                        <table class="command-table">
-                            <tr>
-                                <th>Parameter</th>
-                                <th>Description</th>
-                            </tr>
-                            <tr>
-                                <td><code>&lt;repo&gt;</code></td>
-                                <td>Repository name where agent will be created</td>
-                            </tr>
-                            <tr>
-                                <td><code>&lt;name&gt;</code></td>
-                                <td>Agent name (must be unique)</td>
-                            </tr>
-                            <tr>
-                                <td><code>[image]</code></td>
-                                <td>Container image (default: node:18-alpine)</td>
-                            </tr>
-                        </table>
-                        <pre><code># Examples
-new agent cloud MyAPI              # Node.js agent
-new agent cloud PyBot python:3.11  # Python agent
-new agent vibe WebApp nginx:alpine # Nginx agent</code></pre>
 
                         <h3>enable agent</h3>
                         <p>Register an agent in workspace registry for management.</p>
@@ -174,11 +148,11 @@ enable agent cloud/MyAPI    # Enable specific agent from cloud repo</code></pre>
                             </tr>
                             <tr>
                                 <td><code>[port]</code></td>
-                                <td>Router port (default: 8088)</td>
+                                <td>Router port (default: 8080)</td>
                             </tr>
                         </table>
                         <pre><code># First time setup
-start demo 8088
+start demo 8080
 
 # Subsequent starts (uses saved configuration)
 start</code></pre>
@@ -187,7 +161,7 @@ start</code></pre>
                         <p>Open interactive shell session in agent container.</p>
                         <pre><code>shell &lt;agentName&gt;</code></pre>
                         <div class="alert alert-warning">
-                            Attaches to a persistent container with full TTY support. Exit shell to return to host.
+                            Attaches to a persistent container with full TTY support. Exit shell by typing "exit" to return to host.
                         </div>
 
                         <h3>cli</h3>
@@ -327,7 +301,7 @@ webchat secret python assistant.py</code></pre>
                             </tr>
                         </tbody></table>
                         <div class="alert alert-info">
-                            Access at: http://localhost:8088/webmeet (proxied by the router)
+                            Access at: http://localhost:8080/webmeet (proxied by the router)
                         </div>
                     </div>
 

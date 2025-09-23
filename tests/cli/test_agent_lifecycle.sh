@@ -34,7 +34,7 @@ ploinky start demo 8080
 
 # Give the agent and router some time to initialize
 echo "Waiting for services to start..."
-sleep 3
+sleep 2
 
 # 3. Verify the router process is running directly
 echo "Verifying the router process is running..."

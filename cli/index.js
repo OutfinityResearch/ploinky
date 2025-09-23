@@ -153,8 +153,6 @@ function completer(line) {
             } else if (command === 'expose') {
                 // expose <EXPOSED> <$VAR|value> <agent>
                 if (words.length >= 4) completions = getAgentNames();
-            } else if (command === 'new' && subcommand === 'agent') {
-                completions = getRepoNames();
             } else if (command === 'disable' && subcommand === 'repo') {
                 completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
             } else if (command === 'enable' && subcommand === 'repo') {

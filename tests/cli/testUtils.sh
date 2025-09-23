@@ -22,7 +22,11 @@ handle_error() {
 cleanup() {
   local exit_code=$?
   echo "--- Cleaning up test workspace ---"
-  
+
+  echo "Running final 'ploinky destroy' to clean up services and containers..."
+  # Run destroy but continue cleanup even if it fails
+  ploinky destroy || echo "'ploinky destroy' failed with exit code $?. Continuing cleanup."
+
   # Make sure we are not in the directory when we remove it
   if [[ -d "$TEST_WORKSPACE_DIR" ]]; then
     cd /tmp
@@ -39,4 +43,20 @@ cleanup() {
   fi
   # Exit with the original exit code
   exit $exit_code
+}
+
+# --- Assertion Functions ---
+
+# Asserts that a value is not empty.
+#
+# @param $1 The value to check.
+# @param $2 The error message to display if the assertion fails.
+assert_not_empty() {
+  local value="$1"
+  local message="$2"
+  if [ -z "$value" ]; then
+    echo "Assertion failed: $message" >&2
+    # Returning a non-zero status will trigger the ERR trap.
+    return 1
+  fi
 }
