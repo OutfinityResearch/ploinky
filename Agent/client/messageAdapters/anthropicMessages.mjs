@@ -1,4 +1,4 @@
-function toAnthropicMessages(chatContext = []) {
+export function toAnthropicMessages(chatContext = []) {
     const messages = [];
     const systemParts = [];
 
@@ -25,7 +25,3 @@ function toAnthropicMessages(chatContext = []) {
         messages,
     };
 }
-
-module.exports = {
-    toAnthropicMessages,
-};

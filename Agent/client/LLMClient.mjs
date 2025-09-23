@@ -1,12 +1,12 @@
-const { loadModelsConfiguration } = require('./modelsConfigLoader');
-const { registerBuiltInProviders } = require('./providers');
-const { registerProvidersFromConfig } = require('./providerBootstrap');
-const { ensureProvider } = require('./providerRegistry');
+import { loadModelsConfiguration } from './modelsConfigLoader.mjs';
+import { registerBuiltInProviders } from './providers/index.mjs';
+import { registerProvidersFromConfig } from './providerBootstrap.mjs';
+import { ensureProvider } from './providerRegistry.mjs';
 
 const modelsConfiguration = loadModelsConfiguration();
 
 registerBuiltInProviders();
-registerProvidersFromConfig(modelsConfiguration);
+await registerProvidersFromConfig(modelsConfiguration);
 
 const llmCalls = [];
 
@@ -35,7 +35,7 @@ function resolveProviderKey(modelName, invocationOptions, metadata) {
     throw new Error(`Model "${modelName}" is not configured with a provider.`);
 }
 
-async function callLLM(historyArray, prompt, options = {}) {
+export async function callLLM(historyArray, prompt, options = {}) {
     const modelName = options?.model;
     if (!modelName || typeof modelName !== 'string') {
         throw new Error('callLLM requires options.model to be specified.');
@@ -43,7 +43,7 @@ async function callLLM(historyArray, prompt, options = {}) {
     return callLLMWithModel(modelName, historyArray, prompt, options);
 }
 
-async function callLLMWithModel(modelName, historyArray, prompt, invocationOptions = {}) {
+async function callLLMWithModelInternal(modelName, historyArray, prompt, invocationOptions = {}) {
     const controller = new AbortController();
     llmCalls.push(controller);
 
@@ -95,9 +95,24 @@ async function callLLMWithModel(modelName, historyArray, prompt, invocationOptio
     }
 }
 
-async function cancelRequests() {
+let callLLMWithModelImpl = callLLMWithModelInternal;
+
+export async function callLLMWithModel(modelName, historyArray, prompt, invocationOptions = {}) {
+    return callLLMWithModelImpl(modelName, historyArray, prompt, invocationOptions);
+}
+
+export function cancelRequests() {
     llmCalls.forEach(controller => controller.abort());
     llmCalls.length = 0;
 }
 
-module.exports = { callLLM, callLLMWithModel, cancelRequests };
+export function __setCallLLMWithModelForTests(fn) {
+    if (typeof fn !== 'function') {
+        throw new TypeError('Expected function when overriding callLLMWithModel implementation.');
+    }
+    callLLMWithModelImpl = fn;
+}
+
+export function __resetCallLLMWithModelForTests() {
+    callLLMWithModelImpl = callLLMWithModelInternal;
+}

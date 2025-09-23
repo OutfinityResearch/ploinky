@@ -1,4 +1,4 @@
-function toGeminiPayload(chatContext = []) {
+export function toGeminiPayload(chatContext = []) {
     const contents = [];
     const systemInstruction = { parts: [] };
 
@@ -27,7 +27,3 @@ function toGeminiPayload(chatContext = []) {
 
     return { contents, systemInstruction };
 }
-
-module.exports = {
-    toGeminiPayload,
-};

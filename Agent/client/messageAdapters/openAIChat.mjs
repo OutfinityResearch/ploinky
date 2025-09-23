@@ -1,4 +1,4 @@
-function toOpenAIChatMessages(chatContext = []) {
+export function toOpenAIChatMessages(chatContext = []) {
     const convertedContext = [];
     for (const reply of chatContext) {
         const normalized = {
@@ -31,7 +31,3 @@ function toOpenAIChatMessages(chatContext = []) {
     }
     return convertedContext;
 }
-
-module.exports = {
-    toOpenAIChatMessages,
-};

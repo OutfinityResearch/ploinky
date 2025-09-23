@@ -1,6 +1,6 @@
-const { toAnthropicMessages } = require('../messageAdapters/anthropicMessages');
+import { toAnthropicMessages } from '../messageAdapters/anthropicMessages.mjs';
 
-async function callLLM(chatContext, options) {
+export async function callLLM(chatContext, options) {
     if (!options || typeof options !== 'object') {
         throw new Error('Anthropic provider requires invocation options.');
     }
@@ -54,5 +54,3 @@ async function callLLM(chatContext, options) {
     }
     return data.content?.[0]?.text;
 }
-
-module.exports = { callLLM };

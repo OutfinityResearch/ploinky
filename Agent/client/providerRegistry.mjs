@@ -4,7 +4,7 @@ function normalizeKey(key) {
     return typeof key === 'string' ? key.trim().toLowerCase() : '';
 }
 
-function registerProvider({ key, handler, metadata = {} }) {
+export function registerProvider({ key, handler, metadata = {} }) {
     const normalizedKey = normalizeKey(key);
     if (!normalizedKey) {
         throw new Error('registerProvider requires a non-empty provider key.');
@@ -21,7 +21,7 @@ function registerProvider({ key, handler, metadata = {} }) {
     });
 }
 
-function getProviderRecord(key) {
+export function getProviderRecord(key) {
     const normalizedKey = normalizeKey(key);
     if (!normalizedKey) {
         return null;
@@ -29,11 +29,11 @@ function getProviderRecord(key) {
     return registry.get(normalizedKey) || null;
 }
 
-function getProvider(key) {
+export function getProvider(key) {
     return getProviderRecord(key)?.handler || null;
 }
 
-function ensureProvider(key) {
+export function ensureProvider(key) {
     const record = getProviderRecord(key);
     if (!record) {
         throw new Error(`Provider "${key}" is not registered. Ensure its module has been loaded.`);
@@ -41,19 +41,10 @@ function ensureProvider(key) {
     return record.handler;
 }
 
-function listProviders() {
+export function listProviders() {
     return Array.from(registry.keys());
 }
 
-function resetProviders() {
+export function resetProviders() {
     registry.clear();
 }
-
-module.exports = {
-    registerProvider,
-    getProvider,
-    ensureProvider,
-    getProviderRecord,
-    listProviders,
-    resetProviders,
-};

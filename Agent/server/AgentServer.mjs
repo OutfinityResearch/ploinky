@@ -1,5 +1,5 @@
-const http = require('http');
-const { spawn } = require('child_process');
+import http from 'node:http';
+import { spawn } from 'node:child_process';
 
 // AgentServer: listens on PORT 7000 and, if CHILD_CMD is set, executes it per request
 // with the JSON body encoded in base64 as a single argv parameter.

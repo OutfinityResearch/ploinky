@@ -1,11 +1,9 @@
-'use strict';
+import assert from 'node:assert';
 
-const assert = require('assert');
+import { setupLLMStub, loadLLMAgentClient, reviewScenarios } from './helpers/reviewFixtures.mjs';
 
-const { setupLLMStub, loadLLMAgentClient, reviewScenarios } = require('./helpers/reviewFixtures');
-
-const { resetCallHistory, drainCallHistory } = setupLLMStub();
-const llmAgentClient = loadLLMAgentClient();
+const { resetCallHistory, drainCallHistory, restore } = setupLLMStub();
+const llmAgentClient = await loadLLMAgentClient();
 
 const assertionsByScenario = {
     schema(fastResult, reviewedResult) {
@@ -33,9 +31,9 @@ const assertionsByScenario = {
     },
 };
 
-const scenarios = reviewScenarios.filter((scenario) => assertionsByScenario[scenario.key]);
+const scenarios = reviewScenarios.filter(scenario => assertionsByScenario[scenario.key]);
 
-(async () => {
+try {
     for (const scenario of scenarios) {
         resetCallHistory();
         const fast = await llmAgentClient.doTask(
@@ -107,7 +105,9 @@ const scenarios = reviewScenarios.filter((scenario) => assertionsByScenario[scen
     });
 
     console.log('LLMAgentClient deterministic behaviours verified.');
-})().catch((error) => {
+} catch (error) {
     console.error(error);
     process.exit(1);
-});
+} finally {
+    restore();
+}

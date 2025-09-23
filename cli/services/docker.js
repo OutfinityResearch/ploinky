@@ -591,7 +591,7 @@ async function ensureAgentCore(manifest, agentPath) {
 // - Working directory: current project root (process.cwd()), mounted RW at the same path inside container.
 // - Map Ploinky's Agent tools directory (repository 'Agent') read-only into /Agent inside the container.
 // - If manifest.agent is provided (non-empty), run it via /bin/sh -lc <agentCmd>.
-// - If manifest.agent is missing/empty, run fallback supervisor 'AgentServer.sh' which loops and restarts AgentServer.js.
+// - If manifest.agent is missing/empty, run fallback supervisor 'AgentServer.sh' which loops and restarts AgentServer.mjs.
 // - Always keep the container running; do not auto-stop on exit.
 function startAgentContainer(agentName, manifest, agentPath) {
     const runtime = containerRuntime;

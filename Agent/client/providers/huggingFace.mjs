@@ -1,6 +1,6 @@
-const { toHuggingFacePrompt } = require('../messageAdapters/huggingFaceConversational');
+import { toHuggingFacePrompt } from '../messageAdapters/huggingFaceConversational.mjs';
 
-async function callLLM(chatContext, options) {
+export async function callLLM(chatContext, options) {
     if (!options || typeof options !== 'object') {
         throw new Error('Hugging Face provider requires invocation options.');
     }
@@ -68,5 +68,3 @@ async function callLLM(chatContext, options) {
 
     return typeof data === 'string' ? data : JSON.stringify(data);
 }
-
-module.exports = { callLLM };

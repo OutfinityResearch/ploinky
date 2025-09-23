@@ -1,6 +1,6 @@
-const { toGeminiPayload } = require('../messageAdapters/googleGemini');
+import { toGeminiPayload } from '../messageAdapters/googleGemini.mjs';
 
-async function callLLM(chatContext, options) {
+export async function callLLM(chatContext, options) {
     if (!options || typeof options !== 'object') {
         throw new Error('Google provider requires invocation options.');
     }
@@ -48,5 +48,3 @@ async function callLLM(chatContext, options) {
 
     return responseJSON.candidates?.[0]?.content?.parts?.[0]?.text;
 }
-
-module.exports = { callLLM };
