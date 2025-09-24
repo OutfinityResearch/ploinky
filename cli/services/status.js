@@ -15,11 +15,22 @@ function findAgentManifest(agentName) {
 
 function listRepos() {
   const enabled = new Set(reposSvc.loadEnabledRepos());
+  const installed = new Set(reposSvc.getInstalledRepos(REPOS_DIR));
+  const allRepos = { ...PREDEFINED_REPOS };
+
+  for (const repo of installed) {
+    if (!allRepos[repo]) {
+      allRepos[repo] = { url: 'local', description: '' };
+    }
+  }
+
   console.log('Available repositories:');
-  for (const [name, info] of Object.entries(PREDEFINED_REPOS)) {
-    const installed = fs.existsSync(path.join(REPOS_DIR, name));
-    const flags = `${installed ? '[installed]' : ''}${enabled.has(name) ? ' [enabled]' : ''}`.trim();
-    console.log(`- ${name}: ${info.url} ${flags ? ' ' + flags : ''}`);
+  for (const [name, info] of Object.entries(allRepos)) {
+    const isInstalled = installed.has(name);
+    const isEnabled = enabled.has(name);
+    const flags = `${isInstalled ? '[installed]' : ''}${isEnabled ? ' [enabled]' : ''}`.trim();
+    const url = info.url === 'local' ? '(local)' : info.url;
+    console.log(`- ${name}: ${url} ${flags ? ' ' + flags : ''}`);
   }
   console.log("\nTip: enable repos with 'enable repo <name>'. If none are enabled, installed repos are used by default for agent listings.");
 }
@@ -124,6 +135,52 @@ function listAgents() {
     }
   }
   console.log("\nTip: enable repos with 'enable repo <name>' to control listings. If none are enabled, installed repos are used by default.");
+}
+
+function listRoutes() {
+  try {
+    const routingPath = path.resolve('.ploinky/routing.json');
+    if (!fs.existsSync(routingPath)) {
+      console.log('No routing configuration found (.ploinky/routing.json missing).');
+      console.log("Tip: run 'start <staticAgent> <port>' to generate it.");
+      return;
+    }
+    let routing = {};
+    try {
+      routing = JSON.parse(fs.readFileSync(routingPath, 'utf8')) || {};
+    } catch (e) {
+      console.log('Invalid routing.json (cannot parse).');
+      return;
+    }
+
+    const port = routing.port || '-';
+    const staticCfg = routing.static || {};
+    const routes = routing.routes || {};
+
+    console.log('Routing configuration (.ploinky/routing.json):');
+    console.log(`- Port: ${port}`);
+    if (staticCfg && staticCfg.agent) {
+      const root = staticCfg.hostPath || staticCfg.root || '-';
+      console.log(`- Static: agent=${staticCfg.agent} root=${root}`);
+    } else {
+      console.log('- Static: (not configured)');
+    }
+
+    const names = Object.keys(routes);
+    if (!names.length) {
+      console.log('No routes defined.');
+      return;
+    }
+    console.log('Configured routes:');
+    names.sort().forEach((name) => {
+      const r = routes[name] || {};
+      const container = r.container || '-';
+      const hostPort = r.hostPort || r.port || '-';
+      console.log(`- ${name}: hostPort=${hostPort} container=${container}`);
+    });
+  } catch (e) {
+    console.error('Failed to list routes:', e.message);
+  }
 }
 
 async function statusWorkspace() {
@@ -265,5 +322,6 @@ module.exports = {
   listRepos,
   listCurrentAgents,
   listAgents,
+  listRoutes,
   statusWorkspace
 };

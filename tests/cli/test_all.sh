@@ -25,20 +25,33 @@ tests=(
   "shell_cli_command.sh"
   "start_configuration.sh"
   "web_commands.sh"
+  "demo_run.sh"
+  "paramParser.test.mjs"
 )
 
 for t in "${tests[@]}"; do
   bn="$t"
   test_path="$THIS_DIR/$bn"
   echo "==== Running $bn ===="
-  ( cd "$ROOT_DIR" && PLOINKY_CMD="$PLOINKY_CMD" bash "$test_path" ) && {
-    echo "[PASS] $bn"
-    ((pass++))
-  } || {
-    echo "[FAIL] $bn"
-    ((fail++))
-    failed_tests+=("$bn")
-  }
+  if [[ "$bn" == *.mjs ]]; then
+    ( cd "$ROOT_DIR" && node "$test_path" ) && {
+      echo "[PASS] $bn"
+      ((pass++))
+    } || {
+      echo "[FAIL] $bn"
+      ((fail++))
+      failed_tests+=("$bn")
+    }
+  else
+    ( cd "$ROOT_DIR" && PLOINKY_CMD="$PLOINKY_CMD" bash "$test_path" ) && {
+      echo "[PASS] $bn"
+      ((pass++))
+    } || {
+      echo "[FAIL] $bn"
+      ((fail++))
+      failed_tests+=("$bn")
+    }
+  fi
   echo
 done
 

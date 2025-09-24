@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { PLOINKY_DIR } = require('../services/config');
-const { debugLog } = require('../services/utils');
+const { debugLog, parseParametersString } = require('../services/utils');
 const { showHelp } = require('../services/help');
 
 class ClientCommands {
@@ -177,9 +177,10 @@ class ClientCommands {
             case 'task': {
                 if (!options.length) {
                     console.log('Usage:');
-                    console.log('  client task <agentName> -key1 val1 -key2 val2 ...');
-                    console.log('  client task -key1 val1 -key2 val2 ...   (uses static agent)');
-                    console.log('Example: client task simulation -task montyHall -iterations 10 -description trala');
+                    console.log('  client task <agentName> [--parameters <params> | -p <params>] [-key val ...]');
+                    console.log('  client task [--parameters <params> | -p <params>] [-key val ...]   (uses static agent)');
+                    console.log('Example: client task simulation -task montyHall -iterations 10');
+                    console.log('Example: client task myAgent -p name=John,age=25,hobbies[]=reading,writing');
                     break;
                 }
 
@@ -197,15 +198,31 @@ class ClientCommands {
                     break;
                 }
 
-                // Parse -key value pairs into an object
                 const toNumber = (s) => {
                     if (s === undefined || s === null) return s;
                     const n = Number(s);
                     return Number.isFinite(n) && String(n) === String(s) ? n : s;
                 };
-                const fields = {};
+
+                let fields = {};
                 while (idx < options.length) {
                     let tok = String(options[idx] || '');
+
+                    if (tok === '--parameters' || tok === '-p') {
+                        const parametersString = options[idx + 1] || '';
+                        if (parametersString) {
+                            try {
+                                const parsedParams = parseParametersString(parametersString);
+                                fields = { ...fields, ...parsedParams };
+                            } catch (e) {
+                                console.error(`Error parsing parameters: ${e.message}`);
+                                return;
+                            }
+                        }
+                        idx += 2;
+                        continue;
+                    }
+
                     if (tok === '-') {
                         // support pattern: - key value
                         const key = String(options[idx + 1] || '').replace(/^[-]+/, '');
@@ -238,8 +255,8 @@ class ClientCommands {
                 break;
             default:
                 console.log('Client commands:');
-                console.log('  client task <agentName> -key val ... -k2 v2   - Send a key/value payload');
-                console.log('  client task -key val ...                 (uses static agent from start)');
+                console.log('  client task <agentName> [-p <params>] [-key val]   - Send a key/value payload');
+                console.log('  client task [-p <params>] [-key val] ...         (uses static agent from start)');
                 console.log('  client methods <agentName>        - Calls agent via Router with {command:"methods"}');
                 console.log('  client status <agentName>         - Calls agent via Router with {command:"status"}');
         }

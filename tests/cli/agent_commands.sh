@@ -21,6 +21,16 @@ cd "$TEST_WORKSPACE_DIR"
 DIRNAME=$(basename "$TEST_WORKSPACE_DIR") # Extract dirname for process matching
 echo "Created temporary workspace at: $TEST_WORKSPACE_DIR"
 
+# Determine container runtime
+if command -v docker &> /dev/null; then
+    CONTAINER_RUNTIME="docker"
+elif command -v podman &> /dev/null; then
+    CONTAINER_RUNTIME="podman"
+else
+    echo "Neither docker nor podman found in PATH."
+    exit 1
+fi
+
 # --- Test Execution ---
 
 echo "--- Running Agent Commands Test ---"
@@ -40,16 +50,67 @@ if ! echo "$LIST_OUTPUT" | grep -q "demo"; then
 fi
 echo "✓ 'list agents' shows the 'demo' agent."
 
-# 4. Refresh the agent
-echo -e "\n4. Testing 'refresh agent demo'..."
-# We just check for successful execution.
+# 3. Prepare routing.json and test 'list routes'
+echo -e "\n3. Testing 'list routes'..."
+mkdir -p .ploinky
+cat > .ploinky/routing.json << 'EOF'
+{
+  "port": 8088,
+  "static": {
+    "agent": "demo",
+    "hostPath": "/tmp/demo"
+  },
+  "routes": {
+    "demo": {
+      "container": "ploinky_test_service_demo",
+      "hostPort": 7001
+    }
+  }
+}
+EOF
+ROUTES_OUTPUT=$(ploinky list routes)
+echo "$ROUTES_OUTPUT"
+if ! echo "$ROUTES_OUTPUT" | grep -q "Configured routes:"; then
+  echo "✗ Verification failed: 'list routes' did not print the routes header."
+  exit 1
+fi
+if ! echo "$ROUTES_OUTPUT" | grep -q "demo: hostPort=7001"; then
+  echo "✗ Verification failed: 'list routes' did not include demo with hostPort=7001."
+  exit 1
+fi
+echo "✓ 'list routes' shows routes from .ploinky/routing.json."
+
+# 4. Start the agent
+echo -e "\n4. Testing 'start demo'..."
+ploinky start demo
+echo "Waiting for agent to start..."
+sleep 5 # Give it time to start
+pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Verification failed: 'demo' agent process is not running after start." && exit 1)
+echo "✓ 'start' command executed successfully."
+
+
+# 5. Refresh the agent
+echo -e "\n5. Testing 'refresh agent demo'..."
+CONTAINER_NAME=$($CONTAINER_RUNTIME ps --format "{{.Names}}" | grep "ploinky_agent_demo" | head -n 1)
+ID_BEFORE=$($CONTAINER_RUNTIME ps -q --filter name=$CONTAINER_NAME)
+echo "Container ID before refresh: $ID_BEFORE"
+
 ploinky refresh agent demo
 echo "Waiting for agent to restart..."
-sleep 2
-echo "✓ 'refresh agent' command executed successfully."
+sleep 5 # Increased sleep time to be safe
 
-# 5. Final process check
-echo -e "\n5. Final process check..."
+CONTAINER_NAME_AFTER=$($CONTAINER_RUNTIME ps --format "{{.Names}}" | grep "ploinky_agent_demo" | head -n 1)
+ID_AFTER=$($CONTAINER_RUNTIME ps -q --filter name=$CONTAINER_NAME_AFTER)
+echo "Container ID after refresh: $ID_AFTER"
+
+if [ "$ID_BEFORE" == "$ID_AFTER" ]; then
+  echo "✗ Verification failed: Container ID is the same after refresh."
+  exit 1
+fi
+echo "✓ Container ID changed after refresh."
+
+# 6. Final process check
+echo -e "\n6. Final process check..."
 pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Verification failed: 'demo' agent process is not running after refresh." && exit 1)
 echo "✓ Agent process is running after refresh."
 

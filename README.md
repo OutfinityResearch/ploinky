@@ -59,6 +59,9 @@ You can use Ploinky in two ways:
 - `console <name> <password> [port]`: start the WebConsole (TTY + Chat) for an agent.
 - `cli <name> [args...]`: run the agent’s CLI command interactively.
 - `shell <name>`: open interactive `/bin/sh` in the agent container.
+- `client task <agent> [--parameters <params>] [-key value...]`: send a task to an agent.
+- `client methods <agent>`: list available methods for an agent.
+- `client status <agent>`: check agent health status.
 - `stop`: stop containers recorded in `.ploinky/agents` (do not remove).
 - `shutdown`: stop and remove containers recorded in `.ploinky/agents`.
 

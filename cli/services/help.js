@@ -86,27 +86,6 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Running set with no args lists variables. Tokens usually managed via webtty/webchat/webmeet/dashboard commands.'
         },
         
-        'new': {
-            description: 'Create new agents',
-            subcommands: {
-                'agent': {
-                    syntax: 'new agent <repo> <name> [image]',
-                    description: 'Create a new agent in a repository',
-                    params: {
-                        '<repo>': 'Repository name where agent will be created',
-                        '<name>': 'Agent name (must be unique)',
-                        '[image]': 'Container image (default: node:18-alpine)'
-                    },
-                    examples: [
-                        'new agent cloud MyAPI             # Node.js agent',
-                        'new agent cloud PyBot python:3.11 # Python agent',
-                        'new agent vibe WebApp nginx:alpine # Nginx agent'
-                    ],
-                    notes: 'Creates manifest.json and basic structure in .ploinky/repos/<repo>/<name>/'
-                }
-            }
-        },
-        
         'update': {
             description: 'Update repositories',
             subcommands: {
@@ -148,37 +127,31 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Alias of webtty. Refreshes the WebTTY access token.',
             syntax: 'webconsole',
             examples: [ 'webconsole' ],
-            notes: 'Outputs the new URL backed by the RoutingServer at /webtty.'
+            notes: 'Writes the token to .ploinky/.secrets and prints a one-time URL with the token parameter. `echo $WEBTTY_TOKEN` to print it.'
         },
         'webtty': {
             description: 'Refresh the WebTTY token used by /webtty.',
             syntax: 'webtty',
             examples: [ 'webtty' ],
-            notes: 'Writes the token to .ploinky/.secrets and prints a one-time URL with the token parameter.'
+            notes: 'Writes the token to .ploinky/.secrets and prints a one-time URL with the token parameter. `echo $WEBTTY_TOKEN` to print it.'
         },
         'webchat': {
             description: 'Display or rotate the WebChat token used by /webchat.',
             syntax: 'webchat [--rotate]',
             examples: [ 'webchat', 'webchat --rotate' ],
-            notes: 'Output now masks the token. Retrieve the full value with `echo $WEBCHAT_TOKEN` if you need to share it.'
+            notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBCHAT_TOKEN` to print it.'
         },
         'webmeet': {
             description: 'Display or rotate the WebMeet token served at /webmeet, optionally storing a moderator agent.',
             syntax: 'webmeet [moderatorAgent] [--rotate]',
             examples: [ 'webmeet', 'webmeet ModeratorAgent', 'webmeet --rotate' ],
-            notes: 'Output now masks the token. Use `echo $WEBMEET_TOKEN` if you need to copy it. Without --rotate it reuses the current token; pass --rotate to mint a new one.'
+            notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBMEET_TOKEN` to print it.'
         },
         'dashboard': {
             description: 'Refresh the Dashboard token used by /dashboard.',
             syntax: 'dashboard',
             examples: [ 'dashboard' ],
-            notes: 'Token stored as WEBDASHBOARD_TOKEN; no separate server is launched.'
-        },
-        'admin-mode': {
-            description: 'Dashboard/Admin tools now live behind the router.',
-            syntax: 'admin-mode',
-            examples: [ 'admin-mode' ],
-            notes: 'Use the /dashboard endpoint after running `dashboard` to refresh the token.'
+            notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
         },
         
         
@@ -283,16 +256,6 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'list routes',
                     description: 'List configured routes from .ploinky/routing.json',
                     examples: ['list routes']
-                }
-            }
-        },
-        'delete': {
-            description: 'Delete things',
-            subcommands: {
-                'route': {
-                    syntax: 'delete route <name>',
-                    description: 'Delete a route for an agent from the RoutingServer configuration',
-                    examples: ['delete route MyAPI']
                 }
             }
         },
@@ -517,20 +480,6 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'client': {
             description: 'Client operations for interacting with deployed agents',
             subcommands: {
-                // 'call' removed; prefer interacting via RoutingServer endpoints
-                'call_removed': {
-                    syntax: '(removed)',
-                    description: 'Call a method on an agent with parameters',
-                    params: {
-                        '<agent>': 'Agent name',
-                        '<method>': 'Method name to call',
-                        '[params]': 'Optional parameters for the method'
-                    },
-                    examples: [
-                        'client call MyAPI processData input.json output.json',
-                        'client call DataProcessor analyze "SELECT * FROM users"'
-                    ]
-                },
                 'methods': {
                     syntax: 'client methods <agent>',
                     description: 'List available methods for an agent (if implemented by agent)' ,
@@ -553,22 +502,21 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     ],
                     notes: 'Shows state, uptime, resource usage, and recent activity'
                 },
-                'list': {
-                    syntax: 'client list',
-                    description: 'List all available agents',
-                    examples: [
-                        'client list'
-                    ]
-                },
                 'task': {
-                    syntax: 'client task <agent> <task-description>',
-                    description: 'Interactive: asks for command type and parameters (multiline until "end"), then POSTs JSON to /apis/<agent> on RoutingServer' ,
+                    syntax: 'client task <agent> [--parameters <params> | -p <params>] [-key value...]',
+                    description: 'Sends a task to an agent. Parameters can be passed as a formatted string or as individual key-value pairs.' ,
                     params: {
-                        '<agent>': 'Agent name'
+                        '<agent>': 'The name of the agent to send the task to.',
+                        '[--parameters]': 'A comma-separated string of parameters. Aliased as -p.',
+                        '[-key value]': 'Individual parameters passed as key-value pairs.'
                     },
                     examples: [
-                        'client task MyAPI'
-                    ]
+                        'client task simulation -task montyHall -iterations 100',
+                        "client task myAgent -p 'user.name=\"John Doe\",user.age=30,permissions[]=read,write'",
+                        "client task anotherAgent -task process -p 'config.level=high' -priority 1",
+                        "client task myAgent -p 'hobbies[],reading,skills[]'"
+                    ],
+                    notes: 'The --parameters argument supports nested objects (e.g., user.name=John) and arrays (e.g., hobbies[]=reading,coding or hobbies[]). Values with spaces should be quoted.'
                 },
                 'task-status': {
                     syntax: 'client task-status <agent> <task-id>',

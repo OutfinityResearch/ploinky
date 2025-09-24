@@ -212,19 +212,21 @@ async function runShell(agentName) {
 
 async function refreshAgent(agentName) {
   if (!agentName) { throw new Error('Usage: refresh agent <name>'); }
+  const { isContainerRunning, stopAndRemove, startAgentContainer, getServiceContainerName } = dockerSvc;
+  const containerName = getServiceContainerName(agentName);
+
   const manifestPath = findAgentManifest(agentName);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const agentPath = path.dirname(manifestPath);
-  const { stopAndRemove, startAgentContainer, getServiceContainerName } = dockerSvc;
-  const containerName = getServiceContainerName(agentName);
-  stopAndRemove(containerName);
-  const agentCmd = getAgentCmd(manifest).trim();
-  if (agentCmd) {
-    console.log('Restarting agent container...');
-    startAgentContainer(agentName, manifest, agentPath);
+
+  if (isContainerRunning(containerName)) {
+    console.log(`Container for '${agentName}' is running. Restarting...`);
+    startAgentContainer(agentName, manifest, agentPath); // This already stops and removes
     console.log('✓ Agent restarted.');
   } else {
-    console.log('No agent command configured; container removed if present.');
+    console.log(`Container for '${agentName}' is not running. Removing container if it exists...`);
+    stopAndRemove(containerName); // This will remove the stopped container
+    console.log('✓ Container removed. The configuration is preserved. Use "start" to run it again.');
   }
 }
 

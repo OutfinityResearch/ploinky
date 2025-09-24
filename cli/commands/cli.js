@@ -12,7 +12,7 @@ const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 const reposSvc = require('../services/repos');
 const envSvc = require('../services/secretVars');
 const agentsSvc = require('../services/agents');
-const { listRepos, listAgents, listCurrentAgents, statusWorkspace, collectAgentsSummary } = require('../services/status');
+const { listRepos, listAgents, listCurrentAgents, listRoutes, statusWorkspace, collectAgentsSummary } = require('../services/status');
 const { logsTail, showLast } = require('../services/logUtils');
 const {
     startWorkspace,
@@ -337,6 +337,7 @@ async function handleCommand(args) {
         case 'list':
             if (options[0] === 'agents') listAgents();
             else if (options[0] === 'repos') listRepos();
+            else if (options[0] === 'routes') listRoutes();
             else showHelp();
             break;
         case 'status':

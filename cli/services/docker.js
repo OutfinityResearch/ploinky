@@ -711,7 +711,7 @@ function cleanupSessionSet() { const list = Array.from(SESSION); stopAndRemoveMa
 
 function getAgentsRegistry() { return loadAgentsMap(); }
 
-module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents, stopConfiguredAgents, ensureAgentService, getServiceContainerName };
+module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents, stopConfiguredAgents, ensureAgentService, getServiceContainerName, isContainerRunning };
 
 // Build exec args for attaching to a running container with sh -lc and a given entry command.
 // Returns an array suitable to be used with spawn/spawnSync: [ 'exec', '-it', <container>, 'sh', '-lc', <cmd> ]

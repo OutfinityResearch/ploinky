@@ -123,7 +123,7 @@ enable agent cloud/MyAPI    # Enable specific agent from cloud repo</code></pre>
                         
 
                         <h3>refresh agent</h3>
-                        <p>Restart an agent container with updated configuration.</p>
+                        <p>Refreshes an agent. If the agent's container is running, it will be stopped and restarted with the latest configuration. If the container is not running, it will be removed, but the configuration will be preserved so it can be started later with the <code>start</code> command.</p>
                         <pre><code>refresh agent &lt;name&gt;</code></pre>
 
                         <h3>list agents</h3>
@@ -174,6 +174,16 @@ cli PyBot --version</code></pre>
                         <h3>status</h3>
                         <p>Show workspace status including agents, router, and web services.</p>
                         <pre><code>status</code></pre>
+
+                        <h3>list routes</h3>
+                        <p>List configured routes from <code>.ploinky/routing.json</code>.</p>
+                        <pre><code>list routes</code></pre>
+                        <pre><code># Example output
+Routing configuration (.ploinky/routing.json):
+- Port: 8088
+- Static: agent=demo root=/path/to/demo/agent
+Configured routes:
+- demo: hostPort=7001 container=ploinky_project_service_demo</code></pre>
 
                         <h3>restart</h3>
                         <p>Restart all agents and router or a specific agent.</p>
@@ -309,12 +319,41 @@ webchat secret python assistant.py</code></pre>
                         <h2>Client Operations</h2>
                         
                         <h3>client task</h3>
-                        <p>Interactive mode: send commands to agent via RoutingServer.</p>
-                        <pre><code>client task &lt;agent&gt;</code></pre>
-                        <pre><code># Example
-client task MyAPI
-> getStatus
-> processData {"input": "test"}</code></pre>
+                        <p>Sends a task to an agent. Parameters can be passed in two ways: as key-value pairs or as a single formatted string.</p>
+                        <pre><code>client task &lt;agent&gt; [--parameters &lt;params&gt; | -p &lt;params&gt;] [-key value...]</code></pre>
+                        
+                        <h4>Arguments</h4>
+                        <table class="command-table">
+                            <tr>
+                                <th>Parameter</th>
+                                <th>Description</th>
+                            </tr>
+                            <tr>
+                                <td><code>&lt;agent&gt;</code></td>
+                                <td>The name of the agent to send the task to.</td>
+                            </tr>
+                            <tr>
+                                <td><code>--parameters &lt;params&gt;</code><br><code>-p &lt;params&gt;</code></td>
+                                <td>A comma-separated string of parameters. Supports nested objects and arrays.<br>
+                                    Format: <code>key=value,nested.key=value,array[] | array[]=item1,item2</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>-key value</code></td>
+                                <td>Individual parameters passed as key-value pairs.</td>
+                            </tr>
+                        </table>
+
+                        <h4>Examples</h4>
+                        <pre><code># Using key-value pairs
+client task simulation -task montyHall -iterations 100
+
+# Using the parameters string for complex data
+client task myAgent -p 'user.name=John Doe,user.age=30,permissions[]=read,permissions[]=write'
+
+# Combining both methods
+client task anotherAgent -task process -p 'config.level=high' -priority 1
+</code></pre>
 
                         <h3>client methods</h3>
                         <p>List available methods for an agent (if supported).</p>

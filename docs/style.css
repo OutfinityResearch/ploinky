@@ -49,7 +49,7 @@
   --text-secondary: #8696a0;
   --text-tertiary: #667781;
   --text-header: #e9edef;
-  --text-link: #53bdeb;
+  --text-link: #6ab0d8; /* Less saturated blue */
   --text-code: #ff9f43;
   
   --border-primary: #2a3942;
@@ -375,6 +375,15 @@ main {
   color: var(--text-primary);
   margin: 2rem 0 1rem;
   font-size: 1.3rem;
+}
+
+.doc-section a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+.doc-section a:hover {
+  text-decoration: underline;
 }
 
 /* Code blocks */

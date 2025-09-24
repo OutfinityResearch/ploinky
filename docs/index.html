@@ -165,7 +165,20 @@
 
                 <div class="doc-section">
                     <h2>Getting Started</h2>
+
+                    <h3>Prerequisites</h3>
+                    <p>Ploinky uses containers to run agents in isolated environments. Therefore, you need to have a container runtime installed on your system. Ploinky supports both Docker and Podman.</p>
                     
+                    <h4>Docker</h4>
+                    <p>On Debian-based Linux distributions (like Ubuntu), you can install Docker with:</p>
+                    <pre><code>sudo apt-get update && sudo apt-get install docker-ce docker-ce-cli containerd.io</code></pre>
+                    <p>For other operating systems or more detailed instructions, please refer to the <a href="https://docs.docker.com/get-docker/" target="_blank" rel="noopener noreferrer">official Docker documentation</a>.</p>
+
+                    <h4>Podman</h4>
+                    <p>On Debian-based Linux distributions (like Ubuntu), you can install Podman with:</p>
+                    <pre><code>sudo apt-get update && sudo apt-get install podman</code></pre>
+                    <p>For other operating systems or more detailed instructions, please refer to the <a href="https://podman.io/getting-started/installation" target="_blank" rel="noopener noreferrer">official Podman documentation</a>.</p>
+
                     <h3>Installation</h3>
                     <pre><code>$ git clone https://github.com/ploinkyRepos/ploinky.git
 $ cd ploinky
