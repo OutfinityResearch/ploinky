@@ -18,12 +18,12 @@ export function registerBuiltInProviders(options = {}) {
         return;
     }
 
-    registerProvider({ key: 'openai', handler: openai, metadata: { module: './providers/openai.mjs' } });
-    registerProvider({ key: 'google', handler: google, metadata: { module: './providers/google.mjs' } });
-    registerProvider({ key: 'anthropic', handler: anthropic, metadata: { module: './providers/anthropic.mjs' } });
-    registerProvider({ key: 'huggingface', handler: huggingFace, metadata: { module: './providers/huggingFace.mjs' } });
-    registerProvider({ key: 'openrouter', handler: openai, metadata: { module: './providers/openai.mjs' } });
-    registerProvider({ key: 'custom', handler: openai, metadata: { module: './providers/openai.mjs' } });
+    registerProvider({ key: 'openai', handler: openai, metadata: { module: './openai.mjs' } });
+    registerProvider({ key: 'google', handler: google, metadata: { module: './google.mjs' } });
+    registerProvider({ key: 'anthropic', handler: anthropic, metadata: { module: './anthropic.mjs' } });
+    registerProvider({ key: 'huggingface', handler: huggingFace, metadata: { module: './huggingFace.mjs' } });
+    registerProvider({ key: 'openrouter', handler: openai, metadata: { module: './openai.mjs' } });
+    registerProvider({ key: 'custom', handler: openai, metadata: { module: './openai.mjs' } });
 
     registered = true;
 }

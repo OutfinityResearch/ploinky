@@ -3,15 +3,12 @@ import readline from 'node:readline';
 // The low-level LLM client used for all model invocations.
 import { callLLMWithModel, cancelRequests as cancelLLMRequests } from './LLMClient.mjs';
 import { loadModelsConfiguration } from './modelsConfigLoader.mjs';
-import FlexSearchCache, { computeContentHash } from './FlexSearchCache.mjs';
+import SkillRegistry from './skills/SkillRegistry.mjs';
 
 const operatorRegistry = new Map();
 let agentRegistry = null;
 let defaultAgentName = null;
 let agentRegistrySummary = null;
-let flexSearchCache = null;
-let flexSearchCacheInitError = null;
-
 const modelsConfiguration = loadModelsConfiguration();
 
 const PROVIDER_PRIORITY = ['openai', 'google', 'anthropic', 'openrouter', 'mistral', 'deepseek', 'huggingface'];
@@ -30,19 +27,7 @@ const TOOL_LIKE_ROLES = new Set(['tool', 'function', 'observation']);
 
 let configurationDiagnosticsEmitted = false;
 
-function getFlexSearchCache() {
-    if (flexSearchCache || flexSearchCacheInitError) {
-        return flexSearchCache;
-    }
-    try {
-        flexSearchCache = new FlexSearchCache();
-    } catch (error) {
-        console.warn(`LLMAgentClient: FlexSearch cache unavailable (${error.message || error}).`);
-        flexSearchCacheInitError = error;
-        flexSearchCache = null;
-    }
-    return flexSearchCache;
-}
+let agentLibraryInstance = null;
 
 function limitPreview(value, maxLength = 400) {
     if (value === undefined || value === null) {
@@ -70,20 +55,6 @@ function buildSuggestionBlock(title, lines) {
     }
     const body = lines.map(line => `- ${line}`).join('\n');
     return `${title}:\n${body}`;
-}
-
-function cloneResult(value) {
-    if (!value || typeof value !== 'object') {
-        return value;
-    }
-    try {
-        return JSON.parse(JSON.stringify(value));
-    } catch (error) {
-        if (Array.isArray(value)) {
-            return value.slice();
-        }
-        return { ...value };
-    }
 }
 
 function emitConfigurationDiagnostics() {
@@ -214,16 +185,6 @@ function normalizeTaskContext(_agent, context) {
         type: 'text',
         text: trimmed,
     };
-}
-
-function contextToPlainText(normalizedContext) {
-    if (!normalizedContext) {
-        return '';
-    }
-    if (normalizedContext.type === 'messages' && Array.isArray(normalizedContext.messages)) {
-        return normalizedContext.messages.map(entry => `[${entry.role}] ${entry.message}`).join('\n');
-    }
-    return normalizedContext.text || '';
 }
 
 function getProviderConfig(providerKey) {
@@ -532,117 +493,11 @@ function normalizeModelNameList(list) {
 }
 
 function registerLLMAgent(options = {}) {
-    const {
-        name,
-        role = '',
-        job = '',
-        expertise = '',
-        instructions = '',
-        fastModels = [],
-        deepModels = [],
-        kind = 'task',
-        modelOrder = [],
-        origin = 'registerLLMAgent',
-    } = options;
-
-    if (!name || typeof name !== 'string') {
-        throw new Error('registerLLMAgent requires a non-empty "name".');
-    }
-
-    let normalizedFast = normalizeModelNameList(fastModels);
-    let normalizedDeep = normalizeModelNameList(deepModels);
-
-    if (!normalizedFast.length && !normalizedDeep.length) {
-        const fallbackNames = getOrderedModelNames();
-        const categorized = categorizeModelsByMode(fallbackNames);
-        normalizedFast = categorized.fast;
-        normalizedDeep = categorized.deep;
-    }
-
-    const explicitOrder = normalizeModelNameList(modelOrder);
-    const combinedOrder = [];
-    const seen = new Set();
-
-    const pushInOrder = (list) => {
-        for (const value of list) {
-            if (!seen.has(value)) {
-                seen.add(value);
-                combinedOrder.push(value);
-            }
-        }
-    };
-
-    if (explicitOrder.length) {
-        pushInOrder(explicitOrder);
-    }
-    pushInOrder(normalizedFast);
-    pushInOrder(normalizedDeep);
-
-    const configuredRecords = [];
-    for (const modelName of combinedOrder) {
-        const record = buildModelRecordByName(modelName);
-        if (record) {
-            configuredRecords.push(record);
-        }
-    }
-
-    return commitAgentRecord({
-        name,
-        role,
-        job,
-        expertise,
-        instructions,
-        kind,
-        configuredRecords,
-        fastModelNames: normalizedFast,
-        deepModelNames: normalizedDeep,
-        origin,
-    });
+    return getAgentLibrary().registerLLMAgent(options);
 }
 
 function registerDefaultLLMAgent(options = {}) {
-    const {
-        role = 'General-purpose assistant',
-        job = 'Plan and execute tasks accurately and reliably.',
-        expertise = 'Generalist',
-        instructions = 'Select the most capable model for each request.',
-        kind = 'task',
-    } = options;
-
-    const orderedNames = Array.isArray(modelsConfiguration.orderedModels)
-        ? modelsConfiguration.orderedModels.slice()
-        : Array.from(modelsConfiguration.models.keys());
-
-    const configuredRecords = [];
-    const fastNames = [];
-    const deepNames = [];
-
-    for (const modelName of orderedNames) {
-        const record = buildModelRecordByName(modelName);
-        if (!record) {
-            continue;
-        }
-        configuredRecords.push(record);
-        if (record.mode === 'fast') {
-            fastNames.push(record.name);
-        }
-        if (record.mode === 'deep') {
-            deepNames.push(record.name);
-        }
-    }
-
-    commitAgentRecord({
-        name: 'default',
-        role,
-        job,
-        expertise,
-        instructions,
-        kind,
-        configuredRecords,
-        fastModelNames: fastNames,
-        deepModelNames: deepNames,
-        origin: 'default',
-    });
+    return getAgentLibrary().registerDefaultLLMAgent(options);
 }
 
 function autoRegisterProviders() {
@@ -794,15 +649,6 @@ function registerOperator(operatorName, description, executionCallback) {
         description,
         execute: executionCallback,
     });
-
-    const cache = getFlexSearchCache();
-    if (cache) {
-        try {
-            cache.registerOperator({ operatorName, description });
-        } catch (error) {
-            console.warn(`LLMAgentClient: Failed to register operator in cache (${error.message || error}).`);
-        }
-    }
 }
 
 async function callOperator(operatorName, params = {}) {
@@ -814,361 +660,24 @@ async function callOperator(operatorName, params = {}) {
 }
 
 async function doTask(agentName, context, description, outputSchema = null, mode = 'fast', retries = 3) {
-    const agent = getAgent(agentName);
-    const normalizedMode = normalizeTaskMode(mode, outputSchema, agent);
-
-    let attempt = 0;
-    let lastError = null;
-
-    while (attempt < Math.max(retries, 1)) {
-        try {
-            if (normalizedMode === 'deep') {
-                return await executeDeepTask(agent, context, description, outputSchema);
-            }
-            return await executeFastTask(agent, context, description, outputSchema);
-        } catch (error) {
-            lastError = error;
-            attempt += 1;
-        }
-    }
-
-    throw new Error(`Task failed after ${retries} retries: ${lastError?.message || 'unknown error'}`);
+    return getAgentLibrary().doTask(agentName, context, description, outputSchema, mode, retries);
 }
 
 async function doTaskWithReview(agentName, context, description, outputSchema = null, mode = 'deep', maxIterations = 5) {
-    const agent = getAgent(agentName);
-    const normalizedMode = normalizeTaskMode(mode, outputSchema, agent, 'deep');
-    const cache = getFlexSearchCache();
-
-    const contextInfo = normalizeTaskContext(agent, context);
-    const contextText = contextToPlainText(contextInfo);
-
-    let plan = null;
-    let planMatches = [];
-    if (cache && normalizedMode === 'deep') {
-        try {
-            planMatches = cache.searchPlans({
-                agentName: agent.name,
-                description,
-                context: contextText,
-                outputSchema,
-                limit: 3,
-            });
-            if (planMatches.length && planMatches[0].score >= cache.thresholds.plans.reuse) {
-                plan = planMatches[0].entry.plan;
-            }
-        } catch (error) {
-            console.warn(`LLMAgentClient: Plan cache lookup failed (${error.message || error}).`);
-        }
-    }
-
-    const planHints = cache && planMatches.length
-        ? planMatches.filter(match => match.score >= cache.thresholds.plans.suggest).map(match => match.entry.plan)
-        : [];
-
-    if (!plan && normalizedMode === 'deep') {
-        plan = await generatePlan(agent, context, description, { hints: planHints });
-    }
-
-    if (cache && plan) {
-        try {
-            cache.registerPlan({
-                agentName: agent.name,
-                description,
-                context: contextText,
-                outputSchema,
-                plan,
-            });
-        } catch (error) {
-            console.warn(`LLMAgentClient: Failed to record plan (${error.message || error}).`);
-        }
-    }
-
-    let reviewHintLines = [];
-    if (cache) {
-        try {
-            const reviewMatches = cache.searchReviews({
-                agentName: agent.name,
-                description,
-                outputSchema,
-                limit: 3,
-            });
-            reviewHintLines = reviewMatches
-                .filter(match => match.score >= cache.thresholds.reviews.suggest)
-                .map(match => `Score ${match.score.toFixed(2)}: ${limitPreview(match.entry.feedback, 200)}`);
-        } catch (error) {
-            console.warn(`LLMAgentClient: Review cache lookup failed (${error.message || error}).`);
-        }
-    }
-
-    let iteration = 0;
-    let feedback = '';
-
-    while (iteration < Math.max(maxIterations, 1)) {
-        iteration += 1;
-        const iterationHints = reviewHintLines.slice();
-        const candidate = await executeIteration(agent, context, description, outputSchema, iteration, feedback, plan, normalizedMode, { hints: iterationHints });
-
-        const candidateHash = computeContentHash(candidate.raw ?? candidate.parsed ?? '');
-        if (cache && candidateHash) {
-            try {
-                const duplicate = cache.findApprovedDuplicate({
-                    agentName: agent.name,
-                    outputSchema,
-                    description,
-                    contentHash: candidateHash,
-                });
-                if (duplicate) {
-                    cache.registerTaskResult({
-                        agentName: agent.name,
-                        description,
-                        context: contextText,
-                        outputSchema,
-                        raw: candidate.raw,
-                        parsed: candidate.parsed,
-                        mode: normalizedMode,
-                        approved: true,
-                        source: 'review-auto',
-                    });
-                    cache.registerReviewFeedback({
-                        agentName: agent.name,
-                        description,
-                        outputSchema,
-                        feedback: duplicate.feedback || 'Auto-approved from cache.',
-                        approved: true,
-                    });
-                    return candidate.parsed ?? { result: candidate.raw };
-                }
-            } catch (error) {
-                console.warn(`LLMAgentClient: Duplicate detection failed (${error.message || error}).`);
-            }
-        }
-
-        const review = await reviewCandidate(agent, context, description, candidate.raw, outputSchema, iteration, normalizedMode);
-
-        if (cache) {
-            try {
-                cache.registerReviewFeedback({
-                    agentName: agent.name,
-                    description,
-                    outputSchema,
-                    feedback: review.feedback,
-                    approved: review.approved,
-                });
-                if (!review.approved) {
-                    const refreshed = cache.searchReviews({
-                        agentName: agent.name,
-                        description,
-                        outputSchema,
-                        limit: 3,
-                    });
-                    reviewHintLines = refreshed
-                        .filter(match => match.score >= cache.thresholds.reviews.suggest)
-                        .map(match => `Score ${match.score.toFixed(2)}: ${limitPreview(match.entry.feedback, 200)}`);
-                }
-            } catch (error) {
-                console.warn(`LLMAgentClient: Failed to record review feedback (${error.message || error}).`);
-            }
-        }
-
-        if (review.approved) {
-            if (cache) {
-                try {
-                    cache.registerTaskResult({
-                        agentName: agent.name,
-                        description,
-                        context: contextText,
-                        outputSchema,
-                        raw: candidate.raw,
-                        parsed: candidate.parsed,
-                        mode: normalizedMode,
-                        approved: true,
-                        source: 'review',
-                    });
-                } catch (error) {
-                    console.warn(`LLMAgentClient: Failed to record approved result (${error.message || error}).`);
-                }
-            }
-            return candidate.parsed ?? { result: candidate.raw };
-        }
-        feedback = review.feedback || 'Improve and correct the prior answer.';
-    }
-
-    throw new Error('Maximum review iterations exceeded without an approved result.');
+    return getAgentLibrary().doTaskWithReview(agentName, context, description, outputSchema, mode, maxIterations);
 }
 
 async function doTaskWithHumanReview(agentName, context, description, outputSchema = null, mode = 'deep') {
-    const agent = getAgent(agentName);
-    const normalizedMode = normalizeTaskMode(mode, outputSchema, agent, 'deep');
-    const plan = normalizedMode === 'deep' ? await generatePlan(agent, context, description) : null;
-    let feedback = '';
-    let iteration = 0;
-
-    /* eslint-disable no-constant-condition */
-    while (true) {
-        iteration += 1;
-        const candidate = await executeIteration(agent, context, description, outputSchema, iteration, feedback || '', plan, normalizedMode);
-        const finalResult = candidate.parsed ?? { result: candidate.raw };
-
-        console.log('----- Agent Result -----');
-        console.log(typeof candidate.raw === 'string' ? candidate.raw : JSON.stringify(candidate.raw, null, 2));
-
-        const approval = await promptUser('Is the result okay? [Y/n/cancel]: ');
-        const normalized = (approval || '').trim().toLowerCase();
-
-        if (normalized === '' || normalized === 'y' || normalized === 'yes') {
-            return finalResult;
-        }
-        if (normalized === 'cancel') {
-            throw new Error('Task cancelled by user.');
-        }
-
-        feedback = await promptUser('Please provide feedback for the agent: ');
-    }
-    /* eslint-enable no-constant-condition */
+    return getAgentLibrary().doTaskWithHumanReview(agentName, context, description, outputSchema, mode);
 }
 
 async function brainstorm(agentName, question, generationCount, returnCount, reviewCriteria = null) {
-    if (!question) {
-        throw new Error('question is required for brainstorm.');
-    }
-    if (!Number.isInteger(generationCount) || generationCount < 1) {
-        throw new Error('generationCount must be a positive integer.');
-    }
-    if (!Number.isInteger(returnCount) || returnCount < 1) {
-        throw new Error('returnCount must be a positive integer.');
-    }
-
-    const registry = ensureAgentRegistry();
-    const agents = Array.from(registry.values());
-    if (!agents.length) {
-        throw new Error('No agents available for brainstorming.');
-    }
-
-    const generationResults = [];
-    const cache = getFlexSearchCache();
-    let nextIndex = 1;
-
-    if (cache) {
-        try {
-            const seeds = cache.searchBrainstorm({ question, limit: generationCount });
-            for (const match of seeds) {
-                const options = Array.isArray(match.entry.options) ? match.entry.options : [];
-                for (const option of options) {
-                    const content = typeof option.content === 'string' ? option.content : JSON.stringify(option.content);
-                    generationResults.push({
-                        index: nextIndex,
-                        agent: option.agent || match.entry.agentName || 'cached',
-                        content,
-                        cached: true,
-                        score: match.score,
-                    });
-                    nextIndex += 1;
-                    if (generationResults.length >= generationCount) {
-                        break;
-                    }
-                }
-                if (generationResults.length >= generationCount) {
-                    break;
-                }
-            }
-        } catch (error) {
-            console.warn(`LLMAgentClient: Brainstorm cache lookup failed (${error.message || error}).`);
-        }
-    }
-
-    let generatedCount = 0;
-    while (generationResults.length < generationCount) {
-        const agent = agents[generatedCount % agents.length];
-        const history = buildSystemHistory(agent, {
-            instruction: 'Generate one creative, self-contained answer option.',
-            context: '',
-            description: `Question: ${question}\nYou are variant #${nextIndex}.`,
-            mode: 'fast',
-        });
-        const raw = await invokeAgent(agent, history, { mode: 'fast' });
-        generationResults.push({ index: nextIndex, agent: agent.name, content: raw, cached: false });
-        nextIndex += 1;
-        generatedCount += 1;
-    }
-
-    const evaluator = getAgent(agentName);
-    const evaluationMode = evaluator.supportsMode && evaluator.supportsMode('deep') ? 'deep' : 'fast';
-    const evaluationHistory = buildSystemHistory(evaluator, {
-        instruction: 'Evaluate brainstormed alternatives and return the top choices ranked by quality.',
-        context: buildEvaluationContext(question, generationResults, reviewCriteria),
-        description: 'Return JSON with property "ranked" listing objects {"index": number, "score": number, "rationale": string}.',
-        mode: evaluationMode,
-    });
-    const evaluationRaw = await invokeAgent(evaluator, evaluationHistory, { mode: evaluationMode });
-    const evaluation = safeJsonParse(evaluationRaw);
-
-    if (!evaluation?.ranked || !Array.isArray(evaluation.ranked)) {
-        throw new Error('Brainstorm evaluation response did not include ranked results.');
-    }
-
-    const ranked = evaluation.ranked
-        .filter(entry => typeof entry.index === 'number')
-        .slice(0, returnCount);
-
-    if (cache) {
-        try {
-            cache.registerBrainstorm({
-                question,
-                agentName,
-                options: generationResults.map(option => ({
-                    agent: option.agent,
-                    content: option.content,
-                })),
-            });
-        } catch (error) {
-            console.warn(`LLMAgentClient: Failed to record brainstorm seeds (${error.message || error}).`);
-        }
-    }
-
-    return ranked.map(entry => {
-        const match = generationResults.find(option => option.index === entry.index);
-        if (!match) {
-            return null;
-        }
-        return {
-            choice: match.content,
-            metadata: {
-                agent: match.agent,
-                index: match.index,
-                score: entry.score,
-                rationale: entry.rationale,
-            }
-        };
-    }).filter(Boolean);
+    return getAgentLibrary().brainstormQuestion(agentName, question, generationCount, returnCount, reviewCriteria);
 }
 
 async function chooseOperator(agentName, currentTaskDescription, mode = 'fast', threshold = 0.5) {
     if (!operatorRegistry.size) {
         return { suitableOperators: [] };
-    }
-
-    const cache = getFlexSearchCache();
-    let localSuggestions = [];
-    if (cache && currentTaskDescription) {
-        try {
-            const matches = cache.searchOperators(currentTaskDescription, { limit: 5 });
-            localSuggestions = matches.map(match => ({
-                operatorName: match.entry.name,
-                description: match.entry.description,
-                score: match.score,
-            }));
-            if (localSuggestions.length && localSuggestions[0].score >= cache.thresholds.operators.reuse) {
-                return {
-                    suitableOperators: localSuggestions.map(item => ({
-                        operatorName: item.operatorName,
-                        confidence: Math.min(0.99, item.score / (cache.thresholds.operators.reuse || 1)),
-                    })),
-                };
-            }
-        } catch (error) {
-            console.warn(`LLMAgentClient: Operator cache search failed (${error.message || error}).`);
-        }
     }
 
     const agent = getAgent(agentName);
@@ -1180,14 +689,6 @@ async function chooseOperator(agentName, currentTaskDescription, mode = 'fast', 
     }));
 
     const contextInfo = normalizeTaskContext(agent, JSON.stringify({ operators: operatorList }, null, 2));
-    const extraParts = [];
-    if (cache && localSuggestions.length && localSuggestions[0].score >= cache.thresholds.operators.suggest) {
-        const lines = localSuggestions.slice(0, 5).map(item => `${item.operatorName} (score ${item.score.toFixed(2)}): ${limitPreview(item.description, 160)}`);
-        const block = buildSuggestionBlock('Locally suggested operators', lines);
-        if (block) {
-            extraParts.push(block);
-        }
-    }
     const history = buildSystemHistory(agent, {
         instruction: normalizedMode === 'deep'
             ? 'Review the operator catalog and select the functions that can help with the task.'
@@ -1195,7 +696,6 @@ async function chooseOperator(agentName, currentTaskDescription, mode = 'fast', 
         context: contextInfo,
         description: `Task description: ${currentTaskDescription}\nOnly return JSON: {"suitableOperators":[{"operatorName": string, "confidence": number}]}. Discard operators below confidence ${threshold}.`,
         mode: normalizedMode,
-        extraContextParts: extraParts,
     });
 
     const raw = await invokeAgent(agent, history, { mode: normalizedMode });
@@ -1222,7 +722,7 @@ async function chooseOperator(agentName, currentTaskDescription, mode = 'fast', 
 }
 
 function cancelTasks() {
-    cancelLLMRequests();
+    getAgentLibrary().cancelTasks();
 }
 
 function normalizeTaskMode(mode, outputSchema, agent, fallback = 'fast') {
@@ -1267,155 +767,22 @@ function normalizeTaskMode(mode, outputSchema, agent, fallback = 'fast') {
 
 async function executeFastTask(agent, context, description, outputSchema) {
     const contextInfo = normalizeTaskContext(agent, context);
-    const contextText = contextToPlainText(contextInfo);
-    const cache = getFlexSearchCache();
-    let suggestions = [];
-
-    if (cache) {
-        try {
-            suggestions = cache.searchTasks({
-                agentName: agent.name,
-                description,
-                context: contextText,
-                outputSchema,
-                limit: 3,
-            });
-            if (suggestions.length && suggestions[0].score >= cache.thresholds.tasks.reuse) {
-                return cloneResult(suggestions[0].entry.result);
-            }
-        } catch (error) {
-            console.warn(`LLMAgentClient: Task cache lookup failed (${error.message || error}).`);
-        }
-    }
-
-    const extraParts = [];
-    if (cache && suggestions.length && suggestions[0].score >= cache.thresholds.tasks.suggest) {
-        const lines = suggestions.slice(0, 3).map(match => {
-            const preview = match.entry.result && match.entry.result.result ? match.entry.result.result : match.entry.result;
-            return `${match.entry.agentName} (score ${match.score.toFixed(2)}): ${limitPreview(preview, 200)}`;
-        });
-        const block = buildSuggestionBlock('Relevant prior answers', lines);
-        if (block) {
-            extraParts.push(block);
-        }
-    }
-
     const history = buildSystemHistory(agent, {
         instruction: 'Complete the task in a single response.',
         context: contextInfo,
         description,
         outputSchema,
         mode: 'fast',
-        extraContextParts: extraParts,
     });
     const raw = await invokeAgent(agent, history, { mode: 'fast' });
-    const result = buildTaskResult(raw, outputSchema);
-
-    if (cache) {
-        try {
-            cache.registerTaskResult({
-                agentName: agent.name,
-                description,
-                context: contextText,
-                outputSchema,
-                raw,
-                parsed: result,
-                mode: 'fast',
-                approved: false,
-                source: 'fast',
-            });
-        } catch (error) {
-            console.warn(`LLMAgentClient: Failed to record task result (${error.message || error}).`);
-        }
-    }
-
-    return result;
+    return buildTaskResult(raw, outputSchema);
 }
 
 async function executeDeepTask(agent, context, description, outputSchema) {
     const contextInfo = normalizeTaskContext(agent, context);
-    const contextText = contextToPlainText(contextInfo);
-    const cache = getFlexSearchCache();
-
-    let taskSuggestions = [];
-    if (cache) {
-        try {
-            taskSuggestions = cache.searchTasks({
-                agentName: agent.name,
-                description,
-                context: contextText,
-                outputSchema,
-                limit: 3,
-            });
-            if (taskSuggestions.length && taskSuggestions[0].score >= cache.thresholds.tasks.reuse) {
-                return cloneResult(taskSuggestions[0].entry.result);
-            }
-        } catch (error) {
-            console.warn(`LLMAgentClient: Task cache lookup failed (${error.message || error}).`);
-        }
-    }
-
-    let plan = null;
-    let planMatches = [];
-    if (cache) {
-        try {
-            planMatches = cache.searchPlans({
-                agentName: agent.name,
-                description,
-                context: contextText,
-                outputSchema,
-                limit: 3,
-            });
-            if (planMatches.length && planMatches[0].score >= cache.thresholds.plans.reuse) {
-                plan = planMatches[0].entry.plan;
-            }
-        } catch (error) {
-            console.warn(`LLMAgentClient: Plan cache lookup failed (${error.message || error}).`);
-        }
-    }
-
-    const planHints = cache && planMatches.length ? planMatches.filter(match => match.score >= cache.thresholds.plans.suggest).map(match => match.entry.plan) : [];
-
-    if (!plan) {
-        plan = await generatePlan(agent, context, description, { hints: planHints });
-    }
-
-    if (cache) {
-        try {
-            cache.registerPlan({
-                agentName: agent.name,
-                description,
-                context: contextText,
-                outputSchema,
-                plan,
-            });
-        } catch (error) {
-            console.warn(`LLMAgentClient: Failed to record plan (${error.message || error}).`);
-        }
-    }
+    const plan = await generatePlan(agent, context, description);
 
     const extraParts = [`Plan:\n${JSON.stringify(plan)}`];
-    if (cache && taskSuggestions.length && taskSuggestions[0].score >= cache.thresholds.tasks.suggest) {
-        const lines = taskSuggestions.slice(0, 3).map(match => {
-            const previewSource = match.entry.result && match.entry.result.result ? match.entry.result.result : match.entry.result;
-            return `${match.entry.agentName} (score ${match.score.toFixed(2)}): ${limitPreview(previewSource, 200)}`;
-        });
-        const block = buildSuggestionBlock('Relevant prior answers', lines);
-        if (block) {
-            extraParts.push(block);
-        }
-    }
-
-    if (planHints.length) {
-        const lines = planHints.slice(0, 3).map((hint, index) => {
-            const steps = Array.isArray(hint?.steps) ? hint.steps.slice(0, 3).map((step, stepIndex) => `${stepIndex + 1}. ${typeof step === 'string' ? step : JSON.stringify(step)}`).join(' | ') : limitPreview(hint, 200);
-            return `Plan #${index + 1}: ${steps}`;
-        });
-        const block = buildSuggestionBlock('Retrieved plan guidance', lines);
-        if (block) {
-            extraParts.push(block);
-        }
-    }
 
     const executionHistory = buildSystemHistory(agent, {
         instruction: 'Follow the plan and produce a final answer. Iterate internally as needed.',
@@ -1426,27 +793,7 @@ async function executeDeepTask(agent, context, description, outputSchema) {
         mode: 'deep',
     });
     const raw = await invokeAgent(agent, executionHistory, { mode: 'deep' });
-    const result = buildTaskResult(raw, outputSchema);
-
-    if (cache) {
-        try {
-            cache.registerTaskResult({
-                agentName: agent.name,
-                description,
-                context: contextText,
-                outputSchema,
-                raw,
-                parsed: result,
-                mode: 'deep',
-                approved: false,
-                source: 'deep',
-            });
-        } catch (error) {
-            console.warn(`LLMAgentClient: Failed to record deep task result (${error.message || error}).`);
-        }
-    }
-
-    return result;
+    return buildTaskResult(raw, outputSchema);
 }
 
 async function executeIteration(agent, context, description, outputSchema, iteration, feedback, plan, mode, options = {}) {
@@ -1605,8 +952,8 @@ async function invokeAgent(agent, history, options = {}) {
         apiKeyEnv,
         baseURL,
     } = typeof agent.getInvocationConfig === 'function'
-        ? agent.getInvocationConfig(request)
-        : buildLegacyInvocationConfig(agent);
+            ? agent.getInvocationConfig(request)
+            : buildLegacyInvocationConfig(agent);
 
     if (!record?.name) {
         throw new Error(`Agent "${agent.name}" does not have a usable model.`);
@@ -1720,20 +1067,316 @@ function resetForTests() {
     defaultAgentName = null;
     agentRegistrySummary = null;
     configurationDiagnosticsEmitted = false;
+    agentLibraryInstance = null;
+}
+
+class Agent {
+    constructor(options = {}) {
+        const providedRegistry = options?.skillRegistry;
+        if (providedRegistry && typeof providedRegistry.registerSkill === 'function' && typeof providedRegistry.rankSkill === 'function') {
+            this.skillRegistry = providedRegistry;
+        } else {
+            this.skillRegistry = new SkillRegistry(options?.skillRegistryOptions);
+        }
+    }
+
+    registerSkill(skillSpecs, action) {
+        return this.skillRegistry.registerSkill(skillSpecs, action);
+    }
+
+    rankSkill(taskDescription, options = {}) {
+        return this.skillRegistry.rankSkill(taskDescription, options);
+    }
+
+    getSkill(skillId) {
+        return this.skillRegistry.getSkill(skillId);
+    }
+
+    getSkillAction(skillId) {
+        return this.skillRegistry.getSkillAction(skillId);
+    }
+
+    clearSkills() {
+        this.skillRegistry.clear();
+    }
+
+    registerLLMAgent(options = {}) {
+        const {
+            name,
+            role = '',
+            job = '',
+            expertise = '',
+            instructions = '',
+            fastModels = [],
+            deepModels = [],
+            kind = 'task',
+            modelOrder = [],
+            origin = 'registerLLMAgent',
+        } = options;
+
+        if (!name || typeof name !== 'string') {
+            throw new Error('registerLLMAgent requires a non-empty "name".');
+        }
+
+        let normalizedFast = normalizeModelNameList(fastModels);
+        let normalizedDeep = normalizeModelNameList(deepModels);
+
+        if (!normalizedFast.length && !normalizedDeep.length) {
+            const fallbackNames = getOrderedModelNames();
+            const categorized = categorizeModelsByMode(fallbackNames);
+            normalizedFast = categorized.fast;
+            normalizedDeep = categorized.deep;
+        }
+
+        const explicitOrder = normalizeModelNameList(modelOrder);
+        const combinedOrder = [];
+        const seen = new Set();
+
+        const pushInOrder = (list) => {
+            for (const value of list) {
+                if (!seen.has(value)) {
+                    seen.add(value);
+                    combinedOrder.push(value);
+                }
+            }
+        };
+
+        if (explicitOrder.length) {
+            pushInOrder(explicitOrder);
+        }
+        pushInOrder(normalizedFast);
+        pushInOrder(normalizedDeep);
+
+        const configuredRecords = [];
+        for (const modelName of combinedOrder) {
+            const record = buildModelRecordByName(modelName);
+            if (record) {
+                configuredRecords.push(record);
+            }
+        }
+
+        return commitAgentRecord({
+            name,
+            role,
+            job,
+            expertise,
+            instructions,
+            kind,
+            configuredRecords,
+            fastModelNames: normalizedFast,
+            deepModelNames: normalizedDeep,
+            origin,
+        });
+    }
+
+    registerDefaultLLMAgent(options = {}) {
+        const {
+            role = 'General-purpose assistant',
+            job = 'Plan and execute tasks accurately and reliably.',
+            expertise = 'Generalist',
+            instructions = 'Select the most capable model for each request.',
+            kind = 'task',
+        } = options;
+
+        const orderedNames = Array.isArray(modelsConfiguration.orderedModels)
+            ? modelsConfiguration.orderedModels.slice()
+            : Array.from(modelsConfiguration.models.keys());
+
+        const configuredRecords = [];
+        const fastNames = [];
+        const deepNames = [];
+
+        for (const modelName of orderedNames) {
+            const record = buildModelRecordByName(modelName);
+            if (!record) {
+                continue;
+            }
+            configuredRecords.push(record);
+            if (record.mode === 'fast') {
+                fastNames.push(record.name);
+            }
+            if (record.mode === 'deep') {
+                deepNames.push(record.name);
+            }
+        }
+
+        commitAgentRecord({
+            name: 'default',
+            role,
+            job,
+            expertise,
+            instructions,
+            kind,
+            configuredRecords,
+            fastModelNames: fastNames,
+            deepModelNames: deepNames,
+            origin: 'default',
+        });
+    }
+
+    async doTask(agentName, context, description, outputSchema = null, mode = 'fast', retries = 3) {
+        const agent = getAgent(agentName);
+        const normalizedMode = normalizeTaskMode(mode, outputSchema, agent);
+
+        let attempt = 0;
+        let lastError = null;
+
+        while (attempt < Math.max(retries, 1)) {
+            try {
+                if (normalizedMode === 'deep') {
+                    return await executeDeepTask(agent, context, description, outputSchema);
+                }
+                return await executeFastTask(agent, context, description, outputSchema);
+            } catch (error) {
+                lastError = error;
+                attempt += 1;
+            }
+        }
+
+        throw new Error(`Task failed after ${retries} retries: ${lastError?.message || 'unknown error'}`);
+    }
+
+    async doTaskWithReview(agentName, context, description, outputSchema = null, mode = 'deep', maxIterations = 5) {
+        const agent = getAgent(agentName);
+        const normalizedMode = normalizeTaskMode(mode, outputSchema, agent, 'deep');
+
+        const plan = normalizedMode === 'deep' ? await generatePlan(agent, context, description) : null;
+
+        let iteration = 0;
+        let feedback = '';
+
+        while (iteration < Math.max(maxIterations, 1)) {
+            iteration += 1;
+            const candidate = await executeIteration(agent, context, description, outputSchema, iteration, feedback, plan, normalizedMode);
+
+            const review = await reviewCandidate(agent, context, description, candidate.raw, outputSchema, iteration, normalizedMode);
+
+            if (review.approved) {
+                return candidate.parsed ?? { result: candidate.raw };
+            }
+
+            feedback = review.feedback || 'Improve and correct the prior answer.';
+        }
+
+        throw new Error('Maximum review iterations exceeded without an approved result.');
+    }
+
+    async doTaskWithHumanReview(agentName, context, description, outputSchema = null, mode = 'deep') {
+        const agent = getAgent(agentName);
+        const normalizedMode = normalizeTaskMode(mode, outputSchema, agent, 'deep');
+        const plan = normalizedMode === 'deep' ? await generatePlan(agent, context, description) : null;
+        let feedback = '';
+        let iteration = 0;
+
+        /* eslint-disable no-constant-condition */
+        while (true) {
+            iteration += 1;
+            const candidate = await executeIteration(agent, context, description, outputSchema, iteration, feedback || '', plan, normalizedMode);
+            const finalResult = candidate.parsed ?? { result: candidate.raw };
+
+            console.log('----- Agent Result -----');
+            console.log(typeof candidate.raw === 'string' ? candidate.raw : JSON.stringify(candidate.raw, null, 2));
+
+            const approval = await promptUser('Is the result okay? [Y/n/cancel]: ');
+            const normalized = (approval || '').trim().toLowerCase();
+
+            if (normalized === '' || normalized === 'y' || normalized === 'yes') {
+                return finalResult;
+            }
+            if (normalized === 'cancel') {
+                throw new Error('Task cancelled by user.');
+            }
+
+            feedback = await promptUser('Please provide feedback for the agent: ');
+        }
+        /* eslint-enable no-constant-condition */
+    }
+
+    cancelTasks() {
+        cancelLLMRequests();
+    }
+
+    async brainstormQuestion(agentName, question, generationCount, returnCount, reviewCriteria = null) {
+        if (!question) {
+            throw new Error('question is required for brainstorm.');
+        }
+        if (!Number.isInteger(generationCount) || generationCount < 1) {
+            throw new Error('generationCount must be a positive integer.');
+        }
+        if (!Number.isInteger(returnCount) || returnCount < 1) {
+            throw new Error('returnCount must be a positive integer.');
+        }
+
+        const registry = ensureAgentRegistry();
+        const agents = Array.from(registry.values());
+        if (!agents.length) {
+            throw new Error('No agents available for brainstorming.');
+        }
+
+        const generationResults = [];
+        let nextIndex = 1;
+
+        let generatedCount = 0;
+        while (generationResults.length < generationCount) {
+            const agent = agents[generatedCount % agents.length];
+            const history = buildSystemHistory(agent, {
+                instruction: 'Generate one creative, self-contained answer option.',
+                context: '',
+                description: `Question: ${question}\nYou are variant #${nextIndex}.`,
+                mode: 'fast',
+            });
+            const raw = await invokeAgent(agent, history, { mode: 'fast' });
+            generationResults.push({ index: nextIndex, agent: agent.name, content: raw });
+            nextIndex += 1;
+            generatedCount += 1;
+        }
+
+        const evaluator = getAgent(agentName);
+        const evaluationMode = evaluator.supportsMode && evaluator.supportsMode('deep') ? 'deep' : 'fast';
+        const evaluationHistory = buildSystemHistory(evaluator, {
+            instruction: 'Evaluate brainstormed alternatives and return the top choices ranked by quality.',
+            context: buildEvaluationContext(question, generationResults, reviewCriteria),
+            description: 'Return JSON with property "ranked" listing objects {"index": number, "score": number, "rationale": string}.',
+            mode: evaluationMode,
+        });
+        const evaluationRaw = await invokeAgent(evaluator, evaluationHistory, { mode: evaluationMode });
+        const evaluation = safeJsonParse(evaluationRaw);
+
+        if (!evaluation?.ranked || !Array.isArray(evaluation.ranked)) {
+            throw new Error('Brainstorm evaluation response did not include ranked results.');
+        }
+
+        const ranked = evaluation.ranked
+            .filter(entry => typeof entry.index === 'number')
+            .slice(0, returnCount);
+
+        return ranked.map(entry => {
+            const match = generationResults.find(option => option.index === entry.index);
+            if (!match) {
+                return null;
+            }
+            return {
+                choice: match.content,
+                metadata: {
+                    agent: match.agent,
+                    index: match.index,
+                    score: entry.score,
+                    rationale: entry.rationale,
+                }
+            };
+        }).filter(Boolean);
+    }
+}
+
+function getAgentLibrary() {
+    if (!agentLibraryInstance) {
+        agentLibraryInstance = new Agent();
+    }
+    return agentLibraryInstance;
 }
 
 export {
-    registerLLMAgent,
-    registerDefaultLLMAgent,
-    registerOperator,
-    callOperator,
-    doTask,
-    doTaskWithReview,
-    doTaskWithHumanReview,
-    brainstorm,
-    chooseOperator,
-    cancelTasks,
-    listAgents,
+    Agent
 };
 
 export const __resetForTests = resetForTests;

@@ -4,27 +4,27 @@
             "baseURL": "https://api.openai.com/v1/chat/completions",
             "apiKeyEnv": "OPENAI_API_KEY",
             "defaultModel": "gpt-5-mini",
-            "module": "./providers/openai.mjs"
+            "module": "./openai.mjs"
         },
         "anthropic": {
             "baseURL": "https://api.anthropic.com/v1/messages",
             "apiKeyEnv": "ANTHROPIC_API_KEY",
-            "module": "./providers/anthropic.mjs"
+            "module": "./anthropic.mjs"
         },
         "google": {
             "baseURL": "https://generativelanguage.googleapis.com/v1beta/models/",
             "apiKeyEnv": "GEMINI_API_KEY",
-            "module": "./providers/google.mjs"
+            "module": "./google.mjs"
         },
         "huggingface": {
             "baseURL": "https://api-inference.huggingface.co/models",
             "apiKeyEnv": "HUGGINGFACE_API_KEY",
-            "module": "./providers/huggingFace.mjs"
+            "module": "./huggingFace.mjs"
         },
         "openrouter": {
             "baseURL": "https://openrouter.ai/api/v1/chat/completions",
             "apiKeyEnv": "OPENROUTER_API_KEY",
-            "module": "./providers/openai.mjs"
+            "module": "./openai.mjs"
         }
     },
     "models": [

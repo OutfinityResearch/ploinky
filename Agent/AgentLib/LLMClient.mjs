@@ -1,5 +1,5 @@
 import { loadModelsConfiguration } from './modelsConfigLoader.mjs';
-import { registerBuiltInProviders } from './providers/index.mjs';
+import { registerBuiltInProviders } from './models/providers/index.mjs';
 import { registerProvidersFromConfig } from './providerBootstrap.mjs';
 import { ensureProvider } from './providerRegistry.mjs';
 
