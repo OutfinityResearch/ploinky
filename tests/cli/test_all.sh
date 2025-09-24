@@ -21,7 +21,7 @@ tests=(
   "logs_command.sh"
   "repo_commands.sh"
   "restart_command.sh"
-  "set_command.sh"
+  "var_command.sh"
   "shell_cli_command.sh"
   "start_configuration.sh"
   "web_commands.sh"

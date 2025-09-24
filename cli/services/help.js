@@ -25,8 +25,8 @@ function showHelp(args = []) {
   webchat [--rotate]                 Show or rotate WebChat token and print access URL
   webmeet [moderatorAgent]           Show WebMeet token; use --rotate to mint a new one
   dashboard                          Regenerate Dashboard token and print access URL
-  set <VAR> <$VAR|value>         Set a variable value or alias another variable
-  set                            List all variable names (no values)
+  vars                           List all variable names (no values)
+  var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
   expose <ENV_NAME> <$VAR|value> [agent]  Expose to agent environment
   list agents | repos            List agents (manifests) or predefined repos
@@ -73,17 +73,19 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 
             }
         },
-        'set': {
-            description: 'Manage workspace variables (stored in .ploinky/.secrets)',
-            syntax: 'set <VAR> <$OTHER|value>',
+        'var': {
+            description: 'Set a workspace variable (stored in .ploinky/.secrets)',
+            syntax: 'var <VAR> <value>',
             examples: [
-                'set WEBTTY_TOKEN deadbeef  # Override token manually (prefer using webtty command)',
-                'set WEBCHAT_TOKEN cafebabe # Rotate chat token manually',
-                'set API_KEY sk-123456',
-                'set PROD_KEY $API_KEY',
-                'set'
+                'var WEBTTY_TOKEN deadbeef  # Override token manually (prefer using webtty command)',
+                'var API_KEY sk-123456'
             ],
-            notes: 'Running set with no args lists variables. Tokens usually managed via webtty/webchat/webmeet/dashboard commands.'
+            notes: "Use 'vars' to list variables. Tokens are usually managed via webtty/webchat/webmeet/dashboard commands."
+        },
+        'vars': {
+            description: 'List workspace variables (from .ploinky/.secrets)',
+            syntax: 'vars',
+            examples: [ 'vars' ]
         },
         
         'update': {

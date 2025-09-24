@@ -159,13 +159,13 @@ ploinky webchat python -u assistant.py --verbose</code></pre>
                     
                     <h3>Environment Variables</h3>
                     <pre><code># Set custom port (default: 8080)
-ploinky set WEBCHAT_PORT 3000
+ploinky var WEBCHAT_PORT 3000
 
 # Set custom title
-ploinky set WEBTTY_TITLE "Customer Support"
+ploinky var WEBTTY_TITLE "Customer Support"
 
 # View current settings
-ploinky set</code></pre>
+ploinky vars</code></pre>
 
                     <h3>Token Management</h3>
                     <p>Tokens are automatically generated and stored in <code>.ploinky/.secrets</code>:</p>
@@ -178,7 +178,7 @@ WEBCHAT_TOKEN=918079319222ed91bb68777bf69a500a332465ff9e9a34989644081ee8fca3bb
 
                     <h3>Port Configuration</h3>
                     <pre><code># Change default port
-ploinky set WEBCHAT_PORT 3000
+ploinky var WEBCHAT_PORT 3000
 
 # Start on new port
 ploinky webchat
@@ -423,7 +423,7 @@ done
                         </tr>
                         <tr>
                             <td>Port already in use</td>
-                            <td>Change port: <code>ploinky set WEBCHAT_PORT 3000</code></td>
+                            <td>Change port: <code>ploinky var WEBCHAT_PORT 3000</code></td>
                         </tr>
                         <tr>
                             <td>Connection refused</td>

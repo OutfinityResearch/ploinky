@@ -197,10 +197,9 @@ restart MyAPI    # Restart specific agent</code></pre>
                     <div class="doc-section" id="variables">
                         <h2>Variables & Environment</h2>
                         
-                        <h3>set</h3>
-                        <p>Set or list workspace variables (stored in .ploinky/.secrets).</p>
-                        <pre><code>set &lt;VAR&gt; &lt;$OTHER|value&gt;
-set                        # List all variables</code></pre>
+                        <h3>var</h3>
+                        <p>Set a workspace variable (stored in .ploinky/.secrets).</p>
+                        <pre><code>var &lt;VAR&gt; &lt;value&gt;</code></pre>
                         <table class="command-table">
                             <tr>
                                 <th>Variable</th>
@@ -229,10 +228,13 @@ set                        # List all variables</code></pre>
                             </tr>
                         </table>
                         <pre><code># Examples
-set API_KEY sk-123456789
-set PROD_KEY $API_KEY      # Create alias
-set WEBTTY_PORT 9000
-set                        # List all</code></pre>
+var API_KEY sk-123456789
+var WEBTTY_TOKEN deadbeef
+var WEBTTY_PORT 9000</code></pre>
+
+                        <h3>vars</h3>
+                        <p>List all workspace variables.</p>
+                        <pre><code>vars</code></pre>
 
                         <h3>echo</h3>
                         <p>Print the resolved value of a variable.</p>

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# This test verifies the 'ploinky set' and 'echo' commands for variables.
+# This test verifies the 'ploinky var', 'vars' and 'echo' commands for variables.
 
 # --- Setup ---
 
@@ -17,17 +17,17 @@ echo "Created temporary workspace at: $TEST_WORKSPACE_DIR"
 
 # --- Test Execution ---
 
-echo "--- Running Set Command Test ---"
+echo "--- Running Var/VARS Command Test ---"
 
 # 1. Set the variable directly
 echo "Setting variable 'my_test_var' to 'hello_ploinky_123' ભા"
-ploinky set "my_test_var" "hello_ploinky_123"
-echo "✓ 'set' command executed."
+ploinky var "my_test_var" "hello_ploinky_123"
+echo "✓ 'var' command executed."
 
 # 2. List variables and verify
 echo "Listing variables to verify..."
-LIST_OUTPUT=$(ploinky set)
-echo "--- ploinky set ---"
+LIST_OUTPUT=$(ploinky vars)
+echo "--- ploinky vars ---"
 echo "$LIST_OUTPUT"
 echo "-------------------------"
 
@@ -41,9 +41,9 @@ echo "✓ Verification successful: Found the set variable."
 # --- Test 'echo' command ---
 echo -e "\n--- Running Echo Command Test ---"
 
-# 1. Use 'echo' to retrieve the value of the variable we just set
-echo "Retrieving value for 'my_test_var' ભા"
-ECHO_OUTPUT=$(ploinky echo "my_test_var")
+# 1. Use 'echo' to retrieve the value (use alias form to get raw value)
+echo 'Retrieving value for $my_test_var ભા'
+ECHO_OUTPUT=$(ploinky echo '$my_test_var' | tail -n 1)
 
 # 2. Verify the output
 echo "Verifying 'echo' output..."

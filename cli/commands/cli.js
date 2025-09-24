@@ -221,37 +221,59 @@ async function handleCommand(args) {
             else showHelp();
             break;
         case 'set': {
-            const defaults = ['APP_NAME', 'WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
-            if (!options[0]) {
+            console.log("'set' is deprecated. Use 'var <NAME> <value>' to set and 'vars' to list.");
+            if (!options[0]) { // behave like 'vars'
                 try {
                     const env = require('../services/secretVars');
                     const path = require('path');
                     const crypto = require('crypto');
                     let secrets = env.parseSecrets();
-                    // Ensure APP_NAME defaults to current folder if missing
                     if (!secrets.APP_NAME || !String(secrets.APP_NAME).trim()) {
                         try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch(_) {}
                     }
-                    // Ensure default ports if missing
-                    // Ensure persistent tokens if missing
                     const tokens = ['WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
                     for (const t of tokens) {
                         if (!secrets[t] || !String(secrets[t]).trim()) {
                             try { env.setEnvVar(t, crypto.randomBytes(32).toString('hex')); } catch(_) {}
                         }
                     }
-                    // Reload and print
                     const merged = env.parseSecrets();
                     const printOrder = ['APP_NAME', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN', 'WEBTTY_TOKEN'];
                     const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
                     keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
                 } catch (e) { console.error('Failed to list variables:', e.message); }
-            } else {
+            } else { // behave like 'var'
                 const name = options[0];
                 const value = options.slice(1).join(' ');
                 setVar(name, value);
-                // no extra port hints needed; router serves these interfaces
             }
+            break; }
+        case 'vars': {
+            try {
+                const env = require('../services/secretVars');
+                const path = require('path');
+                const crypto = require('crypto');
+                let secrets = env.parseSecrets();
+                if (!secrets.APP_NAME || !String(secrets.APP_NAME).trim()) {
+                    try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch(_) {}
+                }
+                const tokens = ['WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
+                for (const t of tokens) {
+                    if (!secrets[t] || !String(secrets[t]).trim()) {
+                        try { env.setEnvVar(t, crypto.randomBytes(32).toString('hex')); } catch(_) {}
+                    }
+                }
+                const merged = env.parseSecrets();
+                const printOrder = ['APP_NAME', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN', 'WEBTTY_TOKEN'];
+                const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
+                keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
+            } catch (e) { console.error('Failed to list variables:', e.message); }
+            break; }
+        case 'var': {
+            const name = options[0];
+            const value = options.slice(1).join(' ');
+            if (!name || !value) { showHelp(); throw new Error('Usage: var <VAR> <value>'); }
+            setVar(name, value);
             break; }
         case 'echo': {
             if (!options[0]) { showHelp(); throw new Error('Usage: echo <VAR|$VAR>'); }

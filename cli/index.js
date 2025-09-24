@@ -25,7 +25,7 @@ const COMMANDS = {
     'shutdown': [],
     'stop': [],
     'destroy': [],
-    'list': ['agents', 'repos'],
+    'list': ['agents', 'repos', 'routes'],
     'webconsole': [],
     'webtty': [],
     'webmeet': [],
@@ -34,6 +34,8 @@ const COMMANDS = {
     'logs': ['tail', 'last'],
     'expose': [],
     'set': [],
+    'var': [],
+    'vars': [],
     'echo': [],
     'help': []
 };

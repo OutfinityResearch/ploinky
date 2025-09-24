@@ -254,7 +254,7 @@ PORT=7000                   # Default service port</code></pre>
 
                         <h3>Exposing Variables</h3>
                         <pre><code># Set variable in workspace
-ploinky set DATABASE_URL postgres://localhost/mydb
+ploinky var DATABASE_URL postgres://localhost/mydb
 
 # Expose to agent
 ploinky expose DATABASE_URL $DATABASE_URL MyAgent
