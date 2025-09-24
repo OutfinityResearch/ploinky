@@ -12,11 +12,26 @@ fail=0
 pass=0
 failed_tests=()
 
-for t in "$THIS_DIR"/test_*.sh; do
-  bn=$(basename "$t")
-  [[ "$bn" == "test_all.sh" ]] && continue
+tests=(
+  "agent_commands.sh"
+  "agent_lifecycle.sh"
+  "cleanup_commands.sh"
+  "client_commands.sh"
+  "expose_var.sh"
+  "logs_command.sh"
+  "repo_commands.sh"
+  "restart_command.sh"
+  "set_command.sh"
+  "shell_cli_command.sh"
+  "start_configuration.sh"
+  "web_commands.sh"
+)
+
+for t in "${tests[@]}"; do
+  bn="$t"
+  test_path="$THIS_DIR/$bn"
   echo "==== Running $bn ===="
-  ( cd "$ROOT_DIR" && PLOINKY_CMD="$PLOINKY_CMD" bash "$t" ) && {
+  ( cd "$ROOT_DIR" && PLOINKY_CMD="$PLOINKY_CMD" bash "$test_path" ) && {
     echo "[PASS] $bn"
     ((pass++))
   } || {
