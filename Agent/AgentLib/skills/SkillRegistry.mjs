@@ -1,4 +1,4 @@
-import { createFlexSearchAdapter } from '../search/FlexsearchAdapter.mjs';
+import { createFlexSearchAdapter } from '../search/flexsearchAdapter.mjs';
 
 const DEFAULT_INDEX_OPTIONS = {
     tokenize: 'forward',
