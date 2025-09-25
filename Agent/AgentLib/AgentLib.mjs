@@ -1214,6 +1214,217 @@ class Agent {
         const requiredArgs = Array.isArray(skill.requiredArgs) ? skill.requiredArgs.filter(name => typeof name === 'string' && name) : [];
         const argumentDefinitions = Array.isArray(skill.args) ? skill.args.filter(entry => entry && typeof entry.name === 'string' && entry.name) : [];
 
+        const optionMap = new Map();
+        const toComparableToken = (input) => {
+            if (input === undefined) {
+                return '';
+            }
+            if (input === null) {
+                return 'null';
+            }
+            if (typeof input === 'string') {
+                return input.trim().toLowerCase();
+            }
+            if (typeof input === 'number' || typeof input === 'boolean') {
+                return String(input).toLowerCase();
+            }
+            try {
+                return JSON.stringify(input).toLowerCase();
+            } catch (error) {
+                return String(input).toLowerCase();
+            }
+        };
+
+        const stringifyOptionValue = (value) => {
+            if (value === null) {
+                return 'null';
+            }
+            if (value === undefined) {
+                return 'undefined';
+            }
+            if (typeof value === 'string') {
+                return value;
+            }
+            if (typeof value === 'number' || typeof value === 'boolean') {
+                return String(value);
+            }
+            try {
+                return JSON.stringify(value);
+            } catch (error) {
+                return String(value);
+            }
+        };
+
+        const createOptionEntries = (values) => {
+            const entries = [];
+            for (const entry of values) {
+                if (entry === null || entry === undefined) {
+                    continue;
+                }
+                if (typeof entry === 'object' && Object.prototype.hasOwnProperty.call(entry, 'label') && Object.prototype.hasOwnProperty.call(entry, 'value')) {
+                    const rawLabel = entry.label === null || entry.label === undefined ? '' : String(entry.label).trim();
+                    if (!rawLabel) {
+                        continue;
+                    }
+                    const option = {
+                        label: rawLabel,
+                        value: entry.value,
+                    };
+                    option.labelToken = toComparableToken(option.label);
+                    option.valueToken = toComparableToken(option.value);
+                    const valueForDisplay = stringifyOptionValue(option.value);
+                    option.display = option.label === valueForDisplay
+                        ? option.label
+                        : `${option.label} (${valueForDisplay})`;
+                    entries.push(option);
+                    continue;
+                }
+
+                if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
+                    const label = String(entry);
+                    const option = {
+                        label,
+                        value: entry,
+                    };
+                    option.labelToken = toComparableToken(option.label);
+                    option.valueToken = toComparableToken(option.value);
+                    option.display = option.label;
+                    entries.push(option);
+                }
+            }
+            return entries;
+        };
+
+        if (typeof skill.getOptions === 'function') {
+            try {
+                const potentialOptions = await Promise.resolve(skill.getOptions());
+                if (potentialOptions && typeof potentialOptions === 'object') {
+                    for (const [name, values] of Object.entries(potentialOptions)) {
+                        if (typeof name !== 'string' || !Array.isArray(values)) {
+                            continue;
+                        }
+                        const entries = createOptionEntries(values);
+                        if (entries.length) {
+                            optionMap.set(name, entries);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn(`Failed to load options for skill "${skill.name}": ${error.message}`);
+            }
+        }
+
+        const normalizeOptionValue = (name, value) => {
+            const options = optionMap.get(name);
+            if (!options || !options.length) {
+                return { valid: true, value };
+            }
+            const candidateToken = toComparableToken(value);
+            if (!candidateToken) {
+                return { valid: false, value: null };
+            }
+            for (const option of options) {
+                if (candidateToken === option.labelToken || candidateToken === option.valueToken) {
+                    return { valid: true, value: option.value };
+                }
+            }
+            return { valid: false, value: null };
+        };
+
+        const coerceScalarValue = (raw) => {
+            const value = typeof raw === 'string' ? raw.trim() : raw;
+            if (typeof value !== 'string') {
+                return value;
+            }
+            if (!value.length) {
+                return value;
+            }
+            const lower = value.toLowerCase();
+            if (lower === 'true') {
+                return true;
+            }
+            if (lower === 'false') {
+                return false;
+            }
+            if (lower === 'null') {
+                return null;
+            }
+            if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(value)) {
+                const numeric = Number(value);
+                if (!Number.isNaN(numeric)) {
+                    return numeric;
+                }
+            }
+            if ((value.startsWith('{') && value.endsWith('}')) || (value.startsWith('[') && value.endsWith(']'))) {
+                const parsed = safeJsonParse(value);
+                if (parsed !== null) {
+                    return parsed;
+                }
+            }
+            return value;
+        };
+
+        const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        const parseNamedArguments = (input, candidateNames) => {
+            const resolved = new Map();
+            const invalid = new Set();
+
+            if (!input || !candidateNames.length) {
+                return { resolved, invalid };
+            }
+
+            const lookup = new Map(candidateNames.map(name => [name.toLowerCase(), name]));
+            const pattern = new RegExp(`\\b(${candidateNames.map(escapeRegex).join('|')})\\b\\s*(?::|=)?\\s*("[^"]*"|'[^']*'|[^\s"']+)`, 'gi');
+
+            let match;
+            while ((match = pattern.exec(input)) !== null) {
+                const rawName = match[1];
+                const canonical = lookup.get(rawName.toLowerCase());
+                if (!canonical) {
+                    continue;
+                }
+
+                if (resolved.has(canonical)) {
+                    invalid.add(canonical);
+                    continue;
+                }
+
+                let rawValue = match[2] || '';
+                rawValue = rawValue.trim();
+
+                if (!rawValue.length) {
+                    invalid.add(canonical);
+                    continue;
+                }
+
+                if ((rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'"))) {
+                    rawValue = rawValue.slice(1, -1);
+                }
+
+                rawValue = rawValue.trim();
+                if (!rawValue.length) {
+                    invalid.add(canonical);
+                    continue;
+                }
+
+                const optionCheck = normalizeOptionValue(canonical, rawValue);
+                if (!optionCheck.valid) {
+                    invalid.add(canonical);
+                    continue;
+                }
+
+                if (optionMap.has(canonical)) {
+                    resolved.set(canonical, optionCheck.value);
+                    continue;
+                }
+
+                resolved.set(canonical, coerceScalarValue(rawValue));
+            }
+
+            return { resolved, invalid };
+        };
+
         const missingRequiredArgs = () => requiredArgs.filter((name) => !Object.prototype.hasOwnProperty.call(normalizedArgs, name) || normalizedArgs[name] === undefined || normalizedArgs[name] === null);
 
         while (missingRequiredArgs().length > 0) {
@@ -1221,7 +1432,13 @@ class Agent {
 
             const descriptors = missing.map((name) => {
                 const definition = argumentDefinitions.find(arg => arg.name === name);
-                return definition?.description ? `${name} (${definition.description})` : name;
+                const description = definition?.description ? `${name} (${definition.description})` : name;
+                const options = optionMap.get(name);
+                if (options && options.length) {
+                    const formatted = options.map(option => option.display).join(', ');
+                    return `${description} [options: ${formatted}]`;
+                }
+                return description;
             });
 
             const userInput = await this.readUserPrompt(`Missing required arguments: ${descriptors.join(', ')}. Provide values (or type 'cancel' to abort): `);
@@ -1233,6 +1450,21 @@ class Agent {
 
             if (trimmedInput.toLowerCase() === 'cancel') {
                 throw new Error('Skill execution cancelled by user.');
+            }
+
+            const { resolved: directlyParsed, invalid: ambiguous } = parseNamedArguments(trimmedInput, missing);
+            for (const [name, value] of directlyParsed.entries()) {
+                normalizedArgs[name] = value;
+            }
+
+            if (ambiguous.size) {
+                console.warn(`The following arguments were not understood: ${Array.from(ambiguous).join(', ')}.`);
+            }
+
+            const pendingAfterManual = missingRequiredArgs();
+
+            if (!pendingAfterManual.length) {
+                break;
             }
 
             let agent;
@@ -1252,7 +1484,20 @@ class Agent {
                 humanPromptSections.push(`Argument definitions: ${JSON.stringify(argumentDefinitions, null, 2)}`);
             }
 
-            humanPromptSections.push(`Missing argument names: ${JSON.stringify(missing)}`);
+            humanPromptSections.push(`Missing argument names: ${JSON.stringify(pendingAfterManual)}`);
+            const availableOptions = pendingAfterManual
+                .map((name) => {
+                    const options = optionMap.get(name);
+                    if (!options || !options.length) {
+                        return null;
+                    }
+                    const formatted = options.map(option => option.display).join(', ');
+                    return `${name}: ${formatted}`;
+                })
+                .filter(Boolean);
+            if (availableOptions.length) {
+                humanPromptSections.push(`Available options:\n${availableOptions.join('\n')}`);
+            }
             humanPromptSections.push(`User response: ${trimmedInput}`);
             humanPromptSections.push('Return a JSON object containing values for the missing argument names. Omit any extraneous fields.');
 
@@ -1273,10 +1518,37 @@ class Agent {
                 continue;
             }
 
+            const pendingSet = new Set(pendingAfterManual);
+            const invalidFromModel = new Set();
+            let appliedFromModel = false;
+
             for (const [name, value] of Object.entries(parsedExtraction)) {
-                if (value !== undefined && value !== null) {
-                    normalizedArgs[name] = value;
+                if (!pendingSet.has(name)) {
+                    continue;
                 }
+                if (value === undefined || value === null) {
+                    continue;
+                }
+                const optionCheck = normalizeOptionValue(name, value);
+                if (!optionCheck.valid) {
+                    invalidFromModel.add(name);
+                    continue;
+                }
+                if (optionMap.has(name)) {
+                    normalizedArgs[name] = optionCheck.value;
+                    appliedFromModel = true;
+                    continue;
+                }
+                normalizedArgs[name] = value;
+                appliedFromModel = true;
+            }
+
+            if (invalidFromModel.size) {
+                console.warn(`The model returned unsupported options for arguments: ${Array.from(invalidFromModel).join(', ')}.`);
+            }
+
+            if (!appliedFromModel) {
+                console.warn('Unable to determine values for the remaining arguments. Please provide them again.');
             }
         }
 
