@@ -3,7 +3,7 @@ const path = require('path');
 
 function getLogPath(kind) {
   const base = path.resolve('.ploinky/logs');
-  const map = { router: 'router.log', webtty: 'webtty.log' };
+  const map = { router: 'router.log' };
   const file = map[kind] || map.router;
   return path.join(base, file);
 }
@@ -36,8 +36,8 @@ async function logsTail(kind) {
 
 function showLast(count, kind) {
   const n = Math.max(1, parseInt(count || '200', 10) || 200);
-  const file = kind ? getLogPath(kind) : null;
-  const list = file ? [file] : [getLogPath('router'), getLogPath('webtty')];
+  const file = getLogPath('router');
+  const list = [file];
   for (const f of list) {
     if (!fs.existsSync(f)) { console.log(`No log file: ${f}`); continue; }
     try {

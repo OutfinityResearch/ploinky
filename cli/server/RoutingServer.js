@@ -52,10 +52,13 @@ function buildLocalFactory(createFactoryFn, defaults = {}) {
   return createFactoryFn({ ptyLib: pty, workdir: process.cwd(), ...defaults });
 }
 
+const { resolveVarValue } = require('../services/secretVars');
+
 const webttyFactory = (() => {
   if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
   if (createWebTTYLocalFactory) {
-    const command = process.env.WEBTTY_COMMAND || '';
+    const secretShell = resolveVarValue('WEBTTY_SHELL');
+    const command = secretShell || process.env.WEBTTY_COMMAND || '';
     return {
       factory: buildLocalFactory(createWebTTYLocalFactory, { command }),
       label: command ? command : 'local shell',

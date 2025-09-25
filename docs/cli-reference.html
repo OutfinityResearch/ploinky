@@ -255,49 +255,39 @@ expose API_KEY $PROD_KEY            # Uses static agent</code></pre>
                         <h2>Web Interfaces</h2>
                         
                         <h3>webconsole / webtty</h3>
-                        <p>Start Console server with xterm interface (synonyms).</p>
-                        <pre><code>webconsole &lt;password&gt; [command...]
-webtty &lt;password&gt; [command...]</code></pre>
-                        <table class="command-table">
-                            <tr>
-                                <th>Parameter</th>
-                                <th>Description</th>
-                            </tr>
-                            <tr>
-                                <td><code>&lt;password&gt;</code></td>
-                                <td>Password for web access (use 'null' for no auth)</td>
-                            </tr>
-                            <tr>
-                                <td><code>[command...]</code></td>
-                                <td>Command to run (default: /bin/bash)</td>
-                            </tr>
-                        </table>
+                        <p>Prepare access for the Web Console (synonyms). Prints URL with token.</p>
+                        <pre><code>webconsole [shell]
+webtty [shell]</code></pre>
                         <pre><code># Examples
-webconsole secret /bin/bash
-webtty secret shell MyAgent</code></pre>
+webconsole
+webtty sh
+webtty /bin/zsh</code></pre>
                         <div class="alert alert-info">
-                            Access at: http://localhost:8080 (or configured WEBTTY_PORT)
+                            Access at: http://127.0.0.1:8080/webtty?token=&lt;WEBTTY_TOKEN&gt;
+                        </div>
+                        <div class="alert alert-warning">
+                            Shell options: sh, zsh, dash, ksh, csh, tcsh, fish, or absolute path. When a shell is provided, the router is restarted (if previously configured) so changes apply immediately; otherwise changes take effect on next start.
                         </div>
 
                         <h3>webchat</h3>
-                        <p>Start Chat server with conversational interface.</p>
-                        <pre><code>webchat &lt;password&gt; [command...]</code></pre>
+                        <p>Prepare access for the WebChat interface. Prints URL with token.</p>
+                        <pre><code>webchat [--rotate]</code></pre>
                         <pre><code># Examples
-webchat secret /bin/bash
-webchat secret python assistant.py</code></pre>
+webchat
+webchat --rotate</code></pre>
                         <div class="alert alert-info">
-                            Access at: http://localhost:8080 (or configured WEBCHAT_PORT)
+                            Access at: http://127.0.0.1:8080/webchat?token=&lt;WEBCHAT_TOKEN&gt;
                         </div>
 
                         <h3>dashboard</h3>
-                        <p>Start Dashboard server for workspace management.</p>
-                        <pre><code>dashboard &lt;password&gt;</code></pre>
+                        <p>Prepare access for the Dashboard. Prints URL with token.</p>
+                        <pre><code>dashboard</code></pre>
                         <div class="alert alert-info">
-                            Access at: http://localhost:9000 (or configured WEBDASHBOARD_PORT)
+                            Access at: http://127.0.0.1:8080/dashboard?token=&lt;WEBDASHBOARD_TOKEN&gt;
                         </div>
 
                         <h3>webmeet</h3>
-                        <p>Start WebMeet server for video conferencing.</p>
+                        <p>Prepare access for WebMeet and optionally set a moderator agent. Prints URL with token.</p>
                         <pre><code>webmeet [moderatorAgent] [--rotate]</code></pre>
                         <table class="command-table">
                             <tbody><tr>
@@ -391,18 +381,16 @@ destroy</code></pre>
                         <h2>Logging & Monitoring</h2>
                         
                         <h3>logs tail</h3>
-                        <p>Follow server logs in real-time.</p>
-                        <pre><code>logs tail &lt;router|webtty&gt;</code></pre>
+                        <p>Follow router logs in real-time.</p>
+                        <pre><code>logs tail [router]</code></pre>
                         <pre><code># Examples
-logs tail router    # Follow router logs
-logs tail webtty    # Follow WebTTY logs</code></pre>
+logs tail router    # Follow router logs</code></pre>
 
                         <h3>logs last</h3>
-                        <p>Show last N log lines.</p>
-                        <pre><code>logs last &lt;N&gt; [router|webtty]</code></pre>
+                        <p>Show last N router log lines.</p>
+                        <pre><code>logs last &lt;N&gt;</code></pre>
                         <pre><code># Examples
-logs last 100           # Last 100 lines from all
-logs last 50 router     # Last 50 router lines</code></pre>
+logs last 100           # Last 100 lines from router</code></pre>
                     </div>
 
                     <div class="doc-section">

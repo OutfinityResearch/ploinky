@@ -24,7 +24,7 @@ tests=(
   "var_command.sh"
   "shell_cli_command.sh"
   "start_configuration.sh"
-  "web_commands.sh"
+  "webtty_commands.sh"
   "demo_run.sh"
   "paramParser.test.mjs"
 )

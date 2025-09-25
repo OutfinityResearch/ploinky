@@ -198,6 +198,37 @@ async function shutdownSession() {
     console.log('Shutdown completed for current session containers.');
 }
 
+// Configure the shell used by WebTTY/webconsole
+function configureWebttyShell(input) {
+    const allowed = new Set(['sh','zsh','dash','ksh','csh','tcsh','fish']);
+    const name = String(input || '').trim();
+    if (!allowed.has(name) && !name.startsWith('/')) {
+        console.error(`Unsupported shell '${name}'. Allowed: ${Array.from(allowed).join(', ')}, or an absolute path.`);
+        return false;
+    }
+    // Resolve to executable (absolute path or from PATH)
+    const pathDirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+    const candidates = name.startsWith('/') ? [name] : pathDirs.map(d => path.join(d, name));
+    let found = null;
+    for (const p of candidates) {
+        try { fs.accessSync(p, fs.constants.X_OK); found = p; break; } catch (_) {}
+    }
+    if (!found) {
+        console.error(`Cannot execute shell '${name}': not found or not executable in PATH.`);
+        return false;
+    }
+    try {
+        envSvc.setEnvVar('WEBTTY_SHELL', found);
+        envSvc.setEnvVar('WEBTTY_COMMAND', `exec ${name}`);
+        console.log(`✓ Configured WebTTY shell: ${name} (${found}).`);
+        console.log('Note: Restart the router (restart) for changes to take effect.');
+        return true;
+    } catch (e) {
+        console.error(`Failed to configure WebTTY shell: ${e?.message || e}`);
+        return false;
+    }
+}
+
 async function destroyAll() {
     const { destroyWorkspaceContainers } = require('../services/docker');
     try { const list = destroyWorkspaceContainers(); if (list.length) { console.log('Removed containers:'); list.forEach(n => console.log(` - ${n}`)); } console.log(`Destroyed ${list.length} containers from this workspace.`); }
@@ -310,17 +341,32 @@ async function handleCommand(args) {
             await startWorkspace(options[0], options[1], { refreshComponentToken, ensureComponentToken, enableAgent, killRouterIfRunning });
             break;
         // 'route' and 'probe' commands removed (replaced by start/status and client commands)
-        case 'webconsole':
+        case 'webconsole': {
+            // Optional shell parameter (alias of webtty)
+            const candidate = options[0];
+            if (candidate && !String(candidate).startsWith('-')) {
+                const ok = configureWebttyShell(candidate);
+                if (!ok) break;
+                // Apply immediately if workspace start is configured
+                try { await handleCommand(['restart']); } catch (_) {}
+            }
             await refreshComponentToken('webtty');
-            break;
+            break; }
         case 'webchat': {
             const rotate = options.includes('--rotate');
             if (rotate) refreshComponentToken('webchat');
             else ensureComponentToken('webchat');
             break; }
-        case 'webtty':
+        case 'webtty': {
+            const candidate = options[0];
+            if (candidate && !String(candidate).startsWith('-')) {
+                const ok = configureWebttyShell(candidate);
+                if (!ok) break;
+                // Apply immediately if workspace start is configured
+                try { await handleCommand(['restart']); } catch (_) {}
+            }
             await refreshComponentToken('webtty');
-            break;
+            break; }
         case 'voicechat':
             console.log('voicechat: feature removed; use /webmeet instead.');
             break;
@@ -435,12 +481,14 @@ async function handleCommand(args) {
             const sub = options[0];
             if (sub === 'tail') {
                 const kind = options[1] || 'router';
-                await logsTail(kind);
+                if (kind !== 'router') { console.log('Only router logs are available.'); break; }
+                await logsTail('router');
             } else if (sub === 'last') {
                 const count = options[1] || '200';
                 const kind = options[2];
-                showLast(count, kind);
-            } else { console.log("Usage: logs tail <router|webtty> | logs last <count> [router|webtty]"); }
+                if (kind && kind !== 'router') { console.log('Only router logs are available.'); break; }
+                showLast(count, 'router');
+            } else { console.log("Usage: logs tail [router] | logs last <count>"); }
             break; }
         case 'clean':
             console.log('[clean] Removing all workspace containers...');

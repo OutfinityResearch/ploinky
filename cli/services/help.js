@@ -20,8 +20,8 @@ function showHelp(args = []) {
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
-  webconsole                         Regenerate WebTTY token (alias of webtty)
-  webtty                             Regenerate WebTTY token and print access URL
+  webconsole [shell]                 Prepare WebTTY (alias of webtty). Optional shell.
+  webtty [shell]                     Prepare WebTTY and print access URL. Optional shell.
   webchat [--rotate]                 Show or rotate WebChat token and print access URL
   webmeet [moderatorAgent]           Show WebMeet token; use --rotate to mint a new one
   dashboard                          Regenerate Dashboard token and print access URL
@@ -39,8 +39,8 @@ function showHelp(args = []) {
 
   status | restart               Show state | restart enabled agents + Router
   stop | shutdown | clean        Stop containers | remove containers
-  logs tail <router|webtty>      Follow server logs (router or webtty)
-  logs last <N> [router|webtty]  Show last N log lines (default router+webtty)
+  logs tail [router]             Follow router logs
+  logs last <N>                  Show last N router log lines
 
 ▶ FOR DETAILED HELP
   help <command>                 Show detailed help for a command
@@ -126,16 +126,16 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         'webconsole': {
-            description: 'Alias of webtty. Refreshes the WebTTY access token.',
-            syntax: 'webconsole',
-            examples: [ 'webconsole' ],
-            notes: 'Writes the token to .ploinky/.secrets and prints a one-time URL with the token parameter. `echo $WEBTTY_TOKEN` to print it.'
+            description: 'Alias of webtty. Optionally configure shell for console sessions.',
+            syntax: 'webconsole [shell]',
+            examples: [ 'webconsole', 'webconsole zsh' ],
+            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or an absolute path. If a shell is provided, the router is restarted (if configured) so changes apply immediately. Writes token to .ploinky/.secrets and prints a URL.'
         },
         'webtty': {
-            description: 'Refresh the WebTTY token used by /webtty.',
-            syntax: 'webtty',
-            examples: [ 'webtty' ],
-            notes: 'Writes the token to .ploinky/.secrets and prints a one-time URL with the token parameter. `echo $WEBTTY_TOKEN` to print it.'
+            description: 'Prepare WebTTY. Optionally configure shell for console sessions.',
+            syntax: 'webtty [shell]',
+            examples: [ 'webtty', 'webtty sh' ],
+            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or an absolute path. If a shell is provided, the router is restarted (if configured) so changes apply immediately. Writes token to .ploinky/.secrets and prints a URL.'
         },
         'webchat': {
             description: 'Display or rotate the WebChat token used by /webchat.',
@@ -216,17 +216,17 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Fails if start was not configured yet (no staticAgent/port).'
         },
         'logs': {
-            description: 'Inspect server logs (RoutingServer and WebTTY)',
+            description: 'Inspect router logs',
             subcommands: {
                 'tail': {
-                    syntax: 'logs tail <router|webtty>',
-                    description: 'Follow logs for router or webtty',
-                    examples: [ 'logs tail router', 'logs tail webtty' ]
+                    syntax: 'logs tail [router]',
+                    description: 'Follow router logs',
+                    examples: [ 'logs tail', 'logs tail router' ]
                 },
                 'last': {
-                    syntax: 'logs last <N> [router|webtty]',
-                    description: 'Show last N log lines. If no type, shows both router and webtty.',
-                    examples: [ 'logs last 200', 'logs last 100 webtty' ]
+                    syntax: 'logs last <N>',
+                    description: 'Show last N router log lines',
+                    examples: [ 'logs last 200', 'logs last 50' ]
                 }
             }
         },
