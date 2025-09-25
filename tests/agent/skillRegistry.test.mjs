@@ -58,6 +58,9 @@ const executor = agent.getSkillAction(agentParseSkillId);
 const parsed = executor('{"value":42}');
 assert.deepStrictEqual(parsed, { value: 42 }, 'Retrieved skill action should execute correctly.');
 
+const useSkillResult = await agent.useSkill(agentParseSkillId, { json: '{"value":99}' });
+assert.deepStrictEqual(useSkillResult, { value: 99 }, 'useSkill should execute the registered action when required arguments are provided.');
+
 agent.clearSkills();
 assert.deepStrictEqual(agent.rankSkill('parse some json again'), [], 'Clearing skills should remove results.');
 

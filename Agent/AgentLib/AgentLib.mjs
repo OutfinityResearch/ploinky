@@ -1020,16 +1020,6 @@ function safeJsonParse(value) {
     }
 }
 
-function promptUser(query) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise(resolve => {
-        rl.question(query, answer => {
-            rl.close();
-            resolve(answer);
-        });
-    });
-}
-
 function cloneAgentSummary(summary) {
     return {
         name: summary.name,
@@ -1080,12 +1070,124 @@ class Agent {
         }
     }
 
+    async readUserPrompt(query) {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        return new Promise(resolve => {
+            rl.question(query, answer => {
+                rl.close();
+                resolve(answer);
+            });
+        });
+    }
+
     registerSkill(skillSpecs, action) {
         return this.skillRegistry.registerSkill(skillSpecs, action);
     }
 
     rankSkill(taskDescription, options = {}) {
         return this.skillRegistry.rankSkill(taskDescription, options);
+    }
+
+    async useSkill(skillId, providedArgs = {}) {
+        const skill = this.getSkill(skillId);
+        if (!skill) {
+            throw new Error(`Skill "${skillId}" is not registered.`);
+        }
+
+        const action = this.getSkillAction(skillId);
+        if (typeof action !== 'function') {
+            throw new Error(`No executable action found for skill "${skillId}".`);
+        }
+
+        const normalizedArgs = providedArgs && typeof providedArgs === 'object' ? { ...providedArgs } : {};
+        const requiredArgs = Array.isArray(skill.requiredArgs) ? skill.requiredArgs.filter(name => typeof name === 'string' && name) : [];
+        const argumentDefinitions = Array.isArray(skill.args) ? skill.args.filter(entry => entry && typeof entry.name === 'string' && entry.name) : [];
+
+        const missingRequiredArgs = () => requiredArgs.filter((name) => !Object.prototype.hasOwnProperty.call(normalizedArgs, name) || normalizedArgs[name] === undefined || normalizedArgs[name] === null);
+
+        while (missingRequiredArgs().length > 0) {
+            const missing = missingRequiredArgs();
+
+            const descriptors = missing.map((name) => {
+                const definition = argumentDefinitions.find(arg => arg.name === name);
+                return definition?.description ? `${name} (${definition.description})` : name;
+            });
+
+            const userInput = await this.readUserPrompt(`Missing required arguments: ${descriptors.join(', ')}. Provide values (or type 'cancel' to abort): `);
+            const trimmedInput = typeof userInput === 'string' ? userInput.trim() : '';
+
+            if (!trimmedInput) {
+                continue;
+            }
+
+            if (trimmedInput.toLowerCase() === 'cancel') {
+                throw new Error('Skill execution cancelled by user.');
+            }
+
+            let agent;
+            try {
+                agent = getAgent();
+            } catch (error) {
+                throw new Error(`Unable to obtain language model for parsing arguments: ${error.message}`);
+            }
+
+            const systemPrompt = 'You extract structured JSON arguments for tool execution. Respond with JSON only, no commentary.';
+            const humanPromptSections = [
+                `Skill name: ${skill.name}`,
+                `Skill description: ${skill.description}`,
+            ];
+
+            if (argumentDefinitions.length) {
+                humanPromptSections.push(`Argument definitions: ${JSON.stringify(argumentDefinitions, null, 2)}`);
+            }
+
+            humanPromptSections.push(`Missing argument names: ${JSON.stringify(missing)}`);
+            humanPromptSections.push(`User response: ${trimmedInput}`);
+            humanPromptSections.push('Return a JSON object containing values for the missing argument names. Omit any extraneous fields.');
+
+            let rawExtraction;
+            try {
+                rawExtraction = await invokeAgent(agent, [
+                    { role: 'system', message: systemPrompt },
+                    { role: 'human', message: humanPromptSections.join('\n\n') },
+                ], { mode: 'fast' });
+            } catch (error) {
+                throw new Error(`Failed to parse arguments with the language model: ${error.message}`);
+            }
+
+            const parsedExtraction = safeJsonParse(typeof rawExtraction === 'string' ? rawExtraction.trim() : rawExtraction);
+
+            if (!parsedExtraction || typeof parsedExtraction !== 'object') {
+                console.warn('The language model did not return valid JSON. Please try providing the details again.');
+                continue;
+            }
+
+            for (const [name, value] of Object.entries(parsedExtraction)) {
+                if (value !== undefined && value !== null) {
+                    normalizedArgs[name] = value;
+                }
+            }
+        }
+
+        const orderedNames = argumentDefinitions.length
+            ? argumentDefinitions.map(def => def.name)
+            : requiredArgs.slice();
+
+        if (!orderedNames.length) {
+            return action({ ...normalizedArgs });
+        }
+
+        const positionalValues = orderedNames.map(name => normalizedArgs[name]);
+
+        if (action.length > 1) {
+            return action(...positionalValues);
+        }
+
+        if (orderedNames.length === 1) {
+            return action(positionalValues[0]);
+        }
+
+        return action({ ...normalizedArgs });
     }
 
     getSkill(skillId) {
@@ -1277,7 +1379,7 @@ class Agent {
             console.log('----- Agent Result -----');
             console.log(typeof candidate.raw === 'string' ? candidate.raw : JSON.stringify(candidate.raw, null, 2));
 
-            const approval = await promptUser('Is the result okay? [Y/n/cancel]: ');
+            const approval = await this.readUserPrompt('Is the result okay? [Y/n/cancel]: ');
             const normalized = (approval || '').trim().toLowerCase();
 
             if (normalized === '' || normalized === 'y' || normalized === 'yes') {
@@ -1287,7 +1389,7 @@ class Agent {
                 throw new Error('Task cancelled by user.');
             }
 
-            feedback = await promptUser('Please provide feedback for the agent: ');
+            feedback = await this.readUserPrompt('Please provide feedback for the agent: ');
         }
         /* eslint-enable no-constant-condition */
     }
