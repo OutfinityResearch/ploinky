@@ -1213,6 +1213,18 @@ class Agent {
         const normalizedArgs = providedArgs && typeof providedArgs === 'object' ? { ...providedArgs } : {};
         const requiredArgs = Array.isArray(skill.requiredArgs) ? skill.requiredArgs.filter(name => typeof name === 'string' && name) : [];
         const argumentDefinitions = Array.isArray(skill.args) ? skill.args.filter(entry => entry && typeof entry.name === 'string' && entry.name) : [];
+        const definitionNames = argumentDefinitions.map(def => def.name);
+        const allArgumentNames = definitionNames.length
+            ? definitionNames
+            : Array.from(new Set(requiredArgs));
+        const requiredArgSet = new Set(requiredArgs);
+        const optionalArgumentNames = allArgumentNames.filter(name => !requiredArgSet.has(name));
+
+        const hasArgumentValue = (name) => Object.prototype.hasOwnProperty.call(normalizedArgs, name)
+            && normalizedArgs[name] !== undefined
+            && normalizedArgs[name] !== null;
+
+        const missingArgsFromList = (names) => names.filter((name) => !hasArgumentValue(name));
 
         const optionMap = new Map();
         const toComparableToken = (input) => {
@@ -1295,9 +1307,11 @@ class Agent {
             return entries;
         };
 
-        if (typeof skill.getOptions === 'function') {
+        const skillOptionProvider = this.getSkillOptions(skillName);
+
+        if (typeof skillOptionProvider === 'function') {
             try {
-                const potentialOptions = await Promise.resolve(skill.getOptions());
+                const potentialOptions = await Promise.resolve(skillOptionProvider());
                 if (potentialOptions && typeof potentialOptions === 'object') {
                     for (const [name, values] of Object.entries(potentialOptions)) {
                         if (typeof name !== 'string' || !Array.isArray(values)) {
@@ -1425,26 +1439,46 @@ class Agent {
             return { resolved, invalid };
         };
 
-        const missingRequiredArgs = () => requiredArgs.filter((name) => !Object.prototype.hasOwnProperty.call(normalizedArgs, name) || normalizedArgs[name] === undefined || normalizedArgs[name] === null);
+        const missingRequiredArgs = () => missingArgsFromList(requiredArgs);
+        const missingOptionalArgs = () => missingArgsFromList(optionalArgumentNames);
+
+        const describeArgument = (name) => {
+            const definition = argumentDefinitions.find(arg => arg.name === name);
+            const description = definition?.description ? `${name} (${definition.description})` : name;
+            const options = optionMap.get(name);
+            if (options && options.length) {
+                const formatted = options.map(option => option.display).join(', ');
+                return `${description} [options: ${formatted}]`;
+            }
+            return description;
+        };
+
+        const parseableArgumentNames = allArgumentNames.length
+            ? allArgumentNames
+            : (requiredArgs.length ? requiredArgs : []);
+
+        let optionalPromptShown = false;
 
         while (missingRequiredArgs().length > 0) {
-            const missing = missingRequiredArgs();
+            const missingRequired = missingRequiredArgs();
+            const missingOptional = optionalPromptShown ? [] : missingOptionalArgs();
 
-            const descriptors = missing.map((name) => {
-                const definition = argumentDefinitions.find(arg => arg.name === name);
-                const description = definition?.description ? `${name} (${definition.description})` : name;
-                const options = optionMap.get(name);
-                if (options && options.length) {
-                    const formatted = options.map(option => option.display).join(', ');
-                    return `${description} [options: ${formatted}]`;
-                }
-                return description;
-            });
+            const requiredDescriptors = missingRequired.map(describeArgument);
+            let promptText = `Missing required arguments: ${requiredDescriptors.join(', ')}`;
 
-            const userInput = await this.readUserPrompt(`Missing required arguments: ${descriptors.join(', ')}. Provide values (or type 'cancel' to abort): `);
+            if (missingOptional.length) {
+                const optionalDescriptors = missingOptional.map(describeArgument);
+                promptText += `. Optional arguments you may also set now: ${optionalDescriptors.join(', ')}`;
+                optionalPromptShown = true;
+            }
+
+            const userInput = await this.readUserPrompt(`${promptText}. Provide values (or type 'cancel' to abort): `);
             const trimmedInput = typeof userInput === 'string' ? userInput.trim() : '';
 
             if (!trimmedInput) {
+                if (!optionalPromptShown && optionalArgumentNames.length) {
+                    optionalPromptShown = true;
+                }
                 continue;
             }
 
@@ -1452,7 +1486,8 @@ class Agent {
                 throw new Error('Skill execution cancelled by user.');
             }
 
-            const { resolved: directlyParsed, invalid: ambiguous } = parseNamedArguments(trimmedInput, missing);
+            const parseTargets = parseableArgumentNames.length ? parseableArgumentNames : missingRequired;
+            const { resolved: directlyParsed, invalid: ambiguous } = parseNamedArguments(trimmedInput, parseTargets);
             for (const [name, value] of directlyParsed.entries()) {
                 normalizedArgs[name] = value;
             }
@@ -1579,6 +1614,23 @@ class Agent {
 
     getSkillAction(skillName) {
         return this.skillRegistry.getSkillAction(skillName);
+    }
+
+    getSkillOptions(skillName) {
+        const skill = this.getSkill(skillName);
+
+        if (typeof this.skillRegistry.getSkillOptions === 'function') {
+            const handler = this.skillRegistry.getSkillOptions(skillName);
+            if (typeof handler === 'function') {
+                return skill ? handler.bind(skill) : handler;
+            }
+        }
+
+        if (skill && typeof skill.getOptions === 'function') {
+            return skill.getOptions.bind(skill);
+        }
+
+        return null;
     }
 
     clearSkills() {

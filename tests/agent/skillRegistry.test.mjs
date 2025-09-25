@@ -37,10 +37,29 @@ const sendEmailAction = () => 'email sent';
 const parseSkillName = registry.registerSkill({ specs: parseJsonSpec, roles: ['Analyst'], action: parseJsonAction });
 const emailSkillName = registry.registerSkill({ specs: sendEmailSpec, roles: ['admin', 'communication'], action: sendEmailAction });
 
+const optionsSpec = {
+    why: 'Validate option wiring.',
+    what: 'Return provided options',
+    description: 'Simple spec used to confirm getOptions registration.',
+    name: 'with-options',
+    args: [{ name: 'mode', type: 'string' }],
+    requiredArgs: ['mode'],
+};
+
+const optionsProvider = () => ({ mode: [{ label: 'Fast Path', value: 'fast' }, { label: 'Deep Path', value: 'deep' }] });
+
+const optionsSkillName = registry.registerSkill({ specs: optionsSpec, roles: ['analyst'], action: () => 'noop', getOptions: optionsProvider });
+
 assert.strictEqual(parseSkillName, parseJsonSpec.name, 'registerSkill should return the canonical skill name.');
 assert.ok(typeof registry.getSkillAction(parseSkillName) === 'function', 'Stored actions should be retrievable.');
 assert.deepStrictEqual(registry.getSkill(parseSkillName).roles, ['analyst'], 'Roles should be normalized and stored.');
 assert.deepStrictEqual(registry.getSkill(emailSkillName).roles, ['admin', 'communication'], 'Explicit roles should be stored with the skill.');
+assert.ok(typeof registry.getSkillOptions(optionsSkillName) === 'function', 'getSkillOptions should return the registered provider.');
+assert.deepStrictEqual(
+    registry.getSkillOptions(optionsSkillName)(),
+    optionsProvider(),
+    'Option provider should return the expected options payload.',
+);
 
 const parseMatches = registry.rankSkill('Need to parse a JSON payload for further analysis.', { role: 'analyst' });
 assert.ok(parseMatches.length >= 1, 'Expected at least one skill match for JSON parsing.');

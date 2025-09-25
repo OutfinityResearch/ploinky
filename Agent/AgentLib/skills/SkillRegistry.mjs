@@ -105,6 +105,7 @@ export default class SkillRegistry {
         this.index = flexSearchAdapter || createFlexSearchAdapter(indexOptions || DEFAULT_INDEX_OPTIONS);
         this.skills = new Map();
         this.actions = new Map();
+        this.optionHandlers = new Map();
     }
 
     registerSkill(skillObj) {
@@ -112,7 +113,7 @@ export default class SkillRegistry {
             throw new TypeError('registerSkill requires a skill configuration object.');
         }
 
-        const { specs, action, roles } = skillObj;
+        const { specs, action, roles, getOptions } = skillObj;
 
         if (!specs || typeof specs !== 'object') {
             throw new TypeError('registerSkill requires a "specs" object.');
@@ -120,6 +121,10 @@ export default class SkillRegistry {
 
         if (typeof action !== 'function') {
             throw new TypeError('registerSkill requires a function action handler.');
+        }
+
+        if (typeof getOptions !== 'undefined' && getOptions !== null && typeof getOptions !== 'function') {
+            throw new TypeError('registerSkill requires getOptions to be a function when provided.');
         }
 
         const normalizedSpecs = sanitizeSpecs(specs);
@@ -151,6 +156,7 @@ export default class SkillRegistry {
         if (this.skills.has(canonicalName)) {
             this.skills.delete(canonicalName);
             this.actions.delete(canonicalName);
+            this.optionHandlers.delete(canonicalName);
             if (typeof this.index.remove === 'function') {
                 try {
                     this.index.remove(canonicalName);
@@ -162,6 +168,13 @@ export default class SkillRegistry {
 
         this.skills.set(canonicalName, record);
         this.actions.set(canonicalName, action);
+        if (typeof getOptions === 'function') {
+            this.optionHandlers.set(canonicalName, getOptions);
+        } else if (typeof record.getOptions === 'function') {
+            this.optionHandlers.set(canonicalName, record.getOptions);
+        } else {
+            this.optionHandlers.delete(canonicalName);
+        }
 
         const searchText = buildSearchText(record);
         if (searchText) {
@@ -244,9 +257,19 @@ export default class SkillRegistry {
         return this.actions.get(canonical) || null;
     }
 
+    getSkillOptions(skillName) {
+        const canonical = normalizeSkillName(skillName);
+        if (!canonical) {
+            return null;
+        }
+        const handler = this.optionHandlers.get(canonical);
+        return typeof handler === 'function' ? handler : null;
+    }
+
     clear() {
         this.skills.clear();
         this.actions.clear();
+        this.optionHandlers.clear();
         if (typeof this.index.clear === 'function') {
             this.index.clear();
         }
