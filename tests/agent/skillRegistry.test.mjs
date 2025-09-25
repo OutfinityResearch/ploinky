@@ -55,8 +55,8 @@ assert.deepStrictEqual(noMatches, [], 'Empty search text should return no matche
 __resetForTests();
 const agent = new Agent();
 const agentParseSkillName = agent.registerSkill({ specs: parseJsonSpec, action: parseJsonAction });
-const agentMatches = agent.rankSkill('Please parse this json configuration string');
-assert.strictEqual(agentMatches[0], agentParseSkillName, 'Agent-based ranking should surface registered skills.');
+const agentMatch = await agent.rankSkill('Please parse this json configuration string');
+assert.strictEqual(agentMatch, agentParseSkillName, 'Agent-based ranking should surface registered skills.');
 
 const executor = agent.getSkillAction(agentParseSkillName);
 const parsed = executor('{"value":42}');
@@ -66,6 +66,6 @@ const useSkillResult = await agent.useSkill(agentParseSkillName, { json: '{"valu
 assert.deepStrictEqual(useSkillResult, { value: 99 }, 'useSkill should execute the registered action when required arguments are provided.');
 
 agent.clearSkills();
-assert.deepStrictEqual(agent.rankSkill('parse some json again'), [], 'Clearing skills should remove results.');
+await assert.rejects(() => agent.rankSkill('parse some json again'), /No skills matched/, 'Clearing skills should surface a missing skill error.');
 
 console.log('skillRegistry test passed');

@@ -1084,8 +1084,107 @@ class Agent {
         return this.skillRegistry.registerSkill(skillObj);
     }
 
-    rankSkill(taskDescription, options = {}) {
-        return this.skillRegistry.rankSkill(taskDescription, options);
+    async rankSkill(taskDescription, options = {}) {
+        const matches = this.skillRegistry.rankSkill(taskDescription, options);
+
+        if (!Array.isArray(matches) || matches.length === 0) {
+            throw new Error('No skills matched the provided task description.');
+        }
+
+        if (matches.length === 1) {
+            return matches[0];
+        }
+
+        const normalizeName = (value) => typeof value === 'string' ? value.trim().toLowerCase() : '';
+
+        const candidates = matches.map(name => {
+            const skill = this.getSkill(name);
+            if (!skill) {
+                return null;
+            }
+            const canonical = normalizeName(skill.name || name);
+            return {
+                canonical,
+                name: skill.name || name,
+                spec: skill,
+            };
+        }).filter(Boolean);
+
+        if (!candidates.length) {
+            throw new Error('Unable to load candidate skill specifications for selection.');
+        }
+
+        let selectorAgent;
+        try {
+            selectorAgent = getAgent(options?.agentName);
+        } catch (error) {
+            throw new Error(`Unable to obtain language model for skill selection: ${error.message}`);
+        }
+
+        const selectionMode = normalizeTaskMode(options?.mode || 'fast', null, selectorAgent, 'fast');
+
+        const candidateSummaries = candidates.map(entry => ({
+            name: entry.name,
+            description: entry.spec.description,
+            what: entry.spec.what,
+            why: entry.spec.why,
+            args: entry.spec.args,
+            requiredArgs: entry.spec.requiredArgs,
+        }));
+
+        const contextPayload = {
+            taskDescription,
+            candidates: candidateSummaries,
+        };
+
+        const history = buildSystemHistory(selectorAgent, {
+            instruction: 'Review the candidate skills and choose the single best match for the task.',
+            context: JSON.stringify(contextPayload, null, 2),
+            description: 'Return JSON like {"skill": "<skill name>"}. If no skills are suitable, return {"skill": null}.',
+            mode: selectionMode,
+        });
+
+        const raw = await invokeAgent(selectorAgent, history, { mode: selectionMode });
+
+        const candidateMap = new Map();
+        for (const candidate of candidates) {
+            candidateMap.set(candidate.canonical, candidate.name);
+        }
+
+        const parseSelection = (value) => {
+            const parsed = safeJsonParse(typeof value === 'string' ? value : '');
+            if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'skill')) {
+                return parsed.skill;
+            }
+            return null;
+        };
+
+        let selected = parseSelection(raw);
+
+        if (selected === null || selected === undefined) {
+            if (typeof raw === 'string') {
+                const trimmed = raw.trim();
+                const normalized = normalizeName(trimmed);
+                if (candidateMap.has(normalized)) {
+                    selected = candidateMap.get(normalized);
+                }
+            }
+        }
+
+        if (selected === null || normalizeName(selected) === 'none' || normalizeName(selected) === 'no skill') {
+            throw new Error('No suitable skill was selected for the task description.');
+        }
+
+        if (typeof selected !== 'string' || !selected.trim()) {
+            throw new Error('Skill selection response was invalid.');
+        }
+
+        const normalizedSelected = normalizeName(selected);
+        if (!candidateMap.has(normalizedSelected)) {
+            throw new Error(`Selected skill "${selected}" was not among the matched candidates.`);
+        }
+
+        return candidateMap.get(normalizedSelected);
     }
 
     async useSkill(skillName, providedArgs = {}) {
