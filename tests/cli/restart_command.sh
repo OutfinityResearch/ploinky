@@ -30,8 +30,7 @@ ploinky enable repo demo
 
 echo "Starting demo and simulator agents..."
 ploinky start demo
-ploinky start simulator
-sleep 5 # Give them time to start
+sleep 2 # Give them time to start
 
 # 2. Verify they are running initially
 echo "Verifying initial state..."
