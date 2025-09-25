@@ -212,21 +212,34 @@ async function runShell(agentName) {
 
 async function refreshAgent(agentName) {
   if (!agentName) { throw new Error('Usage: refresh agent <name>'); }
-  const { isContainerRunning, stopAndRemove, startAgentContainer, getServiceContainerName } = dockerSvc;
+
+  const { execSync } = require('child_process');
+  const dockerSvc = require('./docker');
+  const { getServiceContainerName, getRuntime, isContainerRunning, containerExists } = dockerSvc;
+  const runtime = getRuntime();
   const containerName = getServiceContainerName(agentName);
 
-  const manifestPath = findAgentManifest(agentName);
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const agentPath = path.dirname(manifestPath);
+  if (!containerExists(containerName)) {
+    console.error(`Container for agent '${agentName}' does not exist. Use 'start' to create it.`);
+    return;
+  }
+
+  console.log(`Refreshing (restarting) agent '${agentName}'...`);
 
   if (isContainerRunning(containerName)) {
-    console.log(`Container for '${agentName}' is running. Restarting...`);
-    startAgentContainer(agentName, manifest, agentPath); // This already stops and removes
+    try {
+      execSync(`${runtime} stop ${containerName}`, { stdio: 'inherit' });
+    } catch (e) {
+      console.error(`Failed to stop container ${containerName}: ${e.message}`);
+      return; // Stop if we can't stop it
+    }
+  }
+
+  try {
+    execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' });
     console.log('✓ Agent restarted.');
-  } else {
-    console.log(`Container for '${agentName}' is not running. Removing container if it exists...`);
-    stopAndRemove(containerName); // This will remove the stopped container
-    console.log('✓ Container removed. The configuration is preserved. Use "start" to run it again.');
+  } catch (e) {
+    console.error(`Failed to start container ${containerName}: ${e.message}`);
   }
 }
 

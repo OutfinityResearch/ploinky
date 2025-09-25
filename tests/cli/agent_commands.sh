@@ -103,11 +103,11 @@ CONTAINER_NAME_AFTER=$($CONTAINER_RUNTIME ps --format "{{.Names}}" | grep "ploin
 ID_AFTER=$($CONTAINER_RUNTIME ps -q --filter name=$CONTAINER_NAME_AFTER)
 echo "Container ID after refresh: $ID_AFTER"
 
-if [ "$ID_BEFORE" == "$ID_AFTER" ]; then
-  echo "✗ Verification failed: Container ID is the same after refresh."
+if [ "$ID_BEFORE" != "$ID_AFTER" ]; then
+  echo "✗ Verification failed: Container ID changed after refresh, but it should be the same."
   exit 1
 fi
-echo "✓ Container ID changed after refresh."
+echo "✓ Container ID is the same after refresh."
 
 # 6. Final process check
 echo -e "\n6. Final process check..."

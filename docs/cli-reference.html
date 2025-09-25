@@ -124,8 +124,10 @@ enable agent cloud/MyAPI    # Enable specific agent from cloud repo</code></pre>
                         
 
                         <h3>refresh agent</h3>
-                        <p>Refreshes an agent. If the agent's container is running, it will be stopped and restarted with the latest configuration. If the container is not running, it will be removed, but the configuration will be preserved so it can be started later with the <code>start</code> command.</p>
-                        <pre><code>refresh agent &lt;name&gt;</code></pre>
+                        <p>Restart an agent container in-place (preserves the same container ID). If the container is running, it is stopped and then started again. If it exists but is stopped, it is started. If it does not exist, a hint is printed to use <code>start</code>.</p>
+                        <pre><code>refresh agent &lt;name&gt;
+# Example
+refresh agent demo  # stop/start existing container; ID remains the same</code></pre>
 
                         <h3>list agents</h3>
                         <p>List all available agents from enabled repositories.</p>
@@ -171,6 +173,18 @@ start</code></pre>
                         <pre><code># Examples
 cli MyAPI --help
 cli PyBot --version</code></pre>
+
+                        <h3>WebTTY Agent Shortcuts</h3>
+                        <p>Inside the Web Console/WebTTY, you can prefix a command with an agent name to run it inside that agent’s container via its CLI.</p>
+                        <pre><code># In WebTTY shell
+demo whoami     # opens 'cli demo', runs 'whoami', exits; shows only the command output
+demo ls /       # same: runs 'ls /' inside the demo container and prints only its output
+
+# Notes
+- Output is trimmed to the subcommand’s result (not the intermediate 'cli demo'/'exit' steps).
+- Requires the agent to define a <code>cli</code> command in its manifest; otherwise an error is shown.
+- Works in WebTTY/WebConsole sessions that use bash (default). If bash is unavailable, the fallback shell may not support this shortcut.
+- Equivalent to: open <code>cli &lt;agent&gt;</code>, run the subcommand, then exit.</code></pre>
 
                         <h3>status</h3>
                         <p>Show workspace status including agents, router, and web services.</p>
