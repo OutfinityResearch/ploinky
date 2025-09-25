@@ -5,7 +5,7 @@ const DEFAULT_INDEX_OPTIONS = {
     tokenize: 'forward',
 };
 
-const SEARCHABLE_FIELDS = ['name', 'what', 'why', 'description', 'args', 'requiredArgs'];
+const SEARCHABLE_FIELDS = ['name', 'what', 'why', 'description', 'args', 'requiredArgs', 'roles'];
 
 function generateId() {
     if (typeof randomUUID === 'function') {

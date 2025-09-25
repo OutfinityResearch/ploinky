@@ -1,7 +1,9 @@
 import assert from 'node:assert';
 
-import SkillRegistry from '../../Agent/AgentLib/skills/SkillRegistry.mjs';
-import { Agent, __resetForTests } from '../../Agent/AgentLib/AgentLib.mjs';
+process.env.PLOINKY_SKIP_BUILTIN_PROVIDERS = '1';
+
+const { default: SkillRegistry } = await import('../../Agent/AgentLib/skills/SkillRegistry.mjs');
+const { Agent, __resetForTests } = await import('../../Agent/AgentLib/AgentLib.mjs');
 
 const registry = new SkillRegistry();
 
@@ -32,11 +34,13 @@ const sendEmailSpec = {
 const parseJsonAction = (jsonText) => JSON.parse(jsonText);
 const sendEmailAction = () => 'email sent';
 
-const parseSkillId = registry.registerSkill(parseJsonSpec, parseJsonAction);
-const emailSkillId = registry.registerSkill(sendEmailSpec, sendEmailAction);
+const parseSkillId = registry.registerSkill({ specs: parseJsonSpec, action: parseJsonAction });
+const emailSkillId = registry.registerSkill({ specs: sendEmailSpec, roles: ['notification', 'communication'], action: sendEmailAction });
 
 assert.ok(typeof parseSkillId === 'string' && parseSkillId.length > 0, 'Skill IDs should be non-empty strings.');
 assert.ok(typeof registry.getSkillAction(parseSkillId) === 'function', 'Stored actions should be retrievable.');
+assert.deepStrictEqual(registry.getSkill(parseSkillId).roles, [], 'Default roles collection should be empty.');
+assert.deepStrictEqual(registry.getSkill(emailSkillId).roles, ['notification', 'communication'], 'Explicit roles should be stored with the skill.');
 
 const parseMatches = registry.rankSkill('Need to parse a JSON payload for further analysis.');
 assert.ok(parseMatches.length >= 1, 'Expected at least one skill match for JSON parsing.');
@@ -50,7 +54,7 @@ assert.deepStrictEqual(noMatches, [], 'Empty search text should return no matche
 
 __resetForTests();
 const agent = new Agent();
-const agentParseSkillId = agent.registerSkill(parseJsonSpec, parseJsonAction);
+const agentParseSkillId = agent.registerSkill({ specs: parseJsonSpec, action: parseJsonAction });
 const agentMatches = agent.rankSkill('Please parse this json configuration string');
 assert.strictEqual(agentMatches[0], agentParseSkillId, 'Agent-based ranking should surface registered skills.');
 

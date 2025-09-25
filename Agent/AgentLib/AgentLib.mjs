@@ -1080,8 +1080,8 @@ class Agent {
         });
     }
 
-    registerSkill(skillSpecs, action) {
-        return this.skillRegistry.registerSkill(skillSpecs, action);
+    registerSkill(skillObj) {
+        return this.skillRegistry.registerSkill(skillObj);
     }
 
     rankSkill(taskDescription, options = {}) {
