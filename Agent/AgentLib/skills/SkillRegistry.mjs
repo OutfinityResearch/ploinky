@@ -128,9 +128,18 @@ export default class SkillRegistry {
             throw new Error('Skill specification requires a non-empty name.');
         }
 
-        const normalizedRoles = Array.isArray(roles)
-            ? roles.map(role => (typeof role === 'string' ? role.trim() : '')).filter(Boolean)
-            : [];
+        if (!Array.isArray(roles)) {
+            throw new TypeError('registerSkill requires a "roles" array.');
+        }
+
+        const normalizedRoles = Array.from(new Set(roles
+            .map(role => (typeof role === 'string' ? role.trim() : ''))
+            .filter(Boolean)
+            .map(role => role.toLowerCase())));
+
+        if (!normalizedRoles.length) {
+            throw new Error('registerSkill requires at least one role.');
+        }
 
         const record = {
             canonicalName,
@@ -171,6 +180,16 @@ export default class SkillRegistry {
             return [];
         }
 
+        const normalizedRole = typeof options.role === 'string' && options.role.trim()
+            ? options.role.trim().toLowerCase()
+            : (typeof options.callerRole === 'string' && options.callerRole.trim()
+                ? options.callerRole.trim().toLowerCase()
+                : '');
+
+        if (!normalizedRole) {
+            throw new Error('rankSkill requires a caller role for access filtering.');
+        }
+
         const limit = Number.isInteger(options.limit) && options.limit > 0 ? options.limit : options.limit === 0 ? 0 : 5;
         const searchOptions = {
             bool: options?.bool === 'and' ? 'and' : 'or',
@@ -197,8 +216,10 @@ export default class SkillRegistry {
             }
             if (this.skills.has(canonical)) {
                 const record = this.skills.get(canonical);
-                seen.add(canonical);
-                filtered.push(record.name);
+                if (Array.isArray(record.roles) && record.roles.includes(normalizedRole)) {
+                    seen.add(canonical);
+                    filtered.push(record.name);
+                }
             }
             if (limit && filtered.length >= limit) {
                 break;

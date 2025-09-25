@@ -1085,7 +1085,18 @@ class Agent {
     }
 
     async rankSkill(taskDescription, options = {}) {
-        const matches = this.skillRegistry.rankSkill(taskDescription, options);
+        const providedRole = typeof options.role === 'string' && options.role.trim()
+            ? options.role.trim()
+            : (typeof options.callerRole === 'string' && options.callerRole.trim()
+                ? options.callerRole.trim()
+                : '');
+
+        if (!providedRole) {
+            throw new Error('Agent rankSkill requires a role for access control.');
+        }
+
+        const registryOptions = { ...options, role: providedRole };
+        const matches = this.skillRegistry.rankSkill(taskDescription, registryOptions);
 
         if (!Array.isArray(matches) || matches.length === 0) {
             throw new Error('No skills matched the provided task description.');
@@ -1130,6 +1141,7 @@ class Agent {
             why: entry.spec.why,
             args: entry.spec.args,
             requiredArgs: entry.spec.requiredArgs,
+            roles: entry.spec.roles,
         }));
 
         const contextPayload = {
