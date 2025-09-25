@@ -34,35 +34,35 @@ const sendEmailSpec = {
 const parseJsonAction = (jsonText) => JSON.parse(jsonText);
 const sendEmailAction = () => 'email sent';
 
-const parseSkillId = registry.registerSkill({ specs: parseJsonSpec, action: parseJsonAction });
-const emailSkillId = registry.registerSkill({ specs: sendEmailSpec, roles: ['notification', 'communication'], action: sendEmailAction });
+const parseSkillName = registry.registerSkill({ specs: parseJsonSpec, action: parseJsonAction });
+const emailSkillName = registry.registerSkill({ specs: sendEmailSpec, roles: ['notification', 'communication'], action: sendEmailAction });
 
-assert.ok(typeof parseSkillId === 'string' && parseSkillId.length > 0, 'Skill IDs should be non-empty strings.');
-assert.ok(typeof registry.getSkillAction(parseSkillId) === 'function', 'Stored actions should be retrievable.');
-assert.deepStrictEqual(registry.getSkill(parseSkillId).roles, [], 'Default roles collection should be empty.');
-assert.deepStrictEqual(registry.getSkill(emailSkillId).roles, ['notification', 'communication'], 'Explicit roles should be stored with the skill.');
+assert.strictEqual(parseSkillName, parseJsonSpec.name, 'registerSkill should return the canonical skill name.');
+assert.ok(typeof registry.getSkillAction(parseSkillName) === 'function', 'Stored actions should be retrievable.');
+assert.deepStrictEqual(registry.getSkill(parseSkillName).roles, [], 'Default roles collection should be empty.');
+assert.deepStrictEqual(registry.getSkill(emailSkillName).roles, ['notification', 'communication'], 'Explicit roles should be stored with the skill.');
 
 const parseMatches = registry.rankSkill('Need to parse a JSON payload for further analysis.');
 assert.ok(parseMatches.length >= 1, 'Expected at least one skill match for JSON parsing.');
-assert.strictEqual(parseMatches[0], parseSkillId, 'Parse skill should be the most relevant suggestion.');
+assert.strictEqual(parseMatches[0], parseSkillName, 'Parse skill should be the most relevant suggestion.');
 
 const emailMatches = registry.rankSkill('notify the user by sending an email report');
-assert.ok(emailMatches.includes(emailSkillId), 'Email skill should match email related queries.');
+assert.ok(emailMatches.includes(emailSkillName), 'Email skill should match email related queries.');
 
 const noMatches = registry.rankSkill('');
 assert.deepStrictEqual(noMatches, [], 'Empty search text should return no matches.');
 
 __resetForTests();
 const agent = new Agent();
-const agentParseSkillId = agent.registerSkill({ specs: parseJsonSpec, action: parseJsonAction });
+const agentParseSkillName = agent.registerSkill({ specs: parseJsonSpec, action: parseJsonAction });
 const agentMatches = agent.rankSkill('Please parse this json configuration string');
-assert.strictEqual(agentMatches[0], agentParseSkillId, 'Agent-based ranking should surface registered skills.');
+assert.strictEqual(agentMatches[0], agentParseSkillName, 'Agent-based ranking should surface registered skills.');
 
-const executor = agent.getSkillAction(agentParseSkillId);
+const executor = agent.getSkillAction(agentParseSkillName);
 const parsed = executor('{"value":42}');
 assert.deepStrictEqual(parsed, { value: 42 }, 'Retrieved skill action should execute correctly.');
 
-const useSkillResult = await agent.useSkill(agentParseSkillId, { json: '{"value":99}' });
+const useSkillResult = await agent.useSkill(agentParseSkillName, { json: '{"value":99}' });
 assert.deepStrictEqual(useSkillResult, { value: 99 }, 'useSkill should execute the registered action when required arguments are provided.');
 
 agent.clearSkills();

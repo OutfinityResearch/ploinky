@@ -1,4 +1,3 @@
-import { randomBytes, randomUUID } from 'node:crypto';
 import { createFlexSearchAdapter } from '../search/flexsearchAdapter.mjs';
 
 const DEFAULT_INDEX_OPTIONS = {
@@ -6,13 +5,6 @@ const DEFAULT_INDEX_OPTIONS = {
 };
 
 const SEARCHABLE_FIELDS = ['name', 'what', 'why', 'description', 'args', 'requiredArgs', 'roles'];
-
-function generateId() {
-    if (typeof randomUUID === 'function') {
-        return randomUUID();
-    }
-    return randomBytes(16).toString('hex');
-}
 
 function toSearchableText(value) {
     if (value === null || value === undefined) {
@@ -75,6 +67,13 @@ function buildSearchText(skill) {
         .join(' ');
 }
 
+function normalizeSkillName(name) {
+    if (typeof name !== 'string') {
+        return '';
+    }
+    return name.trim().toLowerCase();
+}
+
 function sanitizeSpecs(specs) {
     if (!specs || typeof specs !== 'object') {
         throw new TypeError('Skill specifications must be provided as an object.');
@@ -108,28 +107,59 @@ export default class SkillRegistry {
         this.actions = new Map();
     }
 
-    registerSkill(skillSpecs, action) {
+    registerSkill(skillObj) {
+        if (!skillObj || typeof skillObj !== 'object') {
+            throw new TypeError('registerSkill requires a skill configuration object.');
+        }
+
+        const { specs, action, roles } = skillObj;
+
+        if (!specs || typeof specs !== 'object') {
+            throw new TypeError('registerSkill requires a "specs" object.');
+        }
+
         if (typeof action !== 'function') {
             throw new TypeError('registerSkill requires a function action handler.');
         }
-        const normalizedSpecs = sanitizeSpecs(skillSpecs);
-        const skillId = generateId();
+
+        const normalizedSpecs = sanitizeSpecs(specs);
+        const canonicalName = normalizeSkillName(normalizedSpecs.name);
+        if (!canonicalName) {
+            throw new Error('Skill specification requires a non-empty name.');
+        }
+
+        const normalizedRoles = Array.isArray(roles)
+            ? roles.map(role => (typeof role === 'string' ? role.trim() : '')).filter(Boolean)
+            : [];
 
         const record = {
-            skillId,
+            canonicalName,
             ...normalizedSpecs,
+            roles: normalizedRoles,
             registeredAt: new Date().toISOString(),
         };
 
-        this.skills.set(skillId, record);
-        this.actions.set(skillId, action);
+        if (this.skills.has(canonicalName)) {
+            this.skills.delete(canonicalName);
+            this.actions.delete(canonicalName);
+            if (typeof this.index.remove === 'function') {
+                try {
+                    this.index.remove(canonicalName);
+                } catch (error) {
+                    // ignore removal issues; index will be refreshed via add below
+                }
+            }
+        }
+
+        this.skills.set(canonicalName, record);
+        this.actions.set(canonicalName, action);
 
         const searchText = buildSearchText(record);
         if (searchText) {
-            this.index.add(skillId, searchText);
+            this.index.add(canonicalName, searchText);
         }
 
-        return skillId;
+        return record.name;
     }
 
     rankSkill(taskDescription, options = {}) {
@@ -160,10 +190,15 @@ export default class SkillRegistry {
         }
         const seen = new Set();
         const filtered = [];
-        for (const skillId of matches) {
-            if (!seen.has(skillId) && this.skills.has(skillId)) {
-                seen.add(skillId);
-                filtered.push(skillId);
+        for (const key of matches) {
+            const canonical = normalizeSkillName(key);
+            if (!canonical || seen.has(canonical)) {
+                continue;
+            }
+            if (this.skills.has(canonical)) {
+                const record = this.skills.get(canonical);
+                seen.add(canonical);
+                filtered.push(record.name);
             }
             if (limit && filtered.length >= limit) {
                 break;
@@ -172,12 +207,20 @@ export default class SkillRegistry {
         return filtered;
     }
 
-    getSkill(skillId) {
-        return this.skills.get(skillId) || null;
+    getSkill(skillName) {
+        const canonical = normalizeSkillName(skillName);
+        if (!canonical) {
+            return null;
+        }
+        return this.skills.get(canonical) || null;
     }
 
-    getSkillAction(skillId) {
-        return this.actions.get(skillId) || null;
+    getSkillAction(skillName) {
+        const canonical = normalizeSkillName(skillName);
+        if (!canonical) {
+            return null;
+        }
+        return this.actions.get(canonical) || null;
     }
 
     clear() {

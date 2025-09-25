@@ -2,7 +2,7 @@ import readline from 'node:readline';
 
 // The low-level LLM client used for all model invocations.
 import { callLLMWithModel, cancelRequests as cancelLLMRequests } from './LLMClient.mjs';
-import { loadModelsConfiguration } from './modelsConfigLoader.mjs';
+import { loadModelsConfiguration } from './models/providers/modelsConfigLoader.mjs';
 import SkillRegistry from './skills/SkillRegistry.mjs';
 
 const operatorRegistry = new Map();
@@ -1088,15 +1088,15 @@ class Agent {
         return this.skillRegistry.rankSkill(taskDescription, options);
     }
 
-    async useSkill(skillId, providedArgs = {}) {
-        const skill = this.getSkill(skillId);
+    async useSkill(skillName, providedArgs = {}) {
+        const skill = this.getSkill(skillName);
         if (!skill) {
-            throw new Error(`Skill "${skillId}" is not registered.`);
+            throw new Error(`Skill "${skillName}" is not registered.`);
         }
 
-        const action = this.getSkillAction(skillId);
+        const action = this.getSkillAction(skillName);
         if (typeof action !== 'function') {
-            throw new Error(`No executable action found for skill "${skillId}".`);
+            throw new Error(`No executable action found for skill "${skillName}".`);
         }
 
         const normalizedArgs = providedArgs && typeof providedArgs === 'object' ? { ...providedArgs } : {};
@@ -1190,12 +1190,12 @@ class Agent {
         return action({ ...normalizedArgs });
     }
 
-    getSkill(skillId) {
-        return this.skillRegistry.getSkill(skillId);
+    getSkill(skillName) {
+        return this.skillRegistry.getSkill(skillName);
     }
 
-    getSkillAction(skillId) {
-        return this.skillRegistry.getSkillAction(skillId);
+    getSkillAction(skillName) {
+        return this.skillRegistry.getSkillAction(skillName);
     }
 
     clearSkills() {

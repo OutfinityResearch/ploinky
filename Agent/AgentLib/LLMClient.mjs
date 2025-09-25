@@ -1,7 +1,7 @@
-import { loadModelsConfiguration } from './modelsConfigLoader.mjs';
+import { loadModelsConfiguration } from './models/providers/modelsConfigLoader.mjs';
 import { registerBuiltInProviders } from './models/providers/index.mjs';
-import { registerProvidersFromConfig } from './providerBootstrap.mjs';
-import { ensureProvider } from './providerRegistry.mjs';
+import { registerProvidersFromConfig } from './models/providerBootstrap.mjs';
+import { ensureProvider } from './models/providerRegistry.mjs';
 
 const modelsConfiguration = loadModelsConfiguration();
 
