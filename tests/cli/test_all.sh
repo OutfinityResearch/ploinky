@@ -12,22 +12,12 @@ fail=0
 pass=0
 failed_tests=()
 
-tests=(
-  "agent_commands.sh"
-  "agent_lifecycle.sh"
-  "cleanup_commands.sh"
-  "client_commands.sh"
-  "expose_var.sh"
-  "logs_command.sh"
-  "repo_commands.sh"
-  "restart_command.sh"
-  "var_command.sh"
-  "shell_cli_command.sh"
-  "start_configuration.sh"
-  "webtty_commands.sh"
-  "demo_run.sh"
-  "paramParser.test.mjs"
-)
+# Discover tests dynamically to avoid drift.
+# Include *.sh and *.mjs in this folder, excluding harness files.
+mapfile -t tests < <(\
+  find "$THIS_DIR" -maxdepth 1 -type f \( -name '*.sh' -o -name '*.mjs' \) \
+    ! -name 'test_all.sh' ! -name 'testUtils.sh' \
+    -printf '%f\n' | LC_ALL=C sort)
 
 for t in "${tests[@]}"; do
   bn="$t"
@@ -52,6 +42,8 @@ for t in "${tests[@]}"; do
       failed_tests+=("$bn")
     }
   fi
+  echo "---- Cleanup between tests ----"
+  pkill -f "RoutingServer.js" || true
   echo
 done
 
