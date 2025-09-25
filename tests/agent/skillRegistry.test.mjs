@@ -77,13 +77,35 @@ const parseJsonWithFormatSpec = {
     name: 'parse-json-with-format',
     args: [
         { name: 'json', type: 'string', description: 'The JSON blob to parse.' },
-        { name: 'format', type: 'string', description: 'Optional output format.' },
+        {
+            name: 'format',
+            type: 'string',
+            description: 'Optional output format.',
+            llmHint: 'suggest json output formats helper skill',
+        },
     ],
     requiredArgs: ['json'],
 };
 
 const parseJsonWithFormatAction = (jsonText, format) => ({ parsed: JSON.parse(jsonText), format });
 const parseJsonWithFormatSkill = agent.registerSkill({ specs: parseJsonWithFormatSpec, roles: ['analyst'], action: parseJsonWithFormatAction });
+
+const formatSuggestionSpec = {
+    why: 'Help the agent present ready-to-use format options.',
+    what: 'Suggest JSON output formats',
+    description: 'Suggest JSON output formats helper skill that returns a list of recommended identifiers.',
+    name: 'json-format-suggestions',
+    args: [],
+    requiredArgs: [],
+};
+
+const formatSuggestionAction = () => ([
+    { value: 'compact', label: 'compact', description: 'No whitespace in the output.' },
+    { value: 'pretty', label: 'pretty', description: 'Nicely formatted output.' },
+    'raw',
+]);
+
+agent.registerSkill({ specs: formatSuggestionSpec, roles: ['analyst'], action: formatSuggestionAction });
 
 promptQueue.push('', 'y');
 const optionalArgsResult = await agent.useSkill(parseJsonWithFormatSkill, { json: '{"value":55}' });
@@ -92,6 +114,10 @@ assert.deepStrictEqual(optionalArgsResult, { parsed: { value: 55 }, format: unde
 promptQueue.push('{"value":123}', '', 'y');
 const promptedArgsResult = await agent.useSkill(parseJsonWithFormatSkill, {});
 assert.deepStrictEqual(promptedArgsResult, { parsed: { value: 123 }, format: undefined }, 'Missing required arguments should be collected interactively.');
+
+promptQueue.push('{"value":987}', '2', 'y');
+const suggestionSelectionResult = await agent.useSkill(parseJsonWithFormatSkill, {});
+assert.deepStrictEqual(suggestionSelectionResult, { parsed: { value: 987 }, format: 'pretty' }, 'Selecting a suggestion should populate the argument with the helper-provided value.');
 
 agent.clearSkills();
 await assert.rejects(() => agent.rankSkill('parse some json again', { role: 'analyst' }), /No skills matched/, 'Clearing skills should surface a missing skill error.');
