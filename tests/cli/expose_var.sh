@@ -40,8 +40,13 @@ sleep 3 # Give the container time to start
 
 # 5. Use 'shell' to run 'printenv' inside the container and verify the variable
 echo "Verifying the environment variable inside the container..."
-SHELL_OUTPUT=$(echo "printenv MY_SECRET_KEY && exit" | ploinky shell demo)
-
-assert_match "$SHELL_OUTPUT" "hello_from_the_test" "The exposed environment variable was not found or had the wrong value."
+# We pipe the output to grep directly instead of capturing it to a variable,
+# because 'ploinky shell' is interactive and uses inherited stdio.
+if echo "printenv MY_SECRET_KEY && exit" | ploinky shell demo | grep -q "hello_from_the_test"; then
+    echo "✓ Verification successful: Found the correct environment variable."
+else
+    echo "✗ Verification failed: The exposed environment variable was not found or had the wrong value."
+    exit 1
+fi
 
 # If the script reaches this point, the trap will handle the final PASSED message.
