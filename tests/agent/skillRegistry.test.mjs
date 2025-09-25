@@ -57,6 +57,8 @@ assert.deepStrictEqual(noMatches, [], 'Empty search text should return no matche
 
 __resetForTests();
 const agent = new Agent();
+const promptQueue = [];
+agent.readUserPrompt = async () => (promptQueue.length > 0 ? promptQueue.shift() : '');
 const agentParseSkillName = agent.registerSkill({ specs: parseJsonSpec, roles: ['analyst'], action: parseJsonAction });
 await assert.rejects(() => agent.rankSkill('Please parse this json configuration string', { role: 'admin' }), /No skills matched/, 'Agent should deny access for roles without permission.');
 const agentMatch = await agent.rankSkill('Please parse this json configuration string', { role: 'analyst' });
@@ -66,8 +68,30 @@ const executor = agent.getSkillAction(agentParseSkillName);
 const parsed = executor('{"value":42}');
 assert.deepStrictEqual(parsed, { value: 42 }, 'Retrieved skill action should execute correctly.');
 
+promptQueue.push('y');
 const useSkillResult = await agent.useSkill(agentParseSkillName, { json: '{"value":99}' });
 assert.deepStrictEqual(useSkillResult, { value: 99 }, 'useSkill should execute the registered action when required arguments are provided.');
+
+const parseJsonWithFormatSpec = {
+    ...parseJsonSpec,
+    name: 'parse-json-with-format',
+    args: [
+        { name: 'json', type: 'string', description: 'The JSON blob to parse.' },
+        { name: 'format', type: 'string', description: 'Optional output format.' },
+    ],
+    requiredArgs: ['json'],
+};
+
+const parseJsonWithFormatAction = (jsonText, format) => ({ parsed: JSON.parse(jsonText), format });
+const parseJsonWithFormatSkill = agent.registerSkill({ specs: parseJsonWithFormatSpec, roles: ['analyst'], action: parseJsonWithFormatAction });
+
+promptQueue.push('', 'y');
+const optionalArgsResult = await agent.useSkill(parseJsonWithFormatSkill, { json: '{"value":55}' });
+assert.deepStrictEqual(optionalArgsResult, { parsed: { value: 55 }, format: undefined }, 'Optional arguments should remain undefined when skipped.');
+
+promptQueue.push('{"value":123}', '', 'y');
+const promptedArgsResult = await agent.useSkill(parseJsonWithFormatSkill, {});
+assert.deepStrictEqual(promptedArgsResult, { parsed: { value: 123 }, format: undefined }, 'Missing required arguments should be collected interactively.');
 
 agent.clearSkills();
 await assert.rejects(() => agent.rankSkill('parse some json again', { role: 'analyst' }), /No skills matched/, 'Clearing skills should surface a missing skill error.');
