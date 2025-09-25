@@ -1221,7 +1221,6 @@ class Agent {
                 name: definition.name,
                 description: typeof definition.description === 'string' ? definition.description : '',
                 type: typeof definition.type === 'string' ? definition.type : null,
-                llmHint: typeof definition.llmHint === 'string' ? definition.llmHint.trim() : '',
                 isRequired: requiredArgs.includes(definition.name),
             };
         });
@@ -1232,7 +1231,6 @@ class Agent {
                     name,
                     description: '',
                     type: null,
-                    llmHint: '',
                     isRequired: true,
                 });
             }
@@ -1276,97 +1274,6 @@ class Agent {
             return parsed === null ? trimmed : parsed;
         };
 
-        const normalizeSuggestionEntry = (entry) => {
-            if (entry === null || entry === undefined) {
-                return null;
-            }
-            if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
-                return {
-                    value: entry,
-                    label: String(entry),
-                    description: '',
-                };
-            }
-            if (typeof entry === 'object') {
-                const candidateValue = Object.prototype.hasOwnProperty.call(entry, 'value')
-                    ? entry.value
-                    : (Object.prototype.hasOwnProperty.call(entry, 'suggestion') ? entry.suggestion : undefined);
-                if (candidateValue === undefined) {
-                    return null;
-                }
-                const candidateLabel = typeof entry.label === 'string' && entry.label
-                    ? entry.label
-                    : String(candidateValue);
-                const candidateDescription = typeof entry.description === 'string' ? entry.description
-                    : (typeof entry.detail === 'string' ? entry.detail : '');
-                return {
-                    value: candidateValue,
-                    label: candidateLabel,
-                    description: candidateDescription,
-                };
-            }
-            return null;
-        };
-
-        const fetchArgumentSuggestions = async (argumentMeta) => {
-            if (!argumentMeta.llmHint) {
-                return [];
-            }
-
-            let agent;
-            try {
-                agent = getAgent();
-            } catch (error) {
-                console.warn(`Unable to obtain language model for suggestions: ${error.message}`);
-                return [];
-            }
-
-            const systemPrompt = 'You propose up to five concise candidate values for a tool argument. Respond with JSON only: an array where each element is either a string or an object with keys "value" and optional "label" and "description".';
-            const humanSections = [
-                `Skill name: ${skill.name}`,
-                `Skill description: ${skill.description}`,
-                `Argument name: ${argumentMeta.name}`,
-                `Argument description: ${argumentMeta.description || 'No description provided.'}`,
-                `Argument requirement: ${argumentMeta.isRequired ? 'required' : 'optional'}`,
-                `Hint: ${argumentMeta.llmHint}`,
-            ];
-
-            const knownArgs = Object.entries(normalizedArgs)
-                .filter(([, value]) => value !== undefined && value !== null)
-                .reduce((acc, [name, value]) => {
-                    acc[name] = value;
-                    return acc;
-                }, {});
-
-            if (Object.keys(knownArgs).length > 0) {
-                humanSections.push(`Known argument values: ${JSON.stringify(knownArgs, null, 2)}`);
-            }
-
-            humanSections.push('Return the suggestions as instructed. Do not include explanatory text.');
-
-            let rawSuggestions;
-            try {
-                rawSuggestions = await invokeAgent(agent, [
-                    { role: 'system', message: systemPrompt },
-                    { role: 'human', message: humanSections.join('\n\n') },
-                ], { mode: 'fast' });
-            } catch (error) {
-                console.warn(`Failed to generate suggestions for argument "${argumentMeta.name}": ${error.message}`);
-                return [];
-            }
-
-            const parsed = safeJsonParse(typeof rawSuggestions === 'string' ? rawSuggestions.trim() : rawSuggestions);
-            if (!Array.isArray(parsed)) {
-                console.warn(`Suggestion generator for argument "${argumentMeta.name}" did not return a JSON array.`);
-                return [];
-            }
-
-            return parsed
-                .map(normalizeSuggestionEntry)
-                .filter(Boolean)
-                .slice(0, 5);
-        };
-
         const ensureArgumentProvided = async (argumentMeta) => {
             const hasValue = Object.prototype.hasOwnProperty.call(normalizedArgs, argumentMeta.name)
                 && normalizedArgs[argumentMeta.name] !== undefined
@@ -1374,31 +1281,11 @@ class Agent {
             if (hasValue) {
                 return;
             }
-
-            const suggestions = await fetchArgumentSuggestions(argumentMeta);
-
-            let showSuggestions = true;
             while (true) {
-                if (suggestions.length && showSuggestions) {
-                    console.log('Suggested values:');
-                    suggestions.forEach((suggestion, index) => {
-                        const parts = [`  ${index + 1}. ${suggestion.label}`];
-                        if (suggestion.description) {
-                            parts.push(`— ${suggestion.description}`);
-                        }
-                        console.log(parts.join(' '));
-                    });
-                    console.log('Select a suggestion by number, provide a custom value, or type \"cancel\" to abort.');
-                    if (!argumentMeta.isRequired) {
-                        console.log('Press Enter without typing anything to skip this optional argument.');
-                    }
-                    showSuggestions = false;
-                }
-
                 const descriptionSuffix = argumentMeta.description ? ` - ${argumentMeta.description}` : '';
-                    const basePrompt = argumentMeta.isRequired
-                        ? `Enter value for ${argumentMeta.name} (required${descriptionSuffix}) [type 'cancel' to abort]: `
-                        : `Enter value for ${argumentMeta.name} (optional${descriptionSuffix}) [press Enter to skip or type 'cancel' to abort]: `;
+                const basePrompt = argumentMeta.isRequired
+                    ? `Enter value for ${argumentMeta.name} (required${descriptionSuffix}) [type 'cancel' to abort]: `
+                    : `Enter value for ${argumentMeta.name} (optional${descriptionSuffix}) [press Enter to skip or type 'cancel' to abort]: `;
 
                 const userInput = await this.readUserPrompt(basePrompt);
                 const rawInput = typeof userInput === 'string' ? userInput : '';
@@ -1407,7 +1294,6 @@ class Agent {
                 if (!trimmedInput) {
                     if (argumentMeta.isRequired) {
                         console.log(`${argumentMeta.name} is required.`);
-                        showSuggestions = suggestions.length > 0;
                         continue;
                     }
                     break;
@@ -1415,17 +1301,6 @@ class Agent {
 
                 if (trimmedInput.toLowerCase() === 'cancel') {
                     throw new Error('Skill execution cancelled by user.');
-                }
-
-                if (suggestions.length && /^\d+$/.test(trimmedInput)) {
-                    const index = Number.parseInt(trimmedInput, 10) - 1;
-                    if (index >= 0 && index < suggestions.length) {
-                        normalizedArgs[argumentMeta.name] = suggestions[index].value;
-                        break;
-                    }
-                    console.log('Invalid selection. Please choose a valid suggestion number or provide a custom value.');
-                    showSuggestions = true;
-                    continue;
                 }
 
                 normalizedArgs[argumentMeta.name] = coerceArgumentValue(trimmedInput, argumentMeta);
