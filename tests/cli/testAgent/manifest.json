@@ -1,0 +1,6 @@
+{
+  "container": "alpine:latest",
+  "cli": "/bin/sh",
+  "about": "Test agent for webchat setup",
+  "webchat": "echo hello world"
+}

@@ -768,6 +768,44 @@ function getContainerLabel(containerName, key) {
     } catch (_) { return ''; }
 }
 
+// Apply pre-start setup steps based on manifest fields (e.g., manifest.webchat).
+// Runs on the host (cwd = current workspace directory).
+// Persists brief output snippets into the workspace agent registry for surfacing in UI.
+function applyAgentStartupConfig(agentName, manifest, agentPath, containerName) {
+    try {
+        if (!manifest || typeof manifest !== 'object') return;
+        const webchatSetupCmd = (typeof manifest.webchat === 'string' && manifest.webchat.trim()) ? manifest.webchat.trim() : '';
+        if (webchatSetupCmd) {
+            console.log('Executing webchat config...');
+            console.log(`[webchat] configuring for '${agentName}'...`);
+            const out = execSync(`sh -lc "${webchatSetupCmd.replace(/"/g, '\\"')}"`, { stdio: ['ignore','pipe','inherit'] }).toString();
+            try { if (out && out.trim()) process.stdout.write(out); } catch(_) {}
+            try {
+                const agents = loadAgentsMap();
+                const key = containerName || getServiceContainerName(agentName);
+                const repoName = path.basename(path.dirname(agentPath));
+                const image = manifest.container || manifest.image || 'node:18-alpine';
+                const rec = agents[key] || (agents[key] = {
+                    agentName,
+                    repoName,
+                    containerImage: image,
+                    createdAt: new Date().toISOString(),
+                    projectPath: process.cwd(),
+                    type: 'agent',
+                    config: { binds: [], env: [], ports: [] }
+                });
+                rec.webchatSetupOutput = (out || '').split(/\n/).slice(-5).join('\n');
+                rec.webchatSetupAt = new Date().toISOString();
+                saveAgentsMap(agents);
+            } catch(_) {}
+        }
+    } catch (e) {
+        console.log(`[setup] ${agentName}: ${e?.message || e}`);
+    }
+}
+
+module.exports.applyAgentStartupConfig = applyAgentStartupConfig;
+
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000)
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000).
 // Uses the same mounting strategy as startAgentContainer. Falls back to AgentServer.sh if no agent command set.
@@ -777,6 +815,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     // Use a dedicated service container name with cwd hash to avoid clashes across workspaces
     const containerName = getServiceContainerName(agentName);
     const image = manifest.container || manifest.image || 'node:18-alpine';
+    const webchatSetupCmd = (manifest && typeof manifest.webchat === 'string' && manifest.webchat.trim()) ? manifest.webchat.trim() : '';
 
     // If container exists, ensure it's running and return current mapped port.
     let createdNew = false;
@@ -790,6 +829,8 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     }
     if (containerExists(containerName)) {
         if (!isContainerRunning(containerName)) {
+            // Apply any pre-start setup steps for this agent
+            applyAgentStartupConfig(agentName, manifest, agentPath, containerName);
             try { execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
         }
         try {
@@ -804,6 +845,8 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     }
 
     const hostPort = preferredHostPort || (10000 + Math.floor(Math.random() * 50000));
+    // Apply any pre-start setup steps (before container creation)
+    applyAgentStartupConfig(agentName, manifest, agentPath, containerName);
     // Use startAgentContainer to create the container with identical config and publish mapping
     startAgentContainer(agentName, manifest, agentPath, { publish: [ `${hostPort}:7000` ] });
     createdNew = true;

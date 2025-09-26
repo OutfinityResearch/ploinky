@@ -65,6 +65,8 @@ function collectWorkspaceAgents() {
         agentName: rec?.agentName || container,
         repoName: rec?.repoName || '',
         image: rec?.containerImage || '',
+        webchatSetupOutput: rec?.webchatSetupOutput || '',
+        webchatSetupAt: rec?.webchatSetupAt || null
       }));
   } catch (_) {
     return [];
@@ -125,14 +127,15 @@ function handleStatus(req, res) {
   if (pathname === '/data') {
     Promise.all([runStatusCommand()]).then(([result]) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
+      const payload = {
         ok: true,
         code: result.code,
         output: result.stdout || result.stderr || '',
         servers: collectServerStatuses(),
         static: collectStaticInfo(),
         agents: collectWorkspaceAgents()
-      }));
+      };
+      res.end(JSON.stringify(payload));
     });
     return;
   }
