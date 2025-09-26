@@ -10,10 +10,14 @@ function emitConfigurationDiagnostics() {
     configurationDiagnosticsEmitted = true;
 
     for (const error of modelsConfiguration.issues.errors) {
-        console.error(`LLMAgentClient: ${error}`);
+        if (process.env.LLMAgentClient_DEBUG === 'true') {
+            console.error(`LLMAgentClient: ${error}`);
+        }
     }
     for (const warning of modelsConfiguration.issues.warnings) {
-        console.warn(`LLMAgentClient: ${warning}`);
+        if (process.env.LLMAgentClient_DEBUG === 'true') {
+            console.warn(`LLMAgentClient: ${warning}`);
+        }
     }
 }
 
@@ -105,12 +109,16 @@ function categorizeModelsByMode(modelNames) {
 function buildModelRecordByName(modelName) {
     const descriptor = getModelDescriptor(modelName);
     if (!descriptor) {
-        console.warn(`LLMAgentClient: models.json does not define model "${modelName}".`);
+        if (process.env.LLMAgentClient_DEBUG === 'true') {
+            console.warn(`LLMAgentClient: models.json does not define model "${modelName}".`);
+        }
         return null;
     }
     const providerConfig = getProviderConfig(descriptor.providerKey);
     if (!providerConfig) {
-        console.warn(`LLMAgentClient: Model "${modelName}" references unknown provider "${descriptor.providerKey}".`);
+        if (process.env.LLMAgentClient_DEBUG === 'true') {
+            console.warn(`LLMAgentClient: Model "${modelName}" references unknown provider "${descriptor.providerKey}".`);
+        }
         return null;
     }
     return createAgentModelRecord(providerConfig, descriptor);

@@ -167,7 +167,9 @@ function commitAgentRecord({
             origin,
         });
         agentRegistry.delete(name.toLowerCase());
-        console.warn(`LLMAgentClient: Agent "${name}" could not be registered because no models were supplied.`);
+        if (process.env.LLMAgentClient_DEBUG === 'true') {
+            console.warn(`LLMAgentClient: Agent "${name}" could not be registered because no models were supplied.`);
+        }
         return { status: 'inactive', reason: 'no models configured' };
     }
 
@@ -185,7 +187,9 @@ function commitAgentRecord({
             origin,
         });
         agentRegistry.delete(name.toLowerCase());
-        console.warn(`LLMAgentClient: Agent "${name}" has no models with available API keys.`);
+        if (process.env.LLMAgentClient_DEBUG === 'true') {
+            console.warn(`LLMAgentClient: Agent "${name}" has no models with available API keys.`);
+        }
         return { status: 'inactive', reason: 'missing API keys' };
     }
 
@@ -247,7 +251,9 @@ function autoRegisterProviders() {
         const descriptors = modelsConfiguration.providerModels.get(providerKey) || [];
 
         if (!descriptors.length) {
-            console.warn(`LLMAgentClient: No models configured in models.json for provider "${providerKey}".`);
+            if (process.env.LLMAgentClient_DEBUG === 'true') {
+                console.warn(`LLMAgentClient: No models configured in models.json for provider "${providerKey}".`);
+            }
             commitAgentRecord({
                 name: providerKey,
                 role: `${providerKey} agent`,

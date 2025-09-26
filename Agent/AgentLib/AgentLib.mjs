@@ -209,7 +209,9 @@ class Agent {
         return candidateMap.get(normalizedSelected);
     }
 
-    async useSkill(skillName, providedArgs = {}) {
+    async useSkill(skillName, providedArgs = {}, options = {}) {
+        const taskDescription = typeof options.taskDescription === 'string' ? options.taskDescription : '';
+        const skipConfirmation = options.skipConfirmation === true;
         return executeSkill({
             skillName,
             providedArgs,
@@ -217,7 +219,13 @@ class Agent {
             getSkillAction: this.getSkillAction.bind(this),
             getSkillOptions: this.getSkillOptions.bind(this),
             readUserPrompt: this.readUserPrompt.bind(this),
+            taskDescription,
+            skipConfirmation,
         });
+    }
+
+    listSkillsForRole(role) {
+        return this.skillRegistry.listSkillsForRole(role);
     }
 
     getSkill(skillName) {

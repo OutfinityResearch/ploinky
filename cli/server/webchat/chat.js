@@ -28,6 +28,7 @@
   let lastServerMsg = { bubble: null, fullText: '' };
   let activeSidePanelBubble = null;
   let userInputSent = false;
+  let lastClientCommand = '';
 
   // --- Basic Setup ---
   const appTitle = (body.dataset.title || body.dataset.agent || 'Chat').trim() || 'Chat';
@@ -286,6 +287,7 @@
   }
 
   function addClientMsg(text) {
+    lastClientCommand = text;
     const msgDiv = document.createElement('div');
     msgDiv.className = 'wa-message out';
     msgDiv.innerHTML = `
@@ -332,6 +334,26 @@
   }
 
   function addServerMsg(text) {
+    let normalized = typeof text === 'string' ? text : '';
+    if (lastClientCommand) {
+      const commandTrim = lastClientCommand.trim();
+      if (commandTrim) {
+        const lines = normalized.split(/\r?\n/);
+        while (lines.length && lines[0].trim() === commandTrim) {
+          lines.shift();
+        }
+        normalized = lines.join('\n');
+      }
+      lastClientCommand = '';
+      normalized = normalized.replace(/^\n+/, '');
+    }
+    if (!normalized.trim()) {
+      lastServerMsg.bubble = null;
+      lastServerMsg.fullText = '';
+      userInputSent = false;
+      return;
+    }
+    text = normalized;
     if (!userInputSent && lastServerMsg.bubble) {
       // Append to existing bubble
       lastServerMsg.fullText += '\n' + text;

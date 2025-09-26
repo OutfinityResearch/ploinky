@@ -266,6 +266,24 @@ export default class SkillRegistry {
         return typeof handler === 'function' ? handler : null;
     }
 
+    listSkillsForRole(role) {
+        const normalizedRole = typeof role === 'string' ? role.trim().toLowerCase() : '';
+        if (!normalizedRole) {
+            return [];
+        }
+
+        const toSummary = (record) => ({
+            name: record.name,
+            description: record.humanDescription || record.description || record.what || record.name,
+            needConfirmation: record.needConfirmation === true,
+        });
+
+        return Array.from(this.skills.values())
+            .filter(record => Array.isArray(record.roles) && record.roles.includes(normalizedRole))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(toSummary);
+    }
+
     clear() {
         this.skills.clear();
         this.actions.clear();

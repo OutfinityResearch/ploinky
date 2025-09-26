@@ -138,6 +138,79 @@ promptQueue.push('{"value":987}', '2', 'y');
 const suggestionSelectionResult = await agent.useSkill(parseJsonWithFormatSkill, {});
 assert.deepStrictEqual(suggestionSelectionResult, { parsed: { value: 987 }, format: 'pretty' }, 'Selecting a suggestion should populate the argument with the helper-provided value.');
 
+const addUserSpec = {
+    name: 'add-user',
+    description: 'Add a new user.',
+    needConfirmation: true,
+    args: [
+        { name: 'username', description: 'Username for the new user.' },
+        { name: 'password', description: 'Password for the new user.' },
+        { name: 'role', description: 'Role assigned to the user.' },
+        { name: 'givenName', description: 'Given name of the new user.' },
+        { name: 'familyName', description: 'Family name of the new user.' },
+    ],
+    requiredArgs: ['username', 'password', 'role', 'givenName'],
+};
+
+const addUserRoles = () => ({
+    role: [
+        { label: 'SystemAdmin - Manages the entire platform.', value: 'SystemAdmin' },
+        { label: 'ProjectManager - Oversees project inventory.', value: 'ProjectManager' },
+    ],
+});
+
+const addUserAction = ({ username, password, role, givenName, familyName } = {}) => ({
+    username,
+    password,
+    role,
+    givenName,
+    familyName,
+});
+
+agent.registerSkill({ specs: addUserSpec, roles: ['systemadmin'], action: addUserAction, getOptions: addUserRoles });
+
+promptQueue.push('username jsmith password s3cret', 'y');
+const autoprefillResult = await agent.useSkill('add-user', {}, { taskDescription: 'add new project manager jhon smith' });
+assert.deepStrictEqual(
+    autoprefillResult,
+    {
+        username: 'jsmith',
+        password: 's3cret',
+        role: 'ProjectManager',
+        givenName: 'Jhon',
+        familyName: 'Smith',
+    },
+    'Task description should prefill role and names before prompting for the remaining arguments.',
+);
+
+promptQueue.push('username asmith password firstpass', 'e', 'password betterpass', 'y');
+const editedResult = await agent.useSkill('add-user', {}, { taskDescription: 'add new system admin alice smith' });
+assert.deepStrictEqual(
+    editedResult,
+    {
+        username: 'asmith',
+        password: 'betterpass',
+        role: 'SystemAdmin',
+        givenName: 'Alice',
+        familyName: 'Smith',
+    },
+    'Editing after the confirmation prompt should update arguments before execution.',
+);
+
+promptQueue.push('username skipuser password skipsecret role SystemAdmin givenName Skip familyName Confirmed');
+const skipConfirmationResult = await agent.useSkill('add-user', {}, { taskDescription: 'add skip confirmation user', skipConfirmation: true });
+assert.deepStrictEqual(
+    skipConfirmationResult,
+    {
+        username: 'skipuser',
+        password: 'skipsecret',
+        role: 'SystemAdmin',
+        givenName: 'Skip',
+        familyName: 'Confirmed',
+    },
+    'skipConfirmation should bypass the confirmation prompt and retain provided arguments.',
+);
+
 agent.clearSkills();
 await assert.rejects(() => agent.rankSkill('parse some json again', { role: 'analyst' }), /No skills matched/, 'Clearing skills should surface a missing skill error.');
 
