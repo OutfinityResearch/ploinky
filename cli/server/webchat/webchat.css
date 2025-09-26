@@ -332,13 +332,55 @@ body {
   padding: 16px;
 }
 
-.wa-side-panel-content pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+.wa-side-panel-body {
+  white-space: normal;
   font-size: 13px;
   color: var(--wa-text-secondary);
+  line-height: 1.5;
 }
+.wa-side-panel-body p { margin: 0 0 10px; }
+.wa-side-panel-body p:last-child { margin-bottom: 0; }
+.wa-side-panel-body pre {
+  background: var(--wa-bg-panel);
+  border: 1px solid var(--wa-border);
+  border-radius: 6px;
+  padding: 12px;
+  overflow-x: auto;
+  font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+}
+.wa-side-panel-body code {
+  background: var(--wa-bg-input);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+}
+.wa-side-panel-body ul,
+.wa-side-panel-body ol { margin: 0 0 10px 0; padding-left: 22px; }
+.wa-side-panel-body blockquote {
+  margin: 8px 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--wa-accent);
+  color: var(--wa-text-secondary);
+}
+.wa-side-panel-body a {
+  color: var(--wa-accent);
+  text-decoration: underline;
+}
+.wa-side-panel-body h1,
+.wa-side-panel-body h2,
+.wa-side-panel-body h3,
+.wa-side-panel-body h4 {
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--wa-text-primary);
+}
+.wa-side-panel-body .wa-md-table-wrap { overflow-x: auto; margin: 12px 0; }
+.wa-side-panel-body table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 320px; background: var(--wa-bg-secondary); }
+.wa-side-panel-body table.wa-md-table th,
+.wa-side-panel-body table.wa-md-table td { border: 1px solid var(--wa-border); padding: 8px 10px; text-align: left; }
+.wa-side-panel-body table.wa-md-table th { background: var(--wa-bg-panel); color: var(--wa-text-primary); font-weight: 600; }
 
 /* Iframe overlay for X-Frame-Options / CSP errors */
 .wa-iframe-wrap { position: relative; }
@@ -402,7 +444,29 @@ body {
 .wa-message.out .wa-message-bubble { background: var(--wa-bg-message-out); color: var(--wa-text-message-out); border-top-right-radius: 0; }
 .wa-message.in .wa-message-bubble { background: var(--wa-bg-message-in); color: var(--wa-text-primary); border-top-left-radius: 0; }
 
-.wa-message-text { white-space: pre-wrap; margin: 0; padding-right: 60px; min-height: 19px; }
+.wa-message-text { white-space: normal; margin: 0; padding-right: 60px; min-height: 19px; }
+.wa-message-text p { margin: 0 0 6px; line-height: 1.45; }
+.wa-message-text p:last-child { margin-bottom: 0; }
+.wa-message-text ul,
+.wa-message-text ol { margin: 0 0 6px 0; padding-left: 20px; }
+.wa-message-text li { margin-bottom: 4px; }
+.wa-message-text li:last-child { margin-bottom: 0; }
+.wa-message-text code { background: var(--wa-bg-input); border-radius: 4px; padding: 1px 4px; font-size: 0.95em; font-family: 'Menlo', 'Monaco', 'Consolas', monospace; color: var(--wa-text-secondary); }
+.wa-message-text pre { background: var(--wa-bg-panel); border: 1px solid var(--wa-border); border-radius: 6px; padding: 10px; margin: 6px 0; overflow-x: auto; font-family: 'Menlo', 'Monaco', 'Consolas', monospace; font-size: 13px; }
+.wa-message-text h1,
+.wa-message-text h2,
+.wa-message-text h3,
+.wa-message-text h4 { margin: 0 0 8px; font-weight: 600; color: var(--wa-text-primary); }
+.wa-message-text h1 { font-size: 1.25rem; }
+.wa-message-text h2 { font-size: 1.15rem; }
+.wa-message-text h3 { font-size: 1.05rem; }
+.wa-message-text blockquote { margin: 6px 0; padding-left: 12px; border-left: 3px solid var(--wa-accent); color: var(--wa-text-secondary); }
+.wa-message-text a { color: var(--wa-accent); text-decoration: underline; cursor: pointer; }
+.wa-message-text .wa-md-table-wrap { overflow-x: auto; margin: 8px 0; }
+.wa-message-text table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 240px; background: var(--wa-bg-secondary); }
+.wa-message-text table.wa-md-table th,
+.wa-message-text table.wa-md-table td { border: 1px solid var(--wa-border); padding: 6px 8px; text-align: left; }
+.wa-message-text table.wa-md-table th { background: var(--wa-bg-panel); color: var(--wa-text-primary); font-weight: 600; }
 
 .wa-message-time {
   position: absolute;

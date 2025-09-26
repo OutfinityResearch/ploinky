@@ -4,6 +4,7 @@
 
   // --- DOM Elements ---
   const body = document.body;
+  const markdown = window.webchatMarkdown;
   const titleBar = document.getElementById('titleBar');
   const statusEl = document.getElementById('statusText');
   const statusDot = document.querySelector('.wa-status-dot');
@@ -115,9 +116,12 @@
   function showTextInPanel(text) {
     const wrap = getPanelWrapper();
     if (!wrap) return;
-    wrap.innerHTML = '<pre id="sidePanelContent"></pre>';
+    wrap.innerHTML = '<div id="sidePanelContent" class="wa-side-panel-body"></div>';
     const el = document.getElementById('sidePanelContent');
-    if (el) el.textContent = text;
+    if (el) {
+      el.innerHTML = markdown ? markdown.render(text) : text;
+      bindLinkDelegation(el);
+    }
     setPanelTitleText('Full Message');
     sidePanel.style.display = 'flex';
     chatContainer.classList.add('side-panel-open');
@@ -286,7 +290,8 @@
         </span>
       </div>`;
     const textDiv = msgDiv.querySelector('.wa-message-text');
-    textDiv.appendChild(linkify(text));
+    textDiv.innerHTML = markdown ? markdown.render(text) : text;
+    bindLinkDelegation(textDiv);
     chatList.appendChild(msgDiv);
     chatList.scrollTop = chatList.scrollHeight;
     lastServerMsg.bubble = null; // Reset server message grouping
@@ -300,9 +305,8 @@
     const textDiv = bubble.querySelector('.wa-message-text');
     const moreDiv = bubble.querySelector('.wa-message-more');
 
-    // linkify preview
-    textDiv.innerHTML = '';
-    textDiv.appendChild(linkify(preview));
+    textDiv.innerHTML = markdown ? markdown.render(preview) : preview;
+    bindLinkDelegation(textDiv);
 
     if (hasMore && !moreDiv) {
       const more = document.createElement('div');
@@ -316,7 +320,7 @@
 
     if (activeSidePanelBubble === bubble) {
       const el = document.getElementById('sidePanelContent');
-      if (el) el.textContent = fullText;
+      if (el) el.innerHTML = markdown ? markdown.render(fullText) : fullText;
     }
   }
 
@@ -653,74 +657,6 @@
   let es;
   let chatBuffer = '';
 
-  function formatLinkText(rawUrl) {
-    try {
-      const u = new URL(rawUrl);
-      // Domain without port and without leading www.
-      let domain = u.hostname || '';
-      if (domain.startsWith('www.')) domain = domain.slice(4);
-      // Build a short, readable path summary
-      const rawPath = (u.pathname || '/').replace(/\/+$/,'') || '/';
-      const path = decodeURIComponent(rawPath);
-      const segs = path.split('/').filter(Boolean);
-      const short = (s, n) => (s.length > n ? (s.slice(0, Math.max(1, n-1)) + '…') : s);
-      let shortPath = '/';
-      if (segs.length === 1) {
-        shortPath = '/' + short(segs[0], 18);
-      } else if (segs.length === 2) {
-        shortPath = '/' + short(segs[0], 12) + '/' + short(segs[1], 12);
-      } else if (segs.length >= 3) {
-        shortPath = '/' + short(segs[0], 10) + '/…/' + short(segs[segs.length - 1], 14);
-      }
-
-      // Prefer a meaningful query hint (id or q)
-      let hint = '';
-      try {
-        const qp = new URLSearchParams(u.search || '');
-        const id = qp.get('id');
-        const q = qp.get('q');
-        if (id) hint = ` ?id=${short(id, 12)}`;
-        else if (q) hint = ` ?q=${short(q, 12)}`;
-      } catch(_) {}
-
-      // Optional hash hint
-      if (u.hash) {
-        const h = u.hash.replace(/^#/, '');
-        if (h) hint += ` #${short(h, 12)}`;
-      }
-
-      const labelPath = (shortPath === '/') ? '' : shortPath;
-      const sep = hint ? ' ' : '';
-      return `Open ${domain}${labelPath}${sep}${hint}`;
-    } catch(_) {
-      return rawUrl;
-    }
-  }
-
-  function linkify(text) {
-    const frag = document.createDocumentFragment();
-    const urlRe = /(https?:\/\/[\w\-._~:\/?#\[\]@!$&'()*+,;=%]+)/gi;
-    let lastIndex = 0;
-    let m;
-    while ((m = urlRe.exec(text)) !== null) {
-      const before = text.slice(lastIndex, m.index);
-      if (before) frag.appendChild(document.createTextNode(before));
-      const rawUrl = m[0];
-      const a = document.createElement('a');
-      a.href = rawUrl;
-      a.textContent = formatLinkText(rawUrl);
-      a.title = rawUrl;
-      a.style.color = 'var(--wa-accent)';
-      a.style.textDecoration = 'underline';
-      a.addEventListener('click', (e) => { e.preventDefault(); openIframe(rawUrl); });
-      frag.appendChild(a);
-      lastIndex = m.index + rawUrl.length;
-    }
-    const rest = text.slice(lastIndex);
-    if (rest) frag.appendChild(document.createTextNode(rest));
-    return frag;
-  }
-
   function stripCtrlAndAnsi(s) {
     try {
       let out = s || '';
@@ -738,7 +674,7 @@
     if (!chatBuffer) return;
     const parts = chatBuffer.split(/\r?\n/);
     chatBuffer = parts.pop() || '';
-    const blocks = parts.map(stripCtrlAndAnsi).filter(Boolean).join('\n');
+    const blocks = parts.map(stripCtrlAndAnsi).join('\n');
     if (blocks) addServerMsg(blocks);
   }
 
@@ -774,6 +710,20 @@
       } catch (e) { dlog('term write error', e); }
     };
   }
+
+  function bindLinkDelegation(container) {
+    if (!container || container.dataset.linksBound === 'true') return;
+    container.addEventListener('click', (evt) => {
+      const link = evt.target.closest('a[data-wc-link="true"]');
+      if (link) {
+        evt.preventDefault();
+        openIframe(link.href);
+      }
+    });
+    container.dataset.linksBound = 'true';
+  }
+
+  bindLinkDelegation(chatList);
 
   startSSE();
 })();

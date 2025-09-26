@@ -119,10 +119,29 @@
       <button class="wa-icon-btn" id="participantsToggle" title="Toggle participants">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
       </button>
-      <button class="wa-icon-btn" id="themeToggle" title="Toggle theme">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 3a7 7 0 1 1 0 14 7 7 0 0 1 0-14z" opacity="0.4"/><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></svg>
+      <button class="wa-icon-btn" id="settingsBtn" title="Voice settings">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.07 7.07 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.9 2h-3.8a.5.5 0 0 0-.5.43l-.36 2.54a7.07 7.07 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L3.2 8.49a.5.5 0 0 0 .12.64l2.03 1.58c-.04.3-.06.61-.06.94s.02.64.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.38 1.05.7 1.63.94l.36 2.54a.5.5 0 0 0 .5.43h3.8a.5.5 0 0 0 .5-.43l.36-2.54c.58-.24 1.13-.56 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zm-7.14 2.56a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
       </button>
     </div>
+  </div>
+
+  <div class="wa-settings-panel" id="settingsPanel">
+    <div class="wa-settings-header">Voice Settings</div>
+    <label class="wa-settings-row">
+      <input type="checkbox" id="sttEnable" checked />
+      <span>Enable speech dictation</span>
+    </label>
+    <label class="wa-settings-row">
+      <span class="wa-settings-label">Recognition language</span>
+      <select id="sttLang"></select>
+    </label>
+    <label class="wa-settings-row">
+      <span class="wa-settings-label">Theme</span>
+      <select id="themeSelect">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
   </div>
 
   <div class="wa-connection-banner" id="connBanner">
@@ -148,136 +167,98 @@
       <!-- Participants panel moved inside chat-container to sit beside side panel -->
       <div id="participantsPanel" class="wa-participants-panel">
         <div class="wa-participants-header">
-          <h3 id="participantsPanelTitle" style="margin:0;font-size:16px">Register</h3>
-          <form style="margin-top:12px; display:flex; gap:8px; align-items:center;" autocomplete="on" onsubmit="return false;">
-            <input id="vc_email_input" type="email" name="email" autocomplete="email" placeholder="Enter email and press Enter to join" style="flex:1;padding:8px;border:1px solid var(--wa-border);border-radius:6px;background:var(--wa-bg-input);color:var(--wa-text-primary)" />
-            <button type="button" class="vc-toolbar-btn" id="vc_connect_btn" title="Connect" style="margin:0;">
+          <div class="wa-participants-header-row">
+            <h3 id="participantsPanelTitle" class="wa-participants-title">Register</h3>
+            <button type="button" class="vc-toolbar-btn" id="vc_connect_btn" title="Connect">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM19 18H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h.71C7.37 7.69 9.48 6 12 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3s-1.34 3-3 3z"/></svg>
             </button>
-          </form>
-          <div class="vc-toolbar" style="margin-top:8px">
-            <button class="vc-toolbar-btn" id="vc_mic_btn" title="Request to speak" style="display:none">
-              <span style="font-size: 18px;">✌️</span>
+          </div>
+          <div class="wa-meeting-controls">
+            <button class="wa-icon-btn" id="vc_mic_btn" title="Raise hand">
+              <span style="font-size:18px;">✋</span>
             </button>
-            <button class="vc-toolbar-btn" id="vc_prepare_btn" title="Prepare message" style="display:none">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3.49h-.72c-.28 0-.5.22-.5.5V11c0 2.76-2.24 5-5 5s-5-2.24-5-5v-.01c0-.28-.22-.5-.5-.5h-.72c-.28 0-.5.22-.5.5V11c0 3.25 2.47 5.95 5.66 6.42v2.08c0 .28.22.5.5.5h1.22c.28 0 .5-.22.5-.5v-2.08c3.19-.46 5.66-3.17 5.66-6.42v-.01c0-.28-.22-.49-.5-.49z"/></svg>
+            <button class="wa-icon-btn" id="vc_mute_btn" title="Unmute microphone">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a4 4 0 0 0-4 4v5a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4zm6 8a6 6 0 0 1-12 0H4a8 8 0 0 0 16 0h-2zm-6-7a2 2 0 0 1 2 2v5a2 2 0 0 1-4 0V6a2 2 0 0 1 2-2z"/></svg>
             </button>
-            <button class="vc-toolbar-btn" id="vc_deafen_btn" title="Deafen (mute incoming audio)" style="display:none">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+            <button class="wa-icon-btn" id="vc_deafen_btn" title="Deafen (mute others)">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 2a6 6 0 0 0-6 6v5c0 1.1-.9 2-2 2s-2-.9-2-2H4c0 2.2 1.8 4 4 4s4-1.8 4-4V8a4 4 0 0 1 8 0c0 1.6-.9 3-2.2 3.6V15c2.4-.7 4.2-3 4.2-5.6A6 6 0 0 0 16 2zm-1 18v2h-2v-2h2z"/></svg>
+            </button>
+            <button class="wa-icon-btn" id="vc_camera_btn" title="Turn camera on">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7h-3V5a2 2 0 0 0-2-2H5C3.9 3 3 3.9 3 5v14c0 1.1.9 2 2 2h7a2 2 0 0 0 2-2v-2h3l4 3V4l-4 3z"/></svg>
+            </button>
+            <button class="wa-icon-btn" id="vc_screen_btn" title="Share screen">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h7v2H6v2h12v-2h-4v-2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 13H3V5h18v11z"/></svg>
             </button>
           </div>
+          <form class="wa-participants-form" autocomplete="on" onsubmit="return false;">
+            <input id="vc_email_input" type="email" name="email" autocomplete="email" placeholder="Enter email and press Enter to join" />
+          </form>
         </div>
         <div class="wa-participants-content">
           <div style="margin-bottom:16px">
             <h4 style="margin:0 0 8px 0;font-size:14px;color:var(--wa-text-secondary)">Active Participants</h4>
-            <div id="vc_participants_list"></div>
+            <div id="vc_participants_list" class="wa-participants-list"></div>
           </div>
-          <!-- Speaking Queue section removed -->
+          <div class="wa-video-panel">
+            <div class="wa-video-header">
+              <span id="vc_video_title">Preview</span>
+              <span id="vc_video_hint">Camera off</span>
+            </div>
+            <div class="wa-video-shell">
+              <video id="vc_video_preview" playsinline autoplay muted></video>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <div class="wa-composer">
-    <button class="wa-icon-btn" id="footerPrepareBtn" title="Prepare message">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3.49h-.72c-.28 0-.5.22-.5.5V11c0 2.76-2.24 5-5 5s-5-2.24-5-5v-.01c0-.28-.22-.5-.5-.5h-.72c-.28 0-.5.22-.5.5V11c0 3.25 2.47 5.95 5.66 6.42v2.08c0 .28.22.5.5.5h1.22c.28 0 .5-.22.5-.5v-2.08c3.19-.46 5.66-3.17 5.66-6.42v-.01c0-.28-.22-.49-.5-.49z"/></svg>
-    </button>
+    <div class="wa-voice-control">
+      <button class="wa-icon-btn" id="sttBtn" title="Voice dictation">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2s1.2.54 1.2 1.2v6.2c0 .66-.54 1.2-1.2 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
+      </button>
+      <span class="wa-voice-status" id="sttStatus">Off</span>
+    </div>
     <div class="wa-composer-input-wrapper">
       <textarea 
         id="cmd" 
         class="wa-composer-input" 
         rows="1" 
-        placeholder="Type a message"
+        placeholder="Type or dictate a message"
         autocomplete="off"
       ></textarea>
     </div>
-    <div id="composer_actions" class="vc-row">
+    <div class="wa-composer-actions" id="composer_actions">
       <button class="wa-send-btn" id="send" title="Send">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
       </button>
     </div>
   </div>
 
-  <!-- Speak overlay (appears only when it's your turn) -->
-  <div id="speakOverlay" class="vc-overlay">
-    <div id="speakCard" class="vc-card">
-      <div class="vc-row" style="justify-content:space-between;margin-bottom:8px">
-        <h3 style="margin:0" id="speakTitle">Speak Now</h3>
-        <div class="vc-row">
-          <label for="speakLang" style="font-size:12px;color:var(--wa-text-secondary)">Language</label>
-          <select id="speakLang" class="vc-select"></select>
-        </div>
-      </div>
-      <textarea id="speakText" class="vc-text" placeholder="Your transcript will appear here..."></textarea>
-      <div class="vc-row" style="margin-top:8px;justify-content:space-between">
-        <div class="vc-row" style="gap:4px">
-          <button class="vc-toolbar-btn" id="speakRequestBtn" title="Request to speak again" style="display:none">
-            <span style="font-size: 18px;">✌️</span>
-          </button>
-        </div>
-        <div class="vc-row" style="gap:8px">
-          <button class="vc-toolbar-btn" id="speakSend" title="Send message">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          </button>
-          <button class="vc-toolbar-btn" id="speakLive" title="Go Live">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
-          </button>
-          <button class="vc-toolbar-btn" id="speakPause" title="Pause Broadcasting" style="display:none">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-          </button>
-          <button class="vc-toolbar-btn" id="speakResume" title="Resume Broadcasting" style="display:none">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          </button>
-          <button class="vc-toolbar-btn" id="speakStop" title="Stop Live" style="display:none">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
-          </button>
-          <button class="vc-toolbar-btn danger" id="speakCancel" title="Cancel speaking">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Prepare Message overlay (manual edit, with STT option) -->
-  <div id="prepOverlay" class="vc-overlay">
-    <div class="vc-card">
-      <div class="vc-row" style="justify-content:space-between;margin-bottom:8px">
-        <h3 style="margin:0">Prepare Message</h3>
-        <div class="vc-row">
-          <label style="font-size:12px;margin-right:8px">
-            <input type="checkbox" id="prepEnableSTT" checked /> Enable voice
-          </label>
-          <select id="prepLang" class="vc-select"></select>
-        </div>
-      </div>
-      <textarea id="prepText" class="vc-text" placeholder="Speak or type your message..."></textarea>
-      <div class="vc-row" style="margin-top:8px;justify-content:space-between">
-        <div class="vc-hint" id="prepStatus">Ready</div>
-        <div class="vc-row" style="gap:8px">
-          <button class="vc-toolbar-btn" id="prepRecord" title="Start Recording">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-          </button>
-          <button class="vc-toolbar-btn" id="prepSend" title="Send message">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          </button>
-          <button class="vc-toolbar-btn danger" id="prepCancel" title="Cancel">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Disconnected mask -->
   <div id="disconnectMask" class="vc-disconnect-mask"></div>
 
-  <!-- Participants view moved inside chat container above -->
+  <div id="screenOverlay" class="wa-screen-overlay">
+    <div class="wa-screen-modal">
+      <div class="wa-screen-modal-header">
+        <span id="screenOverlayTitle">Screen share</span>
+        <button id="screenOverlayClose" class="wa-icon-btn" title="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="wa-screen-modal-body">
+        <video id="screenOverlayVideo" playsinline autoplay controls></video>
+      </div>
+    </div>
+  </div>
 
   <!-- Load modular scripts -->
   <script src="__ASSET_BASE__/audio.js"></script>
-  <script src="__ASSET_BASE__/popups.js"></script>
   <script src="__ASSET_BASE__/showdemo.js"></script>
+  <script src="__ASSET_BASE__/webmeet-store.js"></script>
+  <script src="__ASSET_BASE__/webmeet-ui.js"></script>
+  <script src="__ASSET_BASE__/webmeet-media.js"></script>
   <script src="__ASSET_BASE__/webrtc-room.js"></script>
   <script src="__ASSET_BASE__/webmeet-client.js"></script>
 </body>

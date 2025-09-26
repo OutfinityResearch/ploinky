@@ -1,11 +1,26 @@
 (() => {
   // WebRTC Room Connection Module
+  function identifyStreamKind(stream) {
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track) return 'camera';
+    const settings = track.getSettings ? track.getSettings() : {};
+    const label = track.label || '';
+    if (settings.displaySurface || /screen|window|display|monitor/i.test(label)) return 'screen';
+    return 'camera';
+  }
+
   const WebRTCRoom = {
     peers: new Map(),
     micStream: null,
     liveTargets: [],
     isPaused: false,
     originalAudioTrack: null,
+    isBroadcasting: false,
+    cameraTrack: null,
+    cameraSenders: new Map(),
+    screenTrack: null,
+    screenSenders: new Map(),
+    initiatedPeers: new Set(),
 
     async startMic() {
       if (this.micStream) return this.micStream;
@@ -18,12 +33,9 @@
 
     stopMic() {
       // Stop STT if it's running
-      if (window.webMeetAudio?.recognition) {
-        try {
-          window.webMeetAudio.recognition.stop();
-        } catch(_) {}
-        window.webMeetAudio.recognition = null;
-      }
+      try {
+        window.WebMeetMedia?.stopRecognition?.();
+      } catch (_) {}
 
       // Stop microphone stream
       if (this.micStream) {
@@ -41,7 +53,26 @@
           pc.close();
         } catch(_) {}
       }
+      for (const peerId of this.peers.keys()) {
+        try { window.WebMeetMedia?.handlePeerClosed(peerId); } catch (_) {}
+      }
       this.peers.clear();
+      this.initiatedPeers.clear();
+      this.isBroadcasting = false;
+      this.cameraSenders.clear();
+      this.screenSenders.clear();
+      if (this.cameraTrack) {
+        try { this.cameraTrack.stop(); } catch(_) {}
+      }
+      this.cameraTrack = null;
+      if (this.screenTrack) {
+        try { this.screenTrack.stop(); } catch(_) {}
+      }
+      this.screenTrack = null;
+      document.querySelectorAll('audio[id^="audio_"]').forEach((el) => {
+        try { el.srcObject = null; } catch (_) {}
+        el.remove();
+      });
     },
 
     async goLive() {
@@ -61,6 +92,7 @@
         if (!this.liveTargets || this.liveTargets.length === 0) {
           console.log('No other participants to broadcast to');
         }
+        this.isBroadcasting = true;
       } catch(e) {
         console.error('Error going live:', e);
         throw e;
@@ -80,13 +112,22 @@
       });
 
       this.peers.set(peerId, pc);
+      this.initiatedPeers.add(peerId);
 
       // Add microphone tracks to the connection
       if (this.micStream) {
         console.log('Adding mic tracks to peer connection');
-        this.micStream.getTracks().forEach(track => {
+        this.micStream.getAudioTracks().forEach(track => {
           pc.addTrack(track, this.micStream);
         });
+        if (this.cameraTrack) {
+          try {
+            const sender = pc.addTrack(this.cameraTrack, this.micStream);
+            this.cameraSenders.set(peerId, sender);
+          } catch (err) {
+            console.warn('Failed to add camera track to peer', err);
+          }
+        }
       } else {
         console.warn('No microphone stream available for peer connection');
       }
@@ -106,7 +147,7 @@
 
       pc.ontrack = (e) => {
         console.log('Received remote track from:', peerId);
-        this.attachRemoteAudio(peerId, e.streams[0]);
+        this.attachRemoteStream(peerId, e.streams[0]);
       };
 
       const offer = await pc.createOffer();
@@ -152,14 +193,22 @@
 
         pc.ontrack = (e) => {
           console.log('Received remote audio track from:', from);
-          this.attachRemoteAudio(from, e.streams[0]);
+          this.attachRemoteStream(from, e.streams[0]);
         };
 
         if (this.micStream) {
           console.log('Adding mic tracks for incoming connection');
-          this.micStream.getTracks().forEach(track => {
+          this.micStream.getAudioTracks().forEach(track => {
             pc.addTrack(track, this.micStream);
           });
+          if (this.cameraTrack) {
+            try {
+              const sender = pc.addTrack(this.cameraTrack, this.micStream);
+              this.cameraSenders.set(from, sender);
+            } catch (err) {
+              console.warn('Failed to add camera track for incoming connection', err);
+            }
+          }
         }
       }
 
@@ -190,7 +239,7 @@
       }
     },
 
-    attachRemoteAudio(peerId, stream) {
+    attachRemoteStream(peerId, stream) {
       let audioElement = document.getElementById('audio_' + peerId);
 
       if (!audioElement) {
@@ -198,15 +247,49 @@
         audioElement.id = 'audio_' + peerId;
         audioElement.autoplay = true;
         audioElement.playsInline = true;
-        audioElement.muted = window.webMeetClient?.isDeafened || false;
+        audioElement.muted = window.WebMeetStore?.getState()?.isDeafened || false;
         document.body.appendChild(audioElement);
       }
 
       audioElement.srcObject = stream;
+      if (stream?.getVideoTracks?.().length) {
+        const kind = identifyStreamKind(stream);
+        try { window.WebMeetMedia?.handleRemoteStream(peerId, stream, kind); } catch (_) {}
+      }
     },
 
     setLiveTargets(targets) {
-      this.liveTargets = targets || [];
+      this.liveTargets = Array.isArray(targets) ? targets : [];
+      const desired = new Set(this.liveTargets);
+      const toClose = [];
+      for (const peerId of this.initiatedPeers) {
+        if (!desired.has(peerId)) {
+          toClose.push(peerId);
+        }
+      }
+      toClose.forEach((peerId) => {
+        this.removePeer(peerId);
+        try { window.WebMeetMedia?.handlePeerClosed(peerId, { skipPeerRemoval: true }); } catch (_) {}
+      });
+      if (this.isBroadcasting && !this.isPaused) {
+        this.goLive().catch(err => console.error('Failed to refresh WebRTC peers', err));
+      }
+    },
+
+    removePeer(peerId) {
+      const pc = this.peers.get(peerId);
+      if (pc) {
+        try { pc.close(); } catch(_) {}
+        this.peers.delete(peerId);
+      }
+      this.initiatedPeers.delete(peerId);
+      this.cameraSenders.delete(peerId);
+      this.screenSenders.delete(peerId);
+      const audioEl = document.getElementById('audio_' + peerId);
+      if (audioEl) {
+        try { audioEl.srcObject = null; } catch (_) {}
+        audioEl.remove();
+      }
     },
 
     muteAllRemoteAudio(muted) {
@@ -225,6 +308,7 @@
         // Mute the track
         this.originalAudioTrack.enabled = false;
         this.isPaused = true;
+        this.isBroadcasting = false;
       }
     },
 
@@ -234,7 +318,104 @@
       // Unmute the track
       this.originalAudioTrack.enabled = true;
       this.isPaused = false;
+      this.isBroadcasting = true;
     }
+  };
+
+  WebRTCRoom.enableCamera = async function enableCamera(track) {
+    await this.startMic();
+    if (this.cameraTrack) return;
+    if (track) {
+      this.cameraTrack = track;
+    } else {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      this.cameraTrack = stream.getVideoTracks()[0];
+    }
+    if (!this.cameraTrack) return;
+    if (this.micStream && !this.micStream.getTracks().includes(this.cameraTrack)) {
+      this.micStream.addTrack(this.cameraTrack);
+    }
+    for (const [peerId, pc] of this.peers.entries()) {
+      try {
+        const sender = pc.addTrack(this.cameraTrack, this.micStream);
+        this.cameraSenders.set(peerId, sender);
+      } catch (err) {
+        console.warn('enableCamera addTrack failed', err);
+      }
+    }
+    if (this.isBroadcasting) {
+      await this.goLive();
+    }
+  };
+
+  WebRTCRoom.disableCamera = function disableCamera() {
+    if (this.cameraTrack) {
+      for (const sender of this.cameraSenders.values()) {
+        try {
+          if (sender?.track?.stop) sender.track.stop();
+        } catch (_) {}
+      }
+      try { this.cameraTrack.stop(); } catch (_) {}
+      if (this.micStream) {
+        try { this.micStream.removeTrack(this.cameraTrack); } catch (_) {}
+      }
+    }
+    for (const [peerId, pc] of this.peers.entries()) {
+      const sender = this.cameraSenders.get(peerId);
+      if (sender) {
+        try { pc.removeTrack(sender); } catch (_) {}
+      }
+    }
+    this.cameraSenders.clear();
+    this.cameraTrack = null;
+  };
+
+  WebRTCRoom.enableScreenShare = async function enableScreenShare(track) {
+    await this.startMic();
+    if (this.screenTrack) return;
+    if (track) {
+      this.screenTrack = track;
+    } else {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      this.screenTrack = stream.getVideoTracks()[0];
+    }
+    if (!this.screenTrack) return;
+    if (this.micStream && !this.micStream.getTracks().includes(this.screenTrack)) {
+      this.micStream.addTrack(this.screenTrack);
+    }
+    for (const [peerId, pc] of this.peers.entries()) {
+      try {
+        const sender = pc.addTrack(this.screenTrack, this.micStream);
+        this.screenSenders.set(peerId, sender);
+      } catch (err) {
+        console.warn('enableScreenShare addTrack failed', err);
+      }
+    }
+    if (this.isBroadcasting) {
+      await this.goLive();
+    }
+  };
+
+  WebRTCRoom.disableScreenShare = function disableScreenShare() {
+    if (this.screenTrack) {
+      for (const sender of this.screenSenders.values()) {
+        try {
+          if (sender?.track?.stop) sender.track.stop();
+        } catch (_) {}
+      }
+      try { this.screenTrack.stop(); } catch (_) {}
+      if (this.micStream) {
+        try { this.micStream.removeTrack(this.screenTrack); } catch (_) {}
+      }
+    }
+    for (const [peerId, pc] of this.peers.entries()) {
+      const sender = this.screenSenders.get(peerId);
+      if (sender) {
+        try { pc.removeTrack(sender); } catch (_) {}
+      }
+    }
+    this.screenSenders.clear();
+    this.screenTrack = null;
   };
 
   // Export to global scope
