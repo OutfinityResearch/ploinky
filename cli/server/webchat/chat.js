@@ -369,6 +369,7 @@
   let sttLangCode = localStorage.getItem(sttLangKey) || 'en-GB';
   let finalSegments = [];
   let interimTranscript = '';
+  let sttAppliedTranscript = '';
 
   function updateVoiceStatus(text) {
     if (sttStatus) sttStatus.textContent = text;
@@ -383,22 +384,50 @@
   function resetTranscriptState() {
     finalSegments = [];
     interimTranscript = '';
+    sttAppliedTranscript = '';
   }
 
   function normalizeWhitespace(str) {
     return (str || '').replace(/\s+/g, ' ').trim();
   }
 
-  function currentTranscript() {
-    const finals = finalSegments.join(' ');
-    if (interimTranscript) return `${finals} ${interimTranscript}`.trim();
-    return finals.trim();
+  function appendVoiceText(addition) {
+    if (!addition) return;
+    const current = cmdInput.value;
+    let insert = addition;
+    const additionHasLeadingSpace = /^\s/.test(insert);
+    const additionStartsPunct = /^[.,!?;:]/.test(insert);
+    if (!additionHasLeadingSpace && current && !/\s$/.test(current) && !additionStartsPunct) {
+      insert = ` ${insert}`;
+    }
+    const selStart = cmdInput.selectionStart;
+    const selEnd = cmdInput.selectionEnd;
+    const hadFocus = document.activeElement === cmdInput;
+    const prevScroll = cmdInput.scrollTop;
+    cmdInput.value = current + insert;
+    if (hadFocus) {
+      if (selStart !== current.length || selEnd !== current.length) {
+        cmdInput.setSelectionRange(selStart, selEnd);
+      } else {
+        const pos = cmdInput.value.length;
+        cmdInput.setSelectionRange(pos, pos);
+      }
+    }
+    cmdInput.scrollTop = prevScroll;
+    autoResize();
   }
 
   function updateComposerFromVoice() {
-    const text = currentTranscript();
-    cmdInput.value = text;
-    autoResize();
+    const combined = normalizeWhitespace(finalSegments.join(' '));
+    if (!combined) return;
+    if (combined === sttAppliedTranscript) return;
+    const addition = combined.slice(sttAppliedTranscript.length);
+    if (!addition.trim()) {
+      sttAppliedTranscript = combined;
+      return;
+    }
+    appendVoiceText(addition);
+    sttAppliedTranscript = combined;
   }
 
   function handleVoiceSend(rawJoined) {

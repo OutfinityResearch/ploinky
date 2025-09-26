@@ -25,6 +25,9 @@
   --wa-accent-faded: rgba(0, 168, 132, 0.18);
   --wa-online: #00a884;
   --wa-typing: #25d366;
+  --wa-table-header-bg: #1f2c34;
+  --wa-table-row-odd-bg: #111b21;
+  --wa-table-row-even-bg: #19232c;
   
   --wa-header-height: 59px;
   --wa-composer-height: 56px;
@@ -60,6 +63,9 @@ body[data-theme="light"] {
   --wa-accent-faded: rgba(0, 128, 105, 0.18);
   --wa-online: #25d366;
   --wa-typing: #25d366;
+  --wa-table-header-bg: #dfd5c8;
+  --wa-table-row-odd-bg: #ffffff;
+  --wa-table-row-even-bg: #f5ede3;
   
   --wa-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
   --wa-shadow-md: 0 1px 3px rgba(11,20,26,.08);
@@ -380,9 +386,9 @@ body {
 .wa-side-panel-body table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 320px; background: transparent; }
 .wa-side-panel-body table.wa-md-table th,
 .wa-side-panel-body table.wa-md-table td { border: 1px solid var(--wa-border); padding: 8px 10px; text-align: left; }
-.wa-side-panel-body table.wa-md-table th { background: var(--wa-bg-hover); color: var(--wa-text-primary); font-weight: 600; }
-.wa-side-panel-body table.wa-md-table tbody tr:nth-child(odd) td { background: var(--wa-bg-secondary); }
-.wa-side-panel-body table.wa-md-table tbody tr:nth-child(even) td { background: var(--wa-bg-hover); }
+.wa-side-panel-body table.wa-md-table th { background: var(--wa-table-header-bg); color: var(--wa-text-primary); font-weight: 600; }
+.wa-side-panel-body table.wa-md-table tbody tr:nth-child(odd) td { background: var(--wa-table-row-odd-bg); }
+.wa-side-panel-body table.wa-md-table tbody tr:nth-child(even) td { background: var(--wa-table-row-even-bg); }
 
 /* Iframe overlay for X-Frame-Options / CSP errors */
 .wa-iframe-wrap { position: relative; }
@@ -468,9 +474,9 @@ body {
 .wa-message-text table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 240px; background: transparent; }
 .wa-message-text table.wa-md-table th,
 .wa-message-text table.wa-md-table td { border: 1px solid var(--wa-border); padding: 6px 8px; text-align: left; }
-.wa-message-text table.wa-md-table th { background: var(--wa-bg-hover); color: var(--wa-text-primary); font-weight: 600; }
-.wa-message-text table.wa-md-table tbody tr:nth-child(odd) td { background: var(--wa-bg-secondary); }
-.wa-message-text table.wa-md-table tbody tr:nth-child(even) td { background: var(--wa-bg-hover); }
+.wa-message-text table.wa-md-table th { background: var(--wa-table-header-bg); color: var(--wa-text-primary); font-weight: 600; }
+.wa-message-text table.wa-md-table tbody tr:nth-child(odd) td { background: var(--wa-table-row-odd-bg); }
+.wa-message-text table.wa-md-table tbody tr:nth-child(even) td { background: var(--wa-table-row-even-bg); }
 
 .wa-message-time {
   position: absolute;
