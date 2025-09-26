@@ -377,10 +377,12 @@ body {
   color: var(--wa-text-primary);
 }
 .wa-side-panel-body .wa-md-table-wrap { overflow-x: auto; margin: 12px 0; }
-.wa-side-panel-body table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 320px; background: var(--wa-bg-secondary); }
+.wa-side-panel-body table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 320px; background: transparent; }
 .wa-side-panel-body table.wa-md-table th,
 .wa-side-panel-body table.wa-md-table td { border: 1px solid var(--wa-border); padding: 8px 10px; text-align: left; }
-.wa-side-panel-body table.wa-md-table th { background: var(--wa-bg-panel); color: var(--wa-text-primary); font-weight: 600; }
+.wa-side-panel-body table.wa-md-table th { background: var(--wa-bg-hover); color: var(--wa-text-primary); font-weight: 600; }
+.wa-side-panel-body table.wa-md-table tbody tr:nth-child(odd) td { background: var(--wa-bg-secondary); }
+.wa-side-panel-body table.wa-md-table tbody tr:nth-child(even) td { background: var(--wa-bg-hover); }
 
 /* Iframe overlay for X-Frame-Options / CSP errors */
 .wa-iframe-wrap { position: relative; }
@@ -463,10 +465,12 @@ body {
 .wa-message-text blockquote { margin: 6px 0; padding-left: 12px; border-left: 3px solid var(--wa-accent); color: var(--wa-text-secondary); }
 .wa-message-text a { color: var(--wa-accent); text-decoration: underline; cursor: pointer; }
 .wa-message-text .wa-md-table-wrap { overflow-x: auto; margin: 8px 0; }
-.wa-message-text table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 240px; background: var(--wa-bg-secondary); }
+.wa-message-text table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 240px; background: transparent; }
 .wa-message-text table.wa-md-table th,
 .wa-message-text table.wa-md-table td { border: 1px solid var(--wa-border); padding: 6px 8px; text-align: left; }
-.wa-message-text table.wa-md-table th { background: var(--wa-bg-panel); color: var(--wa-text-primary); font-weight: 600; }
+.wa-message-text table.wa-md-table th { background: var(--wa-bg-hover); color: var(--wa-text-primary); font-weight: 600; }
+.wa-message-text table.wa-md-table tbody tr:nth-child(odd) td { background: var(--wa-bg-secondary); }
+.wa-message-text table.wa-md-table tbody tr:nth-child(even) td { background: var(--wa-bg-hover); }
 
 .wa-message-time {
   position: absolute;
