@@ -326,8 +326,8 @@ webchat --rotate</code></pre>
                         <h2>Client Operations</h2>
                         
                         <h3>client task</h3>
-                        <p>Sends a task to an agent. Parameters can be passed in two ways: as key-value pairs or as a single formatted string.</p>
-                        <pre><code>client task &lt;agent&gt; [--parameters &lt;params&gt; | -p &lt;params&gt;] [-key value...]</code></pre>
+                        <p>Sends a task to an agent. Parameters are passed as a series of key-value pairs, supporting nested objects, arrays, and quoted strings.</p>
+                        <pre><code>client task &lt;agent&gt; [parameters...]</code></pre>
                         
                         <h4>Arguments</h4>
                         <table class="command-table">
@@ -340,26 +340,28 @@ webchat --rotate</code></pre>
                                 <td>The name of the agent to send the task to.</td>
                             </tr>
                             <tr>
-                                <td><code>--parameters &lt;params&gt;</code><br><code>-p &lt;params&gt;</code></td>
-                                <td>A comma-separated string of parameters. Supports nested objects and arrays.<br>
-                                    Format: <code>key=value,nested.key=value,array[] | array[]=item1,item2</code>
+                                <td><code>[parameters...]</code></td>
+                                <td>
+                                    A space-separated list of parameters. Each parameter is a flag starting with <code>-</code> followed by its value.
+                                    <ul style="margin-left: 1rem; margin-top: 0.5rem;">
+                                        <li><strong>Simple values:</strong> <code>-key value</code></li>
+                                        <li><strong>Nested objects:</strong> <code>-object.key value</code></li>
+                                        <li><strong>Arrays:</strong> <code>-array "[item1 item2 'item with spaces']"</code></li>
+                                        <li><strong>Quoted values:</strong> <code>-key "value with spaces"</code></li>
+                                    </ul>
                                 </td>
-                            </tr>
-                            <tr>
-                                <td><code>-key value</code></td>
-                                <td>Individual parameters passed as key-value pairs.</td>
                             </tr>
                         </table>
 
                         <h4>Examples</h4>
-                        <pre><code># Using key-value pairs
+                        <pre><code># Simple key-value pairs
 client task simulation -task montyHall -iterations 100
 
-# Using the parameters string for complex data
-client task myAgent -p 'user.name=John Doe,user.age=30,permissions[]=read,permissions[]=write'
+# Complex data with nested objects and arrays
+client task myAgent -user.name "John Doe" -user.age 30 -permissions "[read write 'special access']"
 
-# Combining both methods
-client task anotherAgent -task process -p 'config.level=high' -priority 1
+# A mix of different types
+client task anotherAgent -task process -config.level high -priority 1 -tags "[alpha beta]"
 </code></pre>
 
                         <h3>client methods</h3>

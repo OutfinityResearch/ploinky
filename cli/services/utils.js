@@ -115,52 +115,86 @@ function getAgentNameSuggestions() {
  */
 function parseParametersString(paramString) {
     const result = {};
-    if (!paramString) {
-        return result;
+    if (!paramString || !String(paramString).trim()) return result;
+
+    const s = String(paramString);
+    let i = 0;
+
+    function skipWs() { while (i < s.length && /\s/.test(s[i])) i++; }
+    function readKey() {
+        // keys start with '-'
+        if (s[i] !== '-') return null;
+        i++; // skip '-'
+        const start = i;
+        while (i < s.length && !/\s/.test(s[i])) i++;
+        return s.slice(start, i);
+    }
+    function readQuoted() {
+        // assumes s[i] === '"'
+        i++; const start = i;
+        let out = '';
+        let escaped = false;
+        while (i < s.length) {
+            const ch = s[i];
+            if (!escaped && ch === '"') { i++; break; }
+            if (!escaped && ch === '\\') { escaped = true; i++; continue; }
+            out += ch; escaped = false; i++;
+        }
+        return out;
+    }
+    function readToken() {
+        skipWs();
+        if (i >= s.length) return '';
+        if (s[i] === '"') return readQuoted();
+        const start = i;
+        while (i < s.length && !/\s/.test(s[i]) && s[i] !== '[' && s[i] !== ']') i++;
+        return s.slice(start, i);
+    }
+    function readArray() {
+        // expects current char at '['
+        if (s[i] !== '[') return [];
+        i++; // skip '['
+        const arr = [];
+        while (i < s.length) {
+            skipWs();
+            if (i >= s.length) break;
+            if (s[i] === ']') { i++; break; }
+            let val;
+            if (s[i] === '"') val = readQuoted();
+            else {
+                const start = i;
+                while (i < s.length && !/\s|\]/.test(s[i])) i++;
+                val = s.slice(start, i);
+            }
+            if (val !== undefined && val !== '') arr.push(parseValue(String(val)));
+        }
+        return arr;
     }
 
-    const pairs = [];
-    let inQuote = false;
-    let start = 0;
-    for (let i = 0; i < paramString.length; i++) {
-        if (paramString[i] === '"') {
-            inQuote = !inQuote;
+    while (i < s.length) {
+        skipWs();
+        if (i >= s.length) break;
+        if (s[i] !== '-') { // ignore free text
+            // consume until next whitespace
+            while (i < s.length && !/\s/.test(s[i])) i++;
+            continue;
         }
-        if (paramString[i] === ',' && !inQuote) {
-            pairs.push(paramString.substring(start, i));
-            start = i + 1;
+        const keyPath = readKey();
+        if (!keyPath) break;
+        skipWs();
+        let value;
+        if (s[i] === '[') {
+            value = readArray();
+        } else if (s[i] === '"') {
+            value = readQuoted();
+            value = parseValue('"' + value + '"');
+        } else {
+            const tok = readToken();
+            value = parseValue(tok);
         }
-    }
-    pairs.push(paramString.substring(start));
-
-    let lastArrayKeyPath = null;
-
-    for (const pair of pairs) {
-        if (pair.includes('=')) {
-            const parts = pair.split('=');
-            const fullKey = parts[0];
-            const value = parts.slice(1).join('=');
-            
-            setValue(result, fullKey, value);
-
-            if (fullKey.endsWith('[]')) {
-                lastArrayKeyPath = fullKey;
-            } else {
-                lastArrayKeyPath = null;
-            }
-        } else if (pair.endsWith('[]')) {
-            setValue(result, pair, '');
-            lastArrayKeyPath = pair;
-        } else if (lastArrayKeyPath) {
-            const parsedValue = parseValue(pair);
-            
-            const keys = lastArrayKeyPath.slice(0, -2).split('.');
-            let current = result;
-            for (let i = 0; i < keys.length; i++) {
-                current = current[keys[i]];
-            }
-            current.push(parsedValue);
-        }
+        // If no value provided (e.g., '-flag' end of string), set empty string
+        if (value === undefined) value = '';
+        setValue(result, keyPath, value);
     }
 
     return result;
@@ -179,22 +213,21 @@ function setValue(obj, path, value) {
     }
 
     let lastKey = keys[keys.length - 1];
-    const parsedValue = parseValue(value);
 
     if (lastKey.endsWith('[]')) {
         lastKey = lastKey.slice(0, -2);
         if (!current[lastKey]) {
             current[lastKey] = [];
         }
-        if (typeof parsedValue === 'string' && parsedValue) {
-            current[lastKey].push(...parsedValue.split(','));
-        } else if (typeof parsedValue === 'string' && !parsedValue) {
+        if (typeof value === 'string' && value) {
+            current[lastKey].push(...value.split(','));
+        } else if (typeof value === 'string' && !value) {
             // do nothing, this is an empty array
-        } else if (parsedValue) {
-            current[lastKey].push(parsedValue);
+        } else if (value) {
+            current[lastKey].push(value);
         }
     } else {
-        current[lastKey] = parsedValue;
+        current[lastKey] = value;
     }
 }
 

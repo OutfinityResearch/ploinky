@@ -47,6 +47,7 @@
             max-height: 400px;
             overflow-y: auto;
             font-size: 13px;
+            position: relative;
         }
         .terminal-header {
             position: sticky;
@@ -54,11 +55,32 @@
             background: #1e1e1e;
             z-index: 10;
         }
+        #terminal-content {
+            padding: 1.5rem;
+        }
         .demo-content {
             display: none;
         }
         .demo-content.active {
             display: block;
+        }
+
+        /* Custom Scrollbar for Terminal */
+        .terminal::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .terminal::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .terminal::-webkit-scrollbar-thumb {
+            background-color: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        .terminal::-webkit-scrollbar-thumb:hover {
+            background-color: var(--text-secondary);
         }
     </style>
 </head>
@@ -245,22 +267,23 @@ $ npm install
         // Demo content for each tab
         const demos = {
             init: [
-                { type: 'command', text: '[salboaie@0 demoPloinky]$ ploinky' },
-                { type: 'output', text: 'Initializing Ploinky environment in /home/salboaie/work/demoPloinky/.ploinky...' },
+                { type: 'command', text: 'user@host:~/Desktop/work$ ploinky' },
+                { type: 'output', text: 'Initializing Ploinky environment in ~/Desktop/work/.ploinky...' },
                 { type: 'output', text: 'Default \'basic\' repository not found. Cloning...' },
                 { type: 'output', text: 'Cloning into \'.ploinky/repos/basic\'...' },
                 { type: 'output', text: 'remote: Enumerating objects: 102, done.' },
                 { type: 'output', text: 'remote: Counting objects: 100% (102/102), done.' },
                 { type: 'output', text: 'remote: Compressing objects: 100% (61/61), done.' },
-                { type: 'output', text: 'Receiving objects: 100% (102/102), 15.88 KiB | 2.27 MiB/s, done.' },
+                { type: 'output', text: 'remote: Total 102 (delta 25), reused 64 (delta 7), pack-reused 0 (from 0)' },
+                { type: 'output', text: 'Receiving objects: 100% (102/102), 15.88 KiB | 15.88 MiB/s, done.' },
                 { type: 'output', text: 'Resolving deltas: 100% (25/25), done.' },
                 { type: 'output', text: 'Default repository cloned successfully.' },
                 { type: 'output', text: 'Welcome to Ploinky interactive mode.' },
-                { type: 'output', text: 'Type \'help\' for a list of commands. Use \'exit\' to leave.' },
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' }
+                { type: 'output', text: 'Type \'help\' for a list of commands. Use \'exit\' to leave, \'shutdown\' to close session containers, or \'destroy\' to remove all Ploinky containers.' },
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
             ],
             repos: [
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' },
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' },
                 { type: 'command', text: 'list repos' },
                 { type: 'output', text: 'Available repositories:' },
                 { type: 'output', text: '- basic: https://github.com/PloinkyRepos/Basic.git  [installed] [enabled]' },
@@ -271,10 +294,10 @@ $ npm install
                 { type: 'output', text: '- demo: https://github.com/PloinkyRepos/demo.git' },
                 { type: 'output', text: '' },
                 { type: 'output', text: 'Tip: enable repos with \'enable repo <name>\'.' },
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' }
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
             ],
             enable: [
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' },
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' },
                 { type: 'command', text: 'enable repo demo' },
                 { type: 'output', text: 'Cloning into \'.ploinky/repos/demo\'...' },
                 { type: 'output', text: 'remote: Enumerating objects: 131, done.' },
@@ -284,46 +307,63 @@ $ npm install
                 { type: 'output', text: 'Resolving deltas: 100% (29/29), done.' },
                 { type: 'success', text: '✓ Repo \'demo\' enabled. Use \'list agents\' to view agents.' },
                 { type: 'output', text: '' },
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' }
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
             ],
             admin: [
             ],
             start: [
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' },
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' },
                 { type: 'command', text: 'start demo' },
-                { type: 'output', text: 'Cloning into \'.ploinky/repos/vibe1\'...' },
+                { type: 'success', text: '✓ Agent \'demo\' from repo \'demo\' enabled. Use \'start\' to start all configured agents.' },
+                { type: 'output', text: 'Cloning into \'.ploinky/repos/vibe\'...' },
+                { type: 'output', text: 'remote: Enumerating objects: 19, done.' },
+                { type: 'output', text: 'remote: Counting objects: 100% (19/19), done.' },
+                { type: 'output', text: 'remote: Compressing objects: 100% (11/11), done.' },
+                { type: 'output', text: 'remote: Total 19 (delta 0), reused 16 (delta 0), pack-reused 0 (from 0)' },
                 { type: 'output', text: 'Receiving objects: 100% (19/19), done.' },
-                { type: 'output', text: 'Cloning into \'.ploinky/repos/security1\'...' },
-                { type: 'output', text: 'Receiving objects: 100% (57/57), 8.62 KiB | 464.00 KiB/s, done.' },
-                { type: 'info', text: 'Static: agent=demo port=8088' },
-                { type: 'info', text: '→ Ensuring service for \'simulator\'...' },
-                { type: 'output', text: 'b233ace55495a3ea08bfb3283174e1320eb34f1962eacde426d529802437fbc2' },
-                { type: 'output', text: '[install] running for \'simulator\'...' },
-                { type: 'output', text: 'No installation needed' },
-                { type: 'success', text: '  OK: /apis/simulator -> http://127.0.0.1:39839/api' },
-                { type: 'output', text: '  [container: ploinky_agent_simulator_demoPloinky_52278f]' },
-                { type: 'success', text: '✓ Routes updated from .ploinky/agents' },
-                { type: 'info', text: '[Ploinky] Starting RoutingServer on port 8088' },
-                { type: 'output', text: '[RoutingServer] listening on http://127.0.0.1:8088' },
-                { type: 'output', text: '' },
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' }
+                { type: 'output', text: 'Cloning into \'.ploinky/repos/webmeet\'...' },
+                { type: 'output', text: 'remote: Enumerating objects: 8, done.' },
+                { type: 'output', text: 'remote: Counting objects: 100% (8/8), done.' },
+                { type: 'output', text: 'remote: Compressing objects: 100% (7/7), done.' },
+                { type: 'output', text: 'remote: Total 8 (delta 0), reused 5 (delta 0), pack-reused 0 (from 0)' },
+                { type: 'output', text: 'Receiving objects: 100% (8/8), done.' },
+                { type: 'info', text: 'Static: agent=demo port=8080' },
+                { type: 'output', text: 'f50f3026bfac2a027ad86fc51627318b994604796faa6dcece502afcd3b0f9d2' },
+                { type: 'output', text: '[install] running for \'demo\'...' },
+                { type: 'output', text: 'No installation needed.' },
+                { type: 'output', text: 'ploinky_agent_simulator_work_xxxxxx' },
+                { type: 'output', text: 'ploinky_agent_moderator_work_xxxxxx' },
+                { type: 'info', text: '[start] RoutingServer launched in background (pid xxxxx).' },
+                { type: 'info', text: '[start] Logs: ~/Desktop/work/.ploinky/logs/router.log' },
+                { type: 'info', text: '[start] Dashboard: http://127.0.0.1:8080/dashboard' },
+                { type: 'output', text: '[RoutingServer] Ploinky server running on http://127.0.0.1:8080' },
+                { type: 'output', text: '  Dashboard: /dashboard' },
+                { type: 'output', text: '  WebTTY:    /webtty' },
+                { type: 'output', text: '  WebChat:   /webchat' },
+                { type: 'output', text: '  WebMeet:   /webmeet' },
+                { type: 'output', text: '  Status:    /status' },
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
             ],
             status: [
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' },
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' },
                 { type: 'command', text: 'status' },
                 { type: 'info', text: 'Workspace status' },
-                { type: 'output', text: '- Workspace: demoPloinky [52278f]' },
-                { type: 'output', text: '- Static: agent=demo port=8088' },
-                { type: 'output', text: '- Dashboard: running (pid 36622) on port 9000' },
-                { type: 'output', text: '- Console: running (pid 36620) on port 9001' },
-                { type: 'output', text: '- Chat: running (pid 36621) on port 8080' },
-                { type: 'output', text: '- Router: running (pid 36820)' },
+                { type: 'output', text: '- Workspace: work [xxxxxx]' },
+                { type: 'output', text: '- Static: agent=demo port=8080' },
+                { type: 'output', text: '- Interfaces:' },
+                { type: 'output', text: '  • Dashboard: served via router (configured)' },
+                { type: 'output', text: '  • Web Console: served via router (configured)' },
+                { type: 'output', text: '  • WebChat: served via router (configured)' },
+                { type: 'output', text: '  • WebMeet: served via router (run "webmeet <agent>" to set moderator)' },
+                { type: 'output', text: '- Router: running (pid xxxxx)' },
                 { type: 'output', text: '- Agents:' },
-                { type: 'success', text: '  • simulator  [container: ploinky_agent_simulator_demoPloinky_52278f] (running)' },
-                { type: 'output', text: '    api: http://127.0.0.1:39839/api' },
-                { type: 'output', text: '    image: node:18-alpine  repo: demo  cwd: /home/salboaie/work/demoPloinky' },
-                { type: 'output', text: '    ports: 7000->39839' },
-                { type: 'prompt', text: 'ploinky ~/work/demoPloinky> ' }
+                { type: 'success', text: '  • demo [static]  [container: ploinky_agent_demo_work_xxxxxx] (running)' },
+                { type: 'output', text: '    image: node:18-alpine  repo: demo  cwd: ~/Desktop/work' },
+                { type: 'success', text: '  • simulator  [container: ploinky_agent_simulator_work_xxxxxx] (running)' },
+                { type: 'output', text: '    image: node:18-alpine  repo: demo  cwd: ~/Desktop/work' },
+                { type: 'success', text: '  • moderator  [container: ploinky_agent_moderator_work_xxxxxx] (running)' },
+                { type: 'output', text: '    image: node:18-alpine  repo: webmeet  cwd: ~/Desktop/work' },
+                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
             ]
         };
 
