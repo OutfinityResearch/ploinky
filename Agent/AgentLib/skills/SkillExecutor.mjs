@@ -262,68 +262,182 @@ async function executeSkill({
         return { resolved, invalid };
     };
 
-    const tokensFrom = (input) => {
-        if (input === null || input === undefined) {
-            return [];
+    const resolveFieldName = (name) => {
+        if (typeof name !== 'string') {
+            return null;
         }
-        const stringValue = typeof input === 'string' ? input : stringifyOptionValue(input);
-        const spaced = stringValue
-            .replace(/[_-]+/g, ' ')
-            .replace(/([a-z])([A-Z])/g, '$1 $2');
-        return spaced
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, ' ')
-            .split(' ')
-            .map(token => token.trim())
-            .filter(Boolean);
+        const trimmed = name.trim();
+        if (!trimmed) {
+            return null;
+        }
+        if (allArgumentNames.includes(trimmed)) {
+            return trimmed;
+        }
+        const lower = trimmed.toLowerCase();
+        const direct = allArgumentNames.find(candidate => candidate.toLowerCase() === lower);
+        if (direct) {
+            return direct;
+        }
+
+        const nameKeywords = ['job', 'project', 'title'];
+        const customerKeywords = ['client', 'customer'];
+        const descriptionKeywords = ['description', 'details', 'notes'];
+        const statusKeywords = ['status', 'state'];
+
+        if (nameKeywords.some(token => lower.includes(token)) && allArgumentNames.includes('name')) {
+            return 'name';
+        }
+        if (customerKeywords.some(token => lower.includes(token)) && allArgumentNames.includes('customer')) {
+            return 'customer';
+        }
+        if (descriptionKeywords.some(token => lower.includes(token)) && allArgumentNames.includes('description')) {
+            return 'description';
+        }
+        if (statusKeywords.some(token => lower.includes(token)) && allArgumentNames.includes('status')) {
+            return 'status';
+        }
+
+        const fuzzy = allArgumentNames.find(candidate => {
+            const canonical = candidate.toLowerCase();
+            const distance = Math.abs(canonical.length - lower.length);
+            return distance <= 2 && (canonical.startsWith(lower) || lower.startsWith(canonical));
+        });
+        return fuzzy || null;
     };
 
-    const findTokenSequence = (tokens, sequence, options = {}) => {
-        if (!Array.isArray(tokens) || !Array.isArray(sequence) || sequence.length === 0) {
-            return -1;
+    const applyUpdatesMap = (updates) => {
+        if (!updates || typeof updates !== 'object') {
+            return 'unchanged';
         }
-        const maxStart = tokens.length - sequence.length;
-        if (maxStart < 0) {
-            return -1;
-        }
-        const skipUsed = options?.skipUsed === true;
-        const usedIndices = skipUsed && options?.usedTokenIndexes instanceof Set
-            ? options.usedTokenIndexes
-            : null;
-        for (let start = 0; start <= maxStart; start += 1) {
-            if (usedIndices) {
-                let conflicts = false;
-                for (let offset = 0; offset < sequence.length; offset += 1) {
-                    if (usedIndices.has(start + offset)) {
-                        conflicts = true;
-                        break;
-                    }
+
+        let applied = false;
+        for (const [rawName, rawValue] of Object.entries(updates)) {
+            const field = resolveFieldName(rawName);
+            if (!field) {
+                continue;
+            }
+            const currentValue = normalizedArgs[field];
+            const hasValue = hasArgumentValue(field);
+            const optionCheck = normalizeOptionValue(field, rawValue);
+            if (!optionCheck.valid) {
+                continue;
+            }
+
+            const nextValue = optionMap.has(field)
+                ? optionCheck.value
+                : coerceScalarValue(rawValue);
+
+            const valuesMatch = () => {
+                if (!hasValue) {
+                    return false;
                 }
-                if (conflicts) {
+                const current = currentValue;
+                if (typeof current === 'string' && typeof nextValue === 'string') {
+                    return current.trim() === nextValue.trim();
+                }
+                return current === nextValue;
+            };
+
+            if (valuesMatch()) {
+                continue;
+            }
+
+            normalizedArgs[field] = nextValue;
+            applied = true;
+        }
+
+        if (!applied) {
+            return 'unchanged';
+        }
+
+        return missingRequiredArgs().length > 0 ? 'needsMissing' : 'updated';
+    };
+
+    const applyDescriptionDefaults = () => {
+        for (const definition of argumentDefinitions) {
+            if (!definition || typeof definition.name !== 'string') {
+                continue;
+            }
+            if (hasArgumentValue(definition.name)) {
+                continue;
+            }
+            const desc = typeof definition.description === 'string' ? definition.description : '';
+            const defaultMatch = desc.match(/defaults? to\s+([^.]+)/i);
+            if (defaultMatch && defaultMatch[1]) {
+                const rawDefault = defaultMatch[1]
+                    .replace(/["']/g, '')
+                    .replace(/[)\.]+$/, '')
+                    .trim();
+                if (!rawDefault) {
                     continue;
                 }
-            }
-            let matches = true;
-            for (let offset = 0; offset < sequence.length; offset += 1) {
-                if (tokens[start + offset] !== sequence[offset]) {
-                    matches = false;
-                    break;
+                const optionCheck = normalizeOptionValue(definition.name, rawDefault);
+                if (!optionCheck.valid) {
+                    continue;
+                }
+                if (optionMap.has(definition.name)) {
+                    normalizedArgs[definition.name] = optionCheck.value;
+                } else {
+                    normalizedArgs[definition.name] = coerceScalarValue(rawDefault);
                 }
             }
-            if (matches) {
-                return start;
-            }
         }
-        return -1;
     };
 
-    const capitalizeWord = (token) => {
-        if (typeof token !== 'string' || token.length === 0) {
-            return token;
+    const autofillWithLanguageModel = async () => {
+        if (!missingRequiredArgs().length) {
+            return false;
         }
-        const lower = token.toLowerCase();
-        return lower.charAt(0).toUpperCase() + lower.slice(1);
+
+        let agent;
+        try {
+            agent = getAgent();
+        } catch (error) {
+            return false;
+        }
+
+        const allowedKeys = JSON.stringify(allArgumentNames);
+        const systemPrompt = 'You complete tool arguments based on a user request. Respond ONLY with JSON using keys from ' + allowedKeys + '. Use exact casing. Include a key only when the value is clearly implied. Avoid guessing. Use numbers for numeric fields and booleans for true/false.';
+
+        const sections = [
+            `Skill name: ${skill.name}`,
+            `Skill description: ${skill.description}`,
+            `Existing arguments: ${JSON.stringify(normalizedArgs, null, 2)}`,
+            `Missing arguments: ${JSON.stringify(missingRequiredArgs())}`,
+            `Optional arguments: ${JSON.stringify(missingOptionalArgs())}`,
+        ];
+
+        if (argumentDefinitions.length) {
+            sections.push(`Argument definitions: ${JSON.stringify(argumentDefinitions, null, 2)}`);
+        }
+
+        if (taskDescription && typeof taskDescription === 'string') {
+            sections.push(`Original user request: ${taskDescription}`);
+        }
+
+        sections.push('Map serial numbers to serialNumber. Use phrases like "stored in Bay C-02" to populate storageLocation. Manufacturer should be the brand; model should be the product name. Use status for availability (e.g., available). Only set allocationBlocked when explicitly stated. If uncertain, omit the key. Return JSON only.');
+
+        let raw;
+        try {
+            raw = await invokeAgent(agent, [
+                { role: 'system', message: systemPrompt },
+                { role: 'human', message: sections.join('\n\n') },
+            ], { mode: 'fast' });
+        } catch (error) {
+            return false;
+        }
+
+        const parsed = safeJsonParse(typeof raw === 'string' ? raw.trim() : raw);
+        if (!parsed || typeof parsed !== 'object') {
+            return false;
+        }
+
+        const status = applyUpdatesMap(parsed);
+        return status !== 'unchanged';
     };
+
+
+
 
     const prefillFromTaskDescription = (rawDescription) => {
         if (typeof rawDescription !== 'string') {
@@ -334,356 +448,18 @@ async function executeSkill({
             return;
         }
 
-        const preferredTargets = allArgumentNames.length
+        const candidateNames = allArgumentNames.length
             ? allArgumentNames
-            : (requiredArgs.length ? requiredArgs : []);
-        const candidateNames = preferredTargets.length ? preferredTargets : missingRequiredArgs();
+            : (requiredArgs.length ? requiredArgs : missingRequiredArgs());
+
         if (candidateNames.length) {
-            const { resolved: fromDescription } = parseNamedArguments(trimmed, candidateNames);
-            for (const [name, value] of fromDescription.entries()) {
+            const { resolved: parsed } = parseNamedArguments(trimmed, candidateNames);
+            for (const [name, value] of parsed.entries()) {
                 if (!hasArgumentValue(name)) {
                     normalizedArgs[name] = value;
                 }
             }
         }
-
-        const rawTokens = trimmed.match(/[A-Za-z0-9']+/g);
-        if (!rawTokens || !rawTokens.length) {
-            return;
-        }
-
-        const lowerTokens = rawTokens.map(token => token.toLowerCase());
-        const usedTokenIndexes = new Set();
-        const anchorPoints = [];
-
-        const addAnchor = (index) => {
-            if (typeof index === 'number' && Number.isFinite(index)) {
-                const clamped = Math.max(0, Math.min(index, lowerTokens.length));
-                anchorPoints.push(clamped);
-            }
-        };
-
-        const markIndexes = (indexes) => {
-            if (!Array.isArray(indexes)) {
-                return;
-            }
-            for (const index of indexes) {
-                usedTokenIndexes.add(index);
-            }
-        };
-
-        const STOP_WORDS = new Set(['with', 'using', 'by', 'for', 'to', 'from', 'of', 'on', 'at', 'the', 'a', 'an', 'then', 'please', 'via', 'into', 'in', 'as', 'named', 'called', 'set', 'value', 'values', 'be', 'should', 'need', 'needs', 'type', 'kind', 'make', 'create', 'add', 'new']);
-        const TRUE_TOKENS = new Set(['true', 'yes', 'y', '1', 'enable', 'enabled', 'allow', 'allowed']);
-        const FALSE_TOKENS = new Set(['false', 'no', 'n', '0', 'disable', 'disabled', 'deny', 'denied']);
-
-        const getDefinition = (name) => argumentDefinitions.find((arg) => arg.name === name) || { name };
-
-        const isNameLike = (definition) => {
-            const tokens = new Set([
-                ...tokensFrom(definition?.name),
-                ...tokensFrom(definition?.description),
-            ]);
-            return tokens.has('name')
-                || tokens.has('firstname')
-                || tokens.has('lastname')
-                || tokens.has('given')
-                || tokens.has('family')
-                || tokens.has('surname')
-                || tokens.has('fullname')
-                || tokens.has('title');
-        };
-
-        const determineMaxWords = (definition) => {
-            const type = typeof definition?.type === 'string' ? definition.type.toLowerCase() : '';
-            if (type === 'boolean' || type === 'number' || type === 'integer') {
-                return 1;
-            }
-            if (type === 'date' || type === 'datetime') {
-                return 3;
-            }
-            if (!type || type === 'string') {
-                return isNameLike(definition) ? 1 : 5;
-            }
-            return null;
-        };
-
-        const normalizeStringTokens = (tokens, definition) => {
-            if (!tokens.length) {
-                return tokens;
-            }
-            if (isNameLike(definition)) {
-                return tokens.map(capitalizeWord);
-            }
-            return tokens;
-        };
-
-        const convertTokensToValue = (name, tokens, definition) => {
-            if (!tokens.length) {
-                return { applied: false };
-            }
-
-            const type = typeof definition?.type === 'string' ? definition.type.toLowerCase() : '';
-
-            if (optionMap.has(name)) {
-                const raw = tokens.join(' ');
-                const normalized = normalizeOptionValue(name, raw);
-                if (!normalized.valid) {
-                    return { applied: false };
-                }
-                return { applied: true, value: normalized.value };
-            }
-
-            if (type === 'boolean') {
-                const firstToken = tokens[0].toLowerCase();
-                if (TRUE_TOKENS.has(firstToken)) {
-                    return { applied: true, value: true };
-                }
-                if (FALSE_TOKENS.has(firstToken)) {
-                    return { applied: true, value: false };
-                }
-                return { applied: false };
-            }
-
-            if (type === 'number' || type === 'integer') {
-                const numeric = Number(tokens[0]);
-                if (!Number.isFinite(numeric)) {
-                    return { applied: false };
-                }
-                const value = type === 'integer' ? Math.trunc(numeric) : numeric;
-                return { applied: true, value };
-            }
-
-            if (type === 'array') {
-                const joined = tokens.join(' ');
-                return { applied: true, value: [coerceScalarValue(joined)] };
-            }
-
-            const processedTokens = normalizeStringTokens(tokens, definition);
-            const raw = processedTokens.join(' ');
-            return { applied: true, value: coerceScalarValue(raw) };
-        };
-
-        const collectPhrase = (startIndex, definition, maxWordsOverride = null) => {
-            const tokens = [];
-            const indexes = [];
-            let idx = Math.max(0, startIndex);
-            const maxWords = typeof maxWordsOverride === 'number' && maxWordsOverride > 0
-                ? maxWordsOverride
-                : determineMaxWords(definition);
-            while (idx < rawTokens.length) {
-                if (usedTokenIndexes.has(idx)) {
-                    idx += 1;
-                    continue;
-                }
-                const lower = lowerTokens[idx];
-                if (!tokens.length && STOP_WORDS.has(lower)) {
-                    idx += 1;
-                    continue;
-                }
-                if (tokens.length && STOP_WORDS.has(lower)) {
-                    break;
-                }
-                tokens.push(rawTokens[idx]);
-                indexes.push(idx);
-                idx += 1;
-                if (maxWords && tokens.length >= maxWords) {
-                    break;
-                }
-            }
-            return { tokens, indexes };
-        };
-
-        const collectPhraseBefore = (startIndex, definition) => {
-            const tokens = [];
-            const indexes = [];
-            let idx = startIndex - 1;
-            const maxWords = determineMaxWords(definition);
-            while (idx >= 0) {
-                if (usedTokenIndexes.has(idx)) {
-                    idx -= 1;
-                    continue;
-                }
-                const lower = lowerTokens[idx];
-                if (!tokens.length && STOP_WORDS.has(lower)) {
-                    idx -= 1;
-                    continue;
-                }
-                if (tokens.length && STOP_WORDS.has(lower)) {
-                    break;
-                }
-                tokens.unshift(rawTokens[idx]);
-                indexes.unshift(idx);
-                idx -= 1;
-                if (maxWords && tokens.length >= maxWords) {
-                    break;
-                }
-            }
-            return { tokens, indexes };
-        };
-
-        const applyPhrase = (name, phrase, definition) => {
-            if (!phrase.tokens.length) {
-                return false;
-            }
-            const result = convertTokensToValue(name, phrase.tokens, definition);
-            if (!result.applied) {
-                return false;
-            }
-            normalizedArgs[name] = result.value;
-            markIndexes(phrase.indexes);
-            return true;
-        };
-
-        const sequencesForDefinition = (definition) => {
-            const sequences = [];
-            const addSequence = (tokens) => {
-                const filtered = tokens.filter(Boolean);
-                if (filtered.length) {
-                    sequences.push(filtered);
-                }
-            };
-            addSequence(tokensFrom(definition?.name));
-            if (typeof definition?.description === 'string') {
-                addSequence(tokensFrom(definition.description));
-            }
-            if (Array.isArray(definition?.aliases)) {
-                for (const alias of definition.aliases) {
-                    addSequence(tokensFrom(alias));
-                }
-            }
-            if (Array.isArray(definition?.keywords)) {
-                for (const keyword of definition.keywords) {
-                    addSequence(tokensFrom(keyword));
-                }
-            }
-            if (typeof definition?.short === 'string') {
-                addSequence(tokensFrom(definition.short));
-            }
-            sequences.sort((a, b) => b.length - a.length);
-            return sequences;
-        };
-
-        const markSequence = (start, length) => {
-            for (let offset = 0; offset < length; offset += 1) {
-                usedTokenIndexes.add(start + offset);
-            }
-        };
-
-        for (const [argName, options] of optionMap.entries()) {
-            if (hasArgumentValue(argName) || !options || !options.length) {
-                continue;
-            }
-            for (const option of options) {
-                const sequences = [
-                    tokensFrom(option.value),
-                    tokensFrom(option.label),
-                    tokensFrom(option.display),
-                ].filter(sequence => sequence.length);
-
-                for (const sequence of sequences) {
-                    const matchIndex = findTokenSequence(lowerTokens, sequence, {
-                        skipUsed: true,
-                        usedTokenIndexes,
-                    });
-                    if (matchIndex === -1) {
-                        continue;
-                    }
-                    const normalized = normalizeOptionValue(argName, option.value);
-                    if (normalized.valid && !hasArgumentValue(argName)) {
-                        normalizedArgs[argName] = normalized.value;
-                        markSequence(matchIndex, sequence.length);
-                        addAnchor(matchIndex + sequence.length);
-                    }
-                    break;
-                }
-
-                if (hasArgumentValue(argName)) {
-                    break;
-                }
-            }
-        }
-
-        const candidateArgNames = (allArgumentNames.length ? allArgumentNames : requiredArgs).filter(Boolean);
-        const definitionsByName = new Map(candidateArgNames.map(name => [name, getDefinition(name)]));
-
-        const tryDescriptorMatch = (name) => {
-            if (hasArgumentValue(name)) {
-                return;
-            }
-            const definition = definitionsByName.get(name);
-            const sequences = sequencesForDefinition(definition);
-            for (const sequence of sequences) {
-                const matchIndex = findTokenSequence(lowerTokens, sequence, {
-                    skipUsed: true,
-                    usedTokenIndexes,
-                });
-                if (matchIndex === -1) {
-                    continue;
-                }
-                const afterPhrase = collectPhrase(matchIndex + sequence.length, definition);
-                if (applyPhrase(name, afterPhrase, definition)) {
-                    markSequence(matchIndex, sequence.length);
-                    addAnchor(matchIndex + sequence.length);
-                    return;
-                }
-                const beforePhrase = collectPhraseBefore(matchIndex, definition);
-                if (applyPhrase(name, beforePhrase, definition)) {
-                    markSequence(matchIndex, sequence.length);
-                    return;
-                }
-            }
-        };
-
-        for (const name of candidateArgNames) {
-            tryDescriptorMatch(name);
-        }
-
-        const collectFromAnchor = (definition) => {
-            if (!isNameLike(definition)) {
-                return { tokens: [], indexes: [] };
-            }
-            for (const anchor of anchorPoints) {
-                const phrase = collectPhrase(anchor, definition);
-                if (phrase.tokens.length) {
-                    return phrase;
-                }
-            }
-            return { tokens: [], indexes: [] };
-        };
-
-        const collectFromAnywhere = (definition) => {
-            if (!isNameLike(definition)) {
-                return { tokens: [], indexes: [] };
-            }
-            for (let idx = 0; idx < rawTokens.length; idx += 1) {
-                if (usedTokenIndexes.has(idx)) {
-                    continue;
-                }
-                const phrase = collectPhrase(idx, definition);
-                if (phrase.tokens.length) {
-                    return phrase;
-                }
-            }
-            return { tokens: [], indexes: [] };
-        };
-
-        for (const name of candidateArgNames) {
-            if (hasArgumentValue(name)) {
-                continue;
-            }
-            const definition = definitionsByName.get(name);
-            if (!isNameLike(definition)) {
-                continue;
-            }
-            let phrase = collectFromAnchor(definition);
-            if (!phrase.tokens.length) {
-                phrase = collectFromAnywhere(definition);
-            }
-            if (phrase.tokens.length) {
-                applyPhrase(name, phrase, definition);
-            }
-        }
-
     };
 
     const missingRequiredArgs = () => missingArgsFromList(requiredArgs);
@@ -704,6 +480,56 @@ async function executeSkill({
     const parseableArgumentNames = allArgumentNames.length
         ? allArgumentNames
         : (requiredArgs.length ? requiredArgs : []);
+
+    const interpretConfirmationResponse = async (rawInput, summaryText) => {
+        let agent;
+        try {
+            agent = getAgent();
+        } catch (error) {
+            return null;
+        }
+
+        const systemPrompt = 'You interpret confirmation responses for tool execution. Respond ONLY with JSON like {"action":"confirm|cancel|edit","updates":{"field":"value"}}. Use lowercase action strings.';
+        const humanSections = [
+            'The user was shown a summary of the pending action and replied as follows.',
+            `User reply: ${rawInput}`,
+            `Current arguments: ${JSON.stringify(normalizedArgs, null, 2)}`,
+        ];
+
+        if (summaryText) {
+            humanSections.push(`Summary shown to user:\n${summaryText}`);
+        }
+
+        if (argumentDefinitions.length) {
+            humanSections.push(`Argument definitions: ${JSON.stringify(argumentDefinitions, null, 2)}`);
+        }
+
+        humanSections.push('Return JSON only. Use "confirm" to proceed, "cancel" to stop, or "edit" with updates to adjust specific arguments.');
+
+        let raw;
+        try {
+            raw = await invokeAgent(agent, [
+                { role: 'system', message: systemPrompt },
+                { role: 'human', message: humanSections.join('\n\n') },
+            ], { mode: 'fast' });
+        } catch (error) {
+            return null;
+        }
+
+        const parsed = safeJsonParse(typeof raw === 'string' ? raw.trim() : raw);
+        if (!parsed || typeof parsed !== 'object') {
+            return null;
+        }
+
+        const action = typeof parsed.action === 'string' ? parsed.action.trim().toLowerCase() : '';
+        const updates = parsed.updates && typeof parsed.updates === 'object' ? parsed.updates : null;
+
+        if (!action) {
+            return null;
+        }
+
+        return { action, updates };
+    };
 
     const formatArgumentList = (descriptors) => descriptors
         .map((descriptor) => {
@@ -751,7 +577,7 @@ async function executeSkill({
                 optionalPromptShown = true;
             }
 
-            promptSections.push("Provide values (or type 'cancel' to abort): ");
+            promptSections.push("Provide values (or type 'cancel' to abort):\n");
 
             const userInput = await readUserPrompt(`${promptSections.join('\n')}`);
             const trimmedInput = typeof userInput === 'string' ? userInput.trim() : '';
@@ -1073,7 +899,7 @@ async function executeSkill({
             return 'unchanged';
         }
 
-        const editInput = await readUserPrompt('Enter updates (e.g., "password newPass role Admin") or press Enter to keep current values: ');
+        const editInput = await readUserPrompt('Enter updates (e.g., "password newPass role Admin") or press Enter to keep current values:\n');
         const trimmedEdit = typeof editInput === 'string' ? editInput.trim() : '';
 
         if (!trimmedEdit) {
@@ -1081,21 +907,22 @@ async function executeSkill({
         }
 
         const { resolved: updates, invalid: invalidUpdates } = parseNamedArguments(trimmedEdit, editTargets);
-
-        for (const [name, value] of updates.entries()) {
-            normalizedArgs[name] = value;
-        }
+        const updatesObject = Object.fromEntries(updates);
+        const applyResult = applyUpdatesMap(updatesObject);
 
         if (invalidUpdates.size) {
             console.warn(`The following arguments were not understood: ${Array.from(invalidUpdates).join(', ')}.`);
         }
 
-        return missingRequiredArgs().length > 0 ? 'needsMissing' : 'updated';
+        return applyResult;
     };
 
     if (taskDescription && typeof taskDescription === 'string' && taskDescription.trim()) {
         prefillFromTaskDescription(taskDescription);
     }
+
+    await autofillWithLanguageModel();
+    applyDescriptionDefaults();
 
     let needsArgumentCollection = true;
 
@@ -1110,18 +937,22 @@ async function executeSkill({
         }
 
         const summary = buildConfirmationSummary();
-        const confirmationInput = await readUserPrompt(`${summary}\nProceed? [y]es / [e]dit / [c]ancel: `);
+        const confirmationInput = await readUserPrompt(`${summary}\nGo ahead, edit, or cancel?\n`);
         const normalizedResponse = typeof confirmationInput === 'string' ? confirmationInput.trim().toLowerCase() : '';
 
-        if (!normalizedResponse || normalizedResponse === 'y' || normalizedResponse === 'yes') {
+        const affirmatives = new Set(['y', 'yes', 'ok', 'sure', 'do it', 'go ahead', 'proceed']);
+        const negatives = new Set(['c', 'cancel', 'n', 'no', 'stop', 'abort', 'never mind']);
+        const edits = new Set(['e', 'edit', 'change', 'update', 'adjust']);
+
+        if (!normalizedResponse || affirmatives.has(normalizedResponse)) {
             break;
         }
 
-        if (normalizedResponse === 'c' || normalizedResponse === 'cancel' || normalizedResponse === 'n' || normalizedResponse === 'no') {
+        if (negatives.has(normalizedResponse)) {
             throw new Error('Skill execution cancelled by user.');
         }
 
-        if (normalizedResponse === 'e' || normalizedResponse === 'edit' || normalizedResponse === 'change' || normalizedResponse === 'update') {
+        if (edits.has(normalizedResponse)) {
             const editResult = await requestArgumentEdits();
             if (editResult === 'needsMissing') {
                 needsArgumentCollection = true;
@@ -1129,7 +960,38 @@ async function executeSkill({
             continue;
         }
 
-        console.log("Please respond with 'y', type 'edit' to adjust, or 'cancel' to abort.");
+        const interpreted = await interpretConfirmationResponse(confirmationInput, summary);
+        if (interpreted && interpreted.action) {
+            const action = interpreted.action;
+            if (action === 'confirm' || action === 'yes' || action === 'proceed') {
+                break;
+            }
+            if (action === 'cancel' || action === 'stop' || action === 'abort') {
+                throw new Error('Skill execution cancelled by user.');
+            }
+            if (action === 'edit') {
+                if (interpreted.updates && Object.keys(interpreted.updates).length) {
+                    const editResult = applyUpdatesMap(interpreted.updates);
+                    if (editResult === 'needsMissing') {
+                        needsArgumentCollection = true;
+                    } else if (editResult === 'unchanged') {
+                        console.log('I could not apply those changes. Let’s try again together.');
+                        const manualResult = await requestArgumentEdits();
+                        if (manualResult === 'needsMissing') {
+                            needsArgumentCollection = true;
+                        }
+                    }
+                    continue;
+                }
+                const manualResult = await requestArgumentEdits();
+                if (manualResult === 'needsMissing') {
+                    needsArgumentCollection = true;
+                }
+                continue;
+            }
+        }
+
+        console.log("Please answer in your own words—for example 'yes', 'edit', or 'cancel'.");
     }
 
     const orderedNames = argumentDefinitions.length
