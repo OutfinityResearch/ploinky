@@ -20,11 +20,11 @@ function showHelp(args = []) {
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
-  webconsole [shell]                 Prepare WebTTY (alias of webtty). Optional shell.
-  webtty [shell]                     Prepare WebTTY and print access URL. Optional shell.
-  webchat [--rotate]                 Show or rotate WebChat token and print access URL
-  webmeet [moderatorAgent]           Show WebMeet token; use --rotate to mint a new one
-  dashboard                          Regenerate Dashboard token and print access URL
+  webconsole [shell] [--rotate]  Prepare WebTTY (alias). Prints URL; --rotate mints new token.
+  webtty [shell] [--rotate]      Prepare WebTTY and print access URL. Optional shell.
+  webchat [--rotate]             Show or rotate WebChat token and print access URL
+  webmeet [moderatorAgent] [--rotate]  Show WebMeet token; --rotate mints a new one
+  dashboard [--rotate]           Show or rotate Dashboard token and print access URL
   vars                           List all variable names (no values)
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
@@ -126,16 +126,16 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         'webconsole': {
-            description: 'Alias of webtty. Optionally configure shell for console sessions.',
-            syntax: 'webconsole [shell]',
-            examples: [ 'webconsole', 'webconsole zsh' ],
-            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or an absolute path. If a shell is provided, the router is restarted (if configured) so changes apply immediately. Writes token to .ploinky/.secrets and prints a URL.'
+            description: 'Alias of webtty. Optionally configure shell for console sessions; show or rotate token.',
+            syntax: 'webconsole [shell] [--rotate]',
+            examples: [ 'webconsole', 'webconsole zsh', 'webconsole --rotate' ],
+            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or absolute path. If a shell is provided, the router restarts (if configured). Without --rotate, prints existing URL (creates token if missing); with --rotate, mints a new token. Token stored in .ploinky/.secrets.'
         },
         'webtty': {
-            description: 'Prepare WebTTY. Optionally configure shell for console sessions.',
-            syntax: 'webtty [shell]',
-            examples: [ 'webtty', 'webtty sh' ],
-            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or an absolute path. If a shell is provided, the router is restarted (if configured) so changes apply immediately. Writes token to .ploinky/.secrets and prints a URL.'
+            description: 'Prepare WebTTY. Optionally configure shell for console sessions; show or rotate token.',
+            syntax: 'webtty [shell] [--rotate]',
+            examples: [ 'webtty', 'webtty sh', 'webtty --rotate' ],
+            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or absolute path. If a shell is provided, the router restarts (if configured). Without --rotate, prints existing URL (creates token if missing); with --rotate, mints a new token. Token stored in .ploinky/.secrets.'
         },
         'webchat': {
             description: 'Display or rotate the WebChat token used by /webchat.',
@@ -150,9 +150,9 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBMEET_TOKEN` to print it.'
         },
         'dashboard': {
-            description: 'Refresh the Dashboard token used by /dashboard.',
-            syntax: 'dashboard',
-            examples: [ 'dashboard' ],
+            description: 'Display or rotate the Dashboard token used by /dashboard.',
+            syntax: 'dashboard [--rotate]',
+            examples: [ 'dashboard', 'dashboard --rotate' ],
             notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
         },
         

@@ -342,15 +342,25 @@ async function handleCommand(args) {
             break;
         // 'route' and 'probe' commands removed (replaced by start/status and client commands)
         case 'webconsole': {
-            // Optional shell parameter (alias of webtty)
-            const candidate = options[0];
-            if (candidate && !String(candidate).startsWith('-')) {
-                const ok = configureWebttyShell(candidate);
+            // Alias of webtty; supports optional shell and --rotate
+            const argsList = (options || []).filter(Boolean);
+            let shellCandidate = null;
+            let rotate = false;
+            for (const arg of argsList) {
+                if (String(arg).startsWith('--')) {
+                    if (arg === '--rotate') rotate = true;
+                } else if (!shellCandidate) {
+                    shellCandidate = arg;
+                }
+            }
+            if (shellCandidate) {
+                const ok = configureWebttyShell(shellCandidate);
                 if (!ok) break;
                 // Apply immediately if workspace start is configured
                 try { await handleCommand(['restart']); } catch (_) {}
             }
-            await refreshComponentToken('webtty');
+            if (rotate) await refreshComponentToken('webtty');
+            else ensureComponentToken('webtty');
             break; }
         case 'webchat': {
             const rotate = options.includes('--rotate');
@@ -358,21 +368,33 @@ async function handleCommand(args) {
             else ensureComponentToken('webchat');
             break; }
         case 'webtty': {
-            const candidate = options[0];
-            if (candidate && !String(candidate).startsWith('-')) {
-                const ok = configureWebttyShell(candidate);
+            const argsList = (options || []).filter(Boolean);
+            let shellCandidate = null;
+            let rotate = false;
+            for (const arg of argsList) {
+                if (String(arg).startsWith('--')) {
+                    if (arg === '--rotate') rotate = true;
+                } else if (!shellCandidate) {
+                    shellCandidate = arg;
+                }
+            }
+            if (shellCandidate) {
+                const ok = configureWebttyShell(shellCandidate);
                 if (!ok) break;
                 // Apply immediately if workspace start is configured
                 try { await handleCommand(['restart']); } catch (_) {}
             }
-            await refreshComponentToken('webtty');
+            if (rotate) await refreshComponentToken('webtty');
+            else ensureComponentToken('webtty');
             break; }
         case 'voicechat':
             console.log('voicechat: feature removed; use /webmeet instead.');
             break;
-        case 'dashboard':
-            await refreshComponentToken('dashboard');
-            break;
+        case 'dashboard': {
+            const rotate = (options || []).includes('--rotate');
+            if (rotate) await refreshComponentToken('dashboard');
+            else ensureComponentToken('dashboard');
+            break; }
         case 'webmeet': {
             const argsList = (options || []).filter(Boolean);
             let moderator = null;

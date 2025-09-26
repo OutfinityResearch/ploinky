@@ -269,11 +269,12 @@ expose API_KEY $PROD_KEY            # Uses static agent</code></pre>
                         <h2>Web Interfaces</h2>
                         
                         <h3>webconsole / webtty</h3>
-                        <p>Prepare access for the Web Console (synonyms). Prints URL with token.</p>
-                        <pre><code>webconsole [shell]
-webtty [shell]</code></pre>
+                        <p>Prepare access for the Web Console (synonyms). Prints URL with token. Use --rotate to mint a new token.</p>
+                        <pre><code>webconsole [shell] [--rotate]
+webtty [shell] [--rotate]</code></pre>
                         <pre><code># Examples
 webconsole
+webconsole --rotate
 webtty sh
 webtty /bin/zsh</code></pre>
                         <div class="alert alert-info">
@@ -294,8 +295,8 @@ webchat --rotate</code></pre>
                         </div>
 
                         <h3>dashboard</h3>
-                        <p>Prepare access for the Dashboard. Prints URL with token.</p>
-                        <pre><code>dashboard</code></pre>
+                        <p>Prepare access for the Dashboard. Prints URL with token. Use --rotate to mint a new token.</p>
+                        <pre><code>dashboard [--rotate]</code></pre>
                         <div class="alert alert-info">
                             Access at: http://127.0.0.1:8080/dashboard?token=&lt;WEBDASHBOARD_TOKEN&gt;
                         </div>
