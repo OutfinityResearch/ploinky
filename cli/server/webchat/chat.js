@@ -347,101 +347,199 @@
 
   // --- STT (Speech-to-Text) Logic ---
   const sttBtn = document.getElementById('sttBtn');
-  const sttOverlay = document.getElementById('sttOverlay');
-  const sttText = document.getElementById('sttText');
-  const sttSend = document.getElementById('sttSend');
-  const sttCancel = document.getElementById('sttCancel');
+  const sttStatus = document.getElementById('sttStatus');
   const sttLang = document.getElementById('sttLang');
   const sttEnable = document.getElementById('sttEnable');
-  const sttStatus = document.getElementById('sttStatus');
-  const sttRecord = document.getElementById('sttRecord');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsPanel = document.getElementById('settingsPanel');
+
+  const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const sttSupported = typeof SpeechRecognitionClass === 'function';
+  const sttLangKey = 'vc_stt_lang';
+  const sttEnabledKey = 'vc_stt_enabled';
+  const sendTriggerRe = /\bsend\b/i;
 
   let sttRecognition = null;
-  let sttRecording = false;
-  let finalTranscript = '';
-  let sttLangCode = localStorage.getItem('vc_stt_lang') || 'en-US';
+  let sttListening = false;
+  let sttActive = false;
+  let sttLangCode = localStorage.getItem(sttLangKey) || 'en-GB';
+  let finalSegments = [];
+  let interimTranscript = '';
 
-  if (sttBtn) {
-    sttBtn.onclick = () => {
-      // Reset state before showing
-      if (sttText) sttText.value = '';
-      if (sttStatus) sttStatus.textContent = 'Ready';
-      finalTranscript = '';
-
-      if (sttOverlay) sttOverlay.style.display = 'flex';
-      // Auto-start recording if enabled
-      setTimeout(() => { if (sttEnable?.checked && sttRecord) sttRecord.click(); }, 100);
-    };
+  function updateVoiceStatus(text) {
+    if (sttStatus) sttStatus.textContent = text;
   }
 
-  if (sttCancel) {
-    sttCancel.onclick = () => {
-      if (sttRecognition) sttRecognition.stop();
-      if (sttOverlay) sttOverlay.style.display = 'none';
-    };
+  function setMicVisual(active) {
+    if (!sttBtn) return;
+    sttBtn.classList.toggle('active', active);
+    sttBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
 
-  if (sttSend) {
-    sttSend.onclick = () => {
-      const text = sttText.value.trim();
-      if (text) {
-        cmdInput.value = text;
-        sendCmd();
-      }
-      if (sttRecognition) sttRecognition.stop();
-      if (sttOverlay) sttOverlay.style.display = 'none';
-    };
+  function resetTranscriptState() {
+    finalSegments = [];
+    interimTranscript = '';
   }
 
-  if (sttRecord) {
-    sttRecord.onclick = () => {
-      if (sttRecording) {
-        if (sttRecognition) sttRecognition.stop();
-        return;
-      }
+  function normalizeWhitespace(str) {
+    return (str || '').replace(/\s+/g, ' ').trim();
+  }
 
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SR) {
-        alert('Speech recognition not supported in this browser.');
-        return;
-      }
-      if (!sttEnable?.checked) return;
+  function currentTranscript() {
+    const finals = finalSegments.join(' ');
+    if (interimTranscript) return `${finals} ${interimTranscript}`.trim();
+    return finals.trim();
+  }
 
-      finalTranscript = sttText.value ? sttText.value + ' ' : '';
-      sttRecognition = new SR();
-      sttRecognition.lang = sttLang?.value || sttLangCode || 'en-US';
+  function updateComposerFromVoice() {
+    const text = currentTranscript();
+    cmdInput.value = text;
+    autoResize();
+  }
+
+  function handleVoiceSend(rawJoined) {
+    const cleaned = normalizeWhitespace((rawJoined || '').replace(/\bsend\b/gi, ' '));
+    cmdInput.value = cleaned;
+    autoResize();
+    if (cleaned) sendCmd();
+    else {
+      cmdInput.value = '';
+      autoResize();
+    }
+    resetTranscriptState();
+  }
+
+  function stopRecognition() {
+    if (!sttRecognition) return;
+    try { sttRecognition.onresult = null; sttRecognition.onerror = null; sttRecognition.onend = null; sttRecognition.stop(); } catch (_) {}
+    sttRecognition = null;
+    sttListening = false;
+  }
+
+  function startRecognition() {
+    if (!sttSupported) {
+      updateVoiceStatus('Unsupported');
+      setMicVisual(false);
+      return;
+    }
+    if (!sttEnable?.checked) {
+      updateVoiceStatus('Disabled');
+      setMicVisual(false);
+      return;
+    }
+    if (!sttActive) return;
+    if (sttListening) return;
+
+    resetTranscriptState();
+
+    try {
+      sttRecognition = new SpeechRecognitionClass();
+      sttRecognition.lang = sttLang?.value || sttLangCode || 'en-GB';
       sttRecognition.continuous = true;
       sttRecognition.interimResults = true;
 
       sttRecognition.onresult = (event) => {
-        let interim_transcript = '';
+        interimTranscript = '';
+        let triggered = false;
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript + ' ';
+          const res = event.results[i];
+          const transcript = (res[0]?.transcript || '').trim();
+          if (!transcript) continue;
+          if (res.isFinal) {
+            finalSegments.push(transcript);
+            const joined = finalSegments.join(' ');
+            if (sendTriggerRe.test(joined)) {
+              triggered = true;
+              handleVoiceSend(joined);
+              break;
+            }
           } else {
-            interim_transcript += event.results[i][0].transcript;
+            interimTranscript = interimTranscript ? `${interimTranscript} ${transcript}` : transcript;
           }
         }
-        sttText.value = finalTranscript + interim_transcript;
+        if (!triggered) updateComposerFromVoice();
       };
 
-      sttRecognition.onerror = (e) => { sttStatus.textContent = `Error: ${e.error}`; };
+      sttRecognition.onerror = (e) => {
+        dlog('stt error', e);
+        const err = e?.error || e?.message || 'unknown';
+        const fatal = err === 'not-allowed' || err === 'service-not-allowed';
+        sttListening = false;
+        if (fatal) {
+          sttActive = false;
+          updateVoiceStatus('Permission denied');
+          setMicVisual(false);
+          stopRecognition();
+        } else {
+          updateVoiceStatus(`Error: ${err}`);
+        }
+      };
+
       sttRecognition.onend = () => {
-        finalTranscript = sttText.value;
-        sttRecording = false;
-        sttRecord.textContent = 'Start Recording';
-        sttStatus.textContent = 'Ready';
+        sttListening = false;
+        if (sttActive && sttEnable?.checked) {
+          setTimeout(() => { if (!sttListening && sttActive && sttEnable?.checked) startRecognition(); }, 200);
+        } else {
+          updateVoiceStatus(sttEnable?.checked ? 'Paused' : 'Disabled');
+        }
+        setMicVisual(sttActive && sttEnable?.checked);
       };
 
-      try {
-        sttRecognition.start();
-        sttRecording = true;
-        sttRecord.textContent = 'Stop Recording';
-        sttStatus.textContent = 'Listening...';
-      } catch (e) {
-        alert(`Could not start STT: ${e.message}`);
-      }
+      sttRecognition.start();
+      sttListening = true;
+      updateVoiceStatus('Listening…');
+      setMicVisual(true);
+    } catch (e) {
+      dlog('stt start failed', e);
+      updateVoiceStatus('Mic blocked');
+      setMicVisual(false);
+    }
+  }
+
+  function applyEnableState(checked) {
+    if (sttBtn) {
+      sttBtn.setAttribute('aria-disabled', checked ? 'false' : 'true');
+    }
+    if (!checked) {
+      sttActive = false;
+      setMicVisual(false);
+      stopRecognition();
+      updateVoiceStatus('Disabled');
+      resetTranscriptState();
+    } else {
+      sttActive = true;
+      setMicVisual(true);
+      startRecognition();
+    }
+  }
+
+  if (settingsBtn && settingsPanel) {
+    let settingsOpen = false;
+    const toggleSettings = () => {
+      settingsOpen = !settingsOpen;
+      settingsPanel.classList.toggle('show', settingsOpen);
+      settingsBtn.classList.toggle('active', settingsOpen);
     };
+    settingsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSettings();
+    });
+    document.addEventListener('click', (e) => {
+      if (!settingsOpen) return;
+      if (!settingsPanel.contains(e.target) && !settingsBtn.contains(e.target)) {
+        settingsOpen = false;
+        settingsPanel.classList.remove('show');
+        settingsBtn.classList.remove('active');
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (!settingsOpen) return;
+      if (e.key === 'Escape') {
+        settingsOpen = false;
+        settingsPanel.classList.remove('show');
+        settingsBtn.classList.remove('active');
+      }
+    });
   }
 
   try {
@@ -449,7 +547,7 @@
       const list = (window.speechSynthesis?.getVoices?.() || []).map(v => v.lang).filter(Boolean);
       const common = ['en-US', 'en-GB', 'ro-RO', 'fr-FR', 'de-DE', 'es-ES', 'it-IT', 'pt-PT', 'pt-BR', 'nl-NL', 'pl-PL', 'tr-TR', 'ru-RU', 'zh-CN', 'ja-JP', 'ko-KR'];
       const langs = Array.from(new Set([...(list || []), ...common])).sort();
-      
+
       if (sttLang) {
         sttLang.innerHTML = '';
         langs.forEach(code => {
@@ -464,20 +562,71 @@
 
     fillLangs();
     window.speechSynthesis?.addEventListener?.('voiceschanged', fillLangs);
-
-    if (sttLang) {
-      sttLang.addEventListener('change', (e) => {
-        sttLangCode = e.target.value || 'en-US';
-        localStorage.setItem('vc_stt_lang', sttLangCode);
-        // If recording is active, restart it to apply the new language
-        if (sttRecording && sttRecord) {
-          if (sttRecognition) sttRecognition.stop(); // This will trigger onend
-          // A brief timeout to allow the 'onend' event to fire properly before restarting
-          setTimeout(() => sttRecord.click(), 100);
-        }
-      });
-    }
   } catch (_) {}
+
+  if (sttLang) {
+    sttLang.addEventListener('change', (e) => {
+      sttLangCode = e.target.value || 'en-GB';
+      localStorage.setItem(sttLangKey, sttLangCode);
+      if (sttListening) {
+        stopRecognition();
+        setTimeout(startRecognition, 150);
+      }
+    });
+  }
+
+  if (sttEnable) {
+    const stored = localStorage.getItem(sttEnabledKey);
+    if (stored !== null) sttEnable.checked = stored === 'true';
+    sttEnable.addEventListener('change', () => {
+      localStorage.setItem(sttEnabledKey, sttEnable.checked ? 'true' : 'false');
+      applyEnableState(sttEnable.checked);
+    });
+  }
+
+  if (sttBtn) {
+    sttBtn.addEventListener('click', () => {
+      if (!sttSupported) {
+        updateVoiceStatus('Unsupported');
+        return;
+      }
+      if (sttEnable && !sttEnable.checked) {
+        if (sttEnable) {
+          sttEnable.checked = true;
+          localStorage.setItem(sttEnabledKey, 'true');
+        }
+        applyEnableState(true);
+        return;
+      }
+      sttActive = !sttActive;
+      setMicVisual(sttActive);
+      if (sttActive) {
+        updateVoiceStatus('Listening…');
+        startRecognition();
+      } else {
+        stopRecognition();
+        updateVoiceStatus('Off');
+        resetTranscriptState();
+      }
+    });
+  }
+
+  if (!sttSupported) {
+    updateVoiceStatus('Unsupported');
+    if (sttBtn) sttBtn.disabled = true;
+  } else if (sttEnable) {
+    if (sttEnable.checked) {
+      sttActive = true;
+      setMicVisual(true);
+      startRecognition();
+    } else {
+      applyEnableState(false);
+    }
+  } else {
+    sttActive = true;
+    setMicVisual(true);
+    startRecognition();
+  }
 
   // --- Actions & Network ---
   function sendCmd() {
