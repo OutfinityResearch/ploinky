@@ -593,7 +593,10 @@ async function ensureAgentCore(manifest, agentPath) {
 // - If manifest.agent is provided (non-empty), run it via /bin/sh -lc <agentCmd>.
 // - If manifest.agent is missing/empty, run fallback supervisor 'AgentServer.sh' which loops and restarts AgentServer.mjs.
 // - Always keep the container running; do not auto-stop on exit.
-function startAgentContainer(agentName, manifest, agentPath) {
+// Start a persistent agent container in detached mode.
+// Options:
+// - options.publish: array of strings like "HOST:CONTAINER" to add -p mappings
+function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const runtime = containerRuntime;
     const containerName = getServiceContainerName(agentName);
     try { execSync(`${runtime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
@@ -608,6 +611,12 @@ function startAgentContainer(agentName, manifest, agentPath) {
         '-v', `${agentLibPath}:/Agent${runtime==='podman'?':ro,z':':ro'}`,
         '-v', `${path.resolve(agentPath)}:/code${runtime==='podman'?':ro,z':':ro'}`
     ];
+    // Optional port publishings
+    const pubs = (options && Array.isArray(options.publish)) ? options.publish : [];
+    for (const p of pubs) {
+        if (!p) continue;
+        args.splice(1, 0, '-p', String(p));
+    }
     // Inject environment for exposed variables
     const envFlags = flagsToArgs(buildEnvFlags(manifest));
     if (envFlags.length) args.push(...envFlags);
@@ -768,10 +777,6 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     // Use a dedicated service container name with cwd hash to avoid clashes across workspaces
     const containerName = getServiceContainerName(agentName);
     const image = manifest.container || manifest.image || 'node:18-alpine';
-    const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
-    const cwd = process.cwd();
-    const agentLibPath = path.resolve(__dirname, '../../Agent');
-    const absAgentPath = path.resolve(agentPath);
 
     // If container exists, ensure it's running and return current mapped port.
     let createdNew = false;
@@ -799,24 +804,8 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     }
 
     const hostPort = preferredHostPort || (10000 + Math.floor(Math.random() * 50000));
-    // Build run args with mounts:
-    // - Mount current directory RW at same path (workdir = cwd)
-    // - Mount Agent library RO at /agent
-    // - Mount agentPath RO at /code (for apps expecting /code)
-    const envHash2 = computeEnvHash(manifest);
-    const args = ['run', '-d', '-p', `${hostPort}:7000`, '--name', containerName, '--label', `ploinky.envhash=${envHash2}`,
-        '-w', cwd,
-        '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
-        '-v', `${agentLibPath}:/Agent${runtime==='podman'?':ro,z':':ro'}`,
-        '-v', `${absAgentPath}:/code${runtime==='podman'?':ro,z':':ro'}`
-    ];
-    const envFlags2 = flagsToArgs(buildEnvFlags(manifest));
-    if (envFlags2.length) args.push(...envFlags2);
-    const cmd = agentCmd || 'sh /Agent/server/AgentServer.sh';
-    args.push(image, '/bin/sh', '-lc', cmd);
-    const { spawnSync } = require('child_process');
-    const runRes = spawnSync(runtime, args, { stdio: 'inherit' });
-    if (runRes.status !== 0) { throw new Error(`${runtime} run failed with code ${runRes.status}`); }
+    // Use startAgentContainer to create the container with identical config and publish mapping
+    startAgentContainer(agentName, manifest, agentPath, { publish: [ `${hostPort}:7000` ] });
     createdNew = true;
 
     // Save to registry
@@ -827,12 +816,12 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         repoName: path.basename(path.dirname(agentPath)),
         containerImage: image,
         createdAt: new Date().toISOString(),
-        projectPath: cwd,
+        projectPath: process.cwd(),
         type: 'agent',
         config: {
             binds: [
-                { source: cwd, target: cwd },
-                { source: agentLibPath, target: '/agent', ro: true },
+                { source: process.cwd(), target: process.cwd() },
+                { source: path.resolve(__dirname, '../../Agent'), target: '/agent', ro: true },
                 { source: agentPath, target: '/code', ro: true }
             ],
             env: Array.from(new Set(declaredEnvNames3)).map(name => ({ name })),

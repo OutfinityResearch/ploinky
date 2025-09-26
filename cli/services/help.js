@@ -209,11 +209,22 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             examples: [ 'status' ],
             notes: 'Reads .ploinky/agents and prints container, binds, ports, and static config.'
         },
+        'refresh': {
+            description: 'Refresh an agent by re-creating its container.',
+            subcommands: {
+                'agent': {
+                    syntax: 'refresh agent <name>',
+                    description: 'Stops, removes, and re-creates the agent\'s container. This is a destructive operation that ensures the agent starts from a clean state. This command only has an effect if the agent\'s container is currently running.',
+                    examples: [ 'refresh agent MyAPI' ],
+                    notes: 'This is useful for applying configuration changes that require a new container.'
+                }
+            }
+        },
         'restart': {
-            description: 'Stop and then start all enabled agents and Router',
-            syntax: 'restart',
-            examples: [ 'restart' ],
-            notes: 'Fails if start was not configured yet (no staticAgent/port).'
+            description: 'Restarts services. If an agent name is provided, it performs a non-destructive stop and start of that agent\'s container. If no agent name is provided, it restarts all agents and the router.',
+            syntax: 'restart [agentName]',
+            examples: [ 'restart', 'restart MyAPI' ],
+            notes: 'The command only affects running containers when an agent name is specified. The general restart fails if start was not configured yet.'
         },
         'logs': {
             description: 'Inspect router logs',

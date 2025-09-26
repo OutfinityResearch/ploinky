@@ -124,10 +124,10 @@ enable agent cloud/MyAPI    # Enable specific agent from cloud repo</code></pre>
                         
 
                         <h3>refresh agent</h3>
-                        <p>Restart an agent container in-place (preserves the same container ID). If the container is running, it is stopped and then started again. If it exists but is stopped, it is started. If it does not exist, a hint is printed to use <code>start</code>.</p>
+                        <p>Stops, removes, and re-creates the agent's container. This is a destructive operation that ensures the agent starts from a clean state. This command only has an effect if the agent's container is currently running.</p>
                         <pre><code>refresh agent &lt;name&gt;
 # Example
-refresh agent demo  # stop/start existing container; ID remains the same</code></pre>
+refresh agent demo  # stop, remove, and re-create the container for the 'demo' agent</code></pre>
 
                         <h3>list agents</h3>
                         <p>List all available agents from enabled repositories.</p>
@@ -201,11 +201,11 @@ Configured routes:
 - demo: hostPort=7001 container=ploinky_project_service_demo</code></pre>
 
                         <h3>restart</h3>
-                        <p>Restart all agents and router or a specific agent.</p>
+                        <p>Restarts services. If an agent name is provided, it performs a non-destructive stop and start of that agent's container, preserving the container ID. This only affects running containers. If no agent name is provided, it restarts all agents and the router.</p>
                         <pre><code>restart [agentName]</code></pre>
                         <pre><code># Examples
-restart          # Restart everything
-restart MyAPI    # Restart specific agent</code></pre>
+restart          # Restart all agents and the router
+restart MyAPI    # Stop and then start the existing container for MyAPI</code></pre>
                     </div>
 
                     <div class="doc-section" id="variables">
