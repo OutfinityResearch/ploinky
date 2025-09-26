@@ -337,27 +337,66 @@ async function handleCommand(args) {
         case 'webchat': {
             const argsList = (options || []).filter(Boolean);
             let rotate = false;
-            const commandParts = [];
+            const positional = [];
             for (const arg of argsList) {
-                if (arg === '--rotate') {
-                    rotate = true;
-                    continue;
+                if (String(arg).startsWith('--')) {
+                    if (arg === '--rotate') rotate = true;
+                } else {
+                    positional.push(arg);
                 }
-                commandParts.push(arg);
             }
 
             if (rotate) refreshComponentToken('webchat');
             else ensureComponentToken('webchat');
 
-            if (!rotate && commandParts.length) {
-                const command = commandParts.join(' ').trim();
-                if (command.length === 0) break;
-                envSvc.setEnvVar('WEBCHAT_COMMAND', command);
-                console.log(`✓ Configured WebChat command: ${command}`);
-                try {
-                    await handleCommand(['restart', 'router']);
-                } catch (e) {
-                    console.error('Failed to restart router:', e?.message || e);
+            // Configure behavior: single positional = agent name -> run 'ploinky cli <agent>'
+            if (!rotate && positional.length) {
+                const fs = require('fs');
+                const path = require('path');
+                const first = positional[0];
+                const rest = positional.slice(1);
+
+                // Detect local script path (absolute or relative) by existence
+                const asPath = path.isAbsolute(first) ? first : path.resolve(first);
+                let isLocalScript = false;
+                try { const st = fs.statSync(asPath); isLocalScript = st && st.isFile(); } catch (_) { isLocalScript = false; }
+
+                let command;
+                if (isLocalScript) {
+                    const needsQuote = /\s/.test(asPath);
+                    const quoted = needsQuote ? `'${asPath.replace(/'/g, "'\\''")}'` : asPath;
+                    command = quoted + (rest.length ? (' ' + rest.join(' ')) : '');
+                    try {
+                        envSvc.setEnvVar('WEBCHAT_COMMAND', command);
+                        console.log(`✓ Configured WebChat to run local script: ${command}`);
+                        try { await handleCommand(['restart']); } catch (_) {}
+                    } catch (e) {
+                        console.error('Failed to configure WebChat command:', e?.message || e);
+                    }
+                } else if (positional.length === 1) {
+                    // Treat as agent name
+                    const agentName = first;
+                    try { await enableAgent(agentName); } catch (_) {}
+                    command = `ploinky cli ${agentName}`;
+                    try {
+                        envSvc.setEnvVar('WEBCHAT_COMMAND', command);
+                        console.log(`✓ Configured WebChat to run: ${command}`);
+                        try { await handleCommand(['restart']); } catch (_) {}
+                    } catch (e) {
+                        console.error('Failed to configure WebChat command:', e?.message || e);
+                    }
+                } else {
+                    // Back-compat: treat as raw command
+                    command = positional.join(' ').trim();
+                    if (command) {
+                        try {
+                            envSvc.setEnvVar('WEBCHAT_COMMAND', command);
+                            console.log(`✓ Configured WebChat command: ${command}`);
+                            try { await handleCommand(['restart']); } catch (_) {}
+                        } catch (e) {
+                            console.error('Failed to configure WebChat command:', e?.message || e);
+                        }
+                    }
                 }
             }
             break; }

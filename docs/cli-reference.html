@@ -285,11 +285,26 @@ webtty /bin/zsh</code></pre>
                         </div>
 
                         <h3>webchat</h3>
-                        <p>Prepare access for the WebChat interface. Prints URL with token.</p>
-                        <pre><code>webchat [--rotate]</code></pre>
+                        <p>
+                            Prepare access for the WebChat interface. Prints URL with token. You can pass either an
+                            agent name or a local script/program. If an agent name is provided, WebChat runs that agent's
+                            CLI (as <code>ploinky cli &lt;agentName&gt;</code>) when sessions start. If a local script/program is
+                            provided (relative or absolute path to an existing file), WebChat runs it directly. The configuration
+                            is saved as <code>WEBCHAT_COMMAND</code>.
+                        </p>
+                        <div class="alert alert-info">
+                            Detection rules: if the first argument resolves to an existing file on disk (relative or absolute path),
+                            it is treated as a local script/program; otherwise, with a single token it is treated as an agent name;
+                            with multiple tokens and the first not a file, the entire string is saved as a raw command.
+                        </div>
+                        <pre><code>webchat [agentName|localScript [args...]|command...] [--rotate]</code></pre>
                         <pre><code># Examples
-webchat
-webchat --rotate</code></pre>
+webchat                          # ensure token and show URL
+webchat demo                     # bind WebChat to run: ploinky cli demo
+webchat ./scripts/menu.sh        # bind WebChat to a local script
+webchat /abs/tool --flag         # bind WebChat to an absolute program path with args
+webchat --rotate                # mint a new token
+webchat "python bot.py"        # bind WebChat to a custom command string</code></pre>
                         <div class="alert alert-info">
                             Access at: http://127.0.0.1:8080/webchat?token=&lt;WEBCHAT_TOKEN&gt;
                         </div>

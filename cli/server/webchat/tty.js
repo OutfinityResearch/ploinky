@@ -3,7 +3,7 @@ const { buildExecArgs } = require('../../services/docker');
 function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
   const DEBUG = process.env.WEBTTY_DEBUG === '1';
   const log = (...args) => { if (DEBUG) console.log('[webchat][tty]', ...args); };
-  const factory = () => {
+	const factory = () => {
     const wd = workdir || process.cwd();
     const env = { ...process.env, TERM: 'xterm-256color' };
     const shellCmd = entry && String(entry).trim()
@@ -92,28 +92,38 @@ function createLocalTTYFactory({ ptyLib, workdir, command }) {
       }
     };
 
-    const hasCustom = !!(command && String(command).trim());
-    const parentShell = process.env.WEBCHAT_SHELL || process.env.SHELL || '/bin/sh';
-    const entry = hasCustom
-      ? String(command)
-      : 'command -v /bin/bash >/dev/null 2>&1 && exec /bin/bash || exec /bin/sh';
-    const shCmd = `cd '${wd}' && ${entry}`;
+		const hasCustom = !!(command && String(command).trim());
+		const parentShell = process.env.WEBCHAT_SHELL || process.env.SHELL || '/bin/sh';
+		const fallbackEntry = 'command -v /bin/bash >/dev/null 2>&1 && exec /bin/bash || exec /bin/sh';
 
-    if (!ptyLib) throw new Error("'node-pty' is required for local WebChat sessions.");
-    try {
-      ptyProc = ptyLib.spawn(parentShell, ['-lc', shCmd], {
-        name: 'xterm-color',
-        cols: 80,
-        rows: 24,
-        cwd: wd,
-        env
-      });
-      ptyProc.onData(emitOutput);
-      ptyProc.onExit(() => emitClose());
-    } catch (e) {
-      log('local pty spawn failed', e?.message || e);
-      throw e;
-    }
+		function startProc({ entry, isFallback } = {}) {
+			const useEntry = entry && String(entry).trim() ? String(entry) : fallbackEntry;
+			const shCmd = `cd '${wd}' && ${useEntry}`;
+			if (!ptyLib) throw new Error("'node-pty' is required for local WebChat sessions.");
+			try {
+				ptyProc = ptyLib.spawn(parentShell, ['-lc', shCmd], {
+					name: 'xterm-color',
+					cols: 80,
+					rows: 24,
+					cwd: wd,
+					env
+				});
+				ptyProc.onData(emitOutput);
+				ptyProc.onExit(() => {
+					log('local pty exit', { isFallback: !!isFallback });
+					if (!isFallback && hasCustom) {
+						try { startProc({ entry: fallbackEntry, isFallback: true }); return; } catch (_) {}
+					}
+					emitClose();
+				});
+			} catch (e) {
+				log('local pty spawn failed', e?.message || e);
+				throw e;
+			}
+		}
+
+		// Start with custom command if provided; fallback to base shell after it exits
+		startProc({ entry: hasCustom ? String(command) : fallbackEntry, isFallback: !hasCustom });
 
     return {
       onOutput(handler) { if (handler) outputHandlers.add(handler); return () => outputHandlers.delete(handler); },

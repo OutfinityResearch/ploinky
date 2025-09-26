@@ -121,7 +121,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     description: 'Run manifest "cli" command interactively (attached TTY).',
                     params: { '<agentName>': 'Agent name', '[args...]': 'Arguments appended to the cli command' },
                     examples: [ 'cli MyAPI --help' ],
-                    notes: 'Attaches to a persistent container. REPLs stay attached until exit.'
+                    notes: 'Attaches to a persistent container. REPLs stay attached until exit. Tip: Use "webchat <agentName>" to configure WebChat to run this CLI.'
                 }
             }
         },
@@ -138,10 +138,17 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or absolute path. If a shell is provided, the router restarts (if configured). Without --rotate, prints existing URL (creates token if missing); with --rotate, mints a new token. Token stored in .ploinky/.secrets.'
         },
         'webchat': {
-            description: 'Display or rotate the WebChat token used by /webchat.',
-            syntax: 'webchat [--rotate]',
-            examples: [ 'webchat', 'webchat --rotate' ],
-            notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBCHAT_TOKEN` to print it.'
+            description: 'Display or rotate the WebChat token used by /webchat. You can bind WebChat to an agent CLI or to a local script/program.',
+            syntax: 'webchat [agentName|localScript [args...]|command...] [--rotate]',
+            examples: [
+                'webchat',
+                'webchat demo',
+                'webchat ./scripts/menu.sh',
+                'webchat /absolute/path/tool --flag',
+                'webchat --rotate',
+                'webchat "python bot.py"'
+            ],
+            notes: 'Detection uses a filesystem existence check on the first argument: if it resolves to an existing file (relative or absolute), WebChat runs that script/program and saves it as WEBCHAT_COMMAND. Otherwise, with a single token it is treated as an agent and runs "ploinky cli <agentName>". If multiple tokens and the first is not a file, the entire string is saved as a raw command. Router restarts to apply changes.'
         },
         'webmeet': {
             description: 'Display or rotate the WebMeet token served at /webmeet, optionally storing a moderator agent.',
