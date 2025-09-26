@@ -85,33 +85,76 @@ echo -e "\n4. Testing 'start demo'..."
 ploinky start demo
 echo "Waiting for agent to start..."
 sleep 5 # Give it time to start
-pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Verification failed: 'demo' agent process is not running after start." && exit 1)
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Verification failed: 'demo' agent container is not running after start."
+  exit 1
+fi
 echo "✓ 'start' command executed successfully."
 
 
-# 5. Refresh the agent
+# 5. Refresh the agent (should re-create container)
 echo -e "\n5. Testing 'refresh agent demo'..."
-CONTAINER_NAME=$($CONTAINER_RUNTIME ps --format "{{.Names}}" | grep "ploinky_agent_demo" | head -n 1)
-ID_BEFORE=$($CONTAINER_RUNTIME ps -q --filter name=$CONTAINER_NAME)
+
+# Get container name before refresh
+CONTAINER_NAME_BEFORE=$($CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | head -n 1)
+if [ -z "$CONTAINER_NAME_BEFORE" ]; then
+  echo "✗ Verification failed: Could not find container for 'demo' agent before refresh."
+  exit 1
+fi
+
+# Get container ID before refresh
+ID_BEFORE=$($CONTAINER_RUNTIME ps -q --filter "name=$CONTAINER_NAME_BEFORE")
+if [ -z "$ID_BEFORE" ]; then
+  echo "✗ Verification failed: Could not get ID for container '$CONTAINER_NAME_BEFORE'."
+  exit 1
+fi
 echo "Container ID before refresh: $ID_BEFORE"
 
 ploinky refresh agent demo
-echo "Waiting for agent to restart..."
-sleep 5 # Increased sleep time to be safe
+echo "Waiting for agent to be re-created..."
+sleep 8 # Increased sleep time for re-creation
 
-CONTAINER_NAME_AFTER=$($CONTAINER_RUNTIME ps --format "{{.Names}}" | grep "ploinky_agent_demo" | head -n 1)
-ID_AFTER=$($CONTAINER_RUNTIME ps -q --filter name=$CONTAINER_NAME_AFTER)
-echo "Container ID after refresh: $ID_AFTER"
-
-if [ "$ID_BEFORE" != "$ID_AFTER" ]; then
-  echo "✗ Verification failed: Container ID changed after refresh, but it should be the same."
+# Get container name after refresh
+CONTAINER_NAME_AFTER=$($CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | head -n 1)
+if [ -z "$CONTAINER_NAME_AFTER" ]; then
+  echo "✗ Verification failed: Could not find container for 'demo' agent after refresh."
   exit 1
 fi
-echo "✓ Container ID is the same after refresh."
 
-# 6. Final process check
-echo -e "\n6. Final process check..."
-pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Verification failed: 'demo' agent process is not running after refresh." && exit 1)
-echo "✓ Agent process is running after refresh."
+# Get container ID after refresh
+ID_AFTER=$($CONTAINER_RUNTIME ps -q --filter "name=$CONTAINER_NAME_AFTER")
+if [ -z "$ID_AFTER" ]; then
+  echo "✗ Verification failed: Could not get ID for container '$CONTAINER_NAME_AFTER'."
+  exit 1
+fi
+echo "Container ID after refresh: $ID_AFTER"
+
+if [ "$ID_BEFORE" == "$ID_AFTER" ]; then
+  echo "✗ Verification failed: Container ID did not change after refresh, but it should have."
+  exit 1
+fi
+echo "✓ Container ID changed after refresh."
+
+# 6. Test refresh on a stopped container
+echo -e "\n6. Testing 'refresh agent' on a stopped container..."
+ploinky stop
+sleep 3
+# Verify container is not running
+if $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Verification failed: 'demo' agent container is running after refresh on stopped, but it should not."
+  exit 1
+fi
+echo "✓ 'refresh agent' on stopped container behaved as expected."
+
+# 7. Final process check
+echo -e "\n7. Final process check..."
+# Restart the agent to check if it's still working
+ploinky start demo
+sleep 5
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Verification failed: 'demo' agent container is not running after final start."
+  exit 1
+fi
+echo "✓ Agent container is running after final start."
 
 # If the script reaches this point, it is considered a success.

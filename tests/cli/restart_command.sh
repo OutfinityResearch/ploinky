@@ -17,6 +17,14 @@ trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
 cd "$TEST_WORKSPACE_DIR"
 echo "Created temporary workspace at: $TEST_WORKSPACE_DIR"
 
+if command -v docker &> /dev/null; then
+    CONTAINER_RUNTIME="docker"
+elif command -v podman &> /dev/null; then
+    CONTAINER_RUNTIME="podman"
+else
+    echo "Neither docker nor podman found in PATH."
+    exit 1
+fi
 # --- Test Execution ---
 
 echo "--- Running Restart Command Test ---"
@@ -34,10 +42,16 @@ sleep 2 # Give them time to start
 
 # 2. Verify they are running initially
 echo "Verifying initial state..."
-pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Demo agent process not running initially" && exit 1)
-echo "✓ Demo agent process is running."
-pgrep -f "ploinky_agent_simulator_$DIRNAME" > /dev/null || (echo "✗ Simulator agent process not running initially" && exit 1)
-echo "✓ Simulator agent process is running."
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Verification failed: 'demo' agent container is not running after start."
+  exit 1
+fi
+echo "✓ Demo agent container is running."
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_simulator" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Verification failed: 'simulator' agent container is not running after start."
+  exit 1
+fi
+echo "✓ Simulator agent container is running."
 ROUTER_PID=$(pgrep -f "RoutingServer.js" || true)
 assert_not_empty "$ROUTER_PID" "RoutingServer.js should be running initially"
 echo "✓ Initial state verified: demo, simulator, and router are running."
@@ -49,59 +63,97 @@ sleep 5 # Give everything time to restart
 
 # 4. Verify they are all running again
 echo "Verifying state after full restart..."
-pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Demo agent not running after restart" && exit 1)
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Demo agent not running after restart"
+  exit 1
+fi
 echo "✓ Demo agent is running after restart."
-pgrep -f "ploinky_agent_simulator_$DIRNAME" > /dev/null || (echo "✗ Simulator agent not running after restart" && exit 1)
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_simulator" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Simulator agent not running after restart"
+  exit 1
+fi
 echo "✓ Simulator agent is running after restart."
 ROUTER_PID_AFTER_RESTART=$(pgrep -f "RoutingServer.js" || true)
 assert_not_empty "$ROUTER_PID_AFTER_RESTART" "RoutingServer.js should be running after restart"
 echo "✓ Full restart successful."
 
 
-# --- Part 2: Specific Agent Restart ---
+# --- Part 2: Specific Agent Restart (non-destructive) ---
 echo "--- Testing specific agent restart (ploinky restart demo) ---"
 
-# 1. Stop everything
-echo "Stopping all services..."
-ploinky stop
-sleep 3 # Give them time to stop
+# 1. Make sure agents are running
+ploinky start
+sleep 3
 
-# 2. Verify they are stopped
-echo "Verifying stopped state..."
-if pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null; then
-  echo "✗ Demo agent process still running after stop"
+# 2. Get container ID before restart
+echo "Getting container ID for 'demo' agent..."
+CONTAINER_NAME_BEFORE=$($CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | head -n 1)
+if [ -z "$CONTAINER_NAME_BEFORE" ]; then
+  echo "✗ Verification failed: Could not find running container for agent 'demo' before restart."
   exit 1
 fi
-if pgrep -f "ploinky_agent_simulator_$DIRNAME" > /dev/null; then
-  echo "✗ Simulator agent process still running after stop"
+ID_BEFORE=$($CONTAINER_RUNTIME ps -q --filter name="$CONTAINER_NAME_BEFORE")
+if [ -z "$ID_BEFORE" ]; then
+  echo "✗ Verification failed: Could not get ID for container '$CONTAINER_NAME_BEFORE'."
   exit 1
 fi
-ROUTER_PID_AFTER_STOP=$(pgrep -f "RoutingServer.js" || true)
-if [ -n "$ROUTER_PID_AFTER_STOP" ]; then
-  echo "✗ RoutingServer.js still running after stop"
+echo "Container ID before restart: $ID_BEFORE"
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_simulator" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Simulator agent should be running before restart"
   exit 1
 fi
-echo "✓ All services stopped."
+echo "✓ Simulator agent is running."
 
 # 3. Restart only 'demo'
 echo "Issuing 'ploinky restart demo'..."
 ploinky restart demo
-sleep 5 # Give it time to start
+sleep 5 # Give it time to restart
 
 # 4. Verify final state
 echo "Verifying state after 'restart demo'..."
-pgrep -f "ploinky_agent_demo_$DIRNAME" > /dev/null || (echo "✗ Demo agent not running after specific restart" && exit 1)
-echo "✓ Demo agent is running."
-
-if pgrep -f "ploinky_agent_simulator_$DIRNAME" > /dev/null; then
-  echo "✗ Simulator agent is running but should not be."
+CONTAINER_NAME_AFTER=$($CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | head -n 1)
+if [ -z "$CONTAINER_NAME_AFTER" ]; then
+  echo "✗ Verification failed: Container for demo agent not found after restart."
   exit 1
 fi
-echo "✓ Simulator agent is not running."
+ID_AFTER=$($CONTAINER_RUNTIME ps -q --filter name="$CONTAINER_NAME_AFTER")
+if [ -z "$ID_AFTER" ]; then
+  echo "✗ Verification failed: Could not get ID for container '$CONTAINER_NAME_AFTER'."
+  exit 1
+fi
+echo "Container ID after restart: $ID_AFTER"
 
-ROUTER_PID_FINAL=$(pgrep -f "RoutingServer.js" || true)
-assert_not_empty "$ROUTER_PID_FINAL" "RoutingServer.js should be running after specific restart"
-echo "✓ Router is running."
+if [ "$ID_BEFORE" != "$ID_AFTER" ]; then
+  echo "✗ Verification failed: Container ID changed after restart, but it should be the same."
+  exit 1
+fi
+echo "✓ Container ID is the same after restart."
+
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_demo" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Demo agent not running after specific restart"
+  exit 1
+fi
+echo "✓ Demo agent is running."
+if ! $CONTAINER_RUNTIME ps --filter "name=ploinky_agent_simulator" --format "{{.Names}}" | grep -q .; then
+  echo "✗ Simulator agent should still be running"
+  exit 1
+fi
+echo "✓ Simulator agent is still running."
 echo "✓ Specific agent restart successful."
+
+# --- Part 3: Test restart on a stopped container ---
+echo "--- Testing restart on a stopped container ---"
+ploinky stop
+sleep 3
+ploinky restart demo
+
+# Verify the container is in 'exited' state
+EXITED_CONTAINER=$($CONTAINER_RUNTIME ps -a --filter "name=ploinky_agent_demo" --filter "status=exited" --format "{{.Names}}")
+if [ -z "$EXITED_CONTAINER" ]; then
+    echo "✗ Verification failed: 'demo' agent container was not found in 'exited' state after 'restart' on stopped."
+    exit 1
+fi
+
+echo "✓ 'restart' on stopped container behaved as expected."
 
 # If the script reaches this point, the trap will handle the final PASSED message.

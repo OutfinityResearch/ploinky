@@ -211,36 +211,89 @@ async function runShell(agentName) {
 }
 
 async function refreshAgent(agentName) {
-  if (!agentName) { throw new Error('Usage: refresh agent <name>'); }
+    if (!agentName) { throw new Error('Usage: refresh agent <name>'); }
 
-  const { execSync } = require('child_process');
-  const dockerSvc = require('./docker');
-  const { getServiceContainerName, getRuntime, isContainerRunning, containerExists } = dockerSvc;
-  const runtime = getRuntime();
-  const containerName = getServiceContainerName(agentName);
+    const dockerSvc = require('./docker');
+    const { getServiceContainerName, isContainerRunning, stopAndRemove, ensureAgentService } = dockerSvc;
+    const containerName = getServiceContainerName(agentName);
 
-  if (!containerExists(containerName)) {
-    console.error(`Container for agent '${agentName}' does not exist. Use 'start' to create it.`);
-    return;
-  }
-
-  console.log(`Refreshing (restarting) agent '${agentName}'...`);
-
-  if (isContainerRunning(containerName)) {
-    try {
-      execSync(`${runtime} stop ${containerName}`, { stdio: 'inherit' });
-    } catch (e) {
-      console.error(`Failed to stop container ${containerName}: ${e.message}`);
-      return; // Stop if we can't stop it
+    if (!isContainerRunning(containerName)) {
+        console.error(`Agent '${agentName}' is not running.`);
+        return;
     }
-  }
 
-  try {
-    execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' });
-    console.log('✓ Agent restarted.');
-  } catch (e) {
-    console.error(`Failed to start container ${containerName}: ${e.message}`);
-  }
+    console.log(`Refreshing (re-creating) agent '${agentName}'...`);
+
+    try {
+        const { findAgent } = require('./utils');
+        const res = findAgent(agentName);
+        const short = res.shortAgentName;
+        const manifest = JSON.parse(fs.readFileSync(res.manifestPath, 'utf8'));
+        const agentPath = path.dirname(res.manifestPath);
+        
+        stopAndRemove(containerName);
+        
+        const { containerName: newContainerName, hostPort } = await ensureAgentService(short, manifest, agentPath);
+        console.log(`[refresh] refreshed '${short}' [container: ${newContainerName}]`);
+
+        // Routing update logic from original restart command
+        try {
+            const routingFile = path.resolve('.ploinky/routing.json');
+            let cfg = { routes: {} };
+            try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch(_) {}
+            cfg.routes = cfg.routes || {};
+            const repoName = path.basename(path.dirname(agentPath));
+            cfg.routes[short] = cfg.routes[short] || {};
+            cfg.routes[short].container = newContainerName;
+            cfg.routes[short].hostPath = agentPath;
+            cfg.routes[short].repo = repoName;
+            cfg.routes[short].agent = short;
+            if (hostPort) cfg.routes[short].hostPort = hostPort;
+            
+            let port = 8080;
+            if (cfg && cfg.port) { port = parseInt(cfg.port, 10) || port; }
+            try {
+                const ws = require('./workspace');
+                const saved = ws.getConfig();
+                if (saved && saved.static && saved.static.port) {
+                    port = parseInt(saved.static.port, 10) || port;
+                }
+            } catch(_) {}
+            cfg.port = port;
+            fs.mkdirSync(path.dirname(routingFile), { recursive: true });
+            fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+
+            const isRouterUp = (p) => {
+                const { execSync } = require('child_process');
+                try {
+                    const out = execSync(`lsof -t -i :${p} -sTCP:LISTEN`, { stdio: 'pipe' }).toString().trim();
+                    if (out) return true;
+                } catch(_) {}
+                try {
+                    const out = execSync('ss -ltnp', { stdio: 'pipe' }).toString();
+                    return out.includes(`:${p}`) && out.includes('LISTEN');
+                } catch(_) { return false; }
+            };
+            if (!isRouterUp(cfg.port)) {
+                const runningDir = path.resolve('.ploinky/running');
+                fs.mkdirSync(runningDir, { recursive: true });
+                const routerPath = path.resolve(__dirname, '../server/RoutingServer.js');
+                const routerPidFile = path.join(runningDir, 'router.pid');
+                const child = require('child_process').spawn(process.execPath, [routerPath], {
+                    detached: true,
+                    stdio: ['ignore', 'inherit', 'inherit'],
+                    env: { ...process.env, PORT: String(cfg.port), PLOINKY_ROUTER_PID_FILE: routerPidFile }
+                });
+                try { fs.writeFileSync(routerPidFile, String(child.pid)); } catch(_) {}
+                child.unref();
+                console.log(`[refresh] RoutingServer launched (pid ${child.pid}) on port ${cfg.port}.`);
+            }
+        } catch (e) {
+            console.error('[refresh] routing update/router start failed:', e?.message||e);
+        }
+    } catch (e) {
+        console.error(`[refresh] ${agentName}: ${e?.message||e}`);
+    }
 }
 
 module.exports = {
