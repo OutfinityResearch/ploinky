@@ -19,25 +19,34 @@
       </div>
     </div>
     <div class="wa-header-actions">
-      <button class="wa-icon-btn" id="themeToggle" title="Toggle theme">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 18c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6zm0-10c-2.2 0-4 1.8-4 4s1.8 4 4 4-1.8 4-4-1.8-4-4-4z"/><path d="M13 4h-2v-2h2v2zm0 18h-2v-2h2v2zm9-11h-2v-2h2v2zm-18 0h-2v-2h2v2z"/></svg>
-      </button>
-      <button class="wa-icon-btn" id="settingsBtn" title="Voice settings">
+      <button class="wa-icon-btn" id="settingsBtn" title="Settings">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.07 7.07 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 14.9 2h-3.8a.5.5 0 0 0-.5.43l-.36 2.54a7.07 7.07 0 0 0-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L3.2 8.49a.5.5 0 0 0 .12.64l2.03 1.58c-.04.3-.06.61-.06.94s.02.64.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.38 1.05.7 1.63.94l.36 2.54a.5.5 0 0 0 .5.43h3.8a.5.5 0 0 0 .5-.43l.36-2.54c.58-.24 1.13-.56 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zm-7.14 2.56a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
       </button>
     </div>
   </div>
 
   <div class="wa-settings-panel" id="settingsPanel">
-    <div class="wa-settings-header">Voice Settings</div>
-    <label class="wa-settings-row">
-      <input type="checkbox" id="sttEnable" checked />
-      <span>Enable speech dictation</span>
-    </label>
-    <label class="wa-settings-row">
-      <span class="wa-settings-label">Recognition language</span>
-      <select id="sttLang"></select>
-    </label>
+    <div class="wa-settings-section">
+      <div class="wa-settings-header">Voice</div>
+      <label class="wa-settings-row">
+        <input type="checkbox" id="sttEnable" checked />
+        <span>Enable speech dictation</span>
+      </label>
+      <label class="wa-settings-row">
+        <span class="wa-settings-label">Recognition language</span>
+        <select id="sttLang"></select>
+      </label>
+    </div>
+    <div class="wa-settings-divider"></div>
+    <div class="wa-settings-section">
+      <div class="wa-settings-header">Appearance</div>
+      <div class="wa-settings-row">
+        <span class="wa-settings-label">Theme</span>
+        <button class="wa-icon-btn" id="themeToggle" title="Toggle theme">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 18c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6zm0-10c-2.2 0-4 1.8-4 4s1.8 4 4 4-1.8 4-4-1.8-4-4-4z"/><path d="M13 4h-2v-2h2v2zm0 18h-2v-2h2v2zm9-11h-2v-2h2v2zm-18 0h-2v-2h2v2z"/></svg>
+        </button>
+      </div>
+    </div>
   </div>
 
   <div class="wa-connection-banner" id="connBanner">

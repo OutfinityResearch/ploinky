@@ -187,6 +187,18 @@ body {
   color: var(--wa-text-secondary);
 }
 
+.wa-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wa-settings-divider {
+  height: 1px;
+  background: var(--wa-border);
+  opacity: 0.6;
+}
+
 .wa-settings-row input[type="checkbox"] {
   width: 18px;
   height: 18px;
@@ -271,6 +283,58 @@ body {
 .wa-chat-container.dragging, .wa-chat-container.dragging * {
   cursor: col-resize !important;
   user-select: none;
+}
+
+@media (max-width: 900px) {
+  .wa-chat-container {
+    position: relative;
+  }
+
+  .wa-resizer {
+    display: none;
+  }
+
+  .wa-chat-container.side-panel-open::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 900;
+  }
+
+  .wa-side-panel {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    flex: none !important;
+    max-width: none !important;
+    border-radius: 0 !important;
+    border-left: none !important;
+    box-shadow: none !important;
+    background: var(--wa-bg-primary);
+    z-index: 1000 !important;
+  }
+
+  .wa-side-panel-header {
+    padding: 18px;
+  }
+
+  .wa-side-panel-content {
+    padding: 20px;
+  }
+
+  .wa-chat-container.side-panel-open .wa-side-panel {
+    display: flex;
+  }
+
+  .wa-chat-container.side-panel-open .wa-chat-area {
+    display: none;
+  }
 }
 
 .wa-side-panel {
@@ -566,6 +630,47 @@ body {
   flex-shrink: 0;
 }
 .wa-send-btn:hover { background: var(--wa-accent-hover); }
+
+@media (max-width: 640px) {
+  .wa-composer {
+    align-items: center;
+    padding: 10px 12px;
+  }
+
+  .wa-voice-control {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 48px;
+  }
+
+  .wa-voice-status {
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .wa-send-btn {
+    align-self: center;
+  }
+
+  .wa-messages {
+    padding: 12px;
+  }
+
+  .wa-message {
+    max-width: 90%;
+  }
+
+  .wa-message-text {
+    padding-right: 48px;
+  }
+
+  .wa-message-time {
+    right: 5px;
+    bottom: 3px;
+    font-size: 10px;
+  }
+}
 
 /* --- Other styles --- */
 /* Terminal specific styles */
