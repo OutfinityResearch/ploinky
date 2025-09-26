@@ -11,6 +11,15 @@
     const suffix = String(path || '').replace(/^\/+/, '');
     return (basePath ? basePath : '') + '/' + suffix;
   };
+
+  const appTitle = (body.dataset.agent || '').trim();
+  const logo = document.querySelector('.logo');
+  if (logo && appTitle) {
+    logo.textContent = appTitle.charAt(0).toUpperCase();
+  }
+  if (appTitle) {
+    document.title = `${appTitle} Access`;
+  }
   async function goIfAuthed() {
     try {
       const res = await fetch(toEndpoint('whoami'), { credentials: 'include' });

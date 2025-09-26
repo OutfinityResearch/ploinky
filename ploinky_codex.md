@@ -61,7 +61,7 @@ Ploinky is a lightweight multi-agent runtime that turns ordinary console program
 **User story:** As a developer, I want to store secrets once and surface them to specific agents so that sensitive data stays centralized.
 
 **How to do it in Ploinky**
-1. Store a value with `set <VAR> <value>`; secrets live in `.ploinky/.secrets` and can reference other variables via `$OTHER` aliases.
+1. Store a value with `var <VAR> <value>`; secrets live in `.ploinky/.secrets` and can reference other variables via `$OTHER` aliases.
 2. Print values with `echo <VAR>` or resolved aliases with `echo $VAR` to confirm configuration.
 3. Call `expose <ENV_NAME> <$VAR|value> [agent]` to write the exposure into an agent manifest; omit the agent to target the static agent configured via `start`.
 4. Restart or refresh the agent so the new environment variable is available inside the container via `process.env` (Node) or `os.getenv` (Python).

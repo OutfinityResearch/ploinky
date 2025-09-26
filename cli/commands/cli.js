@@ -91,7 +91,7 @@ async function updateRepo(repoName) {
 function setVar(varName, valueOrAlias) {
     if (!varName || typeof valueOrAlias !== 'string' || valueOrAlias.length === 0) {
         showHelp();
-        throw new Error('Usage: set <VAR> <$OTHER|value>');
+        throw new Error('Usage: var <VAR> <value|$OTHER>');
     }
     // Store raw value; if it starts with '$', it becomes an alias. Resolution happens at use time.
     envSvc.setEnvVar(varName, valueOrAlias);
@@ -251,34 +251,6 @@ async function handleCommand(args) {
             if (options[0] === 'repo') addRepo(options[1], options[2]);
             else showHelp();
             break;
-        case 'set': {
-            console.log("'set' is deprecated. Use 'var <NAME> <value>' to set and 'vars' to list.");
-            if (!options[0]) { // behave like 'vars'
-                try {
-                    const env = require('../services/secretVars');
-                    const path = require('path');
-                    const crypto = require('crypto');
-                    let secrets = env.parseSecrets();
-                    if (!secrets.APP_NAME || !String(secrets.APP_NAME).trim()) {
-                        try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch(_) {}
-                    }
-                    const tokens = ['WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
-                    for (const t of tokens) {
-                        if (!secrets[t] || !String(secrets[t]).trim()) {
-                            try { env.setEnvVar(t, crypto.randomBytes(32).toString('hex')); } catch(_) {}
-                        }
-                    }
-                    const merged = env.parseSecrets();
-                    const printOrder = ['APP_NAME', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN', 'WEBTTY_TOKEN'];
-                    const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
-                    keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
-                } catch (e) { console.error('Failed to list variables:', e.message); }
-            } else { // behave like 'var'
-                const name = options[0];
-                const value = options.slice(1).join(' ');
-                setVar(name, value);
-            }
-            break; }
         case 'vars': {
             try {
                 const env = require('../services/secretVars');
@@ -363,9 +335,31 @@ async function handleCommand(args) {
             else ensureComponentToken('webtty');
             break; }
         case 'webchat': {
-            const rotate = options.includes('--rotate');
+            const argsList = (options || []).filter(Boolean);
+            let rotate = false;
+            const commandParts = [];
+            for (const arg of argsList) {
+                if (arg === '--rotate') {
+                    rotate = true;
+                    continue;
+                }
+                commandParts.push(arg);
+            }
+
             if (rotate) refreshComponentToken('webchat');
             else ensureComponentToken('webchat');
+
+            if (!rotate && commandParts.length) {
+                const command = commandParts.join(' ').trim();
+                if (command.length === 0) break;
+                envSvc.setEnvVar('WEBCHAT_COMMAND', command);
+                console.log(`✓ Configured WebChat command: ${command}`);
+                try {
+                    await handleCommand(['restart', 'router']);
+                } catch (e) {
+                    console.error('Failed to restart router:', e?.message || e);
+                }
+            }
             break; }
         case 'webtty': {
             const argsList = (options || []).filter(Boolean);
@@ -434,8 +428,28 @@ async function handleCommand(args) {
             await statusWorkspace();
             break;
         case 'restart': {
-            if (options[0]) {
-                const agentName = options[0];
+            const target = (options[0] || '').trim();
+            if (target && target.toLowerCase() === 'router') {
+                const ws = require('../services/workspace');
+                const cfg = ws.getConfig();
+                if (!cfg || !cfg.static || !cfg.static.agent || !cfg.static.port) {
+                    console.error('restart router: start is not configured. Run: start <staticAgent> <port> first.');
+                    break;
+                }
+                console.log('[restart] Restarting RoutingServer (containers untouched)...');
+                killRouterIfRunning();
+                await startWorkspace(undefined, undefined, {
+                    refreshComponentToken,
+                    ensureComponentToken,
+                    enableAgent,
+                    killRouterIfRunning: () => {}
+                });
+                console.log('[restart] RoutingServer restarted.');
+                break;
+            }
+
+            if (target) {
+                const agentName = target;
                 const { execSync } = require('child_process');
                 const dockerSvc = require('../services/docker');
                 const { getServiceContainerName, getRuntime, isContainerRunning } = dockerSvc;

@@ -6,6 +6,7 @@
   const body = document.body;
   const markdown = window.webchatMarkdown;
   const titleBar = document.getElementById('titleBar');
+  const avatarInitial = document.getElementById('avatarInitial');
   const statusEl = document.getElementById('statusText');
   const statusDot = document.querySelector('.wa-status-dot');
   const themeToggle = document.getElementById('themeToggle');
@@ -29,7 +30,13 @@
   let userInputSent = false;
 
   // --- Basic Setup ---
-  titleBar.textContent = body.dataset.title || body.dataset.agent || 'Chat';
+  const appTitle = (body.dataset.title || body.dataset.agent || 'Chat').trim() || 'Chat';
+  titleBar.textContent = appTitle;
+  document.title = `${appTitle} · WebChat`;
+  if (avatarInitial) {
+    const initial = appTitle.trim().charAt(0) || 'P';
+    avatarInitial.textContent = initial.toUpperCase();
+  }
   
   function showBanner(text, cls) {
     banner.className = 'wa-connection-banner show';
@@ -122,7 +129,7 @@
       el.innerHTML = markdown ? markdown.render(text) : text;
       bindLinkDelegation(el);
     }
-    setPanelTitleText('Full Message');
+    setPanelTitleText('Full Answear');
     sidePanel.style.display = 'flex';
     chatContainer.classList.add('side-panel-open');
   }

@@ -79,7 +79,8 @@ const webttyFactory = (() => {
 const webchatFactory = (() => {
   if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
   if (createWebChatLocalFactory) {
-    const command = process.env.WEBCHAT_COMMAND || '';
+    const secretCommand = resolveVarValue('WEBCHAT_COMMAND');
+    const command = secretCommand || process.env.WEBCHAT_COMMAND || '';
     return {
       factory: buildLocalFactory(createWebChatLocalFactory, { command }),
       label: command ? command : 'local shell',
@@ -148,6 +149,16 @@ function loadApiRoutes() {
   }
 }
 
+const envAppName = (() => {
+    const secretName = resolveVarValue('APP_NAME');
+    const fromSecrets = secretName && String(secretName).trim();
+    if (fromSecrets) return fromSecrets;
+    const raw = process.env.APP_NAME;
+    if (!raw) return null;
+    const trimmed = String(raw).trim();
+    return trimmed.length ? trimmed : null;
+})();
+
 const config = {
     webtty: {
         ttyFactory: webttyFactory.factory,
@@ -157,7 +168,7 @@ const config = {
     },
     webchat: {
         ttyFactory: webchatFactory.factory,
-        agentName: 'ChatAgent',
+        agentName: envAppName || 'ChatAgent',
         containerName: webchatFactory.label,
         runtime: webchatFactory.runtime
     },

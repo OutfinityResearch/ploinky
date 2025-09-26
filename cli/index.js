@@ -33,7 +33,6 @@ const COMMANDS = {
     'client': ['methods', 'status', 'list', 'task', 'task-status'],
     'logs': ['tail', 'last'],
     'expose': [],
-    'set': [],
     'var': [],
     'vars': [],
     'echo': [],
