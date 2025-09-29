@@ -165,3 +165,63 @@ module.exports = {
   sendFile,
   serveStaticRequest,
 };
+
+// --- Agent-specific static routing ---
+function getAgentHostPath(agentName) {
+  const cfg = readRouting();
+  const rec = cfg && cfg.routes ? cfg.routes[agentName] : null;
+  if (!rec || !rec.hostPath) return null;
+  try {
+    const abs = path.resolve(rec.hostPath);
+    if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) return abs;
+  } catch (_) {}
+  return null;
+}
+
+function safeJoin(base, rel) {
+  const cleaned = sanitizeRelative(rel || '');
+  if (cleaned === null) return null;
+  const p = path.join(base, cleaned);
+  const absBase = path.resolve(base);
+  const abs = path.resolve(p);
+  if (!abs.startsWith(absBase)) return null; // prevent traversal outside base
+  return abs;
+}
+
+function resolveAgentStaticFile(agentName, agentRelPath) {
+  const root = getAgentHostPath(agentName);
+  if (!root) return null;
+  const candidate = safeJoin(root, agentRelPath);
+  if (!candidate) return null;
+  try {
+    const stat = fs.statSync(candidate);
+    if (stat.isDirectory()) {
+      const indexFiles = ['index.html', 'index.htm', 'default.html'];
+      for (const name of indexFiles) {
+        const idx = path.join(candidate, name);
+        if (fs.existsSync(idx) && fs.statSync(idx).isFile()) return idx;
+      }
+      return null;
+    }
+    if (stat.isFile()) return candidate;
+  } catch (_) { return null; }
+  return null;
+}
+
+function serveAgentStaticRequest(req, res) {
+  try {
+    const parsed = url.parse(req.url);
+    const pathname = decodeURIComponent(parsed.pathname || '/');
+    const parts = pathname.split('/').filter(Boolean);
+    if (parts.length < 2) return false; // need /agent/...
+    const agent = parts[0];
+    const rest = parts.slice(1).join('/');
+    const target = resolveAgentStaticFile(agent, rest);
+    if (target && sendFile(res, target)) return true;
+  } catch (_) {}
+  return false;
+}
+
+module.exports.getAgentHostPath = getAgentHostPath;
+module.exports.resolveAgentStaticFile = resolveAgentStaticFile;
+module.exports.serveAgentStaticRequest = serveAgentStaticRequest;

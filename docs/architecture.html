@@ -227,10 +227,18 @@ function getServiceContainerName(agentName) {
                         </ol>
 
                         <h3>Static File Serving</h3>
-                        <p>The "static" agent serves files directly from the host filesystem:</p>
-                        <pre><code>// Serves files from static.hostPath
-GET /index.html → /path/to/demo/agent/index.html
-GET /assets/app.js → /path/to/demo/agent/assets/app.js</code></pre>
+                        <p>The router serves static files from the host filesystem in two ways:</p>
+                        <ul>
+                            <li><strong>Static agent root</strong> (existing): requests like <code>/index.html</code> map to <code>static.hostPath</code> in <code>routing.json</code>.</li>
+                            <li><strong>Agent-specific static routing</strong> (new): requests like <code>/demo/ui/index.html</code> map to the <code>hostPath</code> of the <code>demo</code> agent from <code>routes.demo.hostPath</code>.</li>
+                        </ul>
+                        <pre><code>// Static agent root
+GET /index.html            → routing.static.hostPath/index.html
+GET /assets/app.js         → routing.static.hostPath/assets/app.js
+
+// Agent-specific static routing
+GET /demo/ui/index.html    → routing.routes.demo.hostPath/ui/index.html
+GET /simulator/app.js      → routing.routes.simulator.hostPath/app.js</code></pre>
                     </div>
 
                     <div class="doc-section" id="workspace">

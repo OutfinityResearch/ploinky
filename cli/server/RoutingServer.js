@@ -323,6 +323,9 @@ const server = http.createServer((req, res) => {
         }
         res.writeHead(404); return res.end('API Route not found');
     } else {
+        // 1) Try agent-specific static routing: /<agent>/<path>
+        if (staticSrv.serveAgentStaticRequest(req, res)) return;
+        // 2) Fallback to static agent root
         if (staticSrv.serveStaticRequest(req, res)) return;
         res.writeHead(404); return res.end('Not Found');
     }
