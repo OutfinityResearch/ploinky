@@ -7,6 +7,25 @@ const { buildEnvFlags, getExposedNames, buildEnvMap } = require('./secretVars');
 const workspace = require('./workspace');
 const { debugLog } = require('./utils');
 
+// Determine the desired working directory for a given agent based on the
+// workspace registry entry created by 'enable agent'.
+// Falls back to a default of '<cwd>/<agentName>' if not configured.
+function getConfiguredProjectPath(agentName, repoName) {
+    try {
+        const map = loadAgentsMap();
+        // Prefer explicit agent registration records (type === 'agent')
+        const rec = Object.values(map || {}).find(r => r && r.type === 'agent' && r.agentName === agentName && r.repoName === repoName);
+        if (rec && rec.projectPath && typeof rec.projectPath === 'string') {
+            return rec.projectPath;
+        }
+    } catch (_) {}
+    // Default behavior: create/use subfolder named after the agent
+    const p = path.join(process.cwd(), agentName);
+    try { fs.mkdirSync(p, { recursive: true }); } catch (_) {}
+    return p;
+}
+module.exports.getConfiguredProjectPath = getConfiguredProjectPath;
+
 function getContainerRuntime() {
     try {
         execSync('command -v docker', { stdio: 'ignore' });
@@ -603,7 +622,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     try { execSync(`${runtime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
-    const cwd = process.cwd();
+    const cwd = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)));
     const agentLibPath = path.resolve(__dirname, '../../Agent');
     const envHash = computeEnvHash(manifest);
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', cwd,
@@ -633,7 +652,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         repoName: path.basename(path.dirname(agentPath)),
         containerImage: image,
         createdAt: new Date().toISOString(),
-        projectPath: process.cwd(),
+        projectPath: cwd,
         type: 'agent',
         config: { binds: [ { source: cwd, target: cwd }, { source: agentLibPath, target: '/Agent' }, { source: agentPath, target: '/code' } ], env: Array.from(new Set(declaredEnvNames2)).map(name => ({ name })), ports: [] }
     };
@@ -700,13 +719,19 @@ function destroyAllPloinky() {
 
 // Distruge DOAR containerele asociate workspace-ului curent (după AGENTS_FILE)
 function destroyWorkspaceContainers() {
-    const cwd = process.cwd();
+    // Scope is the current workspace registry file; remove all agent entries in it.
     const agents = loadAgentsMap();
     const removedList = [];
-    for (const [name, rec] of Object.entries(agents)) {
-        if (rec && (rec.type === 'agent' || rec.type === 'agentCore') && rec.projectPath === cwd) {
-            try { stopAndRemove(name); delete agents[name]; removedList.push(name); }
-            catch (e) { console.log(`[destroy] ${name} error: ${e?.message||e}`); }
+    for (const [name, rec] of Object.entries(agents || {})) {
+        if (!rec || typeof name !== 'string' || name.startsWith('_')) continue;
+        if (rec.type === 'agent' || rec.type === 'agentCore') {
+            try {
+                stopAndRemove(name);
+                delete agents[name];
+                removedList.push(name);
+            } catch (e) {
+                console.log(`[destroy] ${name} error: ${e?.message||e}`);
+            }
         }
     }
     saveAgentsMap(agents);
@@ -720,7 +745,7 @@ function cleanupSessionSet() { const list = Array.from(SESSION); stopAndRemoveMa
 
 function getAgentsRegistry() { return loadAgentsMap(); }
 
-module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents, stopConfiguredAgents, ensureAgentService, getServiceContainerName, isContainerRunning, containerExists };
+module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents, stopConfiguredAgents, ensureAgentService, getServiceContainerName, isContainerRunning, containerExists, getConfiguredProjectPath };
 
 // Build exec args for attaching to a running container with sh -lc and a given entry command.
 // Returns an array suitable to be used with spawn/spawnSync: [ 'exec', '-it', <container>, 'sh', '-lc', <cmd> ]
@@ -785,12 +810,13 @@ function applyAgentStartupConfig(agentName, manifest, agentPath, containerName) 
                 const key = containerName || getServiceContainerName(agentName);
                 const repoName = path.basename(path.dirname(agentPath));
                 const image = manifest.container || manifest.image || 'node:18-alpine';
+                const projPath = getConfiguredProjectPath(agentName, repoName);
                 const rec = agents[key] || (agents[key] = {
                     agentName,
                     repoName,
                     containerImage: image,
                     createdAt: new Date().toISOString(),
-                    projectPath: process.cwd(),
+                    projectPath: projPath,
                     type: 'agent',
                     config: { binds: [], env: [], ports: [] }
                 });
@@ -854,16 +880,17 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     // Save to registry
     const agents = loadAgentsMap();
     const declaredEnvNames3 = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
+    const projPath = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)));
     agents[containerName] = {
         agentName,
         repoName: path.basename(path.dirname(agentPath)),
         containerImage: image,
         createdAt: new Date().toISOString(),
-        projectPath: process.cwd(),
+        projectPath: projPath,
         type: 'agent',
         config: {
             binds: [
-                { source: process.cwd(), target: process.cwd() },
+                { source: projPath, target: projPath },
                 { source: path.resolve(__dirname, '../../Agent'), target: '/agent', ro: true },
                 { source: agentPath, target: '/code', ro: true }
             ],
@@ -877,7 +904,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     try {
         if (createdNew && manifest.install && String(manifest.install).trim()) {
             console.log(`[install] running for '${agentName}'...`);
-            const cwd = process.cwd();
+            const cwd = projPath;
             const installCmd = `${runtime} exec ${containerName} sh -lc "cd '${cwd}' && ${manifest.install}"`;
             debugLog(`Executing install (service): ${installCmd}`);
             execSync(installCmd, { stdio: 'inherit' });

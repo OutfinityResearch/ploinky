@@ -186,9 +186,14 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     examples: [ 'enable repo cloud', 'enable repo basic' ]
                 },
                 'agent': {
-                    syntax: 'enable agent <name>',
-                    description: 'Register agent in .ploinky/agents (for start/stop/shutdown)',
-                    examples: [ 'enable agent MyAPI', 'enable agent MyWorker' ]
+                    syntax: 'enable agent <name|repo/name> [global|devel [repoName]]',
+                    description: 'Register agent in .ploinky/agents (for start/stop/shutdown). Modes: isolated (omitted) creates a subfolder <agentName>; global uses current project; devel uses a repo under .ploinky/repos.',
+                    examples: [
+                        'enable agent demo',
+                        'enable agent demo global',
+                        'enable agent demo devel simulator',
+                    ],
+                    notes: 'Note: enable agent is optional. You can `enable repo` then `start <agent>`; it will use isolated mode (creates <agentName> subfolder).'
                 }
             }
         },

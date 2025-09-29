@@ -112,9 +112,9 @@ function disableRepo(repoName) {
     console.log(`✓ Repo '${repoName}' disabled.`);
 }
 
-async function enableAgent(agentName) {
-    if (!agentName) throw new Error('Usage: enable agent <name|repo/name>');
-    const { shortAgentName, repoName } = agentsSvc.enableAgent(agentName);
+async function enableAgent(agentName, mode, repoNameParam) {
+    if (!agentName) throw new Error('Usage: enable agent <name|repo/name> [global|devel [repoName]]');
+    const { shortAgentName, repoName } = agentsSvc.enableAgent(agentName, mode, repoNameParam);
     console.log(`✓ Agent '${shortAgentName}' from repo '${repoName}' enabled. Use 'start' to start all configured agents.`);
 }
 
@@ -293,7 +293,7 @@ async function handleCommand(args) {
             break;
         case 'enable':
             if (options[0] === 'repo') enableRepo(options[1]);
-            else if (options[0] === 'agent') await enableAgent(options[1]);
+            else if (options[0] === 'agent') await enableAgent(options[1], options[2], options[3]);
             else showHelp();
             break;
         case 'expose': {

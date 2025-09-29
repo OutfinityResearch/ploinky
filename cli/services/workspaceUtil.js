@@ -186,13 +186,14 @@ async function runCli(agentName, args) {
   const cliBase = getCliCmd(manifest);
   if (!cliBase || !cliBase.trim()) { throw new Error(`Manifest for '${shortAgentName}' has no 'cli' command.`); }
   const cmd = cliBase + (args && args.length ? (' ' + args.join(' ')) : '');
-  const { ensureAgentService, attachInteractive } = dockerSvc;
+  const { ensureAgentService, attachInteractive, getConfiguredProjectPath } = dockerSvc;
   const containerInfo = ensureAgentService(shortAgentName, manifest, path.dirname(manifestPath));
   const containerName = (containerInfo && containerInfo.containerName) || `ploinky_agent_${shortAgentName}`;
   console.log(`[cli] container: ${containerName}`);
   console.log(`[cli] command: ${cmd}`);
   console.log(`[cli] agent: ${shortAgentName}`);
-  attachInteractive(containerName, process.cwd(), cmd);
+  const projPath = getConfiguredProjectPath(shortAgentName, require('path').basename(require('path').dirname(manifestPath)));
+  attachInteractive(containerName, projPath, cmd);
 }
 
 async function runShell(agentName) {
@@ -200,14 +201,15 @@ async function runShell(agentName) {
   const { findAgent } = require('./utils');
   const { manifestPath, shortAgentName } = findAgent(agentName);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const { ensureAgentService, attachInteractive } = dockerSvc;
+  const { ensureAgentService, attachInteractive, getConfiguredProjectPath } = dockerSvc;
   const containerInfo = ensureAgentService(shortAgentName, manifest, path.dirname(manifestPath));
   const containerName = (containerInfo && containerInfo.containerName) || `ploinky_agent_${shortAgentName}`;
   const cmd = '/bin/sh';
   console.log(`[shell] container: ${containerName}`);
   console.log(`[shell] command: ${cmd}`);
   console.log(`[shell] agent: ${shortAgentName}`);
-  attachInteractive(containerName, process.cwd(), cmd);
+  const projPath = getConfiguredProjectPath(shortAgentName, require('path').basename(require('path').dirname(manifestPath)));
+  attachInteractive(containerName, projPath, cmd);
 }
 
 async function refreshAgent(agentName) {
