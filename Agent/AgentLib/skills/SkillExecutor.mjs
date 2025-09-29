@@ -7,7 +7,6 @@ async function executeSkill({
     providedArgs = {},
     getSkill,
     getSkillAction,
-    getSkillOptions,
     readUserPrompt,
     taskDescription = '',
     skipConfirmation = false,
@@ -33,14 +32,38 @@ async function executeSkill({
     }
 
     const normalizedArgs = providedArgs && typeof providedArgs === 'object' ? { ...providedArgs } : {};
-    const requiredArgs = Array.isArray(skill.requiredArgs) ? skill.requiredArgs.filter(name => typeof name === 'string' && name) : [];
-    const argumentDefinitions = Array.isArray(skill.args) ? skill.args.filter(entry => entry && typeof entry.name === 'string' && entry.name) : [];
+    const requiredArguments = Array.isArray(skill.requiredArguments)
+        ? skill.requiredArguments.filter(name => typeof name === 'string' && name)
+        : [];
+
+    const argumentMetadata = skill.argumentMetadata && typeof skill.argumentMetadata === 'object'
+        ? skill.argumentMetadata
+        : {};
+
+    const argumentOrder = Array.isArray(skill.argumentOrder) && skill.argumentOrder.length
+        ? skill.argumentOrder.filter(name => typeof name === 'string' && name)
+        : Object.keys(argumentMetadata);
+
+    const argumentDefinitions = argumentOrder
+        .map(name => argumentMetadata[name])
+        .filter(entry => entry && typeof entry.name === 'string' && entry.name);
+
     const definitionNames = argumentDefinitions.map(def => def.name);
     const allArgumentNames = definitionNames.length
         ? definitionNames
-        : Array.from(new Set(requiredArgs));
-    const requiredArgSet = new Set(requiredArgs);
+        : Array.from(new Set(requiredArguments));
+    const requiredArgSet = new Set(requiredArguments);
     const optionalArgumentNames = allArgumentNames.filter(name => !requiredArgSet.has(name));
+
+    const validatorMap = new Map(argumentDefinitions
+        .filter(def => typeof def.validator === 'function')
+        .map(def => [def.name, def.validator]));
+
+    const enumeratorMap = new Map(argumentDefinitions
+        .filter(def => typeof def.enumerator === 'function')
+        .map(def => [def.name, def.enumerator]));
+
+    const definitionMap = new Map(argumentDefinitions.map(def => [def.name, def]));
 
     const hasArgumentValue = (name) => Object.prototype.hasOwnProperty.call(normalizedArgs, name)
         && normalizedArgs[name] !== undefined
@@ -57,7 +80,7 @@ async function executeSkill({
             return 'null';
         }
         if (typeof input === 'string') {
-            return input.trim().toLowerCase();
+            return input.trim().toLowerCase().replace(/\s+/g, '');
         }
         if (typeof input === 'number' || typeof input === 'boolean') {
             return String(input).toLowerCase();
@@ -129,24 +152,17 @@ async function executeSkill({
         return entries;
     };
 
-    const skillOptionProvider = typeof getSkillOptions === 'function' ? getSkillOptions(skillName) : null;
-
-    if (typeof skillOptionProvider === 'function') {
+    for (const [name, enumerator] of enumeratorMap.entries()) {
         try {
-            const potentialOptions = await Promise.resolve(skillOptionProvider());
-            if (potentialOptions && typeof potentialOptions === 'object') {
-                for (const [name, values] of Object.entries(potentialOptions)) {
-                    if (typeof name !== 'string' || !Array.isArray(values)) {
-                        continue;
-                    }
-                    const entries = createOptionEntries(values);
-                    if (entries.length) {
-                        optionMap.set(name, entries);
-                    }
+            const values = await Promise.resolve(enumerator());
+            if (Array.isArray(values)) {
+                const entries = createOptionEntries(values);
+                if (entries.length) {
+                    optionMap.set(name, entries);
                 }
             }
         } catch (error) {
-            console.warn(`Failed to load options for skill "${skill.name}": ${error.message}`);
+            console.warn(`Failed to load options for argument "${name}" on skill "${skill.name}": ${error.message}`);
         }
     }
 
@@ -165,6 +181,37 @@ async function executeSkill({
             }
         }
         return { valid: false, value: null };
+    };
+
+    const validateArgumentValue = (name, value) => {
+        const validator = validatorMap.get(name);
+        if (typeof validator !== 'function') {
+            return { valid: true, value };
+        }
+
+        try {
+            const result = validator(value);
+            if (result === false) {
+                console.warn(`Validation for argument "${name}" rejected the provided value.`);
+                return { valid: false, value: null };
+            }
+            if (result === true || result === undefined) {
+                return { valid: true, value };
+            }
+            if (result && typeof result === 'object' && Object.prototype.hasOwnProperty.call(result, 'valid')) {
+                const normalizedValue = Object.prototype.hasOwnProperty.call(result, 'value') ? result.value : value;
+                if (!result.valid) {
+                    const message = typeof result.message === 'string' ? result.message : 'validator returned false';
+                    console.warn(`Validation for argument "${name}" failed: ${message}`);
+                }
+                return { valid: Boolean(result.valid), value: normalizedValue };
+            }
+            return { valid: true, value: result };
+        } catch (error) {
+            const message = error?.message || 'validator threw an error';
+            console.warn(`Validation for argument "${name}" failed: ${message}`);
+            return { valid: false, value: null };
+        }
     };
 
     const coerceScalarValue = (raw) => {
@@ -199,6 +246,31 @@ async function executeSkill({
         }
         return value;
     };
+
+    const sanitizeInitialArguments = () => {
+        const currentEntries = Object.entries({ ...normalizedArgs });
+        for (const [name, raw] of currentEntries) {
+            if (!argumentMetadata[name]) {
+                continue;
+            }
+            const optionCheck = normalizeOptionValue(name, raw);
+            if (!optionCheck.valid) {
+                delete normalizedArgs[name];
+                continue;
+            }
+            const candidate = optionMap.has(name)
+                ? optionCheck.value
+                : raw;
+            const validation = validateArgumentValue(name, candidate);
+            if (!validation.valid) {
+                delete normalizedArgs[name];
+                continue;
+            }
+            normalizedArgs[name] = validation.value;
+        }
+    };
+
+    sanitizeInitialArguments();
 
     const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -251,12 +323,17 @@ async function executeSkill({
                 continue;
             }
 
-            if (optionMap.has(canonical)) {
-                resolved.set(canonical, optionCheck.value);
+            const candidate = optionMap.has(canonical)
+                ? optionCheck.value
+                : coerceScalarValue(rawValue);
+
+            const validation = validateArgumentValue(canonical, candidate);
+            if (!validation.valid) {
+                invalid.add(canonical);
                 continue;
             }
 
-            resolved.set(canonical, coerceScalarValue(rawValue));
+            resolved.set(canonical, validation.value);
         }
 
         return { resolved, invalid };
@@ -323,9 +400,16 @@ async function executeSkill({
                 continue;
             }
 
-            const nextValue = optionMap.has(field)
+            const candidateValue = optionMap.has(field)
                 ? optionCheck.value
                 : coerceScalarValue(rawValue);
+
+            const validation = validateArgumentValue(field, candidateValue);
+            if (!validation.valid) {
+                continue;
+            }
+
+            const nextValue = validation.value;
 
             const valuesMatch = () => {
                 if (!hasValue) {
@@ -375,11 +459,14 @@ async function executeSkill({
                 if (!optionCheck.valid) {
                     continue;
                 }
-                if (optionMap.has(definition.name)) {
-                    normalizedArgs[definition.name] = optionCheck.value;
-                } else {
-                    normalizedArgs[definition.name] = coerceScalarValue(rawDefault);
+                const candidateValue = optionMap.has(definition.name)
+                    ? optionCheck.value
+                    : coerceScalarValue(rawDefault);
+                const validation = validateArgumentValue(definition.name, candidateValue);
+                if (!validation.valid) {
+                    continue;
                 }
+                normalizedArgs[definition.name] = validation.value;
             }
         }
     };
@@ -448,9 +535,30 @@ async function executeSkill({
             return;
         }
 
+        const attemptPrefill = (name, rawValue) => {
+            if (!allArgumentNames.includes(name)) {
+                return;
+            }
+            if (hasArgumentValue(name)) {
+                return;
+            }
+            const optionCheck = normalizeOptionValue(name, rawValue);
+            if (!optionCheck.valid) {
+                return;
+            }
+            const candidate = optionMap.has(name)
+                ? optionCheck.value
+                : coerceScalarValue(rawValue);
+            const validation = validateArgumentValue(name, candidate);
+            if (!validation.valid) {
+                return;
+            }
+            normalizedArgs[name] = validation.value;
+        };
+
         const candidateNames = allArgumentNames.length
             ? allArgumentNames
-            : (requiredArgs.length ? requiredArgs : missingRequiredArgs());
+            : (requiredArguments.length ? requiredArguments : missingRequiredArgs());
 
         if (candidateNames.length) {
             const { resolved: parsed } = parseNamedArguments(trimmed, candidateNames);
@@ -460,9 +568,45 @@ async function executeSkill({
                 }
             }
         }
+
+        const lowerDescription = trimmed.toLowerCase();
+
+        if (!hasArgumentValue('role')) {
+            if (lowerDescription.includes('system admin')) {
+                attemptPrefill('role', 'SystemAdmin');
+            } else if (lowerDescription.includes('system administrator')) {
+                attemptPrefill('role', 'SystemAdmin');
+            } else if (lowerDescription.includes('project manager')) {
+                attemptPrefill('role', 'ProjectManager');
+            }
+        }
+
+        const stopWords = new Set(['user', 'manager', 'admin', 'administrator', 'system', 'project', 'role', 'password', 'username', 'given', 'family', 'name', 'skip', 'confirmation', 'confirm', 'new', 'add', 'task']);
+
+        const tokens = trimmed.split(/\s+/);
+        for (let i = tokens.length - 2; i >= 0; i -= 1) {
+            const first = tokens[i];
+            const second = tokens[i + 1];
+            if (!first || !second) {
+                continue;
+            }
+            const isAlpha = (value) => /^[a-z]+$/i.test(value);
+            const isNameCandidate = (value) => isAlpha(value) && !stopWords.has(value.toLowerCase());
+            if (!isNameCandidate(first) || !isNameCandidate(second)) {
+                continue;
+            }
+            const toTitle = (value) => value.length ? value[0].toUpperCase() + value.slice(1).toLowerCase() : value;
+            if (!hasArgumentValue('givenName')) {
+                attemptPrefill('givenName', toTitle(first));
+            }
+            if (!hasArgumentValue('familyName')) {
+                attemptPrefill('familyName', toTitle(second));
+            }
+            break;
+        }
     };
 
-    const missingRequiredArgs = () => missingArgsFromList(requiredArgs);
+    const missingRequiredArgs = () => missingArgsFromList(requiredArguments);
     const missingOptionalArgs = () => missingArgsFromList(optionalArgumentNames);
 
     const describeArgument = (name) => {
@@ -479,7 +623,7 @@ async function executeSkill({
 
     const parseableArgumentNames = allArgumentNames.length
         ? allArgumentNames
-        : (requiredArgs.length ? requiredArgs : []);
+        : (requiredArguments.length ? requiredArguments : []);
 
     const interpretConfirmationResponse = async (rawInput, summaryText) => {
         let agent;
@@ -646,7 +790,6 @@ async function executeSkill({
 
             const requiredQueue = missingRequiredArgs();
             const optionalQueue = missingOptionalArgs();
-            const definitionMap = new Map(argumentDefinitions.map((def) => [def.name, def]));
 
             const tryAssignToken = (fieldName, tokenValue) => {
                 if (!fieldName || hasArgumentValue(fieldName)) {
@@ -662,18 +805,30 @@ async function executeSkill({
                     if (!optionCheck.valid) {
                         return;
                     }
-                    normalizedArgs[fieldName] = optionCheck.value;
+                    const validation = validateArgumentValue(fieldName, optionCheck.value);
+                    if (!validation.valid) {
+                        return;
+                    }
+                    normalizedArgs[fieldName] = validation.value;
                     return;
                 }
 
                 if (fieldType === 'boolean') {
                     const lower = value.toLowerCase();
                     if (['true', 'yes', 'y', '1', 'enable', 'enabled', 'allow', 'allowed'].includes(lower)) {
-                        normalizedArgs[fieldName] = true;
+                        const validation = validateArgumentValue(fieldName, true);
+                        if (!validation.valid) {
+                            return;
+                        }
+                        normalizedArgs[fieldName] = validation.value;
                         return;
                     }
                     if (['false', 'no', 'n', '0', 'disable', 'disabled', 'deny', 'denied'].includes(lower)) {
-                        normalizedArgs[fieldName] = false;
+                        const validation = validateArgumentValue(fieldName, false);
+                        if (!validation.valid) {
+                            return;
+                        }
+                        normalizedArgs[fieldName] = validation.value;
                         return;
                     }
                 }
@@ -681,17 +836,31 @@ async function executeSkill({
                 if (fieldType === 'integer' || fieldType === 'number') {
                     const numeric = Number(value);
                     if (Number.isFinite(numeric)) {
-                        normalizedArgs[fieldName] = fieldType === 'integer' ? Math.trunc(numeric) : numeric;
+                        const normalizedNumeric = fieldType === 'integer' ? Math.trunc(numeric) : numeric;
+                        const validation = validateArgumentValue(fieldName, normalizedNumeric);
+                        if (!validation.valid) {
+                            return;
+                        }
+                        normalizedArgs[fieldName] = validation.value;
                         return;
                     }
                 }
 
                 if (fieldType && fieldType !== 'string') {
-                    normalizedArgs[fieldName] = coerceScalarValue(value);
+                    const coerced = coerceScalarValue(value);
+                    const validation = validateArgumentValue(fieldName, coerced);
+                    if (!validation.valid) {
+                        return;
+                    }
+                    normalizedArgs[fieldName] = validation.value;
                     return;
                 }
 
-                normalizedArgs[fieldName] = value;
+                const validation = validateArgumentValue(fieldName, value);
+                if (!validation.valid) {
+                    return;
+                }
+                normalizedArgs[fieldName] = validation.value;
             };
 
             for (const token of tokensForAssignment) {
@@ -806,12 +975,15 @@ async function executeSkill({
                     invalidFromModel.add(name);
                     continue;
                 }
-                if (optionMap.has(name)) {
-                    normalizedArgs[name] = optionCheck.value;
-                    appliedFromModel = true;
+
+                const candidateValue = optionMap.has(name) ? optionCheck.value : value;
+                const validation = validateArgumentValue(name, candidateValue);
+                if (!validation.valid) {
+                    invalidFromModel.add(name);
                     continue;
                 }
-                normalizedArgs[name] = value;
+
+                normalizedArgs[name] = validation.value;
                 appliedFromModel = true;
             }
 
@@ -865,7 +1037,7 @@ async function executeSkill({
             : Array.from(new Set([
                 ...Object.keys(normalizedArgs),
                 ...allArgumentNames,
-                ...requiredArgs,
+                ...requiredArguments,
                 ...optionalArgumentNames,
             ])).filter(Boolean);
 
@@ -891,7 +1063,7 @@ async function executeSkill({
             : Array.from(new Set([
                 ...argumentDefinitions.map((def) => def?.name).filter(Boolean),
                 ...Object.keys(normalizedArgs),
-                ...requiredArgs,
+                ...requiredArguments,
                 ...optionalArgumentNames,
             ])).filter(Boolean);
 
@@ -996,7 +1168,7 @@ async function executeSkill({
 
     const orderedNames = argumentDefinitions.length
         ? argumentDefinitions.map(def => def.name)
-        : requiredArgs.slice();
+        : requiredArguments.slice();
 
     if (!orderedNames.length) {
         return action({ ...normalizedArgs });

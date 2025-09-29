@@ -31,6 +31,8 @@ import { invokeAgent } from './invocation/modelInvoker.mjs';
 import { safeJsonParse } from './utils/json.mjs';
 import { callOperator, chooseOperator, registerOperator, resetOperatorRegistry } from './operators/operatorRegistry.mjs';
 
+let agentLibraryInstance = null;
+
 function registerLLMAgent(options = {}) {
     return getAgentLibrary().registerLLMAgent(options);
 }
@@ -149,8 +151,8 @@ class Agent {
             description: entry.spec.description,
             what: entry.spec.what,
             why: entry.spec.why,
-            args: entry.spec.args,
-            requiredArgs: entry.spec.requiredArgs,
+            arguments: entry.spec.arguments,
+            requiredArguments: entry.spec.requiredArguments,
             roles: entry.spec.roles,
         }));
 
@@ -217,7 +219,6 @@ class Agent {
             providedArgs,
             getSkill: this.getSkill.bind(this),
             getSkillAction: this.getSkillAction.bind(this),
-            getSkillOptions: this.getSkillOptions.bind(this),
             readUserPrompt: this.readUserPrompt.bind(this),
             taskDescription,
             skipConfirmation,
@@ -234,23 +235,6 @@ class Agent {
 
     getSkillAction(skillName) {
         return this.skillRegistry.getSkillAction(skillName);
-    }
-
-    getSkillOptions(skillName) {
-        const skill = this.getSkill(skillName);
-
-        if (typeof this.skillRegistry.getSkillOptions === 'function') {
-            const handler = this.skillRegistry.getSkillOptions(skillName);
-            if (typeof handler === 'function') {
-                return skill ? handler.bind(skill) : handler;
-            }
-        }
-
-        if (skill && typeof skill.getOptions === 'function') {
-            return skill.getOptions.bind(skill);
-        }
-
-        return null;
     }
 
     clearSkills() {
