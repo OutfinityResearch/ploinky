@@ -274,6 +274,26 @@ async function executeSkill({
 
     const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+    // Build argument name variations mapping (includes space-separated and no-separator versions)
+    const argumentNameVariationsMap = new Map();
+    for (const argName of allArgumentNames) {
+        const variations = [argName];
+        // Add space-separated version: job_name → "job name"
+        const spaceSeparated = argName.replace(/_/g, ' ');
+        if (spaceSeparated !== argName) {
+            variations.push(spaceSeparated);
+        }
+        // Add no-separator version: job_name → "jobname"
+        const noSeparator = argName.replace(/_/g, '');
+        if (noSeparator !== argName && noSeparator !== spaceSeparated) {
+            variations.push(noSeparator);
+        }
+        // Map each variation to the canonical name
+        for (const variant of variations) {
+            argumentNameVariationsMap.set(variant.toLowerCase(), argName);
+        }
+    }
+
     const parseNamedArguments = (input, candidateNames) => {
         const resolved = new Map();
         const invalid = new Set();
@@ -282,14 +302,37 @@ async function executeSkill({
             return { resolved, invalid };
         }
 
-        const lookup = new Map(candidateNames.map(name => [name.toLowerCase(), name]));
-        const nameAlternatives = candidateNames.map(escapeRegex).join('|');
+        // Build all variations for the candidate names (including space-separated)
+        const allVariations = [];
+        const variationToCanonical = new Map();
+        
+        for (const name of candidateNames) {
+            const variations = [name];
+            const spaceSeparated = name.replace(/_/g, ' ');
+            if (spaceSeparated !== name) {
+                variations.push(spaceSeparated);
+            }
+            const noSeparator = name.replace(/_/g, '');
+            if (noSeparator !== name && noSeparator !== spaceSeparated) {
+                variations.push(noSeparator);
+            }
+            
+            for (const variant of variations) {
+                allVariations.push(variant);
+                variationToCanonical.set(variant.toLowerCase(), name);
+            }
+        }
+
+        // Sort by length (longest first) to match "job name" before "job"
+        allVariations.sort((a, b) => b.length - a.length);
+        
+        const nameAlternatives = allVariations.map(escapeRegex).join('|');
         const pattern = new RegExp(String.raw`\b(${nameAlternatives})\b\s*(?::|=)?\s*("[^"]*"|'[^']*'|[^\s"']+)`, 'gi');
 
         let match;
         while ((match = pattern.exec(input)) !== null) {
             const rawName = match[1];
-            const canonical = lookup.get(rawName.toLowerCase());
+            const canonical = variationToCanonical.get(rawName.toLowerCase());
             if (!canonical) {
                 continue;
             }
@@ -356,24 +399,26 @@ async function executeSkill({
             return direct;
         }
 
-        const nameKeywords = ['job', 'project', 'title'];
-        const customerKeywords = ['client', 'customer'];
-        const descriptionKeywords = ['description', 'details', 'notes'];
-        const statusKeywords = ['status', 'state'];
+        // Check skill-provided argument aliases for domain-specific keyword mappings
+        // Example: argumentAliases: { name: ['job', 'project'], customer: ['client'] }
+        const argumentAliases = skill.argumentAliases && typeof skill.argumentAliases === 'object'
+            ? skill.argumentAliases
+            : {};
 
-        if (nameKeywords.some(token => lower.includes(token)) && allArgumentNames.includes('name')) {
-            return 'name';
-        }
-        if (customerKeywords.some(token => lower.includes(token)) && allArgumentNames.includes('customer')) {
-            return 'customer';
-        }
-        if (descriptionKeywords.some(token => lower.includes(token)) && allArgumentNames.includes('description')) {
-            return 'description';
-        }
-        if (statusKeywords.some(token => lower.includes(token)) && allArgumentNames.includes('status')) {
-            return 'status';
+        for (const [targetArg, keywords] of Object.entries(argumentAliases)) {
+            if (!allArgumentNames.includes(targetArg)) {
+                continue;
+            }
+            if (!Array.isArray(keywords) || !keywords.length) {
+                continue;
+            }
+            const lowerKeywords = keywords.map(k => String(k).toLowerCase());
+            if (lowerKeywords.some(keyword => lower.includes(keyword))) {
+                return targetArg;
+            }
         }
 
+        // Fuzzy matching as fallback
         const fuzzy = allArgumentNames.find(candidate => {
             const canonical = candidate.toLowerCase();
             const distance = Math.abs(canonical.length - lower.length);
@@ -484,7 +529,97 @@ async function executeSkill({
         }
 
         const allowedKeys = JSON.stringify(allArgumentNames);
-        const systemPrompt = 'You complete tool arguments based on a user request. Respond ONLY with JSON using keys from ' + allowedKeys + '. Use exact casing. Include a key ONLY when the value is EXPLICITLY and CLEARLY stated in the user request. DO NOT infer values from command names or skill names. If the request only mentions the skill name without additional details, return an empty object {}. Avoid guessing. Use numbers for numeric fields and booleans for true/false.';
+        const skillNameLower = (skill.name || '').toLowerCase();
+        const commandWords = skillNameLower.split(/[-_\s]+/).filter(Boolean);
+        
+        // Build natural language variations of argument names for voice input
+        // e.g., "job_name" → ["job_name", "job name", "jobname"]
+        const argumentNameVariations = allArgumentNames.map(argName => {
+            const variations = [argName];
+            // Add space-separated version: job_name → "job name"
+            const spaceSeparated = argName.replace(/_/g, ' ');
+            if (spaceSeparated !== argName) {
+                variations.push(spaceSeparated);
+            }
+            // Add no-separator version: job_name → "jobname"
+            const noSeparator = argName.replace(/_/g, '');
+            if (noSeparator !== argName && noSeparator !== spaceSeparated) {
+                variations.push(noSeparator);
+            }
+            return { canonical: argName, variations };
+        });
+        
+        const variationsText = argumentNameVariations
+            .map(({ canonical, variations }) => `"${canonical}" can be spoken as: ${variations.map(v => `"${v}"`).join(' or ')}`)
+            .join('\n');
+        
+        // Build type hints for voice input parsing
+        const typeHints = argumentDefinitions.map(def => {
+            const argType = def.type || 'string';
+            const hasOptions = optionMap.has(def.name);
+            if (hasOptions) {
+                const options = optionMap.get(def.name);
+                const optionLabels = options.map(o => o.label).slice(0, 5).join(', ');
+                return `${def.name}: enum/option (values: ${optionLabels}${options.length > 5 ? '...' : ''}) - stop at first matching option`;
+            }
+            if (argType === 'number' || argType === 'integer') {
+                return `${def.name}: number - stop at first numeric value`;
+            }
+            if (argType === 'boolean') {
+                return `${def.name}: boolean - stop at true/false`;
+            }
+            return `${def.name}: string - capture all tokens until next argument name`;
+        }).join('\n');
+
+        const systemPrompt = `You extract tool arguments from natural language requests, including VOICE INPUT patterns. Respond ONLY with JSON using keys from ${allowedKeys}. Use exact casing.
+
+VOICE INPUT PATTERNS (no quotes in voice):
+When you see "arg_name value value value arg_name2 value2" pattern:
+- Capture ALL tokens after an argument name until you see another known argument name or end of input
+- For multi-word values, keep all words together until next argument name
+- Stop capturing when you encounter: another argument name, command word, or end of input
+
+ARGUMENT NAME RECOGNITION (for voice):
+Users may speak argument names without underscores. Map these variations to the canonical JSON key:
+${variationsText}
+
+Examples:
+- "user name" or "username" → use key "user_name"
+- "first name" or "firstname" → use key "first_name"
+- "email address" or "emailaddress" → use key "email_address"
+
+TYPE-BASED STOPPING RULES:
+${typeHints}
+
+NATURAL LANGUAGE SEPARATORS (recommended for voice):
+- "called X" or "named X" → name-related arguments
+- "for X" → purpose/target arguments
+- "at X" or "in X" → location arguments
+- "with X" → additional properties
+- "status X" or "marked as X" → status arguments
+
+GENERIC EXAMPLES (adapt to current skill):
+1. Multi-word string values:
+   "command arg1 value one value two arg2 value three"
+   → Capture all words for arg1 until arg2 starts
+
+2. Mixed types:
+   "command name multi word name quantity 10 status active"
+   → Stop at number for quantity, stop at option for status
+
+3. Natural separators:
+   "command called multi word value for another value"
+   → Map natural language to appropriate arguments
+
+4. Simple positional:
+   "command value1 value2"
+   → Extract based on context and task description
+
+5. No parameters:
+   "command" with no other words → {} (empty)
+
+COMMAND WORDS TO IGNORE: "${commandWords.join('", "')}"
+Use numbers for numeric fields, booleans for true/false. If value is ambiguous or not mentioned, omit that key.`;
 
         const sections = [
             `Skill name: ${skill.name}`,
@@ -502,7 +637,7 @@ async function executeSkill({
             sections.push(`Original user request: ${taskDescription}`);
         }
 
-        sections.push('Map serial numbers to serialNumber. Use phrases like "stored in Bay C-02" to populate storageLocation. Manufacturer should be the brand; model should be the product name. Use status for availability (e.g., available). Only set allocationBlocked when explicitly stated. If uncertain, omit the key. Return JSON only.');
+        sections.push(`Apply the voice input pattern rules above. Remember to capture multi-word values until the next argument name. Map phrases to appropriate arguments. Return JSON only, empty object {} if no parameters found.`);
 
         let raw;
         try {
