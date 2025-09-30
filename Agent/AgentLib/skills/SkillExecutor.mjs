@@ -484,7 +484,7 @@ async function executeSkill({
         }
 
         const allowedKeys = JSON.stringify(allArgumentNames);
-        const systemPrompt = 'You complete tool arguments based on a user request. Respond ONLY with JSON using keys from ' + allowedKeys + '. Use exact casing. Include a key only when the value is clearly implied. Avoid guessing. Use numbers for numeric fields and booleans for true/false.';
+        const systemPrompt = 'You complete tool arguments based on a user request. Respond ONLY with JSON using keys from ' + allowedKeys + '. Use exact casing. Include a key ONLY when the value is EXPLICITLY and CLEARLY stated in the user request. DO NOT infer values from command names or skill names. If the request only mentions the skill name without additional details, return an empty object {}. Avoid guessing. Use numbers for numeric fields and booleans for true/false.';
 
         const sections = [
             `Skill name: ${skill.name}`,
