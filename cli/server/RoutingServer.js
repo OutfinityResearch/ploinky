@@ -9,6 +9,7 @@ const { handleWebChat } = require('./handlers/webchat.js');
 const { handleDashboard } = require('./handlers/dashboard.js');
 const { handleWebMeet } = require('./handlers/webmeet.js');
 const { handleStatus } = require('./handlers/status.js');
+const { handleBlobs } = require('./handlers/blobs.js');
 const staticSrv = require('./static');
 
 // TTY dependencies
@@ -301,6 +302,8 @@ const server = http.createServer((req, res) => {
         return handleWebMeet(req, res, config.webmeet, globalState.webmeet);
     } else if (pathname.startsWith('/status')) {
         return handleStatus(req, res, config.status, globalState.status);
+    } else if (pathname.startsWith('/blobs')) {
+        return handleBlobs(req, res);
     } else if (pathname.startsWith('/apis/') || pathname.startsWith('/api/')) {
         const apiRoutes = loadApiRoutes();
         const parts = pathname.split('/');

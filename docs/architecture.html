@@ -239,6 +239,24 @@ GET /assets/app.js         → routing.static.hostPath/assets/app.js
 // Agent-specific static routing
 GET /demo/ui/index.html    → routing.routes.demo.hostPath/ui/index.html
 GET /simulator/app.js      → routing.routes.simulator.hostPath/app.js</code></pre>
+
+                        <h3>Blob Storage API</h3>
+                        <p>The router exposes a simple blob storage API for large files with streaming upload/download.</p>
+                        <pre><code>// Upload (streaming)
+POST /blobs
+Headers:
+  Content-Type: application/octet-stream
+  X-Mime-Type: text/plain   # optional; falls back to Content-Type
+Body: raw bytes (streamed)
+
+Response: 201 Created
+{ "id": "<uid>", "url": "/blobs/<uid>", "size": N, "mime": "text/plain" }
+
+// Download (streaming, supports Range)
+GET /blobs/&lt;id&gt;
+HEAD /blobs/&lt;id&gt;
+ - Streams bytes from .ploinky/blobs/&lt;id&gt; with metadata from .ploinky/blobs/&lt;id&gt;.json
+ - Sets Content-Type, Content-Length, Accept-Ranges, and supports partial responses (206)</code></pre>
                     </div>
 
                     <div class="doc-section" id="workspace">
