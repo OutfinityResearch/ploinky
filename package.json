@@ -29,7 +29,8 @@
     "url": "https://github.com/PloinkyCloud/ploinky.git"
   },
   "dependencies": {
-    "node-pty": "^1.0.0",
-    "flexsearch": "github:AssistOS-AI/flexsearch-releases#main"
+    "@modelcontextprotocol/sdk": "^1.18.2",
+    "flexsearch": "github:AssistOS-AI/flexsearch-releases#main",
+    "node-pty": "^1.0.0"
   }
 }

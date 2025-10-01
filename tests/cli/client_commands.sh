@@ -46,7 +46,7 @@ METHODS_OUTPUT=$(ploinky client methods demo)
 echo "Command output: $METHODS_OUTPUT"
 
 # Verify the output is a valid JSON array (starts with [ and ends with ])
-if [[ "$METHODS_OUTPUT" =~ ^[.*]$ ]]; then
+if [[ "$METHODS_OUTPUT" =~ ^\[.*\]$ ]]; then
     echo "✓ 'client methods' returned a valid JSON array."
 else
     echo "✗ Verification failed: 'client methods' did not return a JSON array."

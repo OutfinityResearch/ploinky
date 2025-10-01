@@ -1,61 +1,113 @@
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
-import { spawn } from 'node:child_process';
+import { registerDemoCommands } from './commandsConfig.mjs';
 
-// AgentServer: listens on PORT 7000 and, if CHILD_CMD is set, executes it per request
-// with the JSON body encoded in base64 as a single argv parameter.
+// AgentServer (MCP over HTTP): exposes tools/resources via Streamable HTTP transport on PORT (default 7000) at /mcp.
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 7000;
-const CHILD_CMD = process.env.CHILD_CMD || '';
-
-function runChildWithPayload(obj, cb) {
-  if (!CHILD_CMD) return cb(null, null);
-  try {
-    const b64 = Buffer.from(JSON.stringify(obj || {}), 'utf8').toString('base64');
-    // Safe to wrap in single quotes (base64 doesn't contain single quotes)
-    const shCmd = `${CHILD_CMD} '${b64}'`;
-    const child = spawn('/bin/sh', ['-lc', shCmd], { stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = Buffer.alloc(0), err = Buffer.alloc(0);
-    child.stdout.on('data', d => { out = Buffer.concat([out, d]); });
-    child.stderr.on('data', d => { err = Buffer.concat([err, d]); });
-    child.on('close', code => cb(null, { code, stdout: out.toString('utf8'), stderr: err.toString('utf8') }));
-  } catch (e) { cb(e); }
+async function loadSdkDeps() {
+  const mcp = await import('@modelcontextprotocol/sdk/server/mcp.js');
+  const streamHttp = await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+  const types = await import('@modelcontextprotocol/sdk/types.js');
+  const zod = await import('zod');
+  return {
+    McpServer: mcp.McpServer,
+    ResourceTemplate: mcp.ResourceTemplate,
+    StreamableHTTPServerTransport: streamHttp.StreamableHTTPServerTransport,
+    isInitializeRequest: types.isInitializeRequest,
+    z: zod.z,
+    McpError: mcp.McpError,
+    ErrorCode: mcp.ErrorCode
+  };
 }
 
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'GET' && req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ ok: true }));
-  }
-  const urlPath = req.url || '/';
-  const isApiRequest = urlPath === '/api' || urlPath.startsWith('/api?') || urlPath.startsWith('/api/');
-  if (isApiRequest) {
-    const chunks = [];
-    req.on('data', c => chunks.push(c));
-    req.on('end', () => {
-      let payload = {};
-      try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) {}
-      if (!CHILD_CMD) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ ok: false, error: 'command not implemented', request: payload }));
-      }
-      return runChildWithPayload(payload, (err, result) => {
-        if (err) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ ok: false, error: String(err) }));
-        }
-        const { code, stdout, stderr } = result || {};
-        const ok = (typeof code === 'number') ? (code === 0) : true;
-        res.writeHead(ok ? 200 : 500, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ ok, code, stdout, stderr }));
-      });
-    });
-    return;
-  }
-  res.statusCode = 404;
-  res.end('Not found');
-});
+async function createServerInstance() {
+  const { McpServer, ResourceTemplate, z, McpError, ErrorCode } = await loadSdkDeps();
+  const server = new McpServer({ name: 'ploinky-agent-mcp', version: '1.0.0' });
 
-server.listen(PORT, () => {
-  console.log(`[AgentServer] listening on port ${PORT}]`);
-  if (CHILD_CMD) console.log(`[AgentServer] child command: ${CHILD_CMD}`);
-});
+  // Register demo tools/resources from separate config
+  await registerDemoCommands(server, { z, ResourceTemplate, McpError, ErrorCode });
+
+  // Basic health resource for quick checks via resource read
+  server.registerResource(
+    'health',
+    'health://status',
+    {
+      title: 'Health Status',
+      description: 'Simple health indicator resource',
+      mimeType: 'application/json'
+    },
+    async (uri) => ({
+      contents: [{ uri: uri.href, text: JSON.stringify({ ok: true, server: 'ploinky-agent-mcp' }) }]
+    })
+  );
+
+  return server;
+}
+
+async function main() {
+  const { StreamableHTTPServerTransport, isInitializeRequest } = await loadSdkDeps();
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 7000;
+  const sessions = {};
+
+  const serverHttp = http.createServer((req, res) => {
+    const { method, url } = req;
+    const sendJson = (code, obj, extraHeaders = {}) => {
+      const data = Buffer.from(JSON.stringify(obj));
+      res.writeHead(code, { 'Content-Type': 'application/json', 'Content-Length': data.length, ...extraHeaders });
+      res.end(data);
+    };
+    try {
+      const u = new URL(url || '/', 'http://localhost');
+      if (method === 'GET' && u.pathname === '/health') {
+        return sendJson(200, { ok: true, server: 'ploinky-agent-mcp' });
+      }
+      if (method === 'POST' && u.pathname === '/mcp') {
+        const chunks = [];
+        req.on('data', c => chunks.push(c));
+        req.on('end', async () => {
+          let body = {};
+          try { body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { body = {}; }
+          const sessionId = req.headers['mcp-session-id'];
+          let entry = sessionId && sessions[sessionId] ? sessions[sessionId] : null;
+          try {
+            if (!entry) {
+              if (!isInitializeRequest(body)) {
+                return sendJson(400, { jsonrpc: '2.0', error: { code: -32000, message: 'Missing session; send initialize first' }, id: null });
+              }
+              const transport = new StreamableHTTPServerTransport({
+                sessionIdGenerator: () => randomUUID(),
+                enableJsonResponse: true,
+                onsessioninitialized: (sid) => { sessions[sid] = { transport, server }; }
+              });
+              const server = await createServerInstance();
+              await server.connect(transport);
+              transport.onclose = () => {
+                try { server.close(); } catch (_) {}
+                const sid = transport.sessionId;
+                if (sid && sessions[sid]) delete sessions[sid];
+              };
+              await transport.handleRequest(req, res, body);
+              return; // handled
+            }
+            await entry.transport.handleRequest(req, res, body);
+          } catch (err) {
+            console.error('[AgentServer/MCP] error:', err);
+            if (!res.headersSent) return sendJson(500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null });
+          }
+        });
+        return;
+      }
+      // Not found
+      res.statusCode = 404; res.end('Not Found');
+    } catch (err) {
+      console.error('[AgentServer/MCP] http error:', err);
+      if (!res.headersSent) return sendJson(500, { jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null });
+    }
+  });
+
+  serverHttp.listen(PORT, () => {
+    console.log(`[AgentServer/MCP] Streamable HTTP listening on ${PORT} (/mcp)`);
+  });
+}
+
+main().catch(err => { console.error('[AgentServer/MCP] fatal error:', err); process.exit(1); });

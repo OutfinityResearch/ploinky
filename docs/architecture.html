@@ -42,7 +42,7 @@
                         <li><a href="#workspace">Workspace System</a></li>
                         <li><a href="#security">Security Model</a></li>
                         <li><a href="#web-services">Web Services</a></li>
-                        <li><a href="#data-flow">Data Flow</a></li>
+                        <li><a href="#agent-mcp">Agent MCP Bridge</a></li>
                     </ul>
                 </aside>
 
@@ -434,34 +434,20 @@ observability.js    // Monitoring views</code></pre>
    → Display as chat bubble</code></pre>
                     </div>
 
-                    <div class="doc-section">
-                        <h2>Agent Supervisor</h2>
-                        <p>The Agent runtime (/Agent/AgentServer.mjs) provides a supervisor for agents:</p>
-                        
-                        <h3>Supervisor Features</h3>
+                    <div class="doc-section" id="agent-mcp">
+                        <h2>Agent MCP Bridge</h2>
+                        <p>AgentServer (Agent/server/AgentServer.mjs) expune capabilități prin <strong>Model Context Protocol (MCP)</strong> folosind transport <em>Streamable HTTP</em> la ruta <code>/mcp</code> pe portul containerului (implicit 7000).</p>
+
+                        <h3>Comunicare Router ↔ Agent</h3>
                         <ul style="margin-left: 2rem;">
-                            <li>HTTP server on port 7000</li>
-                            <li>Health check endpoint (/api/status)</li>
-                            <li>Process management for agent command</li>
-                            <li>Automatic restart on failure</li>
-                            <li>Request proxying to agent process</li>
+                            <li><strong>Abstractizare în RouterServer:</strong> RouterServer folosește un modul <code>AgentClient</code> (cli/server/AgentClient.js) ca interfață pentru apeluri către agenți.</li>
+                            <li><strong>Protocol MCP:</strong> AgentClient construiește un client MCP cu <code>StreamableHTTPClientTransport</code> către <code>http://127.0.0.1:&lt;hostPort&gt;/mcp</code> și expune metode: <code>listTools()</code>, <code>callTool(name,args)</code>, <code>listResources()</code>, <code>readResource(uri)</code>.</li>
+                            <li><strong>Rute Router:</strong> Cererile către <code>/apis/&lt;agent&gt;</code> sunt mapate la apeluri MCP (ex. <code>methods</code> → <code>listTools</code>, <code>status</code> → resursa <code>health://status</code>, <code>echo</code> → tool-ul <code>echo</code>).</li>
+                            <li><strong>Independență de protocol:</strong> RouterServer nu depinde de detalii MCP; toată logica de transport e încapsulată în AgentClient.</li>
                         </ul>
 
-                        <h3>Agent Manifest Processing</h3>
-                        <pre><code>// manifest.json
-{
-    "agent": "node server.js",    // Long-running service
-    "cli": "node repl.js",       // Interactive CLI
-    "install": "npm install",    // Setup command
-    "update": "npm update"       // Update command
-}
-
-// Supervisor runs:
-if (manifest.agent) {
-    spawn(manifest.agent)  // Start service
-} else {
-    startDefaultServer()   // Basic HTTP server
-}</code></pre>
+                        <h3>Tool-uri și Resurse</h3>
+                        <p>AgentServer înregistrează tool-uri și resurse demo prin <code>registerTool</code> și <code>registerResource</code> în <code>Agent/server/commandsConfig.mjs</code> (ex.: <code>echo</code>, <code>list_things</code>, <code>create_directories</code>, <code>search_in_array</code>, resursa <code>demo-list://{category}</code> și <code>health://status</code>).</p>
                     </div>
 
                     <div class="doc-section">

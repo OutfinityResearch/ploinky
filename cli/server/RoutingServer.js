@@ -305,26 +305,94 @@ const server = http.createServer((req, res) => {
     } else if (pathname.startsWith('/blobs')) {
         return handleBlobs(req, res);
     } else if (pathname.startsWith('/apis/') || pathname.startsWith('/api/')) {
+        // MCP-aware invocation via AgentClient abstraction
         const apiRoutes = loadApiRoutes();
         const parts = pathname.split('/');
         const agent = parts[2];
-        if (!agent) {
-            res.writeHead(404); return res.end('API Route not found');
-        }
+        if (!agent) { res.writeHead(404); return res.end('API Route not found'); }
+
         const route = apiRoutes[agent];
-        if (route && route.hostPort) {
-            const prefix = pathname.startsWith('/apis/') ? '/apis' : '/api';
-            const base = `${prefix}/${agent}`;
-            let suffix = req.url.slice(base.length) || '';
-            if (!suffix) {
-                req.url = '/';
-            } else {
-                if (!suffix.startsWith('/')) suffix = `/${suffix}`;
-                req.url = suffix;
+        if (!route || !route.hostPort) { res.writeHead(404); return res.end('API Route not found'); }
+
+        const { createAgentClient } = require('./AgentClient');
+        const baseUrl = `http://127.0.0.1:${route.hostPort}/mcp`;
+        // Cache per-request; could be memoized globally if needed
+        const agentClient = createAgentClient(baseUrl);
+
+        const method = (req.method || 'GET').toUpperCase();
+        const parsed = url.parse(req.url || '', true);
+
+        const finish = async (payload) => {
+            try {
+                // Commands mapping
+                const command = (payload && payload.command) ? String(payload.command) : '';
+                if (command === 'methods') {
+                    const tools = await agentClient.listTools();
+                    const names = tools.map(t => t.name || t.title || '');
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify(names));
+                }
+                if (command === 'status') {
+                    try {
+                        const rr = await agentClient.readResource('health://status');
+                        // Prefer ok from resource body if JSON
+                        let ok = true;
+                        const text = rr.contents && rr.contents[0] && rr.contents[0].text;
+                        if (text) { try { ok = !!(JSON.parse(text).ok); } catch (_) {} }
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        return res.end(JSON.stringify({ ok: ok }));
+                    } catch (_) {
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        return res.end(JSON.stringify({ ok: true }));
+                    }
+                }
+
+                if (command === 'echo') {
+                    const text = payload && payload.text ? String(payload.text) : '';
+                    const result = await agentClient.callTool('echo', { text });
+                    // Extract text content
+                    let out = '';
+                    if (Array.isArray(result.content)) {
+                        const firstText = result.content.find(c => c && c.type === 'text');
+                        out = firstText ? String(firstText.text || '') : '';
+                    }
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ ok: true, stdout: out }));
+                }
+
+                // Default: if 'tool' specified, call it with provided args
+                if (payload && payload.tool) {
+                    const toolName = String(payload.tool);
+                    const { tool, command, ...args } = payload; // strip command fields
+                    const result = await agentClient.callTool(toolName, args);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    return res.end(JSON.stringify({ ok: true, result }));
+                }
+
+                // Unknown command
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ ok: false, error: 'unknown command' }));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                return res.end(JSON.stringify({ ok: false, error: String(err && err.message || err) }));
+            } finally {
+                await agentClient.close().catch(() => {});
             }
-            return proxyApi(req, res, route.hostPort);
+        };
+
+        if (method === 'GET') {
+            const q = parsed && parsed.query && typeof parsed.query === 'object' ? parsed.query : {};
+            return void finish(q);
         }
-        res.writeHead(404); return res.end('API Route not found');
+
+        const chunks = [];
+        req.on('data', c => chunks.push(c));
+        req.on('end', () => {
+            let payload = {};
+            try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch (_) { payload = {}; }
+            void finish(payload);
+        });
+        return;
     } else {
         // 1) Try agent-specific static routing: /<agent>/<path>
         if (staticSrv.serveAgentStaticRequest(req, res)) return;

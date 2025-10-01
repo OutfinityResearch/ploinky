@@ -625,10 +625,13 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const cwd = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)));
     const agentLibPath = path.resolve(__dirname, '../../Agent');
     const envHash = computeEnvHash(manifest);
+    const projectRoot = process.env.PLOINKY_ROOT;
+    const nodeModulesPath = path.join(projectRoot, 'node_modules');
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', cwd,
         '-v', `${cwd}:${cwd}${runtime==='podman'?':z':''}`,
         '-v', `${agentLibPath}:/Agent${runtime==='podman'?':ro,z':':ro'}`,
-        '-v', `${path.resolve(agentPath)}:/code${runtime==='podman'?':ro,z':':ro'}`
+        '-v', `${path.resolve(agentPath)}:/code${runtime==='podman'?':ro,z':':ro'}`,
+        '-v', `${nodeModulesPath}:/node_modules${runtime==='podman'?':ro,z':':ro'}`
     ];
     // Optional port publishings
     const pubs = (options && Array.isArray(options.publish)) ? options.publish : [];
@@ -639,6 +642,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     // Inject environment for exposed variables
     const envFlags = flagsToArgs(buildEnvFlags(manifest));
     if (envFlags.length) args.push(...envFlags);
+    args.push('-e', 'NODE_PATH=/node_modules');
     const entry = agentCmd ? agentCmd : 'sh /Agent/server/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', entry);
     const { spawnSync } = require('child_process');
