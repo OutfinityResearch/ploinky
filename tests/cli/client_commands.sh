@@ -59,13 +59,25 @@ echo "✓ 'client methods' verification successful."
 echo -e "\n--- Testing 'client task demo' ---"
 # This test assumes the 'demo' agent supports a task that echoes arguments.
 TASK_TEXT="hello_from_the_test"
-TASK_OUTPUT=$(ploinky client task demo -command echo -text "$TASK_TEXT")
+TASK_OUTPUT=$(ploinky client task demo -tool echo -text "$TASK_TEXT")
 echo "Command output: $TASK_OUTPUT"
 
-# Verify the JSON output contains the echoed text.
-# We use grep for simplicity. A more robust test would use a JSON parser like 'jq'.
-echo "$TASK_OUTPUT" | grep -q "$TASK_TEXT" || (echo "✗ Verification failed: Task output did not contain the expected text '$TASK_TEXT'." && exit 1)
-echo "$TASK_OUTPUT" | grep -q '"ok": true' || (echo "✗ Verification failed: Task output did not contain '"ok": true'." && exit 1)
+# Verify the JSON output contains the echoed text using jq for robustness.
+EXTRACTED_TEXT=$(echo "$TASK_OUTPUT" | jq -r '.result.content[0].text')
+
+if [ "$EXTRACTED_TEXT" != "$TASK_TEXT" ]; then
+    echo "✗ Verification failed: Task output did not contain the expected text '$TASK_TEXT' in the correct field."
+    echo "  Expected: $TASK_TEXT"
+    echo "  Got: $EXTRACTED_TEXT"
+    exit 1
+fi
+
+OK_STATUS=$(echo "$TASK_OUTPUT" | jq -r '.ok')
+if [ "$OK_STATUS" != "true" ]; then
+    echo "✗ Verification failed: Task output did not contain '"ok": true'."
+    exit 1
+fi
+
 echo "✓ 'client task' verification successful."
 
 

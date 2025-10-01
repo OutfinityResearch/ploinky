@@ -367,19 +367,6 @@ const server = http.createServer((req, res) => {
                     }
                 }
 
-                if (command === 'echo') {
-                    const text = payload && payload.text ? String(payload.text) : '';
-                    const result = await agentClient.callTool('echo', { text });
-                    // Extract text content
-                    let out = '';
-                    if (Array.isArray(result.content)) {
-                        const firstText = result.content.find(c => c && c.type === 'text');
-                        out = firstText ? String(firstText.text || '') : '';
-                    }
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    return res.end(JSON.stringify({ ok: true, stdout: out }));
-                }
-
                 // Default: if 'tool' specified, call it with provided args
                 if (payload && payload.tool) {
                     const toolName = String(payload.tool);
