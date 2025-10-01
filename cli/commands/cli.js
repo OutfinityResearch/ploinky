@@ -1,33 +1,33 @@
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
-// Web console components now served via RoutingServer; local PTY handled there when available.
-const { PLOINKY_DIR } = require('../services/config');
-const { debugLog } = require('../services/utils');
-// AgentCoreClient is required lazily only by runTask to avoid hard dependency for other commands
-const { showHelp } = require('../services/help');
-// Cloud and Client command handlers are required lazily inside handleCommand
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { execSync } from 'child_process';
+import { fileURLToPath } from 'url';
+import { PLOINKY_DIR } from '../services/config.js';
+import { debugLog, findAgent } from '../services/utils.js';
+import { showHelp } from '../services/help.js';
+import * as reposSvc from '../services/repos.js';
+import * as envSvc from '../services/secretVars.js';
+import * as agentsSvc from '../services/agents.js';
+import { listRepos, listAgents, listCurrentAgents, listRoutes, statusWorkspace, collectAgentsSummary } from '../services/status.js';
+import { logsTail, showLast } from '../services/logUtils.js';
+import { startWorkspace, runCli, runShell, refreshAgent } from '../services/workspaceUtil.js';
+import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/routerEnv.js';
+import * as dockerSvc from '../services/docker.js';
+import * as workspaceSvc from '../services/workspace.js';
+import ClientCommands from './client.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
-const reposSvc = require('../services/repos');
-const envSvc = require('../services/secretVars');
-const agentsSvc = require('../services/agents');
-const { listRepos, listAgents, listCurrentAgents, listRoutes, statusWorkspace, collectAgentsSummary } = require('../services/status');
-const { logsTail, showLast } = require('../services/logUtils');
-const {
-    startWorkspace,
-    runCli,
-    runShell,
-    refreshAgent
-} = require('../services/workspaceUtil');
-const { refreshComponentToken, ensureComponentToken, getComponentToken } = require('../server/routerEnv');
 
 // --- Start of Original Functions ---
 
 // Track containers started in this CLI session that are not persistent agent containers
 // Session tracking moved to docker.js
-function registerSessionContainer(name) { try { require('../services/docker').addSessionContainer(name); } catch (_) {} }
-function cleanupSessionContainers() { try { require('../services/docker').cleanupSessionSet(); } catch (_) {} }
+function registerSessionContainer(name) { try { dockerSvc.addSessionContainer(name); } catch (_) {} }
+function cleanupSessionContainers() { try { dockerSvc.cleanupSessionSet(); } catch (_) {} }
 
 function getRepoNames() {
     if (!fs.existsSync(REPOS_DIR)) return [];
@@ -98,7 +98,7 @@ function setVar(varName, valueOrAlias) {
     console.log(`✓ Set variable '${varName}'.`);
 }
 
-const ENABLED_REPOS_FILE = require('../services/repos').ENABLED_REPOS_FILE;
+const ENABLED_REPOS_FILE = reposSvc.ENABLED_REPOS_FILE;
 function loadEnabledRepos() { return reposSvc.loadEnabledRepos(); }
 function saveEnabledRepos(list) { return reposSvc.saveEnabledRepos(list); }
 function enableRepo(repoName) {
@@ -153,7 +153,6 @@ function killRouterIfRunning() {
 
             const findPids = () => {
                 const pids = new Set();
-                const { execSync } = require('child_process');
                 try {
                     const out = execSync(`lsof -t -i :${port} -sTCP:LISTEN`, { stdio: 'pipe' }).toString();
                     out.split(/\s+/).filter(Boolean).forEach(x => { const n = parseInt(x, 10); if (!Number.isNaN(n)) pids.add(n); });
@@ -185,7 +184,6 @@ function killRouterIfRunning() {
 }
 
 function findAgentManifest(agentName) {
-    const { findAgent } = require('../services/utils');
     const { manifestPath } = findAgent(agentName);
     return manifestPath;
 }
@@ -230,8 +228,7 @@ function configureWebttyShell(input) {
 }
 
 async function destroyAll() {
-    const { destroyWorkspaceContainers } = require('../services/docker');
-    try { const list = destroyWorkspaceContainers(); if (list.length) { console.log('Removed containers:'); list.forEach(n => console.log(` - ${n}`)); } console.log(`Destroyed ${list.length} containers from this workspace.`); }
+    try { const list = dockerSvc.destroyWorkspaceContainers(); if (list.length) { console.log('Removed containers:'); list.forEach(n => console.log(` - ${n}`)); } console.log(`Destroyed ${list.length} containers from this workspace.`); }
     catch (e) { console.error('Destroy failed:', e.message); }
 }
 
@@ -253,9 +250,7 @@ async function handleCommand(args) {
             break;
         case 'vars': {
             try {
-                const env = require('../services/secretVars');
-                const path = require('path');
-                const crypto = require('crypto');
+                const env = envSvc;
                 let secrets = env.parseSecrets();
                 if (!secrets.APP_NAME || !String(secrets.APP_NAME).trim()) {
                     try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch(_) {}
@@ -351,8 +346,6 @@ async function handleCommand(args) {
 
             // Configure behavior: single positional = agent name -> run 'ploinky cli <agent>'
             if (!rotate && positional.length) {
-                const fs = require('fs');
-                const path = require('path');
                 const first = positional[0];
                 const rest = positional.slice(1);
 
@@ -469,8 +462,7 @@ async function handleCommand(args) {
         case 'restart': {
             const target = (options[0] || '').trim();
             if (target && target.toLowerCase() === 'router') {
-                const ws = require('../services/workspace');
-                const cfg = ws.getConfig();
+                const cfg = workspaceSvc.getConfig();
                 if (!cfg || !cfg.static || !cfg.static.agent || !cfg.static.port) {
                     console.error('restart router: start is not configured. Run: start <staticAgent> <port> first.');
                     break;
@@ -489,8 +481,6 @@ async function handleCommand(args) {
 
             if (target) {
                 const agentName = target;
-                const { execSync } = require('child_process');
-                const dockerSvc = require('../services/docker');
                 const { getServiceContainerName, getRuntime, isContainerRunning } = dockerSvc;
                 const runtime = getRuntime();
                 const containerName = getServiceContainerName(agentName);
@@ -516,14 +506,12 @@ async function handleCommand(args) {
                     console.error(`Failed to start container ${containerName}: ${e.message}`);
                 }
             } else {
-                const ws = require('../services/workspace');
-                const cfg = ws.getConfig();
+                const cfg = workspaceSvc.getConfig();
                 if (!cfg || !cfg.static || !cfg.static.agent || !cfg.static.port) { console.error('restart: start is not configured. Run: start <staticAgent> <port>'); break; }
-                const { stopConfiguredAgents } = require('../services/docker');
                 console.log('[restart] Stopping Router and configured agents...');
                 killRouterIfRunning();
                 console.log('[restart] Stopping configured agent containers...');
-                const list = stopConfiguredAgents();
+                const list = dockerSvc.stopConfiguredAgents();
                 if (list.length) { console.log('[restart] Stopped containers:'); list.forEach(n => console.log(` - ${n}`)); }
                 else { console.log('[restart] No containers to stop.'); }
                 console.log('[restart] Starting workspace...');
@@ -537,9 +525,8 @@ async function handleCommand(args) {
         case 'shutdown': {
             console.log('[shutdown] Stopping RoutingServer...');
             killRouterIfRunning();
-            const { destroyWorkspaceContainers } = require('../services/docker');
             console.log('[shutdown] Removing workspace containers...');
-            const list = destroyWorkspaceContainers();
+            const list = dockerSvc.destroyWorkspaceContainers();
             if (list.length) {
                 console.log('[shutdown] Removed containers:');
                 list.forEach(n => console.log(` - ${n}`));
@@ -549,9 +536,8 @@ async function handleCommand(args) {
         case 'stop': {
             console.log('[stop] Stopping RoutingServer...');
             killRouterIfRunning();
-            const { stopConfiguredAgents } = require('../services/docker');
             console.log('[stop] Stopping configured agent containers...');
-            const list = stopConfiguredAgents();
+            const list = dockerSvc.stopConfiguredAgents();
             if (list.length) {
                 console.log('[stop] Stopped containers:');
                 list.forEach(n => console.log(` - ${n}`));
@@ -588,7 +574,6 @@ async function handleCommand(args) {
             console.log('Cloud commands are not available in this build.');
             break;
         case 'client': {
-            const ClientCommands = require('./client');
             await new ClientCommands().handleClientCommand(options);
             break; }
         default:
@@ -596,7 +581,7 @@ async function handleCommand(args) {
     }
 }
 
-module.exports = {
+export {
     handleCommand,
     getAgentNames,
     getRepoNames,

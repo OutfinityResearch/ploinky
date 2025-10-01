@@ -1,6 +1,6 @@
-const fs = require('fs');
-const path = require('path');
-const { REPOS_DIR, isDebugMode } = require('./config');
+import fs from 'fs';
+import path from 'path';
+import { REPOS_DIR, isDebugMode } from './config.js';
 
 // Simple ANSI color helpers
 const ANSI = {
@@ -245,6 +245,4 @@ function parseValue(value) {
     }
     return value;
 }
-
-
-module.exports = { findAgent, debugLog, ANSI, colorize, listAgentsDetailed, getAgentNameSuggestions, parseParametersString };
+export { findAgent, debugLog, ANSI, colorize, listAgentsDetailed, getAgentNameSuggestions, parseParametersString };

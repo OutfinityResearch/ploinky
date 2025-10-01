@@ -1,6 +1,6 @@
-const fs = require('fs');
-const path = require('path');
-const url = require('url');
+import fs from 'fs';
+import path from 'path';
+import { parse } from 'url';
 
 const ROUTING_FILE = path.resolve('.ploinky/routing.json');
 
@@ -121,7 +121,7 @@ function serveStaticRequest(req, res) {
   const root = getStaticHostPath();
   if (!root) return false;
   try {
-    const parsed = url.parse(req.url);
+    const parsed = parse(req.url);
     const pathname = decodeURIComponent(parsed.pathname || '/');
     const rel = pathname.replace(/^\/+/, '');
     const target = resolveStaticFile(rel || '');
@@ -158,7 +158,7 @@ function sendFile(res, filePath) {
   }
 }
 
-module.exports = {
+export {
   getStaticHostPath,
   resolveAssetPath,
   resolveFirstAvailable,
@@ -210,7 +210,7 @@ function resolveAgentStaticFile(agentName, agentRelPath) {
 
 function serveAgentStaticRequest(req, res) {
   try {
-    const parsed = url.parse(req.url);
+    const parsed = parse(req.url);
     const pathname = decodeURIComponent(parsed.pathname || '/');
     const parts = pathname.split('/').filter(Boolean);
     if (parts.length < 2) return false; // need /agent/...
@@ -222,6 +222,4 @@ function serveAgentStaticRequest(req, res) {
   return false;
 }
 
-module.exports.getAgentHostPath = getAgentHostPath;
-module.exports.resolveAgentStaticFile = resolveAgentStaticFile;
-module.exports.serveAgentStaticRequest = serveAgentStaticRequest;
+export { getAgentHostPath, resolveAgentStaticFile, serveAgentStaticRequest };

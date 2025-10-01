@@ -1,10 +1,15 @@
-const fs = require('fs');
-const path = require('path');
-const url = require('url');
-const { spawn } = require('child_process');
+import fs from 'fs';
+import path from 'path';
+import { parse } from 'url';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
-const { loadToken, parseCookies, buildCookie, readJsonBody } = require('./common');
-const staticSrv = require('../static');
+import { loadToken, parseCookies, buildCookie, readJsonBody } from './common.js';
+import * as staticSrv from '../static/index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const appName = 'dashboard';
 const fallbackAppPath = path.join(__dirname, '../', appName);
@@ -34,7 +39,7 @@ async function handleAuth(req, res, appConfig, appState) {
         const token = loadToken(appName);
         const body = await readJsonBody(req);
         if (body && body.token && String(body.token).trim() === token) {
-            const sid = require('crypto').randomBytes(16).toString('hex');
+            const sid = crypto.randomBytes(16).toString('hex');
             appState.sessions.set(sid, { createdAt: Date.now() });
             res.writeHead(200, {
                 'Content-Type': 'application/json',
@@ -52,7 +57,7 @@ async function handleAuth(req, res, appConfig, appState) {
 }
 
 function handleDashboard(req, res, appConfig, appState) {
-    const parsedUrl = url.parse(req.url, true);
+    const parsedUrl = parse(req.url, true);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
 
     if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
@@ -123,4 +128,4 @@ function handleDashboard(req, res, appConfig, appState) {
     res.writeHead(404); res.end('Not Found in App');
 }
 
-module.exports = { handleDashboard };
+export { handleDashboard };

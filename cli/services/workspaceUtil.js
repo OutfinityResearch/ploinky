@@ -1,12 +1,15 @@
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
+import fs from 'fs';
+import path from 'path';
+import { spawn, execSync } from 'child_process';
+import { fileURLToPath } from 'url';
+import * as utils from './utils.js';
+import * as agentsSvc from './agents.js';
+import * as workspaceSvc from './workspace.js';
+import * as dockerSvc from './docker.js';
+import { applyManifestDirectives } from './bootstrapManifest.js';
 
-const { debugLog } = require('./utils');
-const agentsSvc = require('./agents');
-const workspaceSvc = require('./workspace');
-const dockerSvc = require('./docker');
-const { applyManifestDirectives } = require('./bootstrapManifest');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function getAgentCmd(manifest) {
   return (manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '';
@@ -23,8 +26,7 @@ function getCliCmd(manifest) {
 }
 
 function findAgentManifest(agentName) {
-  const { findAgent } = require('./utils');
-  const { manifestPath } = findAgent(agentName);
+  const { manifestPath } = utils.findAgent(agentName);
   return manifestPath;
 }
 
@@ -66,7 +68,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
           ensureComponentToken('webmeet', { quiet: true });
         }
       } catch (e) {
-        debugLog('Failed to refresh component tokens:', e.message);
+        utils.debugLog('Failed to refresh component tokens:', e.message);
       }
     }
     try { await applyManifestDirectives(cfg0.static.agent); } catch (_) {}
@@ -86,7 +88,14 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     const preservedCfg = workspaceSvc.getConfig();
     if (preservedCfg && Object.keys(preservedCfg).length) dedup._config = preservedCfg;
     const staticAgentName0 = cfg0?.static?.agent;
-    const staticManifestPath0 = staticAgentName0 ? (function(){ try { const { manifestPath } = require('./utils').findAgent(staticAgentName0); return manifestPath; } catch(_) { return null; } })() : null;
+    const staticManifestPath0 = staticAgentName0 ? (() => {
+      try {
+        const { manifestPath } = utils.findAgent(staticAgentName0);
+        return manifestPath;
+      } catch (_) {
+        return null;
+      }
+    })() : null;
     if (staticManifestPath0) {
       try {
         const manifest = JSON.parse(fs.readFileSync(staticManifestPath0, 'utf8'));
@@ -112,14 +121,12 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     let cfg = { routes: {} };
     try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch (_) {}
     cfg.routes = cfg.routes || {};
-    const { colorize } = require('./utils');
     const staticAgent = cfg0.static.agent;
     const staticPort = cfg0.static.port;
     let staticManifestPath = null;
     let staticAgentPath = null;
     try {
-      const { findAgent } = require('./utils');
-      const res = findAgent(staticAgent);
+      const res = utils.findAgent(staticAgent);
       staticManifestPath = res.manifestPath;
       staticAgentPath = path.dirname(staticManifestPath);
     } catch (e) {
@@ -128,7 +135,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     }
     cfg.port = staticPort;
     cfg.static = { agent: staticAgent, container: getServiceContainerName(staticAgent), hostPath: staticAgentPath };
-    console.log(`Static: agent=${colorize(staticAgent, 'cyan')} port=${colorize(String(staticPort), 'yellow')}`);
+    console.log(`Static: agent=${utils.colorize(staticAgent, 'cyan')} port=${utils.colorize(String(staticPort), 'yellow')}`);
     if (typeof killRouterIfRunning === 'function') {
       try { killRouterIfRunning(); } catch (_) {}
     }
@@ -180,8 +187,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
 
 async function runCli(agentName, args) {
   if (!agentName) { throw new Error('Usage: cli <agentName> [args...]'); }
-  const { findAgent } = require('./utils');
-  const { manifestPath, shortAgentName } = findAgent(agentName);
+  const { manifestPath, shortAgentName } = utils.findAgent(agentName);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const cliBase = getCliCmd(manifest);
   if (!cliBase || !cliBase.trim()) { throw new Error(`Manifest for '${shortAgentName}' has no 'cli' command.`); }
@@ -192,14 +198,13 @@ async function runCli(agentName, args) {
   console.log(`[cli] container: ${containerName}`);
   console.log(`[cli] command: ${cmd}`);
   console.log(`[cli] agent: ${shortAgentName}`);
-  const projPath = getConfiguredProjectPath(shortAgentName, require('path').basename(require('path').dirname(manifestPath)));
+  const projPath = getConfiguredProjectPath(shortAgentName, path.basename(path.dirname(manifestPath)));
   attachInteractive(containerName, projPath, cmd);
 }
 
 async function runShell(agentName) {
   if (!agentName) { throw new Error('Usage: shell <agentName>'); }
-  const { findAgent } = require('./utils');
-  const { manifestPath, shortAgentName } = findAgent(agentName);
+  const { manifestPath, shortAgentName } = utils.findAgent(agentName);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const { ensureAgentService, attachInteractive, getConfiguredProjectPath } = dockerSvc;
   const containerInfo = ensureAgentService(shortAgentName, manifest, path.dirname(manifestPath));
@@ -208,14 +213,13 @@ async function runShell(agentName) {
   console.log(`[shell] container: ${containerName}`);
   console.log(`[shell] command: ${cmd}`);
   console.log(`[shell] agent: ${shortAgentName}`);
-  const projPath = getConfiguredProjectPath(shortAgentName, require('path').basename(require('path').dirname(manifestPath)));
+  const projPath = getConfiguredProjectPath(shortAgentName, path.basename(path.dirname(manifestPath)));
   attachInteractive(containerName, projPath, cmd);
 }
 
 async function refreshAgent(agentName) {
     if (!agentName) { throw new Error('Usage: refresh agent <name>'); }
 
-    const dockerSvc = require('./docker');
     const { getServiceContainerName, isContainerRunning, stopAndRemove, ensureAgentService } = dockerSvc;
     const containerName = getServiceContainerName(agentName);
 
@@ -227,8 +231,7 @@ async function refreshAgent(agentName) {
     console.log(`Refreshing (re-creating) agent '${agentName}'...`);
 
     try {
-        const { findAgent } = require('./utils');
-        const res = findAgent(agentName);
+        const res = utils.findAgent(agentName);
         const short = res.shortAgentName;
         const manifest = JSON.parse(fs.readFileSync(res.manifestPath, 'utf8'));
         const agentPath = path.dirname(res.manifestPath);
@@ -255,8 +258,7 @@ async function refreshAgent(agentName) {
             let port = 8080;
             if (cfg && cfg.port) { port = parseInt(cfg.port, 10) || port; }
             try {
-                const ws = require('./workspace');
-                const saved = ws.getConfig();
+                const saved = workspaceSvc.getConfig();
                 if (saved && saved.static && saved.static.port) {
                     port = parseInt(saved.static.port, 10) || port;
                 }
@@ -266,7 +268,6 @@ async function refreshAgent(agentName) {
             fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
 
             const isRouterUp = (p) => {
-                const { execSync } = require('child_process');
                 try {
                     const out = execSync(`lsof -t -i :${p} -sTCP:LISTEN`, { stdio: 'pipe' }).toString().trim();
                     if (out) return true;
@@ -281,7 +282,7 @@ async function refreshAgent(agentName) {
                 fs.mkdirSync(runningDir, { recursive: true });
                 const routerPath = path.resolve(__dirname, '../server/RoutingServer.js');
                 const routerPidFile = path.join(runningDir, 'router.pid');
-                const child = require('child_process').spawn(process.execPath, [routerPath], {
+                const child = spawn(process.execPath, [routerPath], {
                     detached: true,
                     stdio: ['ignore', 'inherit', 'inherit'],
                     env: { ...process.env, PORT: String(cfg.port), PLOINKY_ROUTER_PID_FILE: routerPidFile }
@@ -298,7 +299,7 @@ async function refreshAgent(agentName) {
     }
 }
 
-module.exports = {
+export {
   startWorkspace,
   runCli,
   runShell,

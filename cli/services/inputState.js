@@ -1,19 +1,13 @@
 let suspended = false;
 
-function isSuspended() {
+export function isSuspended() {
     return suspended;
 }
 
-function suspend() {
+export function suspend() {
     suspended = true;
 }
 
-function resume() {
+export function resume() {
     suspended = false;
 }
-
-module.exports = {
-    isSuspended,
-    suspend,
-    resume
-};

@@ -1,11 +1,15 @@
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { AGENTS_FILE, SECRETS_FILE, REPOS_DIR } = require('./config');
-const { buildEnvFlags, getExposedNames, buildEnvMap } = require('./secretVars');
-const workspace = require('./workspace');
-const { debugLog } = require('./utils');
+import { execSync, spawnSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+import { REPOS_DIR, PLOINKY_DIR } from './config.js';
+import { buildEnvFlags, getExposedNames, buildEnvMap } from './secretVars.js';
+import { loadAgents, saveAgents } from './workspace.js';
+import { debugLog } from './utils.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Determine the desired working directory for a given agent based on the
 // workspace registry entry created by 'enable agent'.
@@ -24,7 +28,6 @@ function getConfiguredProjectPath(agentName, repoName) {
     try { fs.mkdirSync(p, { recursive: true }); } catch (_) {}
     return p;
 }
-module.exports.getConfiguredProjectPath = getConfiguredProjectPath;
 
 function getContainerRuntime() {
     try {
@@ -58,8 +61,8 @@ const containerRuntime = getContainerRuntime();
 //     ports: [ { containerPort, hostPort } ]
 //   }
 // }
-function loadAgentsMap() { return workspace.loadAgents(); }
-function saveAgentsMap(map) { return workspace.saveAgents(map); }
+function loadAgentsMap() { return loadAgents(); }
+function saveAgentsMap(map) { return saveAgents(map); }
 
 
 function getAgentContainerName(agentName, repoName) {
@@ -88,7 +91,6 @@ function getServiceContainerName(agentName) {
         .substring(0, 6);
     return `ploinky_agent_${safeAgentName}_${projectDir}_${cwdHash}`;
 }
-module.exports.getServiceContainerName = getServiceContainerName;
 
 function isContainerRunning(containerName) {
     // Use exact name matching for better compatibility
@@ -278,7 +280,6 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
         console.log(`[Ploinky] Attaching to container '${containerName}' (interactive TTY).`);
         console.log(`[Ploinky] Working directory in container: ${currentDir}`);
         console.log(`[Ploinky] Exit the program or shell to return to the Ploinky prompt.`);
-        const { spawnSync } = require('child_process');
         const args = ['exec'];
         if (interactive) args.push('-it');
         if (envVars) args.push(...envVars.split(' '));
@@ -400,7 +401,7 @@ function getRuntime() { return containerRuntime; }
 
 // Start all configured agents recorded in workspace registry (if present but not running)
 function startConfiguredAgents() {
-    const agents = workspace.loadAgents();
+    const agents = loadAgents();
     const names = Object.entries(agents || {})
         .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'))
         .map(([name]) => name);
@@ -473,7 +474,7 @@ function getContainerCandidates(name, rec) {
 }
 
 function stopConfiguredAgents() {
-    const agents = workspace.loadAgents();
+    const agents = loadAgents();
     const entries = Object.entries(agents || {})
         .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'));
     const candidateSet = new Set();
@@ -513,9 +514,6 @@ function parseHostPort(output) {
 async function ensureAgentCore(manifest, agentPath) {
     const runtime = containerRuntime;
     const containerName = getServiceContainerName(manifest.name);
-    const fs = require('fs');
-    const path = require('path');
-    const { PLOINKY_DIR } = require('./config');
     const portFilePath = path.join(PLOINKY_DIR, 'running_agents', `${containerName}.port`);
     const lockDir = path.join(PLOINKY_DIR, 'locks');
     const lockFile = path.join(lockDir, `container_${containerName}.lock`);
@@ -645,7 +643,6 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     args.push('-e', 'NODE_PATH=/node_modules');
     const entry = agentCmd ? agentCmd : 'sh /Agent/server/AgentServer.sh';
     args.push(image, '/bin/sh', '-lc', entry);
-    const { spawnSync } = require('child_process');
     const res = spawnSync(runtime, args, { stdio: 'inherit' });
     if (res.status !== 0) { throw new Error(`${runtime} run failed with code ${res.status}`); }
     // Înregistrează în registry
@@ -666,7 +663,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
 function stopAndRemove(name) {
     const runtime = containerRuntime;
-    const agents = workspace.loadAgents();
+    const agents = loadAgents();
     const rec = agents ? agents[name] : null;
     const candidates = getContainerCandidates(name, rec);
 
@@ -749,7 +746,6 @@ function cleanupSessionSet() { const list = Array.from(SESSION); stopAndRemoveMa
 
 function getAgentsRegistry() { return loadAgentsMap(); }
 
-module.exports = { runCommandInContainer, ensureAgentContainer, getAgentContainerName, getRuntime, ensureAgentCore, startAgentContainer, stopAndRemove, stopAndRemoveMany, destroyAllPloinky, addSessionContainer, cleanupSessionSet, listAllContainerNames, destroyWorkspaceContainers, getAgentsRegistry, startConfiguredAgents, stopConfiguredAgents, ensureAgentService, getServiceContainerName, isContainerRunning, containerExists, getConfiguredProjectPath };
 
 // Build exec args for attaching to a running container with sh -lc and a given entry command.
 // Returns an array suitable to be used with spawn/spawnSync: [ 'exec', '-it', <container>, 'sh', '-lc', <cmd> ]
@@ -764,26 +760,23 @@ function buildExecArgs(containerName, workdir, entryCommand, interactive = true)
     return args;
 }
 
-module.exports.buildExecArgs = buildExecArgs;
 
 // Attach to a running container and run a command interactively with proper TTY.
 // Returns the exit code from the spawned process.
 function attachInteractive(containerName, workdir, entryCommand) {
     const runtime = containerRuntime;
-    const { spawnSync } = require('child_process');
     const execArgs = buildExecArgs(containerName, workdir, entryCommand, true);
     const res = spawnSync(runtime, execArgs, { stdio: 'inherit' });
     return res.status ?? 0;
 }
 
-module.exports.attachInteractive = attachInteractive;
 
 function computeEnvHash(manifest) {
     try {
         const map = buildEnvMap(manifest);
         const sorted = Object.keys(map).sort().reduce((o,k)=>{o[k]=map[k];return o;},{});
         const data = JSON.stringify(sorted);
-        return require('crypto').createHash('sha256').update(data).digest('hex');
+        return crypto.createHash('sha256').update(data).digest('hex');
     } catch (_) {
         return '';
     }
@@ -834,7 +827,6 @@ function applyAgentStartupConfig(agentName, manifest, agentPath, containerName) 
     }
 }
 
-module.exports.applyAgentStartupConfig = applyAgentStartupConfig;
 
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000)
 // Ensure an agent service is running on container port 7000 mapped to random host port (>10000).
@@ -872,8 +864,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         } catch (_) {
             // Fall through to recreate if mapping cannot be determined
         }
-    }
-
+}
     const hostPort = preferredHostPort || (10000 + Math.floor(Math.random() * 50000));
     // Apply any pre-start setup steps (before container creation)
     applyAgentStartupConfig(agentName, manifest, agentPath, containerName);
@@ -918,4 +909,30 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     }
     return { containerName, hostPort };
 }
-module.exports.ensureAgentService = ensureAgentService;
+
+export {
+    runCommandInContainer,
+    ensureAgentContainer,
+    getAgentContainerName,
+    getRuntime,
+    ensureAgentCore,
+    startAgentContainer,
+    stopAndRemove,
+    stopAndRemoveMany,
+    destroyAllPloinky,
+    addSessionContainer,
+    cleanupSessionSet,
+    listAllContainerNames,
+    destroyWorkspaceContainers,
+    getAgentsRegistry,
+    startConfiguredAgents,
+    stopConfiguredAgents,
+    ensureAgentService,
+    getServiceContainerName,
+    isContainerRunning,
+    containerExists,
+    getConfiguredProjectPath,
+    buildExecArgs,
+    attachInteractive,
+    applyAgentStartupConfig
+};

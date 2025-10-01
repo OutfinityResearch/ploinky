@@ -1,12 +1,17 @@
-const fs = require('fs');
-const path = require('path');
-const url = require('url');
-const http = require('http');
+import fs from 'fs';
+import path from 'path';
+import { parse } from 'url';
+import http from 'http';
+import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
-const { loadToken, parseCookies, buildCookie, readJsonBody } = require('./common');
-const staticSrv = require('../static');
-const secretVars = require('../../services/secretVars');
-const { findAgent } = require('../../services/utils');
+import { loadToken, parseCookies, buildCookie, readJsonBody } from './common.js';
+import * as staticSrv from '../static/index.js';
+import * as secretVars from '../../services/secretVars.js';
+import { findAgent } from '../../services/utils.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const appName = 'webmeet';
 const fallbackAppPath = path.join(__dirname, '../', appName);
@@ -129,7 +134,7 @@ async function handleAuth(req, res, appConfig, appState) {
         const token = loadToken(appName);
         const body = await readJsonBody(req);
         if (body && body.token && String(body.token).trim() === token) {
-            const sid = require('crypto').randomBytes(16).toString('hex');
+            const sid = crypto.randomBytes(16).toString('hex');
             appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
             // Save both session and token in cookies for persistence
             const cookies = [
@@ -200,7 +205,7 @@ function addChatMessage({ appState, fromTabId, text, type = 'text', role = 'user
 // --- Main Handler ---
 
 function handleWebMeet(req, res, appConfig, appState) {
-    const parsedUrl = url.parse(req.url, true);
+    const parsedUrl = parse(req.url, true);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
 
     // Auth & Login
@@ -223,7 +228,7 @@ function handleWebMeet(req, res, appConfig, appState) {
 
     // If saved token matches current token and no session, create a new session
     if (savedToken && savedToken === currentToken && !authorized(req, appState)) {
-        const sid = require('crypto').randomBytes(16).toString('hex');
+        const sid = crypto.randomBytes(16).toString('hex');
         appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
         // Set session cookie and continue
         res.setHeader('Set-Cookie', buildCookie(`${appName}_sid`, sid, req, `/${appName}`));
@@ -460,4 +465,4 @@ function handleWebMeet(req, res, appConfig, appState) {
     res.end('Not Found in App');
 }
 
-module.exports = { handleWebMeet };
+export { handleWebMeet };

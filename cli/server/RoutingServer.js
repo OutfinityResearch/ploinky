@@ -1,43 +1,65 @@
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
-const url = require('url');
-const querystring = require('querystring');
-// Handlers for each application
-const { handleWebTTY } = require('./handlers/webtty.js');
-const { handleWebChat } = require('./handlers/webchat.js');
-const { handleDashboard } = require('./handlers/dashboard.js');
-const { handleWebMeet } = require('./handlers/webmeet.js');
-const { handleStatus } = require('./handlers/status.js');
-const { handleBlobs } = require('./handlers/blobs.js');
-const staticSrv = require('./static');
+import http from 'http';
+import fs from 'fs';
+import path from 'path';
+import { parse } from 'url';
+import { parse as parseQueryString } from 'querystring';
+import { fileURLToPath } from 'url';
 
-// TTY dependencies
-const pty = (() => { try { return require('node-pty'); } catch { console.warn('node-pty not found, TTY features will be disabled.'); return null; } })();
-function loadTTYFactory(modulePath, legacyPath) {
+import { handleWebTTY } from './handlers/webtty.js';
+import { handleWebChat } from './handlers/webchat.js';
+import { handleDashboard } from './handlers/dashboard.js';
+import { handleWebMeet } from './handlers/webmeet.js';
+import { handleStatus } from './handlers/status.js';
+import { handleBlobs } from './handlers/blobs.js';
+import * as staticSrv from './static/index.js';
+import { resolveVarValue } from '../services/secretVars.js';
+import { createAgentClient } from './AgentClient.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+let pty = null;
+try {
+  const ptyModule = await import('node-pty');
+  pty = ptyModule.default || ptyModule;
+} catch {
+  console.warn('node-pty not found, TTY features will be disabled.');
+}
+
+async function loadTTYModule(primaryRelative, legacyRelative) {
   try {
-    return require(modulePath);
-  } catch (err) {
-    if (legacyPath) {
-      try { return require(legacyPath); } catch (_) {}
+    const mod = await import(new URL(primaryRelative, import.meta.url));
+    return mod.default || mod;
+  } catch (primaryError) {
+    if (legacyRelative) {
+      try {
+        const legacy = await import(new URL(legacyRelative, import.meta.url));
+        return legacy.default || legacy;
+      } catch (_) {}
     }
-    throw err;
+    throw primaryError;
   }
 }
 
-const webttyTTYModule = pty
-  ? (() => {
-      try { return loadTTYFactory('./webtty/tty.js', './webtty/webtty-ttyFactory.js'); }
-      catch (_) { console.warn('WebTTY TTY factory unavailable.'); return {}; }
-    })()
-  : {};
+let webttyTTYModule = {};
+if (pty) {
+  try {
+    webttyTTYModule = await loadTTYModule('./webtty/tty.js', './webtty/webtty-ttyFactory.js');
+  } catch (_) {
+    console.warn('WebTTY TTY factory unavailable.');
+    webttyTTYModule = {};
+  }
+}
 
-const webchatTTYModule = pty
-  ? (() => {
-      try { return loadTTYFactory('./webchat/tty.js', './webchat/webchat-ttyFactory.js'); }
-      catch (_) { console.warn('WebChat TTY factory unavailable.'); return {}; }
-    })()
-  : {};
+let webchatTTYModule = {};
+if (pty) {
+  try {
+    webchatTTYModule = await loadTTYModule('./webchat/tty.js', './webchat/webchat-ttyFactory.js');
+  } catch (_) {
+    console.warn('WebChat TTY factory unavailable.');
+    webchatTTYModule = {};
+  }
+}
 
 const {
   createTTYFactory: createWebTTYTTYFactory,
@@ -53,7 +75,6 @@ function buildLocalFactory(createFactoryFn, defaults = {}) {
   return createFactoryFn({ ptyLib: pty, workdir: process.cwd(), ...defaults });
 }
 
-const { resolveVarValue } = require('../services/secretVars');
 
 const webttyFactory = (() => {
   if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
@@ -245,13 +266,13 @@ function postJsonToAgent(targetPort, payload, res, agentPath) {
 
 function proxyApi(req, res, targetPort) {
     const method = (req.method || 'GET').toUpperCase();
-    const parsed = url.parse(req.url || '', true);
+    const parsed = parse(req.url || '', true);
     const includeSearch = method !== 'GET';
     const agentPath = buildAgentPath(parsed, includeSearch);
     if (method === 'GET') {
         const params = parsed && parsed.query && typeof parsed.query === 'object'
             ? parsed.query
-            : querystring.parse(parsed ? parsed.query : '');
+            : parseQueryString(parsed ? parsed.query : '');
         return postJsonToAgent(targetPort, params, res, agentPath);
     }
 
@@ -288,7 +309,7 @@ function proxyApi(req, res, targetPort) {
 
 // --- Main Server ---
 const server = http.createServer((req, res) => {
-    const parsedUrl = url.parse(req.url);
+    const parsedUrl = parse(req.url);
     const pathname = parsedUrl.pathname;
     appendLog('http_request', { method: req.method, path: pathname });
 
@@ -314,13 +335,12 @@ const server = http.createServer((req, res) => {
         const route = apiRoutes[agent];
         if (!route || !route.hostPort) { res.writeHead(404); return res.end('API Route not found'); }
 
-        const { createAgentClient } = require('./AgentClient');
         const baseUrl = `http://127.0.0.1:${route.hostPort}/mcp`;
         // Cache per-request; could be memoized globally if needed
         const agentClient = createAgentClient(baseUrl);
 
         const method = (req.method || 'GET').toUpperCase();
-        const parsed = url.parse(req.url || '', true);
+        const parsed = parse(req.url || '', true);
 
         const finish = async (payload) => {
             try {

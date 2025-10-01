@@ -1,4 +1,4 @@
-const { buildExecArgs } = require('../../services/docker');
+import { buildExecArgs } from '../../services/docker.js';
 
 function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
   const DEBUG = process.env.WEBTTY_DEBUG === '1';
@@ -70,7 +70,7 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
   return { create: factory };
 }
 
-module.exports = { createTTYFactory, createLocalTTYFactory };
+export { createTTYFactory, createLocalTTYFactory };
 
 function createLocalTTYFactory({ ptyLib, workdir, command }) {
   const DEBUG = process.env.WEBTTY_DEBUG === '1';

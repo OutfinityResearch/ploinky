@@ -1,6 +1,7 @@
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { parse } from 'url';
 
 const ROOT_DIR = path.resolve('.ploinky');
 const BLOBS_DIR = path.join(ROOT_DIR, 'blobs');
@@ -112,7 +113,7 @@ function handleGetHead(req, res, id, isHead = false) {
 }
 
 function handleBlobs(req, res) {
-  const u = require('url').parse(req.url || '', true);
+  const u = parse(req.url || '', true);
   const pathname = u.pathname || '/blobs';
   if (pathname === '/blobs' && req.method === 'POST') return handlePost(req, res);
   if (pathname.startsWith('/blobs/')) {
@@ -123,5 +124,4 @@ function handleBlobs(req, res) {
   res.writeHead(404); res.end('Not Found');
 }
 
-module.exports = { handleBlobs };
-
+export { handleBlobs };

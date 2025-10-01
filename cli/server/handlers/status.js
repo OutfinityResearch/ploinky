@@ -1,11 +1,15 @@
-const fs = require('fs');
-const path = require('path');
-const url = require('url');
-const { spawn } = require('child_process');
+import fs from 'fs';
+import path from 'path';
+import { parse } from 'url';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 
-const staticSrv = require('../static');
-const serverManager = require('../../services/serverManager');
-const workspace = require('../../services/workspace');
+import * as staticSrv from '../static/index.js';
+import { getAllServerStatuses } from '../../services/serverManager.js';
+import { loadAgents } from '../../services/workspace.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const appName = 'status';
 const fallbackAppPath = path.join(__dirname, '../', appName);
@@ -49,7 +53,7 @@ function runStatusCommand() {
 
 function collectServerStatuses() {
   try {
-    return serverManager.getAllServerStatuses();
+    return getAllServerStatuses();
   } catch (_) {
     return {};
   }
@@ -57,7 +61,7 @@ function collectServerStatuses() {
 
 function collectWorkspaceAgents() {
   try {
-    const map = workspace.loadAgents() || {};
+    const map = loadAgents() || {};
     return Object.entries(map)
       .filter(([key]) => key !== '_config')
       .map(([container, rec]) => ({
@@ -100,7 +104,7 @@ function collectStaticInfo() {
 }
 
 function handleStatus(req, res) {
-  const parsedUrl = url.parse(req.url, true);
+  const parsedUrl = parse(req.url, true);
   const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
 
   if (pathname.startsWith('/assets/')) {
@@ -144,4 +148,4 @@ function handleStatus(req, res) {
   res.end('Not Found in App');
 }
 
-module.exports = { handleStatus };
+export { handleStatus };

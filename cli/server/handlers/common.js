@@ -1,5 +1,5 @@
-const crypto = require('crypto');
-const secretVars = require('../../services/secretVars');
+import crypto from 'crypto';
+import * as secretVars from '../../services/secretVars.js';
 
 const TOKEN_VARS = {
   webtty: 'WEBTTY_TOKEN',
@@ -89,7 +89,7 @@ function readJsonBody(req) {
   });
 }
 
-module.exports = {
+export {
   loadToken,
   parseCookies,
   buildCookie,

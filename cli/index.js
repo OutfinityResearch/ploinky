@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 
-const { initEnvironment, setDebugMode, PLOINKY_DIR } = require('./services/config');
-const { handleCommand, getAgentNames, getRepoNames } = require('./commands/cli');
-const { showHelp } = require('./services/help');
-const { debugLog } = require('./services/utils');
-const inputState = require('./services/inputState');
-const readline = require('readline');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
+import readline from 'readline';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { initEnvironment, setDebugMode } from './services/config.js';
+import { handleCommand, getAgentNames, getRepoNames, cleanupSessionContainers as cleanupCliSessions } from './commands/cli.js';
+import { showHelp } from './services/help.js';
+import { debugLog } from './services/utils.js';
+import * as inputState from './services/inputState.js';
+import { bootstrap } from './services/ploinkyboot.js';
 
 const COMMANDS = {
     'add': ['repo'],
@@ -40,8 +42,6 @@ const COMMANDS = {
 };
 
 function completer(line) {
-    const fs = require('fs');
-    const path = require('path');
     const words = line.split(/\s+/).filter(Boolean);
     const lineFragment = line.endsWith(' ') ? '' : (words[words.length - 1] || '');
     
@@ -305,7 +305,7 @@ function startInteractiveMode() {
     });
 
     const cleanupAndExit = () => {
-        try { require('./commands/cli').cleanupSessionContainers(); } catch (_) {}
+        try { cleanupCliSessions(); } catch (_) {}
         restoreTTY();
         try { rl.close(); } catch(_) {}
         process.exit(0);
@@ -350,7 +350,7 @@ function startInteractiveMode() {
         if (process.stdin.isTTY) {
             rl.prompt();
         }
-    }).on('close', async () => { restoreTTY(); try { require('./commands/cli').cleanupSessionContainers(); } catch (_) {} if (process.stdin.isTTY) { console.log('Bye.'); } process.exit(0); });
+    }).on('close', async () => { restoreTTY(); try { cleanupCliSessions(); } catch (_) {} if (process.stdin.isTTY) { console.log('Bye.'); } process.exit(0); });
 
     // Ensure Ctrl-D (EOF) closes the CLI gracefully
     try {
@@ -382,7 +382,7 @@ function main() {
 
         debugLog('Raw arguments:', args);
         initEnvironment();
-        try { require('./services/ploinkyboot').bootstrap(); } catch (_) {}
+        try { bootstrap(); } catch (_) {}
 
         if (args.length === 0) {
             startInteractiveMode();
@@ -403,6 +403,7 @@ function main() {
     }
 }
 
-if (require.main === module) {
+const entryPoint = process.argv[1] ? path.resolve(process.argv[1]) : null;
+if (!entryPoint || entryPoint === fileURLToPath(import.meta.url)) {
     main();
 }

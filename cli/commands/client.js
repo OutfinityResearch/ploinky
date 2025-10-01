@@ -1,9 +1,9 @@
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
-const { PLOINKY_DIR } = require('../services/config');
-const { debugLog, parseParametersString } = require('../services/utils');
-const { showHelp } = require('../services/help');
+import fs from 'fs';
+import path from 'path';
+import http from 'http';
+import { PLOINKY_DIR } from '../services/config.js';
+import { debugLog, parseParametersString, findAgent } from '../services/utils.js';
+import { showHelp } from '../services/help.js';
 
 class ClientCommands {
     constructor() {
@@ -108,7 +108,6 @@ class ClientCommands {
         }
         // Resolve agent name (support repo/name); use short name for Router route key
         try {
-            const { findAgent } = require('../services/utils');
             const res = findAgent(agentName);
             agentName = res.shortAgentName || agentName;
         } catch (e) {
@@ -263,4 +262,4 @@ class ClientCommands {
     }
 }
 
-module.exports = ClientCommands;
+export default ClientCommands;

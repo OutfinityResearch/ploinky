@@ -1,8 +1,8 @@
 // AgentClient: minimal MCP client wrapper used by RoutingServer.
 // Not a class; exposes factory returning concrete methods for MCP interactions.
 
-const { Client } = require('@modelcontextprotocol/sdk/client');
-const { StreamableHTTPClientTransport } = require('@modelcontextprotocol/sdk/client/streamableHttp.js');
+import { Client } from '@modelcontextprotocol/sdk/client';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 function createAgentClient(baseUrl) {
   let client = null;
@@ -50,4 +50,4 @@ function createAgentClient(baseUrl) {
   return { connect, listTools, callTool, listResources, readResource, close };
 }
 
-module.exports = { createAgentClient };
+export { createAgentClient };

@@ -1,22 +1,22 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
-const PLOINKY_DIR = '.ploinky';
-const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
-const AGENTS_FILE = path.join(PLOINKY_DIR, 'agents');
-const SECRETS_FILE = path.join(PLOINKY_DIR, '.secrets');
+export const PLOINKY_DIR = '.ploinky';
+export const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
+export const AGENTS_FILE = path.join(PLOINKY_DIR, 'agents');
+export const SECRETS_FILE = path.join(PLOINKY_DIR, '.secrets');
 
 let DEBUG_MODE = process.env.PLOINKY_DEBUG === '1';
 
-function setDebugMode(enabled) {
-    DEBUG_MODE = !!enabled;
+export function setDebugMode(enabled) {
+    DEBUG_MODE = Boolean(enabled);
 }
 
-function isDebugMode() {
+export function isDebugMode() {
     return DEBUG_MODE;
 }
 
-function initEnvironment() {
+export function initEnvironment() {
     let firstInit = false;
     if (!fs.existsSync(PLOINKY_DIR)) {
         console.log(`Initializing Ploinky environment in ${path.resolve(PLOINKY_DIR)}...`);
@@ -36,13 +36,3 @@ function initEnvironment() {
         fs.writeFileSync(SECRETS_FILE, '# This file stores secrets for Ploinky agents.\n');
     }
 }
-
-module.exports = {
-    initEnvironment,
-    setDebugMode,
-    isDebugMode,
-    PLOINKY_DIR,
-    REPOS_DIR,
-    AGENTS_FILE,
-    SECRETS_FILE,
-};

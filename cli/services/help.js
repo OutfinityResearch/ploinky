@@ -1,4 +1,4 @@
-function showHelp(args = []) {
+export function showHelp(args = []) {
     // Parse help arguments
     const topic = args[0];
     const subtopic = args[1];
@@ -744,7 +744,3 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
     
     console.log();
 }
-
-module.exports = {
-    showHelp
-};

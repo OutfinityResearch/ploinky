@@ -2,6 +2,7 @@
   "name": "ploinky",
   "version": "1.0.0",
   "description": "A shell-like CLI for managing software agent environments.",
+  "type": "module",
   "main": "index.js",
   "bin": {
     "ploinky": "./index.js"
