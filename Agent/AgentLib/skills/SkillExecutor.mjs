@@ -966,7 +966,8 @@ Use numbers for numeric fields, booleans for true/false. If value is ambiguous o
         optionalPromptShown = false;
 
         while (missingRequiredArgs().length > 0) {
-            const missingRequired = missingRequiredArgs();
+            const missingRequiredAtStart = missingRequiredArgs();
+            const missingRequired = missingRequiredAtStart;
             const missingOptional = optionalPromptShown ? [] : missingOptionalArgs();
 
             const requiredDescriptors = missingRequired.map(describeArgument);
@@ -1204,6 +1205,16 @@ Use numbers for numeric fields, booleans for true/false. If value is ambiguous o
                     console.log(`[FlexSearch] Filled remaining arguments without LLM`);
                 }
                 break;
+            }
+
+            // Don't invoke LLM if we made progress with manual/FlexSearch assignment
+            // Just loop back to prompt for remaining arguments
+            const currentPending = missingRequiredArgs();
+            if (currentPending.length < missingRequiredAtStart.length) {
+                if (debugMode) {
+                    console.log(`[Skip LLM] Progress made (${missingRequiredAtStart.length - currentPending.length} filled), prompting for remaining ${currentPending.length}`);
+                }
+                continue;
             }
 
             let agent;

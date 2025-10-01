@@ -107,14 +107,37 @@ class Agent {
             throw new Error('Agent rankSkill requires a role for access control.');
         }
 
+        const verboseMode = options.verbose === true;
+        const startTime = options.startTime || Date.now();
+        
+        const flexSearchStart = Date.now();
         const registryOptions = { ...options, role: providedRole };
         const matches = this.skillRegistry.rankSkill(taskDescription, registryOptions);
 
         if (!Array.isArray(matches) || matches.length === 0) {
+            if (verboseMode) {
+                const flexSearchTime = Date.now() - flexSearchStart;
+                console.log(`[FlexSearch] No matches found (${flexSearchTime}ms)`);
+            }
             throw new Error('No skills matched the provided task description.');
         }
 
+        if (verboseMode) {
+            const flexSearchTime = Date.now() - flexSearchStart;
+            console.log(`\n[FlexSearch] Found ${matches.length} candidate${matches.length > 1 ? 's' : ''} (${flexSearchTime}ms):`);
+            matches.forEach((name, index) => {
+                const skill = this.getSkill(name);
+                const desc = skill?.description || skill?.what || 'No description';
+                const truncated = desc.length > 70 ? desc.slice(0, 67) + '...' : desc;
+                console.log(`  ${index + 1}. ${name}`);
+                console.log(`     ${truncated}`);
+            });
+        }
+
         if (matches.length === 1) {
+            if (verboseMode) {
+                console.log(`[Result] Single match found, using: ${matches[0]}`);
+            }
             return matches[0];
         }
 
@@ -135,6 +158,11 @@ class Agent {
 
         if (!candidates.length) {
             throw new Error('Unable to load candidate skill specifications for selection.');
+        }
+
+        if (verboseMode) {
+            console.log(`\n[LLM] Analyzing context to select best match...`);
+            console.log(`[LLM] Evaluating ${candidates.length} candidates`);
         }
 
         let selectorAgent;
@@ -168,7 +196,13 @@ class Agent {
             mode: selectionMode,
         });
 
+        const llmStart = Date.now();
         const raw = await invokeAgent(selectorAgent, history, { mode: selectionMode });
+        
+        if (verboseMode) {
+            const llmTime = Date.now() - llmStart;
+            console.log(`[LLM] Selection completed (${llmTime}ms)`);
+        }
 
         const candidateMap = new Map();
         for (const candidate of candidates) {
@@ -208,7 +242,13 @@ class Agent {
             throw new Error(`Selected skill "${selected}" was not among the matched candidates.`);
         }
 
-        return candidateMap.get(normalizedSelected);
+        const finalSkill = candidateMap.get(normalizedSelected);
+        
+        if (verboseMode) {
+            console.log(`[Result] LLM selected: ${finalSkill}`);
+        }
+
+        return finalSkill;
     }
 
     async useSkill(skillName, providedArgs = {}, options = {}) {
