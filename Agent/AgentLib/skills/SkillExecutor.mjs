@@ -1,6 +1,7 @@
 import { invokeAgent } from '../invocation/modelInvoker.mjs';
 import { getAgent } from '../agents/agentRegistry.mjs';
 import { safeJsonParse } from '../utils/json.mjs';
+import { createFlexSearchAdapter } from '../search/flexsearchAdapter.mjs';
 
 async function executeSkill({
     skillName,
@@ -72,6 +73,8 @@ async function executeSkill({
     const missingArgsFromList = (names) => names.filter((name) => !hasArgumentValue(name));
 
     const optionMap = new Map();
+    const optionIndexMap = new Map();
+    const debugMode = process.env.LLMAgentClient_DEBUG === 'true';
     const toComparableToken = (input) => {
         if (input === undefined) {
             return '';
@@ -159,6 +162,14 @@ async function executeSkill({
                 const entries = createOptionEntries(values);
                 if (entries.length) {
                     optionMap.set(name, entries);
+                    
+                    // Create FlexSearch index for this argument's options
+                    const searchIndex = createFlexSearchAdapter({ tokenize: 'forward' });
+                    for (const option of entries) {
+                        const searchText = `${option.label} ${option.display}`;
+                        searchIndex.add(option.labelToken, searchText);
+                    }
+                    optionIndexMap.set(name, searchIndex);
                 }
             }
         } catch (error) {
@@ -166,20 +177,91 @@ async function executeSkill({
         }
     }
 
+    const matchOptionWithFlexSearch = (name, value) => {
+        const searchIndex = optionIndexMap.get(name);
+        const options = optionMap.get(name);
+        
+        if (!searchIndex || !options || !options.length) {
+            return { matched: false, confidence: 0, value: null, matches: [] };
+        }
+        
+        const candidateToken = toComparableToken(value);
+        if (!candidateToken) {
+            return { matched: false, confidence: 0, value: null, matches: [] };
+        }
+        
+        // First try exact match
+        for (const option of options) {
+            if (candidateToken === option.labelToken || candidateToken === option.valueToken) {
+                if (debugMode) {
+                    console.log(`[FlexSearch] Exact match for "${name}": "${value}" → "${option.label}"`);
+                }
+                return { matched: true, confidence: 1.0, value: option.value, matches: [option] };
+            }
+        }
+        
+        // Try FlexSearch fuzzy matching
+        let searchResults;
+        try {
+            searchResults = searchIndex.search(candidateToken, { limit: 5 });
+        } catch (error) {
+            return { matched: false, confidence: 0, value: null, matches: [] };
+        }
+        
+        if (!Array.isArray(searchResults) || searchResults.length === 0) {
+            if (debugMode) {
+                console.log(`[FlexSearch] No matches for "${name}": "${value}"`);
+            }
+            return { matched: false, confidence: 0, value: null, matches: [] };
+        }
+        
+        // Convert search results back to option objects
+        const matchedOptions = searchResults
+            .map(resultToken => options.find(opt => opt.labelToken === resultToken))
+            .filter(Boolean);
+        
+        if (matchedOptions.length === 0) {
+            return { matched: false, confidence: 0, value: null, matches: [] };
+        }
+        
+        // Calculate confidence based on result clarity
+        let confidence = 0;
+        if (matchedOptions.length === 1) {
+            // Single clear match - high confidence
+            confidence = 0.9;
+        } else if (matchedOptions.length >= 2) {
+            // Multiple matches - low confidence (ambiguous)
+            confidence = 0.3;
+        }
+        
+        if (debugMode) {
+            if (confidence >= 0.8) {
+                console.log(`[FlexSearch] High-confidence match for "${name}": "${value}" → "${matchedOptions[0].label}"`);
+            } else {
+                console.log(`[FlexSearch] Low-confidence match for "${name}": "${value}" → [${matchedOptions.map(o => o.label).join(', ')}]`);
+            }
+        }
+        
+        return {
+            matched: confidence >= 0.8,
+            confidence,
+            value: matchedOptions[0].value,
+            matches: matchedOptions.slice(0, 3)
+        };
+    };
+
     const normalizeOptionValue = (name, value) => {
         const options = optionMap.get(name);
         if (!options || !options.length) {
             return { valid: true, value };
         }
-        const candidateToken = toComparableToken(value);
-        if (!candidateToken) {
-            return { valid: false, value: null };
+        
+        // Try FlexSearch first
+        const flexResult = matchOptionWithFlexSearch(name, value);
+        if (flexResult.matched) {
+            return { valid: true, value: flexResult.value };
         }
-        for (const option of options) {
-            if (candidateToken === option.labelToken || candidateToken === option.valueToken) {
-                return { valid: true, value: option.value };
-            }
-        }
+        
         return { valid: false, value: null };
     };
 
@@ -528,6 +610,39 @@ async function executeSkill({
             return false;
         }
 
+        // First pass: Try FlexSearch for any option-based arguments in the task description
+        const flexSearchPrefills = new Map();
+        for (const argName of missingRequiredArgs()) {
+            if (!optionIndexMap.has(argName)) {
+                continue;
+            }
+            
+            // Try to extract a value from task description for this argument
+            const flexResult = matchOptionWithFlexSearch(argName, taskDescription);
+            if (flexResult.matched && flexResult.confidence >= 0.8) {
+                flexSearchPrefills.set(argName, flexResult.value);
+                if (debugMode) {
+                    console.log(`[FlexSearch] Pre-filled "${argName}" from task description`);
+                }
+            }
+        }
+        
+        // Apply FlexSearch prefills
+        for (const [argName, value] of flexSearchPrefills.entries()) {
+            const validation = validateArgumentValue(argName, value);
+            if (validation.valid) {
+                normalizedArgs[argName] = validation.value;
+            }
+        }
+        
+        // If all required args are now filled, we're done
+        if (!missingRequiredArgs().length) {
+            if (debugMode && flexSearchPrefills.size > 0) {
+                console.log(`[FlexSearch] Filled all required arguments without LLM`);
+            }
+            return flexSearchPrefills.size > 0;
+        }
+
         const allowedKeys = JSON.stringify(allArgumentNames);
         const skillNameLower = (skill.name || '').toLowerCase();
         const commandWords = skillNameLower.split(/[-_\s]+/).filter(Boolean);
@@ -554,13 +669,22 @@ async function executeSkill({
             .join('\n');
         
         // Build type hints for voice input parsing
+        // Only send top 3 FlexSearch matches for options, not all options
         const typeHints = argumentDefinitions.map(def => {
             const argType = def.type || 'string';
             const hasOptions = optionMap.has(def.name);
             if (hasOptions) {
-                const options = optionMap.get(def.name);
-                const optionLabels = options.map(o => o.label).slice(0, 5).join(', ');
-                return `${def.name}: enum/option (values: ${optionLabels}${options.length > 5 ? '...' : ''}) - stop at first matching option`;
+                // Try FlexSearch first to get top matches
+                const flexResult = matchOptionWithFlexSearch(def.name, taskDescription);
+                if (flexResult.matches && flexResult.matches.length > 0) {
+                    const topMatches = flexResult.matches.slice(0, 3).map(o => o.label).join(', ');
+                    return `${def.name}: enum/option (top matches: ${topMatches}) - stop at first matching option`;
+                } else {
+                    // No matches or FlexSearch unavailable, send first 3 options
+                    const options = optionMap.get(def.name);
+                    const optionLabels = options.map(o => o.label).slice(0, 3).join(', ');
+                    return `${def.name}: enum/option (sample values: ${optionLabels}${options.length > 3 ? ', ...' : ''}) - stop at first matching option`;
+                }
             }
             if (argType === 'number' || argType === 'integer') {
                 return `${def.name}: number - stop at first numeric value`;
@@ -570,6 +694,10 @@ async function executeSkill({
             }
             return `${def.name}: string - capture all tokens until next argument name`;
         }).join('\n');
+        
+        if (debugMode) {
+            console.log('[LLM] Invoking language model for argument extraction');
+        }
 
         const systemPrompt = `You extract tool arguments from natural language requests, including VOICE INPUT patterns. Respond ONLY with JSON using keys from ${allowedKeys}. Use exact casing.
 
@@ -655,6 +783,9 @@ Use numbers for numeric fields, booleans for true/false. If value is ambiguous o
         }
 
         const status = applyUpdatesMap(parsed);
+        if (debugMode && status !== 'unchanged') {
+            console.log(`[LLM] Applied updates from language model: ${JSON.stringify(parsed)}`);
+        }
         return status !== 'unchanged';
     };
 
@@ -1043,11 +1174,47 @@ Use numbers for numeric fields, booleans for true/false. If value is ambiguous o
                 break;
             }
 
+            // Try FlexSearch for any remaining option-based arguments before falling back to LLM
+            const flexSearchMatches = new Map();
+            for (const argName of pendingAfterManual) {
+                if (!optionIndexMap.has(argName)) {
+                    continue;
+                }
+                
+                const flexResult = matchOptionWithFlexSearch(argName, trimmedInput);
+                if (flexResult.matched && flexResult.confidence >= 0.8) {
+                    flexSearchMatches.set(argName, flexResult.value);
+                }
+            }
+            
+            // Apply FlexSearch matches
+            for (const [argName, value] of flexSearchMatches.entries()) {
+                const validation = validateArgumentValue(argName, value);
+                if (validation.valid) {
+                    normalizedArgs[argName] = validation.value;
+                    if (debugMode) {
+                        console.log(`[FlexSearch] Matched "${argName}" from user input before LLM fallback`);
+                    }
+                }
+            }
+            
+            // Check again if we're done after FlexSearch matching
+            if (!missingRequiredArgs().length) {
+                if (debugMode && flexSearchMatches.size > 0) {
+                    console.log(`[FlexSearch] Filled remaining arguments without LLM`);
+                }
+                break;
+            }
+
             let agent;
             try {
                 agent = getAgent();
             } catch (error) {
                 throw new Error(`Unable to obtain language model for parsing arguments: ${error.message}`);
+            }
+            
+            if (debugMode) {
+                console.log('[LLM] Falling back to language model for remaining arguments');
             }
 
             const systemPrompt = 'You extract structured JSON arguments for tool execution. Respond with JSON only, no commentary.';
@@ -1061,14 +1228,24 @@ Use numbers for numeric fields, booleans for true/false. If value is ambiguous o
             }
 
             humanPromptSections.push(`Missing argument names: ${JSON.stringify(pendingAfterManual)}`);
+            // Only send top 3 FlexSearch matches to LLM, not all options
             const availableOptions = pendingAfterManual
                 .map((name) => {
                     const options = optionMap.get(name);
                     if (!options || !options.length) {
                         return null;
                     }
-                    const formatted = options.map(option => option.display).join(', ');
-                    return `${name}: ${formatted}`;
+                    
+                    // Try FlexSearch to get relevant matches first
+                    const flexResult = matchOptionWithFlexSearch(name, trimmedInput);
+                    if (flexResult.matches && flexResult.matches.length > 0) {
+                        const topMatches = flexResult.matches.slice(0, 3).map(option => option.display).join(', ');
+                        return `${name} (top matches): ${topMatches}`;
+                    }
+                    
+                    // No FlexSearch matches, send first 3 options
+                    const formatted = options.slice(0, 3).map(option => option.display).join(', ');
+                    return `${name} (sample options): ${formatted}${options.length > 3 ? ', ...' : ''}`;
                 })
                 .filter(Boolean);
             if (availableOptions.length) {
@@ -1120,6 +1297,10 @@ Use numbers for numeric fields, booleans for true/false. If value is ambiguous o
 
                 normalizedArgs[name] = validation.value;
                 appliedFromModel = true;
+                
+                if (debugMode) {
+                    console.log(`[LLM] Extracted "${name}" = ${JSON.stringify(validation.value)}`);
+                }
             }
 
             if (invalidFromModel.size) {
