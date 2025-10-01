@@ -110,6 +110,14 @@ class Agent {
         const verboseMode = options.verbose === true;
         const startTime = options.startTime || Date.now();
         
+        // Progressive display delay (configurable via env var, default 150ms)
+        const progressiveDelay = process.env.LLMAgentClient_VERBOSE_DELAY 
+            ? parseInt(process.env.LLMAgentClient_VERBOSE_DELAY, 10)
+            : 150;
+        const useProgressiveDisplay = verboseMode && progressiveDelay > 0;
+        
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        
         const flexSearchStart = Date.now();
         const registryOptions = { ...options, role: providedRole };
         const matches = this.skillRegistry.rankSkill(taskDescription, registryOptions);
@@ -124,14 +132,33 @@ class Agent {
 
         if (verboseMode) {
             const flexSearchTime = Date.now() - flexSearchStart;
-            console.log(`\n[FlexSearch] Found ${matches.length} candidate${matches.length > 1 ? 's' : ''} (${flexSearchTime}ms):`);
-            matches.forEach((name, index) => {
-                const skill = this.getSkill(name);
-                const desc = skill?.description || skill?.what || 'No description';
-                const truncated = desc.length > 70 ? desc.slice(0, 67) + '...' : desc;
-                console.log(`  ${index + 1}. ${name}`);
-                console.log(`     ${truncated}`);
-            });
+            console.log(`\n[FlexSearch] Found ${matches.length} candidate${matches.length > 1 ? 's' : ''} (${flexSearchTime}ms):\n`);
+            
+            if (useProgressiveDisplay) {
+                // Display candidates progressively with delays
+                for (let index = 0; index < matches.length; index++) {
+                    const name = matches[index];
+                    const skill = this.getSkill(name);
+                    const desc = skill?.description || skill?.what || 'No description';
+                    const truncated = desc.length > 70 ? desc.slice(0, 67) + '...' : desc;
+                    console.log(`  ${name}`);
+                    console.log(`  ${truncated}\n`);
+                    
+                    // Add delay between candidates (but not after the last one)
+                    if (index < matches.length - 1) {
+                        await delay(progressiveDelay);
+                    }
+                }
+            } else {
+                // Display all at once (instant)
+                matches.forEach((name, index) => {
+                    const skill = this.getSkill(name);
+                    const desc = skill?.description || skill?.what || 'No description';
+                    const truncated = desc.length > 70 ? desc.slice(0, 67) + '...' : desc;
+                    console.log(`  ${name}`);
+                    console.log(`  ${truncated}\n`);
+                });
+            }
         }
 
         if (matches.length === 1) {
