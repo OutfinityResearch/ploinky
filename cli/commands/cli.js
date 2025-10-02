@@ -343,8 +343,8 @@ async function enableSsoCommand(args = []) {
         }
     }
     if (!baseUrl) {
-        baseUrl = 'http://127.0.0.1:18080';
-        console.log('⚠ Could not detect Keycloak host port. Using placeholder http://127.0.0.1:18080. Override with --url once the agent is running.');
+        baseUrl = 'http://127.0.0.1:9090';
+        console.log('⚠ Could not detect Keycloak host port. Using placeholder http://127.0.0.1:9090 (default from manifest). Override with --url once the agent is running.');
     }
     baseUrl = normalizeSsoBaseUrl(baseUrl);
 
@@ -365,11 +365,24 @@ async function enableSsoCommand(args = []) {
         envSvc.setEnvVar('KEYCLOAK_CLIENT_SECRET', clientSecret);
     }
 
+    // Postgres database credentials
     ensureSecretValue('POSTGRES_DB', 'keycloak');
     ensureSecretValue('POSTGRES_USER', 'keycloak');
-    ensureSecretValue('POSTGRES_PASSWORD', () => randomSecret(16));
+    const pgPassword = ensureSecretValue('POSTGRES_PASSWORD', () => randomSecret(16));
+    
+    // Keycloak admin credentials
     ensureSecretValue('KEYCLOAK_ADMIN', 'admin');
     ensureSecretValue('KEYCLOAK_ADMIN_PASSWORD', () => randomSecret(16));
+    
+    // Keycloak database connection (must match Postgres credentials)
+    // On Linux, use container name for direct communication via Docker network
+    // On Mac/Windows, host.docker.internal works but container name is better
+    const postgresContainerName = `ploinky_agent_${extractSsoShortName(postgresAgent)}_${path.basename(process.cwd())}_${crypto.createHash('sha256').update(process.cwd()).digest('hex').substring(0, 6)}`;
+    envSvc.setEnvVar('KC_DB', 'postgres');
+    envSvc.setEnvVar('KC_DB_URL_HOST', postgresContainerName);
+    envSvc.setEnvVar('KC_DB_URL_DATABASE', 'keycloak');
+    envSvc.setEnvVar('KC_DB_USERNAME', 'keycloak');
+    envSvc.setEnvVar('KC_DB_PASSWORD', pgPassword);
 
     setSsoConfig({
         enabled: true,

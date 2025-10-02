@@ -1,4 +1,5 @@
 import { resolveVarValue } from '../../services/secretVars.js';
+import { getConfig } from '../../services/workspace.js';
 
 function readConfigValue(name) {
     const secret = resolveVarValue(name);
@@ -9,6 +10,16 @@ function readConfigValue(name) {
 }
 
 function loadAuthConfig() {
+    // Check if SSO is explicitly disabled in workspace config
+    try {
+        const workspaceConfig = getConfig();
+        if (workspaceConfig && workspaceConfig.sso && workspaceConfig.sso.enabled === false) {
+            return null;
+        }
+    } catch (_) {
+        // Ignore config read errors, fall through to env var check
+    }
+
     const baseUrl = readConfigValue('KEYCLOAK_URL');
     const realm = readConfigValue('KEYCLOAK_REALM');
     const clientId = readConfigValue('KEYCLOAK_CLIENT_ID');

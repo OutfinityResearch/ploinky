@@ -233,6 +233,9 @@ function respondUnauthenticated(req, res, parsedUrl) {
 }
 
 async function ensureAuthenticated(req, res, parsedUrl) {
+    // When SSO is not configured, skip authentication (allows legacy token-based auth)
+    // When SSO is configured and enabled, enforce Keycloak authentication
+    // This automatically disables component token authentication (WEBTTY_TOKEN, etc.)
     if (!authService.isConfigured()) {
         return { ok: true };
     }
