@@ -2,6 +2,46 @@
 # yarn lockfile v1
 
 
+"@cerbos/cerbos-darwin-arm64@0.46.0":
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/@cerbos/cerbos-darwin-arm64/-/cerbos-darwin-arm64-0.46.0.tgz"
+  integrity sha512-xPew4kMHxiG9cPTfFkYLd1NhwSY2I0yiswWLbUlw1lNCcG36rnsB64hf/GSzGkHUugTydofmx0oM247RBKqe0w==
+
+"@cerbos/cerbos-darwin-x64@0.46.0":
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/@cerbos/cerbos-darwin-x64/-/cerbos-darwin-x64-0.46.0.tgz"
+  integrity sha512-OGQaAm7cI2V6Bgv+WCx2+Yg6Q3+PzJt+4R2wesoRklodXYfE7DL89jXY+itpoxW9ont0Do48oYxdqK3DsNN7Nw==
+
+"@cerbos/cerbos-linux-arm64@0.46.0":
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/@cerbos/cerbos-linux-arm64/-/cerbos-linux-arm64-0.46.0.tgz"
+  integrity sha512-DcLyDyYLh1aEWTPnztmWnzF6000tEO7kOzD4aOGwfFX7U7+DL0c2n3PL9sGXiWKAhEGHbGzh4dLzmehg+IuwSQ==
+
+"@cerbos/cerbos-linux-x64@0.46.0":
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/@cerbos/cerbos-linux-x64/-/cerbos-linux-x64-0.46.0.tgz"
+  integrity sha512-0aIF+Xnpe73GCDpnACI4S8Hr6MYHvRdRKKxaKAWuFj78PNm0Nv1DuVLk59haniY4wQm4mSuDmPmyTXpTWmTgaA==
+
+"@cerbos/cerbosctl-darwin-arm64@0.46.0":
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/@cerbos/cerbosctl-darwin-arm64/-/cerbosctl-darwin-arm64-0.46.0.tgz"
+  integrity sha512-XZac5TWRUbm/TvmSF/oIWv7tjeToULmgJEnUFxLpAi29SybefcVgiE5XYyzHw1L+mk794zWY6Fr5BmE0E9WKnw==
+
+"@cerbos/cerbosctl-darwin-x64@0.46.0":
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/@cerbos/cerbosctl-darwin-x64/-/cerbosctl-darwin-x64-0.46.0.tgz"
+  integrity sha512-bLjNb1tpwg2KffnaflHyVb7hAl2vW/1/zFaDKzqqotyCXIF85XUlhqzYUDM2gcS1UXVLpT/c2dOT+ARWnICfPg==
+
+"@cerbos/cerbosctl-linux-arm64@0.46.0":
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/@cerbos/cerbosctl-linux-arm64/-/cerbosctl-linux-arm64-0.46.0.tgz"
+  integrity sha512-VfDCpsaukzYXeuomDpU+HhjVRU4tZIznyBD/T/d480UK9FjWvPAsHFPn1IIinSeW3uKvZZA5grgBFoTTVUqHZw==
+
+"@cerbos/cerbosctl-linux-x64@0.46.0":
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/@cerbos/cerbosctl-linux-x64/-/cerbosctl-linux-x64-0.46.0.tgz"
+  integrity sha512-/zarNmNIpy8PZIikaddsxQd2mh2jX8DhJaQpkfL1MdaonpVzDTbrjPm/2IyTYRYcRjYQ47W0NuToCK9uXJGtBQ==
+
 "@modelcontextprotocol/sdk@^1.18.2":
   version "1.18.2"
   resolved "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.18.2.tgz"
@@ -83,6 +123,26 @@ call-bound@^1.0.2:
   dependencies:
     call-bind-apply-helpers "^1.0.2"
     get-intrinsic "^1.3.0"
+
+cerbos@^0.46.0:
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/cerbos/-/cerbos-0.46.0.tgz"
+  integrity sha512-sBR2cXsHd2rWtv+jlLa61GzS6XDOywIb7LMuPR4xnFSRlAkr8qeBRhSJNXes/IurJ6Fz0qyNUg2v3P3i5qVJHQ==
+  optionalDependencies:
+    "@cerbos/cerbos-darwin-arm64" "0.46.0"
+    "@cerbos/cerbos-darwin-x64" "0.46.0"
+    "@cerbos/cerbos-linux-arm64" "0.46.0"
+    "@cerbos/cerbos-linux-x64" "0.46.0"
+
+cerbosctl@^0.46.0:
+  version "0.46.0"
+  resolved "https://registry.npmjs.org/cerbosctl/-/cerbosctl-0.46.0.tgz"
+  integrity sha512-n6s4CJDmVY+fwMJemGUeTenJSuN+BTXWZChlHkHcPFPbd9m5xZBv2kFPoiHAry2GSCmAEiu/qFvp+KijBobkpQ==
+  optionalDependencies:
+    "@cerbos/cerbosctl-darwin-arm64" "0.46.0"
+    "@cerbos/cerbosctl-darwin-x64" "0.46.0"
+    "@cerbos/cerbosctl-linux-arm64" "0.46.0"
+    "@cerbos/cerbosctl-linux-x64" "0.46.0"
 
 content-disposition@^1.0.0:
   version "1.0.0"
