@@ -53,6 +53,11 @@ export function enableAgent(agentName, mode, repoNameParam) {
         throw new Error(`Unknown mode '${mode}'. Allowed: global | devel`);
     }
 
+    // Parse port mappings from manifest
+    const { portMappings } = parseManifestPorts(manifest);
+    // If no ports specified, use default 7000
+    const ports = portMappings.length > 0 ? portMappings : [{ containerPort: 7000 }];
+    
     const record = {
         agentName: shortAgentName,
         repoName,
@@ -69,7 +74,7 @@ export function enableAgent(agentName, mode, repoNameParam) {
                 { source: agentPath, target: '/code' }
             ],
             env: [],
-            ports: [{ containerPort: 7000 }]
+            ports
         }
     };
     const map = loadAgents();

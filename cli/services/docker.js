@@ -189,13 +189,17 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             ? `--mount type=bind,source="${currentDir}",destination="${currentDir}",relabel=shared` 
             : `-v "${currentDir}:${currentDir}"`;
         
+        // Port publishing from manifest
+        const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
+        const portOptions = manifestPorts.map(p => `-p ${p}`).join(' ');
+        
         // Try to create container, with fallback to docker.io prefix for Podman
         let containerImage = manifest.container;
         let createOutput;
         let containerId;
         
         try {
-            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
+            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${portOptions} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
             debugLog(`Executing create command: ${createCommand}`);
             // Use pipe to capture container ID but also show any pulling progress
             createOutput = execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] }).toString().trim();
@@ -215,7 +219,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
                 }
                 
                 console.log(`Retrying with full registry name: ${containerImage}`);
-                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
+                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${portOptions} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
                 debugLog(`Executing retry command: ${retryCommand}`);
                 
                 try {
@@ -246,7 +250,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             config: {
                 binds: [ { source: currentDir, target: currentDir } ],
                 env: Array.from(new Set(declaredEnvNames)).map(name => ({ name })),
-                ports: []
+                ports: portMappings
             }
         };
         saveAgentsMap(agents);
@@ -370,12 +374,14 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         const roOpt = (containerRuntime === 'podman') ? ':ro,z' : ':ro';
         let containerImage = manifest.container;
         const envHash = computeEnvHash(manifest);
+        const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
+        const portOptions = manifestPorts.map(p => `-p ${p}`).join(' ');
         try {
             const createCommand = `${containerRuntime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
               -v "${currentDir}:${currentDir}${volZ}" \
               -v "${agentLibPath}:/Agent${roOpt}" \
               -v "${absAgentPath}:/code${roOpt}" \
-              ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
+              ${portOptions} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
             debugLog(`Executing create command: ${createCommand}`);
             execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
             createdNew = true;
@@ -388,7 +394,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
                   -v "${currentDir}:${currentDir}${volZ}" \
                   -v "${agentLibPath}:/Agent${roOpt}" \
                   -v "${absAgentPath}:/code${roOpt}" \
-                  ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
+                  ${portOptions} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
                 debugLog(`Executing retry command: ${retryCommand}`);
                 execSync(retryCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
                 manifest.container = containerImage;
@@ -408,7 +414,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
             createdAt: new Date().toISOString(),
             projectPath: currentDir,
             type: 'interactive',
-            config: { binds: [ { source: currentDir, target: currentDir }, { source: agentLibPath, target: '/Agent', ro: true }, { source: absAgentPath, target: '/code', ro: true } ], env: Array.from(new Set(declaredEnvNamesX)).map(name => ({ name })), ports: [] }
+            config: { binds: [ { source: currentDir, target: currentDir }, { source: agentLibPath, target: '/Agent', ro: true }, { source: absAgentPath, target: '/code', ro: true } ], env: Array.from(new Set(declaredEnvNamesX)).map(name => ({ name })), ports: portMappings }
         };
         saveAgentsMap(agents);
     }
@@ -547,6 +553,49 @@ function parseHostPort(output) {
     } catch (_) { return 0; }
 }
 
+// Parse manifest port specification into Docker -p format
+// Supports: "8080:3000", "9000" (maps to same port), "127.0.0.1:8080:3000"
+function parseManifestPorts(manifest) {
+    const ports = manifest.ports || manifest.port;
+    if (!ports) return { publishArgs: [], portMappings: [] };
+    
+    const portArray = Array.isArray(ports) ? ports : [ports];
+    const publishArgs = [];
+    const portMappings = [];
+    
+    for (const p of portArray) {
+        if (!p) continue;
+        const portSpec = String(p).trim();
+        if (!portSpec) continue;
+        
+        publishArgs.push(portSpec);
+        
+        // Parse to extract container and host ports for registry
+        // Format can be: "HOST:CONTAINER", "PORT", or "IP:HOST:CONTAINER"
+        const parts = portSpec.split(':');
+        let hostPort, containerPort;
+        
+        if (parts.length === 1) {
+            // Just "PORT" - maps to same port
+            hostPort = containerPort = parseInt(parts[0], 10);
+        } else if (parts.length === 2) {
+            // "HOST:CONTAINER"
+            hostPort = parseInt(parts[0], 10);
+            containerPort = parseInt(parts[1], 10);
+        } else if (parts.length === 3) {
+            // "IP:HOST:CONTAINER"
+            hostPort = parseInt(parts[1], 10);
+            containerPort = parseInt(parts[2], 10);
+        }
+        
+        if (hostPort && containerPort) {
+            portMappings.push({ hostPort, containerPort });
+        }
+    }
+    
+    return { publishArgs, portMappings };
+}
+
 async function ensureAgentCore(manifest, agentPath) {
     const runtime = containerRuntime;
     const containerName = getServiceContainerName(manifest.name);
@@ -667,8 +716,10 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         '-v', `${path.resolve(agentPath)}:/code${runtime==='podman'?':ro,z':':ro'}`,
         '-v', `${nodeModulesPath}:/node_modules${runtime==='podman'?':ro,z':':ro'}`
     ];
-    // Optional port publishings
-    const pubs = (options && Array.isArray(options.publish)) ? options.publish : [];
+    // Port publishing: manifest ports + optional runtime ports
+    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
+    const runtimePorts = (options && Array.isArray(options.publish)) ? options.publish : [];
+    const pubs = [...manifestPorts, ...runtimePorts];
     for (const p of pubs) {
         if (!p) continue;
         args.splice(1, 0, '-p', String(p));
@@ -692,7 +743,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         createdAt: new Date().toISOString(),
         projectPath: cwd,
         type: 'agent',
-        config: { binds: [ { source: cwd, target: cwd }, { source: agentLibPath, target: '/Agent' }, { source: agentPath, target: '/code' } ], env: Array.from(new Set(declaredEnvNames2)).map(name => ({ name })), ports: [] }
+        config: { binds: [ { source: cwd, target: cwd }, { source: agentLibPath, target: '/Agent' }, { source: agentPath, target: '/code' } ], env: Array.from(new Set(declaredEnvNames2)).map(name => ({ name })), ports: portMappings }
     };
     saveAgentsMap(agents);
     syncAgentMcpConfig(containerName, path.resolve(agentPath));
@@ -906,11 +957,23 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
             // Fall through to recreate if mapping cannot be determined
         }
 }
-    const hostPort = preferredHostPort || (10000 + Math.floor(Math.random() * 50000));
     // Apply any pre-start setup steps (before container creation)
     applyAgentStartupConfig(agentName, manifest, agentPath, containerName);
+    
+    // Prefer manifest ports, otherwise use default 7000 port mapping
+    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
+    let additionalPorts = [];
+    let allPortMappings = [...portMappings];
+    
+    // If manifest doesn't define ports, add default 7000 mapping
+    if (manifestPorts.length === 0) {
+        const hostPort = preferredHostPort || (10000 + Math.floor(Math.random() * 50000));
+        additionalPorts = [ `${hostPort}:7000` ];
+        allPortMappings = [ { containerPort: 7000, hostPort } ];
+    }
+    
     // Use startAgentContainer to create the container with identical config and publish mapping
-    startAgentContainer(agentName, manifest, agentPath, { publish: [ `${hostPort}:7000` ] });
+    startAgentContainer(agentName, manifest, agentPath, { publish: additionalPorts });
     createdNew = true;
 
     // Save to registry
@@ -931,7 +994,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
                 { source: agentPath, target: '/code', ro: true }
             ],
             env: Array.from(new Set(declaredEnvNames3)).map(name => ({ name })),
-            ports: [ { containerPort: 7000, hostPort } ]
+            ports: allPortMappings
         }
     };
     saveAgentsMap(agents);
@@ -949,7 +1012,9 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         console.log(`[install] ${agentName}: ${e?.message||e}`);
     }
     syncAgentMcpConfig(containerName, agentPath);
-    return { containerName, hostPort };
+    // Return first port or default 7000 port for backward compatibility
+    const returnPort = allPortMappings.find(p => p.containerPort === 7000)?.hostPort || allPortMappings[0]?.hostPort || 0;
+    return { containerName, hostPort: returnPort };
 }
 
 export {
@@ -976,5 +1041,6 @@ export {
     getConfiguredProjectPath,
     buildExecArgs,
     attachInteractive,
-    applyAgentStartupConfig
+    applyAgentStartupConfig,
+    parseManifestPorts
 };
