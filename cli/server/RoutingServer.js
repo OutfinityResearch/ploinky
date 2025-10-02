@@ -14,110 +14,112 @@ import { handleBlobs } from './handlers/blobs.js';
 import * as staticSrv from './static/index.js';
 import { resolveVarValue } from '../services/secretVars.js';
 import { createAgentClient } from './AgentClient.js';
+import { parseCookies, buildCookie, readJsonBody, appendSetCookie } from './handlers/common.js';
+import { createAuthService } from './auth/service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let pty = null;
 try {
-  const ptyModule = await import('node-pty');
-  pty = ptyModule.default || ptyModule;
+    const ptyModule = await import('node-pty');
+    pty = ptyModule.default || ptyModule;
 } catch {
-  console.warn('node-pty not found, TTY features will be disabled.');
+    console.warn('node-pty not found, TTY features will be disabled.');
 }
 
 async function loadTTYModule(primaryRelative, legacyRelative) {
-  try {
-    const mod = await import(new URL(primaryRelative, import.meta.url));
-    return mod.default || mod;
-  } catch (primaryError) {
-    if (legacyRelative) {
-      try {
-        const legacy = await import(new URL(legacyRelative, import.meta.url));
-        return legacy.default || legacy;
-      } catch (_) {}
+    try {
+        const mod = await import(new URL(primaryRelative, import.meta.url));
+        return mod.default || mod;
+    } catch (primaryError) {
+        if (legacyRelative) {
+            try {
+                const legacy = await import(new URL(legacyRelative, import.meta.url));
+                return legacy.default || legacy;
+            } catch (_) { }
+        }
+        throw primaryError;
     }
-    throw primaryError;
-  }
 }
 
 let webttyTTYModule = {};
 if (pty) {
-  try {
-    webttyTTYModule = await loadTTYModule('./webtty/tty.js', './webtty/webtty-ttyFactory.js');
-  } catch (_) {
-    console.warn('WebTTY TTY factory unavailable.');
-    webttyTTYModule = {};
-  }
+    try {
+        webttyTTYModule = await loadTTYModule('./webtty/tty.js', './webtty/webtty-ttyFactory.js');
+    } catch (_) {
+        console.warn('WebTTY TTY factory unavailable.');
+        webttyTTYModule = {};
+    }
 }
 
 let webchatTTYModule = {};
 if (pty) {
-  try {
-    webchatTTYModule = await loadTTYModule('./webchat/tty.js', './webchat/webchat-ttyFactory.js');
-  } catch (_) {
-    console.warn('WebChat TTY factory unavailable.');
-    webchatTTYModule = {};
-  }
+    try {
+        webchatTTYModule = await loadTTYModule('./webchat/tty.js', './webchat/webchat-ttyFactory.js');
+    } catch (_) {
+        console.warn('WebChat TTY factory unavailable.');
+        webchatTTYModule = {};
+    }
 }
 
 const {
-  createTTYFactory: createWebTTYTTYFactory,
-  createLocalTTYFactory: createWebTTYLocalFactory
+    createTTYFactory: createWebTTYTTYFactory,
+    createLocalTTYFactory: createWebTTYLocalFactory
 } = webttyTTYModule;
 const {
-  createTTYFactory: createWebChatTTYFactory,
-  createLocalTTYFactory: createWebChatLocalFactory
+    createTTYFactory: createWebChatTTYFactory,
+    createLocalTTYFactory: createWebChatLocalFactory
 } = webchatTTYModule;
 
 function buildLocalFactory(createFactoryFn, defaults = {}) {
-  if (!pty || !createFactoryFn) return null;
-  return createFactoryFn({ ptyLib: pty, workdir: process.cwd(), ...defaults });
+    if (!pty || !createFactoryFn) return null;
+    return createFactoryFn({ ptyLib: pty, workdir: process.cwd(), ...defaults });
 }
 
 
 const webttyFactory = (() => {
-  if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
-  if (createWebTTYLocalFactory) {
-    const secretShell = resolveVarValue('WEBTTY_SHELL');
-    const command = secretShell || process.env.WEBTTY_COMMAND || '';
-    return {
-      factory: buildLocalFactory(createWebTTYLocalFactory, { command }),
-      label: command ? command : 'local shell',
-      runtime: 'local'
-    };
-  }
-  if (createWebTTYTTYFactory) {
-    const containerName = process.env.WEBTTY_CONTAINER || 'ploinky_interactive';
-    return {
-      factory: createWebTTYTTYFactory({ ptyLib: pty, runtime: 'docker', containerName }),
-      label: containerName,
-      runtime: 'docker'
-    };
-  }
-  return { factory: null, label: '-', runtime: 'disabled' };
+    if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
+    if (createWebTTYLocalFactory) {
+        const secretShell = resolveVarValue('WEBTTY_SHELL');
+        const command = secretShell || process.env.WEBTTY_COMMAND || '';
+        return {
+            factory: buildLocalFactory(createWebTTYLocalFactory, { command }),
+            label: command ? command : 'local shell',
+            runtime: 'local'
+        };
+    }
+    if (createWebTTYTTYFactory) {
+        const containerName = process.env.WEBTTY_CONTAINER || 'ploinky_interactive';
+        return {
+            factory: createWebTTYTTYFactory({ ptyLib: pty, runtime: 'docker', containerName }),
+            label: containerName,
+            runtime: 'docker'
+        };
+    }
+    return { factory: null, label: '-', runtime: 'disabled' };
 })();
 
 const webchatFactory = (() => {
-  if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
-  if (createWebChatLocalFactory) {
-    const secretCommand = resolveVarValue('WEBCHAT_COMMAND');
-    const command = secretCommand || process.env.WEBCHAT_COMMAND || '';
-    return {
-      factory: buildLocalFactory(createWebChatLocalFactory, { command }),
-      label: command ? command : 'local shell',
-      runtime: 'local'
-    };
-  }
-  if (createWebChatTTYFactory) {
-    const containerName = process.env.WEBCHAT_CONTAINER || 'ploinky_chat';
-    return {
-      factory: createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName }),
-      label: containerName,
-      runtime: 'docker'
-    };
-  }
-  return { factory: null, label: '-', runtime: 'disabled' };
+    if (!pty) return { factory: null, label: '-', runtime: 'disabled' };
+    if (createWebChatLocalFactory) {
+        const secretCommand = resolveVarValue('WEBCHAT_COMMAND');
+        const command = secretCommand || process.env.WEBCHAT_COMMAND || '';
+        return {
+            factory: buildLocalFactory(createWebChatLocalFactory, { command }),
+            label: command ? command : 'local shell',
+            runtime: 'local'
+        };
+    }
+    if (createWebChatTTYFactory) {
+        const containerName = process.env.WEBCHAT_CONTAINER || 'ploinky_chat';
+        return {
+            factory: createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName }),
+            label: containerName,
+            runtime: 'docker'
+        };
+    }
+    return { factory: null, label: '-', runtime: 'disabled' };
 })();
 
 const ROUTING_DIR = path.resolve('.ploinky');
@@ -125,13 +127,15 @@ const ROUTING_FILE = path.join(ROUTING_DIR, 'routing.json');
 const LOG_DIR = path.join(ROUTING_DIR, 'logs');
 const LOG_PATH = path.join(LOG_DIR, 'router.log');
 const PID_FILE = process.env.PLOINKY_ROUTER_PID_FILE || null;
+const AUTH_COOKIE_NAME = 'ploinky_sso';
+const authService = createAuthService();
 
 function ensurePidFile() {
     if (!PID_FILE) return;
     try {
         fs.mkdirSync(path.dirname(PID_FILE), { recursive: true });
         fs.writeFileSync(PID_FILE, String(process.pid));
-    } catch (_) {}
+    } catch (_) { }
 }
 
 function clearPidFile() {
@@ -155,20 +159,247 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGQUIT']) {
 
 // --- General Utils ---
 function appendLog(type, data) {
-  try {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-    const rec = JSON.stringify({ ts: new Date().toISOString(), type, ...data }) + '\n';
-    fs.appendFileSync(LOG_PATH, rec);
-  } catch (_) {}
+    try {
+        fs.mkdirSync(LOG_DIR, { recursive: true });
+        const rec = JSON.stringify({ ts: new Date().toISOString(), type, ...data }) + '\n';
+        fs.appendFileSync(LOG_PATH, rec);
+    } catch (_) { }
+}
+
+function sendJson(res, statusCode, body) {
+    const payload = JSON.stringify(body || {});
+    res.writeHead(statusCode, { 'Content-Type': 'application/json' });
+    res.end(payload);
+}
+
+function getRequestBaseUrl(req) {
+    const headers = req.headers || {};
+    const forwardedProto = headers['x-forwarded-proto'];
+    const forwardedHost = headers['x-forwarded-host'] || headers['host'];
+    const proto = forwardedProto
+        ? String(forwardedProto).split(',')[0].trim()
+        : (req.socket && req.socket.encrypted ? 'https' : 'http');
+    if (!forwardedHost) return null;
+    return `${proto}://${forwardedHost}`;
+}
+
+function wantsJsonResponse(req, pathname) {
+    const accept = String(req.headers?.accept || '').toLowerCase();
+    if (accept.includes('application/json')) return true;
+    if (accept.includes('text/event-stream')) return true;
+    if (!pathname) return false;
+    return pathname.startsWith('/apis/') || pathname.startsWith('/api/') || pathname.startsWith('/blobs');
+}
+
+function buildIdentityHeaders(req) {
+    if (!req || !req.user) return {};
+    const headers = {};
+    const user = req.user || {};
+    if (user.id) headers['X-Ploinky-User-Id'] = String(user.id);
+    const name = user.username || user.email || user.name || user.id;
+    if (name) headers['X-Ploinky-User'] = String(name);
+    if (user.email) headers['X-Ploinky-User-Email'] = String(user.email);
+    if (Array.isArray(user.roles) && user.roles.length) {
+        headers['X-Ploinky-User-Roles'] = user.roles.join(',');
+    }
+    if (req.sessionId) headers['X-Ploinky-Session-Id'] = String(req.sessionId);
+    if (req.session?.tokens?.accessToken) {
+        headers['Authorization'] = `Bearer ${req.session.tokens.accessToken}`;
+    }
+    return headers;
+}
+
+function respondUnauthenticated(req, res, parsedUrl) {
+    const pathname = parsedUrl.pathname || '/';
+    const returnTo = parsedUrl.path || pathname || '/';
+    const loginUrl = `/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
+    const clearCookie = buildCookie(AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
+    const method = (req.method || 'GET').toUpperCase();
+    const wantsJson = wantsJsonResponse(req, pathname) || method !== 'GET';
+    if (wantsJson) {
+        res.writeHead(401, {
+            'Content-Type': 'application/json',
+            'Set-Cookie': clearCookie
+        });
+        res.end(JSON.stringify({ ok: false, error: 'not_authenticated', login: loginUrl }));
+    } else {
+        res.writeHead(302, {
+            Location: loginUrl,
+            'Set-Cookie': clearCookie
+        });
+        res.end('Authentication required');
+    }
+    return { ok: false };
+}
+
+async function ensureAuthenticated(req, res, parsedUrl) {
+    if (!authService.isConfigured()) {
+        return { ok: true };
+    }
+    const cookies = parseCookies(req);
+    const sessionId = cookies.get(AUTH_COOKIE_NAME);
+    if (!sessionId) {
+        appendLog('auth_missing_cookie', { path: parsedUrl.pathname });
+        return respondUnauthenticated(req, res, parsedUrl);
+    }
+    let session = authService.getSession(sessionId);
+    if (!session || (session.expiresAt && Date.now() > session.expiresAt)) {
+        try {
+            await authService.refreshSession(sessionId);
+        } catch (err) {
+            appendLog('auth_refresh_failed', { error: err?.message || String(err) });
+        }
+        session = authService.getSession(sessionId);
+    }
+    if (!session) {
+        appendLog('auth_session_invalid', { sessionId: '[redacted]' });
+        return respondUnauthenticated(req, res, parsedUrl);
+    }
+    req.user = session.user;
+    req.session = session;
+    req.sessionId = sessionId;
+    try {
+        const cookie = buildCookie(AUTH_COOKIE_NAME, sessionId, req, '/', {
+            maxAge: authService.getSessionCookieMaxAge()
+        });
+        appendSetCookie(res, cookie);
+    } catch (_) { }
+    return { ok: true, session };
+}
+
+async function handleAuthRoutes(req, res, parsedUrl) {
+    const pathname = parsedUrl.pathname || '/';
+    if (!pathname.startsWith('/auth/')) return false;
+    if (!authService.isConfigured()) {
+        sendJson(res, 503, { ok: false, error: 'sso_disabled' });
+        return true;
+    }
+    const method = (req.method || 'GET').toUpperCase();
+    const baseUrl = getRequestBaseUrl(req);
+    try {
+        if (pathname === '/auth/login') {
+            if (method !== 'GET') {
+                res.writeHead(405); res.end(); return true;
+            }
+            const returnTo = parsedUrl.query?.returnTo ? String(parsedUrl.query.returnTo) : '/';
+            const prompt = parsedUrl.query?.prompt ? String(parsedUrl.query.prompt) : undefined;
+            const { redirectUrl } = await authService.beginLogin({ baseUrl, returnTo, prompt });
+            res.writeHead(302, { Location: redirectUrl });
+            res.end('Redirecting to identity provider...');
+            appendLog('auth_login_redirect', { returnTo });
+            return true;
+        }
+        if (pathname === '/auth/callback') {
+            if (method !== 'GET') {
+                res.writeHead(405); res.end(); return true;
+            }
+            const code = parsedUrl.query?.code ? String(parsedUrl.query.code) : '';
+            const state = parsedUrl.query?.state ? String(parsedUrl.query.state) : '';
+            if (!code || !state) {
+                sendJson(res, 400, { ok: false, error: 'missing_parameters' });
+                return true;
+            }
+            const result = await authService.handleCallback({ code, state, baseUrl });
+            const cookie = buildCookie(AUTH_COOKIE_NAME, result.sessionId, req, '/', {
+                maxAge: authService.getSessionCookieMaxAge()
+            });
+            res.writeHead(302, {
+                Location: result.redirectTo || '/',
+                'Set-Cookie': cookie
+            });
+            res.end('Login successful');
+            appendLog('auth_callback_success', { user: result.user?.id });
+            return true;
+        }
+        if (pathname === '/auth/logout') {
+            if (method !== 'GET' && method !== 'POST') {
+                res.writeHead(405); res.end(); return true;
+            }
+            const cookies = parseCookies(req);
+            const sessionId = cookies.get(AUTH_COOKIE_NAME) || '';
+            const outcome = await authService.logout(sessionId, { baseUrl });
+            const clearCookie = buildCookie(AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
+            const redirectTarget = parsedUrl.query?.returnTo ? String(parsedUrl.query.returnTo) : outcome.redirect;
+            if (method === 'GET' || redirectTarget) {
+                res.writeHead(302, {
+                    Location: redirectTarget || '/',
+                    'Set-Cookie': clearCookie
+                });
+                res.end('Logged out');
+            } else {
+                res.writeHead(200, {
+                    'Content-Type': 'application/json',
+                    'Set-Cookie': clearCookie
+                });
+                res.end(JSON.stringify({ ok: true }));
+            }
+            appendLog('auth_logout', { sessionId: sessionId ? '[redacted]' : null });
+            return true;
+        }
+        if (pathname === '/auth/token') {
+            if (method !== 'GET' && method !== 'POST') {
+                res.writeHead(405); res.end(); return true;
+            }
+            const cookies = parseCookies(req);
+            const sessionId = cookies.get(AUTH_COOKIE_NAME);
+            if (!sessionId) {
+                sendJson(res, 401, { ok: false, error: 'not_authenticated' });
+                return true;
+            }
+            const session = authService.getSession(sessionId);
+            if (!session) {
+                const clearCookie = buildCookie(AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
+                res.writeHead(401, {
+                    'Content-Type': 'application/json',
+                    'Set-Cookie': clearCookie
+                });
+                res.end(JSON.stringify({ ok: false, error: 'session_expired' }));
+                return true;
+            }
+            let refreshRequested = false;
+            if (method === 'POST') {
+                try {
+                    const body = await readJsonBody(req);
+                    refreshRequested = Boolean(body?.refresh);
+                } catch (_) { }
+            }
+            let tokenInfo;
+            if (refreshRequested) {
+                tokenInfo = await authService.refreshSession(sessionId);
+            } else {
+                tokenInfo = {
+                    accessToken: session.tokens.accessToken,
+                    expiresAt: session.expiresAt,
+                    scope: session.tokens.scope,
+                    tokenType: session.tokens.tokenType
+                };
+            }
+            const cookie = buildCookie(AUTH_COOKIE_NAME, sessionId, req, '/', {
+                maxAge: authService.getSessionCookieMaxAge()
+            });
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Set-Cookie': cookie
+            });
+            res.end(JSON.stringify({ ok: true, token: tokenInfo, user: session.user }));
+            return true;
+        }
+    } catch (err) {
+        appendLog('auth_error', { error: err?.message || String(err) });
+        sendJson(res, 500, { ok: false, error: 'auth_failure', detail: err?.message || String(err) });
+        return true;
+    }
+    res.writeHead(404); res.end('Not Found');
+    return true;
 }
 
 // --- Config ---
 function loadApiRoutes() {
-  try {
-    return JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')).routes || {};
-  } catch (_) {
-    return {};
-  }
+    try {
+        return JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')).routes || {};
+    } catch (_) {
+        return {};
+    }
 }
 
 const envAppName = (() => {
@@ -236,7 +467,7 @@ function buildAgentPath(parsedUrl, includeSearch = true) {
     return `/mcp${pathname}${search}`;
 }
 
-function postJsonToAgent(targetPort, payload, res, agentPath) {
+function postJsonToAgent(targetPort, payload, res, agentPath, extraHeaders = {}) {
     try {
         const data = Buffer.from(JSON.stringify(payload || {}));
         const opts = {
@@ -246,7 +477,8 @@ function postJsonToAgent(targetPort, payload, res, agentPath) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Content-Length': data.length
+                'Content-Length': data.length,
+                ...extraHeaders
             }
         };
         const upstream = http.request(opts, upstreamRes => {
@@ -273,7 +505,7 @@ function proxyApi(req, res, targetPort) {
         const params = parsed && parsed.query && typeof parsed.query === 'object'
             ? parsed.query
             : parseQueryString(parsed ? parsed.query : '');
-        return postJsonToAgent(targetPort, params, res, agentPath);
+        return postJsonToAgent(targetPort, params, res, agentPath, identityHeaders);
     }
 
     const chunks = [];
@@ -288,7 +520,8 @@ function proxyApi(req, res, targetPort) {
             method: method,
             headers: {
                 'Content-Type': req.headers['content-type'] || 'application/json',
-                'Content-Length': data.length
+                'Content-Length': data.length,
+                ...identityHeaders
             }
         };
         const upstream = http.request(opts, upstreamRes => {
@@ -327,7 +560,7 @@ async function handleRouterMcp(req, res) {
     const sendJson = (statusCode, body) => {
         try {
             res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-        } catch (_) {}
+        } catch (_) { }
         res.end(JSON.stringify(body));
     };
 
@@ -471,13 +704,13 @@ async function handleRouterMcp(req, res) {
         } catch (err) {
             return sendJson(500, { ok: false, error: String(err && err.message || err) });
         } finally {
-            await Promise.all(entries.map(entry => entry.client.close().catch(() => {})));
+            await Promise.all(entries.map(entry => entry.client.close().catch(() => { })));
         }
     };
 
     if (method === 'GET') {
         const payload = parsed && parsed.query && typeof parsed.query === 'object' ? parsed.query : {};
-        processPayload(payload).catch(() => {});
+        processPayload(payload).catch(() => { });
         return;
     }
 
@@ -490,7 +723,7 @@ async function handleRouterMcp(req, res) {
         } catch (_) {
             payload = {};
         }
-        processPayload(payload).catch(() => {});
+        processPayload(payload).catch(() => { });
     });
     req.on('error', err => {
         sendJson(500, { ok: false, error: String(err && err.message || err) });
@@ -498,10 +731,18 @@ async function handleRouterMcp(req, res) {
 }
 
 // --- Main Server ---
-const server = http.createServer((req, res) => {
-    const parsedUrl = parse(req.url);
-    const pathname = parsedUrl.pathname;
+async function processRequest(req, res) {
+    const parsedUrl = parse(req.url || '', true);
+    const pathname = parsedUrl.pathname || '/';
     appendLog('http_request', { method: req.method, path: pathname });
+
+    if (pathname.startsWith('/auth/')) {
+        await handleAuthRoutes(req, res, parsedUrl);
+        return;
+    }
+
+    const authResult = await ensureAuthenticated(req, res, parsedUrl);
+    if (!authResult.ok) return;
 
     if (pathname.startsWith('/webtty')) {
         return handleWebTTY(req, res, config.webtty, globalState.webtty);
@@ -533,6 +774,7 @@ const server = http.createServer((req, res) => {
 
         const method = (req.method || 'GET').toUpperCase();
         const parsed = parse(req.url || '', true);
+        const identityHeaders = buildIdentityHeaders(req);
 
         const finish = async (payload) => {
             try {
@@ -547,10 +789,9 @@ const server = http.createServer((req, res) => {
                 if (command === 'status') {
                     try {
                         const rr = await agentClient.readResource('health://status');
-                        // Prefer ok from resource body if JSON
                         let ok = true;
                         const text = rr.contents && rr.contents[0] && rr.contents[0].text;
-                        if (text) { try { ok = !!(JSON.parse(text).ok); } catch (_) {} }
+                        if (text) { try { ok = !!(JSON.parse(text).ok); } catch (_) { } }
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         return res.end(JSON.stringify({ ok: ok }));
                     } catch (_) {
@@ -559,23 +800,21 @@ const server = http.createServer((req, res) => {
                     }
                 }
 
-                // Default: if 'tool' specified, call it with provided args
                 if (payload && payload.tool) {
                     const toolName = String(payload.tool);
-                    const { tool, command, ...args } = payload; // strip command fields
+                    const { tool, command, ...args } = payload;
                     const result = await agentClient.callTool(toolName, args);
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     return res.end(JSON.stringify({ ok: true, result }));
                 }
 
-                // Unknown command
                 res.writeHead(400, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ ok: false, error: 'unknown command' }));
             } catch (err) {
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 return res.end(JSON.stringify({ ok: false, error: String(err && err.message || err) }));
             } finally {
-                await agentClient.close().catch(() => {});
+                await agentClient.close().catch(() => { });
             }
         };
 
@@ -593,12 +832,23 @@ const server = http.createServer((req, res) => {
         });
         return;
     } else {
-        // 1) Try agent-specific static routing: /<agent>/<path>
         if (staticSrv.serveAgentStaticRequest(req, res)) return;
-        // 2) Fallback to static agent root
         if (staticSrv.serveStaticRequest(req, res)) return;
         res.writeHead(404); return res.end('Not Found');
     }
+}
+
+const server = http.createServer((req, res) => {
+    processRequest(req, res).catch(err => {
+        appendLog('request_error', { error: err?.message || String(err) });
+        if (!res.headersSent) {
+            try { sendJson(res, 500, { ok: false, error: 'internal_error' }); } catch (_) {
+                try { res.end(); } catch (_) { }
+            }
+        } else {
+            try { res.end(); } catch (_) { }
+        }
+    });
 });
 
 const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;

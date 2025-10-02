@@ -4,6 +4,7 @@ import { PLOINKY_DIR } from './config.js';
 import * as reposSvc from './repos.js';
 import { getAgentsRegistry } from './docker.js';
 import { findAgent } from './utils.js';
+import { gatherSsoStatus } from './sso.js';
 
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 const PREDEFINED_REPOS = reposSvc.getPredefinedRepos();
@@ -191,6 +192,29 @@ export function listRoutes() {
 
 export function statusWorkspace() {
     console.log('Workspace status:');
+    const ssoStatus = gatherSsoStatus();
+    if (!ssoStatus.config.enabled) {
+        console.log('- SSO: disabled');
+    } else {
+        const baseUrl = ssoStatus.config.baseUrl || ssoStatus.secrets.baseUrl || '(unset)';
+        const clientSecretState = ssoStatus.secrets.clientSecret ? '[set]' : '(unset)';
+        const keycloakShort = ssoStatus.config.keycloakAgentShort || ssoStatus.config.keycloakAgent;
+        const keycloakLabel = keycloakShort && keycloakShort !== ssoStatus.config.keycloakAgent
+            ? `${ssoStatus.config.keycloakAgent} (${keycloakShort})`
+            : ssoStatus.config.keycloakAgent;
+        console.log('- SSO: enabled');
+        console.log(`    Keycloak agent: ${keycloakLabel}${ssoStatus.keycloakHostPort ? ` (host port ${ssoStatus.keycloakHostPort})` : ''}`);
+        const postgresShort = ssoStatus.config.postgresAgentShort || ssoStatus.config.postgresAgent;
+        const postgresLabel = postgresShort && postgresShort !== ssoStatus.config.postgresAgent
+            ? `${ssoStatus.config.postgresAgent} (${postgresShort})`
+            : ssoStatus.config.postgresAgent;
+        console.log(`    Realm / Client: ${ssoStatus.config.realm} / ${ssoStatus.config.clientId}`);
+        console.log(`    Postgres agent: ${postgresLabel}`);
+        console.log(`    Base URL: ${baseUrl}`);
+        console.log(`    Redirect URI: ${ssoStatus.config.redirectUri || ssoStatus.secrets.redirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/auth/callback`}`);
+        console.log(`    Logout redirect: ${ssoStatus.config.logoutRedirectUri || ssoStatus.secrets.logoutRedirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/`}`);
+        console.log(`    Client secret: ${clientSecretState}`);
+    }
     listAgents();
     listCurrentAgents();
 }

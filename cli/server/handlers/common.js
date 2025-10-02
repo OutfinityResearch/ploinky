@@ -89,9 +89,24 @@ function readJsonBody(req) {
   });
 }
 
+function appendSetCookie(res, cookie) {
+  if (!cookie) return;
+  const existing = res.getHeader('Set-Cookie');
+  if (!existing) {
+    res.setHeader('Set-Cookie', cookie);
+    return;
+  }
+  if (Array.isArray(existing)) {
+    res.setHeader('Set-Cookie', [...existing, cookie]);
+  } else {
+    res.setHeader('Set-Cookie', [existing, cookie]);
+  }
+}
+
 export {
   loadToken,
   parseCookies,
   buildCookie,
-  readJsonBody
+  readJsonBody,
+  appendSetCookie
 };

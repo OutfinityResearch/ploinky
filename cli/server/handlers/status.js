@@ -119,7 +119,7 @@ function handleStatus(req, res) {
       '__AGENT_NAME__': 'Status',
       '__CONTAINER_NAME__': '-',
       '__RUNTIME__': 'local',
-      '__REQUIRES_AUTH__': 'false',
+      '__REQUIRES_AUTH__': 'true',
       '__BASE_PATH__': `/${appName}`
     });
     if (html) {

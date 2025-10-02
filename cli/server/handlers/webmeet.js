@@ -5,7 +5,7 @@ import http from 'http';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
-import { loadToken, parseCookies, buildCookie, readJsonBody } from './common.js';
+import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie } from './common.js';
 import * as staticSrv from '../static/index.js';
 import * as secretVars from '../../services/secretVars.js';
 import { findAgent } from '../../services/utils.js';
@@ -15,7 +15,25 @@ const __dirname = path.dirname(__filename);
 
 const appName = 'webmeet';
 const fallbackAppPath = path.join(__dirname, '../', appName);
+const SID_COOKIE = `${appName}_sid`;
 const ROUTING_FILE = path.resolve('.ploinky/routing.json');
+
+function buildIdentityHeaders(req) {
+    if (!req || !req.user) return {};
+    const headers = {};
+    const user = req.user || {};
+    if (user.id) headers['X-Ploinky-User-Id'] = String(user.id);
+    const name = user.username || user.email || user.name || user.id;
+    if (name) headers['X-Ploinky-User'] = String(name);
+    if (user.email) headers['X-Ploinky-User-Email'] = String(user.email);
+    if (Array.isArray(user.roles) && user.roles.length) {
+        headers['X-Ploinky-User-Roles'] = user.roles.join(',');
+    }
+    if (req.session?.tokens?.accessToken) {
+        headers['Authorization'] = `Bearer ${req.session.tokens.accessToken}`;
+    }
+    return headers;
+}
 
 function loadRoutes() {
     try {
@@ -72,7 +90,7 @@ function resolveAgentRoute(rawName, routes) {
     return { agentName: rawName, route: null };
 }
 
-function callAgent(agentName, data) {
+function callAgent(agentName, data, headers = {}) {
     return new Promise((resolve, reject) => {
         const routes = loadRoutes();
         const { agentName: effectiveName, route } = resolveAgentRoute(agentName, routes);
@@ -87,7 +105,8 @@ function callAgent(agentName, data) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Content-Length': body.length
+                'Content-Length': body.length,
+                ...headers
             }
         }, resp => {
             const chunks = [];
@@ -121,25 +140,30 @@ const DEFAULT_DEMO_SCRIPT = [
 // --- Auth ---
 function getSession(req, appState) {
     const cookies = parseCookies(req);
-    const sid = cookies.get(`${appName}_sid`);
+    const sid = cookies.get(SID_COOKIE);
     return (sid && appState.sessions.has(sid)) ? sid : null;
 }
 
 function authorized(req, appState) {
+    if (req.user) return true;
     return !!getSession(req, appState);
 }
 
 async function handleAuth(req, res, appConfig, appState) {
+    if (req.user) {
+        res.writeHead(400);
+        res.end('SSO is enabled; legacy auth disabled.');
+        return;
+    }
     try {
         const token = loadToken(appName);
         const body = await readJsonBody(req);
         if (body && body.token && String(body.token).trim() === token) {
             const sid = crypto.randomBytes(16).toString('hex');
             appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
-            // Save both session and token in cookies for persistence
             const cookies = [
-                buildCookie(`${appName}_sid`, sid, req, `/${appName}`),
-                buildCookie(`${appName}_token`, token, req, `/${appName}`, { maxAge: 7 * 24 * 60 * 60 }) // 7 days
+                buildCookie(SID_COOKIE, sid, req, `/${appName}`),
+                buildCookie(`${appName}_token`, token, req, `/${appName}`, { maxAge: 7 * 24 * 60 * 60 })
             ];
             res.writeHead(200, {
                 'Content-Type': 'application/json',
@@ -204,6 +228,23 @@ function addChatMessage({ appState, fromTabId, text, type = 'text', role = 'user
 
 // --- Main Handler ---
 
+function ensureAppSession(req, res, appState) {
+    const cookies = parseCookies(req);
+    let sid = cookies.get(SID_COOKIE);
+    if (!sid) {
+        sid = crypto.randomBytes(16).toString('hex');
+        appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
+        appendSetCookie(res, buildCookie(SID_COOKIE, sid, req, `/${appName}`));
+    } else if (!appState.sessions.has(sid)) {
+        appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
+    }
+    if (!cookies.has(SID_COOKIE)) {
+        const existing = req.headers.cookie || '';
+        req.headers.cookie = existing ? `${existing}; ${SID_COOKIE}=${sid}` : `${SID_COOKIE}=${sid}`;
+    }
+    return sid;
+}
+
 function handleWebMeet(req, res, appConfig, appState) {
     const parsedUrl = parse(req.url, true);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
@@ -221,22 +262,27 @@ function handleWebMeet(req, res, appConfig, appState) {
         if (assetPath && staticSrv.sendFile(res, assetPath)) return;
     }
 
-    // Check if user has valid token in cookie
     const cookies = parseCookies(req);
-    const savedToken = cookies.get(`${appName}_token`);
-    const currentToken = loadToken(appName);
 
-    // If saved token matches current token and no session, create a new session
-    if (savedToken && savedToken === currentToken && !authorized(req, appState)) {
-        const sid = crypto.randomBytes(16).toString('hex');
-        appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
-        // Set session cookie and continue
-        res.setHeader('Set-Cookie', buildCookie(`${appName}_sid`, sid, req, `/${appName}`));
-        // Mark as authorized for this request
-        req.headers.cookie = `${req.headers.cookie || ''}; ${appName}_sid=${sid}`;
+    if (req.user) {
+        ensureAppSession(req, res, appState);
+    } else {
+        const savedToken = cookies.get(`${appName}_token`);
+        const currentToken = loadToken(appName);
+
+        if (savedToken && savedToken === currentToken && !authorized(req, appState)) {
+            const sid = crypto.randomBytes(16).toString('hex');
+            appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
+            appendSetCookie(res, buildCookie(SID_COOKIE, sid, req, `/${appName}`));
+            req.headers.cookie = `${req.headers.cookie || ''}; ${appName}_sid=${sid}`;
+        }
     }
 
     if (!authorized(req, appState)) {
+        if (req.user) {
+            res.writeHead(403);
+            return res.end('Access forbidden');
+        }
         const loginHtml = (() => {
             const content = staticSrv.resolveFirstAvailable(appName, fallbackAppPath, ['login.html', 'index.html']);
             if (!content) return null;
@@ -360,7 +406,7 @@ function handleWebMeet(req, res, appConfig, appState) {
                                     text: messageText,
                                     tabId
                                 };
-                                const result = await callAgent(agentName, agentData);
+                                const result = await callAgent(agentName, agentData, buildIdentityHeaders(req));
                                 if (result && result.status >= 200 && result.status < 300) {
                                     const message = extractAgentMessage(result.parsed);
                                     if (message) {
@@ -391,7 +437,7 @@ function handleWebMeet(req, res, appConfig, appState) {
                     if (agentName) {
                         try {
                             const agentData = { from, to, command, text, tabId };
-                            await callAgent(agentName, agentData);
+                            await callAgent(agentName, agentData, buildIdentityHeaders(req));
                         } catch (err) {
                             console.error('Failed to notify moderator:', err);
                         }
@@ -410,7 +456,7 @@ function handleWebMeet(req, res, appConfig, appState) {
                     if (agentName) {
                         try {
                             const agentData = { from, to, command, text, tabId };
-                            await callAgent(agentName, agentData);
+                            await callAgent(agentName, agentData, buildIdentityHeaders(req));
                         } catch (err) {
                             console.error('Failed to notify moderator:', err);
                         }

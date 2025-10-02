@@ -25,6 +25,7 @@ export function showHelp(args = []) {
   webchat [--rotate]             Show or rotate WebChat token and print access URL
   webmeet [moderatorAgent] [--rotate]  Show WebMeet token; --rotate mints a new one
   dashboard [--rotate]           Show or rotate Dashboard token and print access URL
+  sso enable|disable|status      Configure SSO (Keycloak) middleware and secrets
   vars                           List all variable names (no values)
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
@@ -162,6 +163,31 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             syntax: 'dashboard [--rotate]',
             examples: [ 'dashboard', 'dashboard --rotate' ],
             notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
+        },
+        'sso': {
+            description: 'Manage the Keycloak-based SSO middleware.',
+            subcommands: {
+                'enable': {
+                    syntax: 'sso enable [agent] [--url <baseUrl>] [--realm <realm>] [--client-id <id>] [--client-secret <secret>] [--redirect <url>] [--logout-redirect <url>] [--db-agent <agent>]',
+                    description: 'Enable SSO, ensure Keycloak/Postgres agents are registered, and store secrets in .ploinky/.secrets.',
+                    examples: [
+                        'sso enable',
+                        'sso enable --url http://localhost:18080 --realm staging --client-id router-app',
+                        'sso enable my-keycloak --db-agent my-postgres --redirect https://app.local/auth/callback'
+                    ],
+                    notes: 'Defaults: agent=keycloak, db-agent=postgres, realm=ploinky, client-id=ploinky-router, base URL deduced from routing when possible. Secrets are saved to .ploinky/.secrets. Ensure the Keycloak/Postgres agents exist (for example, add repo sso-agent; enable agent keycloak) before restarting the workspace.'
+                },
+                'disable': {
+                    syntax: 'sso disable',
+                    description: 'Disable SSO middleware and revert the router to legacy token-based auth. Does not delete stored secrets.',
+                    examples: [ 'sso disable' ]
+                },
+                'status': {
+                    syntax: 'sso status',
+                    description: 'Show current SSO configuration, stored secrets, and detected ports.',
+                    examples: [ 'sso status' ]
+                }
+            }
         },
         
         

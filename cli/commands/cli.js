@@ -15,6 +15,7 @@ import { startWorkspace, runCli, runShell, refreshAgent } from '../services/work
 import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/routerEnv.js';
 import * as dockerSvc from '../services/docker.js';
 import * as workspaceSvc from '../services/workspace.js';
+import { getSsoConfig, setSsoConfig, disableSsoConfig, gatherSsoStatus, getRouterPort as getSsoRouterPort, getAgentHostPort as getSsoAgentHostPort, normalizeBaseUrl as normalizeSsoBaseUrl, extractShortAgentName as extractSsoShortName } from '../services/sso.js';
 import ClientCommands from './client.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -232,6 +233,195 @@ async function destroyAll() {
     catch (e) { console.error('Destroy failed:', e.message); }
 }
 
+function parseFlagArgs(args = []) {
+    const flags = {};
+    const rest = [];
+    for (let i = 0; i < args.length; i += 1) {
+        const token = args[i];
+        if (!token || !String(token).startsWith('--')) {
+            rest.push(token);
+            continue;
+        }
+        const eqIdx = token.indexOf('=');
+        let key = token.slice(2);
+        let value;
+        if (eqIdx !== -1) {
+            key = token.slice(2, eqIdx);
+            value = token.slice(eqIdx + 1);
+        } else if (i + 1 < args.length && !String(args[i + 1]).startsWith('--')) {
+            value = args[i + 1];
+            i += 1;
+        } else {
+            value = 'true';
+        }
+        if (value === 'true') value = true;
+        else if (value === 'false') value = false;
+        flags[key] = value;
+    }
+    return { flags, rest };
+}
+
+function randomSecret(bytes = 16) {
+    return crypto.randomBytes(bytes).toString('hex');
+}
+
+function ensureSecretValue(name, generator) {
+    const existing = envSvc.resolveVarValue(name);
+    if (existing && String(existing).trim()) return existing;
+    const value = typeof generator === 'function' ? generator() : generator;
+    envSvc.setEnvVar(name, value);
+    return value;
+}
+
+function printSsoDetails(status, { includeSecrets = false } = {}) {
+    const { config, secrets, routerPort, keycloakHostPort } = status;
+    if (!config.enabled) {
+        console.log('SSO: disabled');
+        return;
+    }
+    const baseUrl = config.baseUrl || secrets.baseUrl || '(unset)';
+    const keycloakShort = config.keycloakAgentShort || extractSsoShortName(config.keycloakAgent);
+    const postgresShort = config.postgresAgentShort || extractSsoShortName(config.postgresAgent);
+    const keycloakLabel = keycloakShort && keycloakShort !== config.keycloakAgent
+        ? `${config.keycloakAgent} (${keycloakShort})`
+        : config.keycloakAgent;
+    const postgresLabel = postgresShort && postgresShort !== config.postgresAgent
+        ? `${config.postgresAgent} (${postgresShort})`
+        : config.postgresAgent;
+    console.log('SSO: enabled');
+    console.log(`  Base URL: ${baseUrl}`);
+    console.log(`  Realm: ${config.realm}`);
+    console.log(`  Client ID: ${config.clientId}`);
+    console.log(`  Scope: ${config.scope}`);
+    console.log(`  Keycloak agent: ${keycloakLabel} ${keycloakHostPort ? `(host port ${keycloakHostPort})` : ''}`.trim());
+    console.log(`  Postgres agent: ${postgresLabel}`);
+    console.log(`  Redirect URI: ${config.redirectUri || secrets.redirectUri || `http://127.0.0.1:${routerPort}/auth/callback`}`);
+    console.log(`  Logout redirect: ${config.logoutRedirectUri || secrets.logoutRedirectUri || `http://127.0.0.1:${routerPort}/`}`);
+    if (includeSecrets) {
+        const secretDisplay = secrets.clientSecret ? '[set]' : '(unset)';
+        console.log(`  Client secret: ${secretDisplay}`);
+        const adminUser = envSvc.resolveVarValue('KEYCLOAK_ADMIN') || '(unset)';
+        const adminSecret = envSvc.resolveVarValue('KEYCLOAK_ADMIN_PASSWORD') ? '[set]' : '(unset)';
+        console.log(`  Admin user: ${adminUser}`);
+        console.log(`  Admin password: ${adminSecret}`);
+    }
+}
+
+function parseSsoAgents(rest, flags) {
+    let keycloakAgentRaw = flags.agent ?? flags.keycloak ?? rest[0] ?? 'keycloak';
+    if (typeof keycloakAgentRaw === 'boolean') {
+        keycloakAgentRaw = keycloakAgentRaw ? 'keycloak' : '';
+    }
+    if (typeof keycloakAgentRaw !== 'string' || !keycloakAgentRaw.trim()) {
+        keycloakAgentRaw = rest[0];
+    }
+    if (typeof keycloakAgentRaw !== 'string' || !keycloakAgentRaw.trim()) {
+        keycloakAgentRaw = 'keycloak';
+    }
+    let postgresAgentRaw = flags['db-agent'] ?? flags.postgres ?? rest[1] ?? 'postgres';
+    if (typeof postgresAgentRaw === 'boolean') {
+        postgresAgentRaw = postgresAgentRaw ? 'postgres' : '';
+    }
+    if (typeof postgresAgentRaw !== 'string' || !postgresAgentRaw.trim()) {
+        postgresAgentRaw = 'postgres';
+    }
+    const keycloakAgent = String(keycloakAgentRaw).trim();
+    const postgresAgent = String(postgresAgentRaw).trim();
+    return { keycloakAgent, postgresAgent };
+}
+
+async function enableSsoCommand(args = []) {
+    const { flags, rest } = parseFlagArgs(args);
+    const { keycloakAgent, postgresAgent } = parseSsoAgents(rest, flags);
+
+    const routerPort = getSsoRouterPort();
+    let baseUrl = flags.url || flags.base || flags['keycloak-url'] || '';
+    if (!baseUrl) {
+        const hostPort = getSsoAgentHostPort(keycloakAgent);
+        if (hostPort) {
+            baseUrl = `http://127.0.0.1:${hostPort}`;
+        }
+    }
+    if (!baseUrl) {
+        baseUrl = 'http://127.0.0.1:18080';
+        console.log('⚠ Could not detect Keycloak host port. Using placeholder http://127.0.0.1:18080. Override with --url once the agent is running.');
+    }
+    baseUrl = normalizeSsoBaseUrl(baseUrl);
+
+    const realm = flags.realm || 'ploinky';
+    const clientId = flags['client-id'] || 'ploinky-router';
+    const clientSecret = flags['client-secret'];
+    const scope = flags.scope || 'openid profile email';
+    const redirectUri = flags.redirect || flags['redirect-uri'] || `http://127.0.0.1:${routerPort}/auth/callback`;
+    const logoutRedirectUri = flags['logout-redirect'] || flags['post-logout'] || `http://127.0.0.1:${routerPort}/`;
+
+    envSvc.setEnvVar('KEYCLOAK_URL', baseUrl);
+    envSvc.setEnvVar('KEYCLOAK_REALM', realm);
+    envSvc.setEnvVar('KEYCLOAK_CLIENT_ID', clientId);
+    envSvc.setEnvVar('KEYCLOAK_SCOPE', scope);
+    envSvc.setEnvVar('KEYCLOAK_REDIRECT_URI', redirectUri);
+    envSvc.setEnvVar('KEYCLOAK_LOGOUT_REDIRECT_URI', logoutRedirectUri);
+    if (typeof clientSecret === 'string' && clientSecret.length) {
+        envSvc.setEnvVar('KEYCLOAK_CLIENT_SECRET', clientSecret);
+    }
+
+    ensureSecretValue('POSTGRES_DB', 'keycloak');
+    ensureSecretValue('POSTGRES_USER', 'keycloak');
+    ensureSecretValue('POSTGRES_PASSWORD', () => randomSecret(16));
+    ensureSecretValue('KEYCLOAK_ADMIN', 'admin');
+    ensureSecretValue('KEYCLOAK_ADMIN_PASSWORD', () => randomSecret(16));
+
+    setSsoConfig({
+        enabled: true,
+        keycloakAgent,
+        postgresAgent,
+        baseUrl,
+        realm,
+        clientId,
+        redirectUri,
+        logoutRedirectUri,
+        scope
+    });
+
+    console.log('✓ SSO configuration saved.');
+    console.log(`  Keycloak agent: ${keycloakAgent}`);
+    console.log(`  Postgres agent: ${postgresAgent}`);
+    console.log(`  Base URL: ${baseUrl}`);
+    console.log(`  Realm: ${realm}`);
+    console.log(`  Client ID: ${clientId}`);
+    console.log(`  Redirect URI: ${redirectUri}`);
+
+    console.log('Remember to clone/enable the Keycloak and Postgres agents (e.g. add repo sso-agent; enable agent keycloak) before restarting the workspace.');
+    printSsoDetails(gatherSsoStatus(), { includeSecrets: true });
+}
+
+function disableSsoCommand() {
+    disableSsoConfig();
+    console.log('✓ SSO disabled. Restart the workspace to return to token-based auth.');
+}
+
+function showSsoStatusCommand() {
+    printSsoDetails(gatherSsoStatus(), { includeSecrets: true });
+}
+
+async function handleSsoCommand(options = []) {
+    const subcommand = (options[0] || 'status').toLowerCase();
+    const rest = options.slice(1);
+    if (subcommand === 'enable') {
+        await enableSsoCommand(rest);
+        return;
+    }
+    if (subcommand === 'disable') {
+        disableSsoCommand();
+        return;
+    }
+    if (subcommand === 'status') {
+        showSsoStatusCommand();
+        return;
+    }
+    showHelp(['sso']);
+}
+
 async function handleCommand(args) {
     const [command, ...options] = args;
     switch (command) {
@@ -393,6 +583,9 @@ async function handleCommand(args) {
                 }
             }
             break; }
+        case 'sso':
+            await handleSsoCommand(options);
+            break;
         case 'webtty': {
             const argsList = (options || []).filter(Boolean);
             let shellCandidate = null;
