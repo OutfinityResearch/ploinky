@@ -55,7 +55,7 @@ You can use Ploinky in two ways:
 - `enable agent <name>`: register an agent in `.ploinky/agents` (creates a minimal manifest if missing).
 - `start <staticAgent> <port>`: first run requires a static agent and port; subsequent runs can just use `start`.
   - Ensures all enabled agents are running and launches the Router on `<port>`.
-  - Serves static files from the repository of `<staticAgent>`; non `/apis/...` paths are static.
+  - Serves static files from the repository of `<staticAgent>`; non `/mcps/...` paths are static.
 - `console <name> <password> [port]`: start the WebConsole (TTY + Chat) for an agent.
 - `cli <name> [args...]`: run the agent’s CLI command interactively.
 - `shell <name>`: open interactive `/bin/sh` in the agent container.

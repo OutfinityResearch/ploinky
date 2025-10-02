@@ -182,11 +182,11 @@ Let's say your `database-agent` exposes an API, and you want to call it from a f
 
     ```javascript
     // In your frontend code (e.g., app.js)
-    fetch('/apis/database-agent/users')
+    fetch('/mcps/database-agent/users')
       .then(response => response.json())
       .then(data => console.log(data));
     ```
-    Ploinky's `RoutingServer` automatically knows that requests to `/apis/database-agent/...` should be forwarded to the `database-agent` container. This allows you to build a complete application by composing independent agents.
+    Ploinky's `RoutingServer` automatically knows that requests to `/mcps/database-agent/...` should be forwarded to the `database-agent` container. This allows you to build a complete application by composing independent agents.
 
 ---
 

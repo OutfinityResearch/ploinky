@@ -211,9 +211,7 @@ cli MyAgent</code></pre>
 
 # server.js
 const express = require('express');
-const app = express();
-
-app.get('/api/status', (req, res) => {
+app.get('/mcp/status', (req, res) => {
     res.json({ status: 'running' });
 });
 
@@ -223,7 +221,7 @@ app.listen(7000);</code></pre>
                         <p>If no <code>agent</code> command is specified, Ploinky uses the default supervisor:</p>
                         <pre><code># /Agent/AgentServer.mjs provides:
 - HTTP server on port 7000
-- Health check at /api/status
+- Health check at /mcp/status
 - Process management
 - Automatic restarts</code></pre>
                     </div>
@@ -281,11 +279,10 @@ process.env.DATABASE_URL</code></pre>
                         <pre><code>// server.js
 const http = require('http');
 
-const server = http.createServer((req, res) => {
-    if (req.url === '/api/status') {
+if (req.url === '/mcp/status') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok' }));
-    } else if (req.url.startsWith('/api/')) {
+    } else if (req.url.startsWith('/mcp/')) {
         // Handle API routes
         const path = req.url.substring(5);
         res.writeHead(200);
@@ -307,8 +304,7 @@ const app = express();
 
 app.use(express.json());
 
-// Health check
-app.get('/api/status', (req, res) => {
+app.get('/mcp/status', (req, res) => {
     res.json({ 
         status: 'healthy',
         agent: process.env.AGENT_NAME,
@@ -317,7 +313,7 @@ app.get('/api/status', (req, res) => {
 });
 
 // Custom endpoints
-app.post('/api/process', (req, res) => {
+app.post('/mcp/process', (req, res) => {
     const { data } = req.body;
     // Process data
     res.json({ 
@@ -335,7 +331,7 @@ import os
 
 app = Flask(__name__)
 
-@app.route('/api/status')
+@app.route('/mcp/status')
 def status():
     return jsonify({
         'status': 'healthy',
@@ -343,7 +339,7 @@ def status():
         'language': 'python'
     })
 
-@app.route('/api/process', methods=['POST'])
+@app.route('/mcp/process', methods=['POST'])
 def process():
     data = request.json
     return jsonify({
@@ -357,8 +353,8 @@ if __name__ == '__main__':
                         <h3>Accessing Your API</h3>
                         <p>Once deployed, access your agent's API through the routing server:</p>
                         <pre><code># Local development
-http://localhost:8088/apis/MyAgent/status
-http://localhost:8088/apis/MyAgent/process
+http://localhost:8088/mcps/MyAgent/status
+http://localhost:8088/mcps/MyAgent/process
 
 # From client
 client status MyAgent
@@ -488,7 +484,7 @@ client task MyAgent</code></pre>
                             <tr>
                                 <td>API returns 404</td>
                                 <td>Routing misconfiguration</td>
-                                <td>Check path starts with /api/</td>
+                                <td>Check path starts with /mcp/</td>
                             </tr>
                         </table>
 
@@ -499,7 +495,7 @@ status</code></pre>
                         <h3>Health Checks</h3>
                         <p>Implement health endpoints for monitoring:</p>
                         <pre><code>// Health check endpoint
-app.get('/api/status', (req, res) => {
+app.get('/mcp/status', (req, res) => {
     const health = {
         status: 'healthy',
         checks: {
@@ -547,7 +543,7 @@ const main = spawn('node', ['app.js']);
 
 // Health check server
 http.createServer((req, res) => {
-    if (req.url === '/api/status') {
+    if (req.url === '/mcp/status') {
         res.writeHead(200);
         res.end(JSON.stringify({
             status: main.exitCode === null ? 'running' : 'stopped',

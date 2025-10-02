@@ -438,16 +438,58 @@ observability.js    // Monitoring views</code></pre>
                         <h2>Agent MCP Bridge</h2>
                         <p>AgentServer (Agent/server/AgentServer.mjs) expune capabilități prin <strong>Model Context Protocol (MCP)</strong> folosind transport <em>Streamable HTTP</em> la ruta <code>/mcp</code> pe portul containerului (implicit 7000).</p>
 
-                        <h3>Comunicare Router ↔ Agent</h3>
+                        <h3>Router ↔ Agent Communication</h3>
                         <ul style="margin-left: 2rem;">
-                            <li><strong>Abstractizare în RouterServer:</strong> RouterServer folosește un modul <code>AgentClient</code> (cli/server/AgentClient.js) ca interfață pentru apeluri către agenți.</li>
-                            <li><strong>Protocol MCP:</strong> AgentClient construiește un client MCP cu <code>StreamableHTTPClientTransport</code> către <code>http://127.0.0.1:&lt;hostPort&gt;/mcp</code> și expune metode: <code>listTools()</code>, <code>callTool(name,args)</code>, <code>listResources()</code>, <code>readResource(uri)</code>.</li>
-                            <li><strong>Rute Router:</strong> Cererile către <code>/apis/&lt;agent&gt;</code> sunt mapate la apeluri MCP (ex. <code>methods</code> → <code>listTools</code>, <code>status</code> → resursa <code>health://status</code>, <code>echo</code> → tool-ul <code>echo</code>).</li>
-                            <li><strong>Independență de protocol:</strong> RouterServer nu depinde de detalii MCP; toată logica de transport e încapsulată în AgentClient.</li>
+                            <li><strong>RouterServer abstraction:</strong> RouterServer talks to agents through <code>cli/server/AgentClient.js</code>, which wraps MCP transports.</li>
+                            <li><strong>MCP protocol:</strong> AgentClient builds a <code>StreamableHTTPClientTransport</code> towards <code>http://127.0.0.1:&lt;hostPort&gt;/mcp</code> and exposes <code>listTools()</code>, <code>callTool()</code>, <code>listResources()</code>, and <code>readResource()</code>.</li>
+                            <li><strong>Unified routing:</strong> Requests hitting <code>/mcp</code> carry commands such as <code>list_tools</code>, <code>list_resources</code>, or <code>tool</code>. RouterServer fans these calls out to every registered MCP endpoint and aggregates the replies.</li>
+                            <li><strong>Per-agent routes:</strong> Legacy paths like <code>/mcps/&lt;agent&gt;</code> remain available for direct calls when needed.</li>
+                            <li><strong>Transport independence:</strong> RouterServer stays agnostic of protocol details; AgentClient encapsulates the MCP implementation.</li>
                         </ul>
 
-                        <h3>Tool-uri și Resurse</h3>
-                        <p>AgentServer înregistrează tool-uri și resurse demo prin <code>registerTool</code> și <code>registerResource</code> în <code>Agent/server/commandsConfig.mjs</code> (ex.: <code>echo</code>, <code>list_things</code>, <code>create_directories</code>, <code>search_in_array</code>, resursa <code>demo-list://{category}</code> și <code>health://status</code>).</p>
+                        <h3>Tools and Resources</h3>
+                        <p>Agents declare their MCP surface through a JSON file committed alongside the agent source code: <code>.ploinky/repos/&lt;repo&gt;/&lt;agent&gt;/mcp-config.json</code>. When the CLI boots an agent container it copies this file to <code>/tmp/ploinky/mcp-config.json</code> (also keeping <code>/code/mcp-config.json</code> for reference). The file can expose tools, resources, and prompts, and each tool is executed by spawning a shell command. AgentServer does not register anything if the configuration file is missing.</p>
+                        <pre><code>{
+  "tools": [
+    {
+      "name": "list_things",
+      "title": "List Things",
+      "description": "Enumerate items in a category",
+      "command": "node scripts/list-things.js",
+      "input": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "fruits | animals | colors"
+          }
+        },
+        "required": ["category"],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "resources": [
+    {
+      "name": "health",
+      "uri": "health://status",
+      "description": "Service health state",
+      "mimeType": "application/json",
+      "command": "node scripts/health.js"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "summarize",
+      "description": "Short summary",
+      "messages": [
+        { "role": "system", "content": "You are a concise analyst." },
+        { "role": "user", "content": "${input}" }
+      ]
+    }
+  ]
+}</code></pre>
+                        <p>AgentServer pipes a JSON payload to each command via stdin. Tool invocations receive <code>{ tool, input, metadata }</code>; resources receive <code>{ resource, uri, params }</code>. Command stdout is forwarded to the MCP response, while non-zero exit codes surface as MCP errors.</p>
                     </div>
 
                     <div class="doc-section">

@@ -1,5 +1,5 @@
 # Vision
-Ploinky is a lightweight multi-agent runtime that turns ordinary console programs into collaborative services. Every agent runs inside its own Docker/Podman container with the project workspace mounted in, while a local RoutingServer fronts the fleet with static asset hosting, token-protected web surfaces, and `/apis/<agent>` HTTP proxies. The CLI keeps configuration in the `.ploinky` directory, so workspaces stay portable and reproducible. Although a hosted cloud is on the roadmap, the current focus is empowering local builders to compose agents, route traffic between them, and ship bespoke tooling without leaving their machine.
+Ploinky is a lightweight multi-agent runtime that turns ordinary console programs into collaborative services. Every agent runs inside its own Docker/Podman container with the project workspace mounted in, while a local RoutingServer fronts the fleet with static asset hosting, token-protected web surfaces, and `/mcps/<agent>` HTTP proxies. The CLI keeps configuration in the `.ploinky` directory, so workspaces stay portable and reproducible. Although a hosted cloud is on the roadmap, the current focus is empowering local builders to compose agents, route traffic between them, and ship bespoke tooling without leaving their machine.
 
 ## User Stories
 
@@ -67,7 +67,7 @@ Ploinky is a lightweight multi-agent runtime that turns ordinary console program
 4. Restart or refresh the agent so the new environment variable is available inside the container via `process.env` (Node) or `os.getenv` (Python).
 
 ### Story 8 – Start the Workspace Router and Static App
-**User story:** As an operator, I want to serve my agents through the Ploinky router so that web apps and /apis routes become available.
+**User story:** As an operator, I want to serve my agents through the Ploinky router so that web apps and /mcps routes become available.
 
 **How to do it in Ploinky**
 1. Make sure the desired static agent is enabled; this agent contributes static assets and optionally depends on additional agents via its `manifest.enable` list.
@@ -80,7 +80,7 @@ Ploinky is a lightweight multi-agent runtime that turns ordinary console program
 
 **How to do it in Ploinky**
 1. Run `status` at any time; it prints workspace identity, static agent, interface token hints, router PID status, and each enabled agent with container info.
-2. Inspect the `api` URL shown for running agents (e.g., `http://127.0.0.1:<hostPort>/api`) to confirm reverse proxies are active.
+2. Inspect the `api` URL shown for running agents (e.g., `http://127.0.0.1:<hostPort>/mcp`) to confirm reverse proxies are active.
 3. Use the command output to identify stopped containers, exit codes, required ports, or missing tokens before troubleshooting further.
 
 ### Story 10 – Rotate Web Interface Tokens and Configure WebMeet
@@ -115,7 +115,7 @@ Ploinky is a lightweight multi-agent runtime that turns ordinary console program
 1. Use `client methods <agent>` to send `{command:"methods"}` through the router and list exposed capabilities (if implemented by the agent).
 2. Run `client status <agent>` to check the agent’s health response and HTTP code.
 3. Send structured payloads with `client task <agent> -key value ...`; omit the agent name to target the static agent configured via `start`.
-4. Inspect the JSON response printed to the terminal; the command uses `/apis/<agent>` on the router at the current port recorded in `.ploinky/routing.json`.
+4. Inspect the JSON response printed to the terminal; the command uses `/mcps/<agent>` on the router at the current port recorded in `.ploinky/routing.json`.
 
 ### Story 14 – Manage Agent and Router Lifecycles
 **User story:** As an operator, I want to keep containers healthy and reclaim resources when needed.

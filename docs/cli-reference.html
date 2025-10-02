@@ -363,9 +363,9 @@ webchat "python bot.py"        # bind WebChat to a custom command string</code><
                     <div class="doc-section" id="client">
                         <h2>Client Operations</h2>
                         
-                        <h3>client task</h3>
-                        <p>Sends a task to an agent. Parameters are passed as a series of key-value pairs, supporting nested objects, arrays, and quoted strings.</p>
-                        <pre><code>client task &lt;agent&gt; [parameters...]</code></pre>
+                        <h3>client tool</h3>
+                        <p>Invoke any MCP tool exposed by your agents. RouterServer aggregates every registered MCP endpoint and routes the call to the agent that implements the requested tool.</p>
+                        <pre><code>client tool &lt;toolName&gt; [--agent &lt;agent&gt;] [--parameters &lt;params&gt; | -p &lt;params&gt;] [-key value ...]</code></pre>
                         
                         <h4>Arguments</h4>
                         <table class="command-table">
@@ -374,40 +374,56 @@ webchat "python bot.py"        # bind WebChat to a custom command string</code><
                                 <th>Description</th>
                             </tr>
                             <tr>
-                                <td><code>&lt;agent&gt;</code></td>
-                                <td>The name of the agent to send the task to.</td>
+                                <td><code>&lt;toolName&gt;</code></td>
+                                <td>Name of the MCP tool to execute. Must be unique across agents unless <code>--agent</code> is provided.</td>
                             </tr>
                             <tr>
-                                <td><code>[parameters...]</code></td>
-                                <td>
-                                    A space-separated list of parameters. Each parameter is a flag starting with <code>-</code> followed by its value.
-                                    <ul style="margin-left: 1rem; margin-top: 0.5rem;">
-                                        <li><strong>Simple values:</strong> <code>-key value</code></li>
-                                        <li><strong>Nested objects:</strong> <code>-object.key value</code></li>
-                                        <li><strong>Arrays:</strong> <code>-array "[item1 item2 'item with spaces']"</code></li>
-                                        <li><strong>Quoted values:</strong> <code>-key "value with spaces"</code></li>
-                                    </ul>
-                                </td>
+                                <td><code>[--agent &lt;agent&gt;]</code></td>
+                                <td>Optional agent to target when multiple agents expose the same tool.</td>
+                            </tr>
+                            <tr>
+                                <td><code>[--parameters &lt;params&gt; | -p &lt;params&gt;]</code></td>
+                                <td>Comma-separated list parsed into structured values (supports nested keys and arrays, e.g., <code>user.name=Jane,hobbies[]=read,write</code>).</td>
+                            </tr>
+                            <tr>
+                                <td><code>[-key value ...]</code></td>
+                                <td>Additional flag-style parameters appended individually. Flags without a value become booleans.</td>
                             </tr>
                         </table>
 
                         <h4>Examples</h4>
-                        <pre><code># Simple key-value pairs
-client task simulation -task montyHall -iterations 100
+                        <pre><code># Simple text echo
+client tool echo -text "hello from cli"
 
-# Complex data with nested objects and arrays
-client task myAgent -user.name "John Doe" -user.age 30 -permissions "[read write 'special access']"
+# Disambiguate when multiple agents share a tool name
+client tool plan --agent demo -p steps[]=research,build,ship
 
-# A mix of different types
-client task anotherAgent -task process -config.level high -priority 1 -tags "[alpha beta]"
+# Mix comma parameters with flag-style overrides
+client tool process -p "config.level=high,filters[]=active" --dry-run
 </code></pre>
 
-                        <h3>client methods</h3>
-                        <p>List available methods for an agent (if supported).</p>
-                        <pre><code>client methods &lt;agent&gt;</code></pre>
+                        <h3>client list tools</h3>
+                        <p>List every MCP tool exposed by the agents managed by the router. The output is formatted as a readable bullet list.</p>
+                        <pre><code>client list tools</code></pre>
+                        <div class="alert alert-info">
+                            Example output:
+<pre style="margin-top: 0.5rem;"><code>- [demo] echo - Echo back provided text
+- [demo] list_things - List example items for a given category
+- [simulator] echo - Echo back provided text</code></pre>
+                            <p>If one of the agents fails to respond, the command prints a <strong>Warnings</strong> section listing the affected agents.</p>
+                        </div>
+
+                        <h3>client list resources</h3>
+                        <p>List every MCP resource (e.g., <code>health://status</code>) exposed by registered agents.</p>
+                        <pre><code>client list resources</code></pre>
+                        <div class="alert alert-info">
+                            Example output:
+<pre style="margin-top: 0.5rem;"><code>- [demo] health://status - Health probe result
+- [simulator] health://status - Health probe result</code></pre>
+                        </div>
 
                         <h3>client status</h3>
-                        <p>Check agent health status.</p>
+                        <p>Check the health status of a specific agent.</p>
                         <pre><code>client status &lt;agent&gt;</code></pre>
                     </div>
 

@@ -83,7 +83,7 @@ function callAgent(agentName, data) {
         const req = http.request({
             hostname: '127.0.0.1',
             port: route.hostPort,
-            path: '/api',
+            path: '/mcp',
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

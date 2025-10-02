@@ -439,8 +439,8 @@ const proxy = httpProxy.createProxyServer({});
 const server = http.createServer((req, res) => {
     const url = req.url;
     
-    // API routing: /apis/{agent}/{path}
-    if (url.startsWith('/apis/')) {
+    // API routing: /mcps/{agent}/{path}
+    if (url.startsWith('/mcps/')) {
         const parts = url.substring(6).split('/');
         const agentName = parts[0];
         const apiPath = '/' + parts.slice(1).join('/');
@@ -448,7 +448,7 @@ const server = http.createServer((req, res) => {
         const route = config.routes[agentName];
         if (route && route.hostPort) {
             // Proxy to agent container
-            req.url = '/api' + apiPath;
+            req.url = '/mcp' + apiPath;
             proxy.web(req, res, {
                 target: `http://localhost:${route.hostPort}`
             });

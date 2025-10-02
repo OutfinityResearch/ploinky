@@ -33,8 +33,9 @@ export function showHelp(args = []) {
 
 
 ▶ CLIENT OPERATIONS
-  client task <agent>            Interactive: type command, then params; sends via RoutingServer
-  client methods <agent>         List methods (if supported)
+  client tool <name>             Invoke any MCP tool exposed by agents via RoutingServer
+  client list tools              Aggregate tools exposed by all agents
+  client list resources          Aggregate resources exposed by all agents
   client status <agent>          One-line status (HTTP code, parsed)
 
   status | restart               Show state | restart enabled agents + Router
@@ -454,11 +455,11 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     description: 'Deploy agent to URL path',
                     params: {
                         '<host>': 'Target hostname',
-                        '<path>': 'URL path (e.g., /api)',
+                        '<path>': 'URL path (e.g., /mcp)',
                         '<agent>': 'Agent name to deploy'
                     },
                     examples: [
-                        'cloud deploy example.com /api MyAPI',
+                        'cloud deploy example.com /mcp MyAPI',
                         'cloud deploy localhost /admin AdminPanel'
                     ],
                     notes: 'Agent will be accessible at http://host/path'
@@ -471,7 +472,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                         '<host>': 'Hostname',
                         '<path>': 'URL path'
                     },
-                    examples: ['cloud undeploy example.com /api']
+                    examples: ['cloud undeploy example.com /mcp']
                 },
                 
                 'deployments': {
@@ -505,16 +506,26 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'client': {
             description: 'Client operations for interacting with deployed agents',
             subcommands: {
-                'methods': {
-                    syntax: 'client methods <agent>',
-                    description: 'List available methods for an agent (if implemented by agent)' ,
-                    params: {
-                        '<agent>': 'Agent name'
-                    },
+                'list': {
+                    syntax: 'client list <tools|resources>',
+                    description: 'Aggregate metadata across all MCP agents managed by the router.',
                     examples: [
-                        'client methods MyAPI',
-                        'client methods DataProcessor'
-                    ]
+                        'client list tools',
+                        'client list resources'
+                    ],
+                    notes: 'Use subcommands for detailed help: help client list tools | help client list resources',
+                    subcommands: {
+                        'tools': {
+                            syntax: 'client list tools',
+                            description: 'List every MCP tool exposed by registered agents. Output is formatted as a readable bullet list grouped by agent.',
+                            notes: 'Each line displays the agent, tool name, optional title, and description. Warnings are shown if any agent fails to respond.'
+                        },
+                        'resources': {
+                            syntax: 'client list resources',
+                            description: 'List every MCP resource exposed by registered agents. Useful for discovering resource URIs such as health endpoints or document catalogs.',
+                            notes: 'Output mirrors the tool listing format, including warnings when agents fail to respond.'
+                        }
+                    }
                 },
                 'status': {
                     syntax: 'client status <agent>',
@@ -527,21 +538,21 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     ],
                     notes: 'Shows state, uptime, resource usage, and recent activity'
                 },
-                'task': {
-                    syntax: 'client task <agent> [--parameters <params> | -p <params>] [-key value...]',
-                    description: 'Sends a task to an agent. Parameters can be passed as a formatted string or as individual key-value pairs.' ,
+                'tool': {
+                    syntax: 'client tool <toolName> [--agent <agent>] [--parameters <params> | -p <params>] [-key value...]',
+                    description: 'Invokes an MCP tool by name. RouterServer routes the call to the agent that exposes the tool.',
                     params: {
-                        '<agent>': 'The name of the agent to send the task to.',
-                        '[--parameters]': 'A comma-separated string of parameters. Aliased as -p.',
-                        '[-key value]': 'Individual parameters passed as key-value pairs.'
+                        '<toolName>': 'Tool to invoke. Must be unique across all agents unless --agent is provided.',
+                        '[--agent <agent>]': 'Optional agent name to disambiguate when multiple agents expose the same tool.',
+                        '[--parameters | -p]': 'Comma-separated key/value list parsed into a JSON object.',
+                        '[-key value]': 'Additional individual parameters appended to the payload.'
                     },
                     examples: [
-                        'client task simulation -task montyHall -iterations 100',
-                        "client task myAgent -p 'user.name=\"John Doe\",user.age=30,permissions[]=read,write'",
-                        "client task anotherAgent -task process -p 'config.level=high' -priority 1",
-                        "client task myAgent -p 'hobbies[],reading,skills[]'"
+                        'client tool echo -text "hello"',
+                        "client tool plan --agent demo -p steps[]=research,build,ship",
+                        "client tool process -a data-agent -p 'config.level=high' -batch 1"
                     ],
-                    notes: 'The --parameters argument supports nested objects (e.g., user.name=John) and arrays (e.g., hobbies[]=reading,coding or hobbies[]). Values with spaces should be quoted.'
+                    notes: 'Flag-style parameters (e.g., --dry-run) are sent as boolean true. Use --agent when the same tool name exists on multiple agents.'
                 },
                 'task-status': {
                     syntax: 'client task-status <agent> <task-id>',
@@ -637,18 +648,51 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             console.log('Available client commands: ' + Object.keys(helpContent.client.subcommands).join(', '));
             return;
         }
-        
+
+        if (subsubtopic && clientCmd.subcommands && clientCmd.subcommands[subsubtopic]) {
+            const deepCmd = clientCmd.subcommands[subsubtopic];
+            console.log(`\n╔═══ HELP: client ${subtopic} ${subsubtopic} ═══╗\n`);
+            console.log(`SYNTAX:  ${deepCmd.syntax}`);
+            console.log(`\nDESCRIPTION:\n  ${deepCmd.description}`);
+
+            if (deepCmd.params) {
+                console.log(`\nPARAMETERS:`);
+                for (const [param, desc] of Object.entries(deepCmd.params)) {
+                    console.log(`  ${param.padEnd(20)} ${desc}`);
+                }
+            }
+
+            if (deepCmd.examples) {
+                console.log(`\nEXAMPLES:`);
+                deepCmd.examples.forEach(ex => console.log(`  ${ex}`));
+            }
+
+            if (deepCmd.notes) {
+                console.log(`\nNOTES:\n  ${deepCmd.notes}`);
+            }
+            console.log();
+            return;
+        }
+
         console.log(`\n╔═══ HELP: client ${subtopic} ═══╗\n`);
         console.log(`SYNTAX:  ${clientCmd.syntax}`);
         console.log(`\nDESCRIPTION:\n  ${clientCmd.description}`);
-        
+
         if (clientCmd.params) {
             console.log(`\nPARAMETERS:`);
             for (const [param, desc] of Object.entries(clientCmd.params)) {
                 console.log(`  ${param.padEnd(20)} ${desc}`);
             }
         }
-        
+
+        if (clientCmd.subcommands) {
+            console.log(`\nSUBCOMMANDS:`);
+            for (const [sub, data] of Object.entries(clientCmd.subcommands)) {
+                console.log(`  ${sub.padEnd(10)} ${data.description || ''}`);
+            }
+            console.log(`\nFor more help: help client ${subtopic} <subcommand>`);
+        }
+
         if (clientCmd.examples) {
             console.log(`\nEXAMPLES:`);
             clientCmd.examples.forEach(ex => console.log(`  ${ex}`));
@@ -670,7 +714,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             console.log(`  ${cmd.padEnd(12)} ${data.description}`);
         }
         console.log('\nFor detailed help: help client <subcommand>');
-        console.log('Example: help client call');
+        console.log('Example: help client tool');
         console.log();
         return;
     }

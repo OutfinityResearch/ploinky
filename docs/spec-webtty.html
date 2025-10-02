@@ -499,22 +499,22 @@ observability.js   // Monitoring views
 
                         <h3>Dashboard API</h3>
                         <pre><code>// Dashboard backend endpoints
-app.get('/api/agents', (req, res) => {
+app.get('/mcp/agents', (req, res) => {
     const agents = workspace.loadAgents();
     res.json(agents);
 });
 
-app.get('/api/status/:agent', async (req, res) => {
+app.get('/mcp/status/:agent', async (req, res) => {
     const status = await getAgentStatus(req.params.agent);
     res.json(status);
 });
 
-app.post('/api/agents/:agent/restart', async (req, res) => {
+app.post('/mcp/agents/:agent/restart', async (req, res) => {
     await restartAgent(req.params.agent);
     res.json({ success: true });
 });
 
-app.get('/api/logs/:service', (req, res) => {
+app.get('/mcp/logs/:service', (req, res) => {
     const logs = readLogs(req.params.service);
     res.json({ logs });
 });</code></pre>

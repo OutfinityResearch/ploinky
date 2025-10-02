@@ -1,5 +1,6 @@
 import { execSync, spawnSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
@@ -47,6 +48,8 @@ function getContainerRuntime() {
 }
 
 const containerRuntime = getContainerRuntime();
+const CONTAINER_CONFIG_DIR = '/tmp/ploinky';
+const CONTAINER_CONFIG_PATH = `${CONTAINER_CONFIG_DIR}/mcp-config.json`;
 
 // Agents registry (AGENTS_FILE): JSON map keyed de numele containerului.
 // Folosit pentru a limita operațiile (ex. destroy) la workspace-ul curent.
@@ -128,6 +131,37 @@ function getSecretsForAgent(manifest) {
     return vars;
 }
 
+function getAgentMcpConfigPath(agentPath) {
+    const candidate = path.join(agentPath, 'mcp-config.json');
+    try {
+        if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+            return candidate;
+        }
+    } catch (_) {}
+    return null;
+}
+
+function syncAgentMcpConfig(containerName, agentPath) {
+    try {
+        const hostConfig = getAgentMcpConfigPath(agentPath);
+        if (!hostConfig) return false;
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-mcp-'));
+        const tmpFile = path.join(tmpDir, 'mcp-config.json');
+        fs.copyFileSync(hostConfig, tmpFile);
+        try {
+            execSync(`${containerRuntime} exec ${containerName} sh -c 'mkdir -p ${CONTAINER_CONFIG_DIR}'`, { stdio: 'ignore' });
+        } catch (err) {
+            debugLog(`syncAgentMcpConfig mkdir failed: ${err?.message || err}`);
+        }
+        execSync(`${containerRuntime} cp "${tmpFile}" ${containerName}:${CONTAINER_CONFIG_PATH}`, { stdio: 'ignore' });
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        return true;
+    } catch (err) {
+        console.warn(`[Ploinky] Failed to sync MCP config to ${containerName}: ${err?.message || err}`);
+        return false;
+    }
+}
+
 function flagsToArgs(flags) {
     // Convert ["-e VAR=val", "-e OTHER=val"] -> ["-e","VAR=val","-e","OTHER=val"] for spawn args
     const out = [];
@@ -148,7 +182,8 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     debugLog(`Checking if container '${containerName}' exists...`);
     if (!containerExists(containerName)) {
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
-        const envVars = getSecretsForAgent(manifest).join(' ');
+        const envVarParts = [...getSecretsForAgent(manifest), `-e PLOINKY_MCP_CONFIG_PATH=${CONTAINER_CONFIG_PATH}`];
+        const envVars = envVarParts.join(' ');
         // Use --mount for podman for better SELinux handling, -v for docker. No --workdir here.
         const mountOption = containerRuntime === 'podman' 
             ? `--mount type=bind,source="${currentDir}",destination="${currentDir}",relabel=shared` 
@@ -383,6 +418,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         try { execSync(startCommand, { stdio: 'inherit' }); }
         catch (e) { console.error('[docker.ensureAgentContainer] start failed:', e.message || e); throw e; }
     }
+    syncAgentMcpConfig(containerName, absAgentPath);
     // Run install on first creation if defined
     try {
         if (createdNew && manifest.install && String(manifest.install).trim()) {
@@ -638,7 +674,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         args.splice(1, 0, '-p', String(p));
     }
     // Inject environment for exposed variables
-    const envFlags = flagsToArgs(buildEnvFlags(manifest));
+    const envStrings = [...buildEnvFlags(manifest), `-e PLOINKY_MCP_CONFIG_PATH=${CONTAINER_CONFIG_PATH}`];
+    const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
     args.push('-e', 'NODE_PATH=/node_modules');
     const entry = agentCmd ? agentCmd : 'sh /Agent/server/AgentServer.sh';
@@ -658,6 +695,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         config: { binds: [ { source: cwd, target: cwd }, { source: agentLibPath, target: '/Agent' }, { source: agentPath, target: '/code' } ], env: Array.from(new Set(declaredEnvNames2)).map(name => ({ name })), ports: [] }
     };
     saveAgentsMap(agents);
+    syncAgentMcpConfig(containerName, path.resolve(agentPath));
     return containerName;
 }
 
@@ -858,7 +896,10 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         try {
             const portMap = execSync(`${runtime} port ${containerName} 7000/tcp`, { stdio: 'pipe' }).toString().trim();
             const hostPort = parseHostPort(portMap);
-            if (hostPort) { return { containerName, hostPort }; }
+            if (hostPort) {
+                syncAgentMcpConfig(containerName, agentPath);
+                return { containerName, hostPort };
+            }
             // No mapping; remove and recreate below
             try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch(_) {}
         } catch (_) {
@@ -907,6 +948,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     } catch (e) {
         console.log(`[install] ${agentName}: ${e?.message||e}`);
     }
+    syncAgentMcpConfig(containerName, agentPath);
     return { containerName, hostPort };
 }
 

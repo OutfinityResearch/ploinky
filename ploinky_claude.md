@@ -292,19 +292,19 @@ p-cli
 #### Orchestration Pattern
 ```javascript
 // In static agent's web app
-fetch('/apis/claude-code/complete', {
+fetch('/mcps/claude-code/complete', {
   method: 'POST',
   body: JSON.stringify({ prompt: "..." })
 });
 
-fetch('/apis/database-tools/query', {
+fetch('/mcps/database-tools/query', {
   method: 'POST',
   body: JSON.stringify({ sql: "..." })
 });
 ```
 
 #### Agent Communication
-- Router handles `/apis/<agent>/*` routing
+- Router handles `/mcps/<agent>/*` routing
 - Agents expose HTTP endpoints on port 7000
 - Standard request/response pattern
 - Supports streaming responses
