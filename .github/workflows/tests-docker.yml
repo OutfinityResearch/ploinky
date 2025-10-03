@@ -29,6 +29,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Add Ploinky CLI to PATH
+        run: echo "PATH=$PATH:${GITHUB_WORKSPACE}/bin" >> $GITHUB_ENV
+
       - name: Run test suite (Docker runtime)
         run: |
           set -o pipefail
