@@ -53,7 +53,13 @@
   themeToggle.onclick = () => { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); };
   setTheme(getTheme());
 
-  (async () => { if (requiresAuth && !(await fetch('whoami').then(r => r.ok).catch(()=>false))) location.href = '.'; })();
+  const basePath = (document.body.dataset.base || '').replace(/\/$/, '') || '';
+  const toEndpoint = (path) => {
+    const suffix = String(path || '').replace(/^\/+/, '');
+    return basePath ? `${basePath}/${suffix}` : `/${suffix}`;
+  };
+
+  (async () => { if (requiresAuth && !(await fetch(toEndpoint('whoami')).then(r => r.ok).catch(()=>false))) location.href = basePath || '.'; })();
 
   // --- Side Panel Logic ---
   function getPanelWrapper() { return document.querySelector('.wa-side-panel-content'); }
@@ -698,7 +704,7 @@
     userInputSent = true;
     cmdInput.value = '';
     autoResize();
-    fetch(`input?tabId=${TAB_ID}`, {
+    fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: cmd + '\n'
@@ -741,7 +747,7 @@
     showBanner('Connecting…');
     try { es?.close?.(); } catch (_) {}
 
-    es = new EventSource(`stream?tabId=${TAB_ID}`);
+    es = new EventSource(toEndpoint(`stream?tabId=${TAB_ID}`));
 
     es.onopen = () => {
       statusEl.textContent = 'online';
