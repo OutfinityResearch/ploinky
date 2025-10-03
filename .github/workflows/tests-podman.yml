@@ -1,0 +1,63 @@
+name: Daily Podman Tests
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  podman-tests:
+    runs-on: ubuntu-24.04
+    env:
+      CONTAINER_RUNTIME: podman
+      TEST_REPORT_DIR: reports/podman
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+          podman --version
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run test suite (Podman runtime)
+        run: |
+          set -o pipefail
+          mkdir -p "${TEST_REPORT_DIR}"
+          ./tests/cli/test_all.sh | tee "${TEST_REPORT_DIR}/latest.log"
+
+      - name: Upload test log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: podman-test-log
+          path: ${{ env.TEST_REPORT_DIR }}/latest.log
+
+      - name: Commit updated test report
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "$(git status --porcelain "${TEST_REPORT_DIR}/latest.log")" ]; then
+            git config --global user.name "github-actions"
+            git config --global user.email "actions@github.com"
+            git add "${TEST_REPORT_DIR}/latest.log"
+            git commit -m "chore: update podman test report"
+            git push
+          else
+            echo "No report changes to commit."
