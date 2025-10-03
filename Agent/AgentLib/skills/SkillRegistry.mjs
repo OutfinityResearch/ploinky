@@ -394,13 +394,28 @@ export default class SkillRegistry {
             return [];
         }
 
-        const normalizedRole = typeof options.role === 'string' && options.role.trim()
-            ? options.role.trim().toLowerCase()
-            : (typeof options.callerRole === 'string' && options.callerRole.trim()
-                ? options.callerRole.trim().toLowerCase()
-                : '');
+        // Support both single role and array of roles
+        let normalizedRoles = [];
+        
+        if (Array.isArray(options.roles) && options.roles.length > 0) {
+            // Multiple roles provided
+            normalizedRoles = options.roles
+                .map(r => typeof r === 'string' ? r.trim().toLowerCase() : '')
+                .filter(Boolean);
+        } else {
+            // Single role provided (backward compatibility)
+            const normalizedRole = typeof options.role === 'string' && options.role.trim()
+                ? options.role.trim().toLowerCase()
+                : (typeof options.callerRole === 'string' && options.callerRole.trim()
+                    ? options.callerRole.trim().toLowerCase()
+                    : '');
+            
+            if (normalizedRole) {
+                normalizedRoles = [normalizedRole];
+            }
+        }
 
-        if (!normalizedRole) {
+        if (!normalizedRoles.length) {
             throw new Error('rankSkill requires a caller role for access filtering.');
         }
 
@@ -430,7 +445,11 @@ export default class SkillRegistry {
             }
             if (this.skills.has(canonical)) {
                 const record = this.skills.get(canonical);
-                if (Array.isArray(record.roles) && record.roles.includes(normalizedRole)) {
+                // Check if user has any of the required roles for this skill
+                const hasAccess = Array.isArray(record.roles) && 
+                    normalizedRoles.some(userRole => record.roles.includes(userRole));
+                
+                if (hasAccess) {
                     seen.add(canonical);
                     filtered.push(record.name);
                 }

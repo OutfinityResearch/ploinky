@@ -97,13 +97,24 @@ class Agent {
     }
 
     async rankSkill(taskDescription, options = {}) {
-        const providedRole = typeof options.role === 'string' && options.role.trim()
-            ? options.role.trim()
-            : (typeof options.callerRole === 'string' && options.callerRole.trim()
-                ? options.callerRole.trim()
-                : '');
+        // Support both single role and array of roles
+        let roles = [];
+        
+        if (Array.isArray(options.roles) && options.roles.length > 0) {
+            roles = options.roles;
+        } else {
+            const providedRole = typeof options.role === 'string' && options.role.trim()
+                ? options.role.trim()
+                : (typeof options.callerRole === 'string' && options.callerRole.trim()
+                    ? options.callerRole.trim()
+                    : '');
+            
+            if (providedRole) {
+                roles = [providedRole];
+            }
+        }
 
-        if (!providedRole) {
+        if (!roles.length) {
             throw new Error('Agent rankSkill requires a role for access control.');
         }
 
@@ -119,7 +130,7 @@ class Agent {
         const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
         
         const flexSearchStart = Date.now();
-        const registryOptions = { ...options, role: providedRole };
+        const registryOptions = { ...options, roles };
         const matches = this.skillRegistry.rankSkill(taskDescription, registryOptions);
 
         if (!Array.isArray(matches) || matches.length === 0) {

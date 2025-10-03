@@ -89,8 +89,8 @@ function handleWebChat(req, res, appConfig, appState) {
 
     if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
     if (pathname === '/whoami') {
-        res.writeHead(200, {'Content-Type': 'application/json'});
-        return res.end(JSON.stringify({ok: authorized(req, appState)}));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ ok: authorized(req, appState) }));
     }
 
     if (pathname.startsWith('/assets/')) {
@@ -98,7 +98,7 @@ function handleWebChat(req, res, appConfig, appState) {
         const assetPath = staticSrv.resolveAssetPath(appName, fallbackAppPath, rel);
         if (assetPath && staticSrv.sendFile(res, assetPath)) return;
     }
-    
+
     const cookies = parseCookies(req);
 
     if (req.user) {
@@ -129,7 +129,7 @@ function handleWebChat(req, res, appConfig, appState) {
             '__BASE_PATH__': `/${appName}`
         });
         if (html) {
-            res.writeHead(200, {'Content-Type': 'text/html'});
+            res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(html);
         }
         res.writeHead(403); return res.end('Forbidden');
@@ -145,11 +145,11 @@ function handleWebChat(req, res, appConfig, appState) {
             '__BASE_PATH__': `/${appName}`
         });
         if (html) {
-            res.writeHead(200, {'Content-Type': 'text/html'});
+            res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(html);
         }
     }
-    
+
     if (pathname === '/stream') {
         const sid = getSession(req, appState);
         const session = appState.sessions.get(sid);
@@ -167,7 +167,24 @@ function handleWebChat(req, res, appConfig, appState) {
                 return;
             }
             try {
-                const tty = appConfig.ttyFactory.create();
+                // Extract SSO user context if available
+                const ssoUser = req.user ? {
+                    id: req.user.id,
+                    username: req.user.username,
+                    email: req.user.email,
+                    roles: req.user.roles || []
+                } : null;
+                
+                // Debug: Log SSO user info
+                if (process.env.WEBTTY_DEBUG === '1' && ssoUser) {
+                    console.log('[webchat] SSO User:', JSON.stringify({
+                        username: ssoUser.username,
+                        roles: ssoUser.roles,
+                        rolesLength: ssoUser.roles?.length
+                    }));
+                }
+                
+                const tty = appConfig.ttyFactory.create(ssoUser);
                 tab = { tty, sseRes: res };
                 session.tabs.set(tabId, tab);
                 tty.onOutput((data) => {
@@ -202,9 +219,9 @@ function handleWebChat(req, res, appConfig, appState) {
         if (!tab) { res.writeHead(400); return res.end(); }
         let body = '';
         req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => { 
-            try { tab.tty.write(body); } catch(_) {}
-            res.writeHead(204); res.end(); 
+        req.on('end', () => {
+            try { tab.tty.write(body); } catch (_) { }
+            res.writeHead(204); res.end();
         });
         return;
     }

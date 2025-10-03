@@ -102,14 +102,52 @@ function createAuthService(options = {}) {
         const now = Date.now();
         const accessExpires = tokens.expires_in ? now + Number(tokens.expires_in) * 1000 : now + sessionStore.sessionTtlMs;
         const refreshExpires = tokens.refresh_expires_in ? now + Number(tokens.refresh_expires_in) * 1000 : null;
+        
+        // Extract roles from ACCESS token (not ID token) - roles are in the access token
+        const accessDecoded = tokens.access_token ? decodeJwt(tokens.access_token) : decoded;
+        
+        if (process.env.PLOINKY_DEBUG === '1' || process.env.WEBTTY_DEBUG === '1') {
+            console.log('[auth] Token decoded:', {
+                hasAccessToken: !!tokens.access_token,
+                realmAccessExists: !!accessDecoded.payload.realm_access,
+                resourceAccessExists: !!accessDecoded.payload.resource_access
+            });
+        }
+        
+        const realmRoles = accessDecoded.payload.realm_access?.roles || [];
+        const resourceRoles = [];
+        
+        // Check for client-specific roles in resource_access
+        if (accessDecoded.payload.resource_access) {
+            for (const [clientId, clientData] of Object.entries(accessDecoded.payload.resource_access)) {
+                if (Array.isArray(clientData.roles)) {
+                    resourceRoles.push(...clientData.roles);
+                }
+            }
+        }
+        
+        // Combine realm and client roles, removing duplicates
+        const allRoles = [...new Set([...realmRoles, ...resourceRoles])];
+        
         const user = {
             id: decoded.payload.sub,
             username: decoded.payload.preferred_username || decoded.payload.username || decoded.payload.email || '',
             name: decoded.payload.name || decoded.payload.preferred_username || decoded.payload.email || '',
             email: decoded.payload.email || null,
-            roles: decoded.payload.realm_access?.roles || [],
+            roles: allRoles,
             raw: decoded.payload
         };
+        
+        // Debug: Log what roles we found
+        if (process.env.PLOINKY_DEBUG === '1' || process.env.WEBTTY_DEBUG === '1') {
+            console.log('[auth] SSO user roles:', {
+                username: user.username,
+                realmRoles: realmRoles.length,
+                clientRoles: resourceRoles.length,
+                totalRoles: allRoles.length,
+                roles: allRoles
+            });
+        }
         const { id: sessionId } = sessionStore.createSession({
             user,
             tokens: {
