@@ -716,6 +716,21 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         '-v', `${path.resolve(agentPath)}:/code${runtime==='podman'?':ro,z':':ro'}`,
         '-v', `${nodeModulesPath}:/node_modules${runtime==='podman'?':ro,z':':ro'}`
     ];
+    
+    // Add custom volumes from manifest
+    if (manifest.volumes && typeof manifest.volumes === 'object') {
+        const workspaceRoot = getConfiguredProjectPath('.', '');
+        for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
+            const resolvedHostPath = path.isAbsolute(hostPath) 
+                ? hostPath 
+                : path.resolve(workspaceRoot, hostPath);
+            // Create directory if it doesn't exist
+            if (!fs.existsSync(resolvedHostPath)) {
+                fs.mkdirSync(resolvedHostPath, { recursive: true });
+            }
+            args.push('-v', `${resolvedHostPath}:${containerPath}${runtime==='podman'?':z':''}`);
+        }
+    }
     // Port publishing: manifest ports + optional runtime ports
     const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
     const runtimePorts = (options && Array.isArray(options.publish)) ? options.publish : [];
@@ -729,8 +744,24 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
     args.push('-e', 'NODE_PATH=/node_modules');
-    const entry = agentCmd ? agentCmd : 'sh /Agent/server/AgentServer.sh';
-    args.push(image, '/bin/sh', '-lc', entry);
+    
+    // Determine how to run the container
+    args.push(image);
+    if (agentCmd) {
+        // If agent command contains shell operators or is complex, wrap in shell
+        const needsShell = /[;&|$`\n(){}]/.test(agentCmd);
+        if (needsShell) {
+            args.push('/bin/sh', '-lc', agentCmd);
+        } else {
+            // Parse command and arguments, execute directly to respect container entrypoint
+            const cmdParts = agentCmd.split(/\s+/).filter(Boolean);
+            args.push(...cmdParts);
+        }
+    } else {
+        // No agent command - use default AgentServer wrapper
+        args.push('/bin/sh', '-lc', 'sh /Agent/server/AgentServer.sh');
+    }
+    
     const res = spawnSync(runtime, args, { stdio: 'inherit' });
     if (res.status !== 0) { throw new Error(`${runtime} run failed with code ${res.status}`); }
     // Înregistrează în registry
