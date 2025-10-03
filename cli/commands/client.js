@@ -81,13 +81,25 @@ class ClientCommands {
         return `- [${agent}] ${uri}${name}${description}`;
     }
 
-    printAggregatedList(items, formatter, errors) {
-        if (!items || !items.length) {
-            console.log('No entries found.');
-        } else {
+    printAggregatedList(items, formatter, errors, emptyAgents) {
+        const hasItems = Array.isArray(items) && items.length > 0;
+        const hasEmptyAgents = Array.isArray(emptyAgents) && emptyAgents.length > 0;
+
+        if (hasItems) {
             for (const item of items) {
                 console.log(formatter(item));
             }
+        }
+
+        if (hasEmptyAgents) {
+            for (const agent of emptyAgents) {
+                const label = typeof agent === 'string' ? agent : 'unknown';
+                console.log(`- [${label}] none`);
+            }
+        }
+
+        if (!hasItems && !hasEmptyAgents) {
+            console.log('No entries found.');
         }
         if (Array.isArray(errors) && errors.length) {
             console.log('\nWarnings:');
@@ -102,11 +114,11 @@ class ClientCommands {
     async listTools() {
         const result = await this.sendRouterRequest('/mcp', { command: 'list_tools' });
         if (result.code >= 200 && result.code < 300 && result.json && Array.isArray(result.json.tools)) {
-            this.printAggregatedList(result.json.tools, this.formatToolLine.bind(this), result.json.errors);
+            this.printAggregatedList(result.json.tools, this.formatToolLine.bind(this), result.json.errors, result.json.emptyAgents);
             return;
         }
         if (Array.isArray(result.json)) {
-            this.printAggregatedList(result.json, this.formatToolLine.bind(this), result.json.errors);
+            this.printAggregatedList(result.json, this.formatToolLine.bind(this), result.json.errors, result.json.emptyAgents);
             return;
         }
         console.log(result.raw || 'Failed to retrieve tool list');

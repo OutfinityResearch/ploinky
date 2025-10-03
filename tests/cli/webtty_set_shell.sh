@@ -21,7 +21,7 @@ echo "--- Running Web Access Commands Test ---"
 
 # --- Setup: Enable and start demo agent ---
 echo "Enabling demo agent..."
-ploinky agent enable demo
+ploinky enable repo demo
 echo "Starting demo agent..."
 ploinky start demo
 

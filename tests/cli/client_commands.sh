@@ -46,70 +46,62 @@ echo -e "\n--- Testing 'client list tools' ---"
 TOOLS_OUTPUT=$(ploinky client list tools)
 echo "Command output:\n$TOOLS_OUTPUT"
 
-TOOLS_PRESENT=0
-if echo "$TOOLS_OUTPUT" | grep -q "^- \["; then
-    TOOLS_PRESENT=1
-    echo "✓ 'client list tools' returned tool definitions."
-elif echo "$TOOLS_OUTPUT" | grep -q "No entries found."; then
-    echo "✓ 'client list tools' reported no tools (no config detected)."
-else
-    echo "✗ Verification failed: 'client list tools' did not return a recognizable response." && exit 1
-fi
+echo "$TOOLS_OUTPUT" | grep -q "echo_script" || (
+    echo "✗ Verification failed: echo_script tool not found in 'client list tools' output." && exit 1
+)
+echo "$TOOLS_OUTPUT" | grep -q "random_probability" || (
+    echo "✗ Verification failed: random_probability tool not found in 'client list tools' output." && exit 1
+)
+echo "✓ 'client list tools' reported demo tools."
 
 # --- Test 3: client list resources ---
 echo -e "\n--- Testing 'client list resources' ---"
 RES_OUTPUT=$(ploinky client list resources)
 echo "Command output:\n$RES_OUTPUT"
 
-RES_PRESENT=0
-if echo "$RES_OUTPUT" | grep -q "^- \["; then
-    RES_PRESENT=1
-    echo "✓ 'client list resources' returned resource definitions."
-elif echo "$RES_OUTPUT" | grep -q "No entries found."; then
-echo "✓ 'client list resources' reported no resources (no config detected)."
-else
-    echo "✗ Verification failed: 'client list resources' did not return a recognizable response." && exit 1
+echo "$RES_OUTPUT" | grep -q "echo_script" || (
+    echo "✗ Verification failed: echo_script resource not listed." && exit 1
+)
+echo "$RES_OUTPUT" | grep -q "random_probability" || (
+    echo "✗ Verification failed: random_probability resource not listed." && exit 1
+)
+echo "✓ 'client list resources' reported demo resources."
+
+
+
+# --- Test 4: client tool invocations with demo MCP config ---
+echo -e "\n--- Testing 'client tool echo_script' ---"
+ECHO_TOOL_OUTPUT=$(ploinky client tool echo_script -message "Client Commands Test")
+echo "Command output: $ECHO_TOOL_OUTPUT"
+
+if ! echo "$ECHO_TOOL_OUTPUT" | jq -e '.ok == true and .agent == "demo"' >/dev/null; then
+    echo "✗ Verification failed: echo_script tool call did not report ok=true for agent 'demo'."
+    exit 1
 fi
 
-
-
-# --- Test 4A: client tool without --agent should detect duplicates ---
-if [ "$TOOLS_PRESENT" -eq 1 ]; then
-    echo -e "\n--- Testing 'client tool list_things' ambiguity detection ---"
-    AMBIG_OUTPUT=$(ploinky client tool list_things -category fruits)
-    echo "Command output: $AMBIG_OUTPUT"
-
-    echo "$AMBIG_OUTPUT" | jq -e '.ok == false and (.agents | length) > 1' >/dev/null || (
-        echo "✗ Verification failed: ambiguous tool invocation did not report multiple agents." && exit 1
-    )
-    echo "✓ Ambiguity detection verification successful."
-
-    echo -e "\n--- Testing 'client tool list_things --agent demo' ---"
-    TOOL_OUTPUT=$(ploinky client tool list_things --agent demo -category fruits)
-    echo "Command output: $TOOL_OUTPUT"
-
-    TOOL_OK=$(echo "$TOOL_OUTPUT" | jq -r '.ok')
-    if [ "$TOOL_OK" != "true" ]; then
-        echo "✗ Verification failed: Tool invocation did not report ok=true."
-        exit 1
-    fi
-
-    AGENT_NAME=$(echo "$TOOL_OUTPUT" | jq -r '.agent')
-    if [ "$AGENT_NAME" != "demo" ]; then
-        echo "✗ Verification failed: Tool invocation did not report the expected agent 'demo'."
-        exit 1
-    fi
-
-    LIST_TEXT=$(echo "$TOOL_OUTPUT" | jq -r '.result.content[0].text')
-    if ! echo "$LIST_TEXT" | grep -q "fruits"; then
-        echo "✗ Verification failed: Tool response did not include the requested category.";
-        exit 1
-    fi
-
-    echo "✓ 'client tool' verification successful."
-else
-    echo "Skipping tool execution tests because no MCP tools were detected."
+ECHO_TEXT=$(echo "$ECHO_TOOL_OUTPUT" | jq -r '.result.content[0].text')
+if ! echo "$ECHO_TEXT" | grep -q "Echo: Client Commands Test"; then
+    echo "✗ Verification failed: echo_script tool did not echo the expected text." && exit 1
 fi
+echo "✓ echo_script tool invocation verified."
+
+echo -e "\n--- Testing 'client tool random_probability --agent demo' ---"
+PROB_TOOL_OUTPUT=$(ploinky client tool random_probability --agent demo -samples 7)
+echo "Command output: $PROB_TOOL_OUTPUT"
+
+if ! echo "$PROB_TOOL_OUTPUT" | jq -e '.ok == true and .agent == "demo"' >/dev/null; then
+    echo "✗ Verification failed: random_probability tool call did not report ok=true for agent 'demo'."
+    exit 1
+fi
+
+PROB_TEXT=$(echo "$PROB_TOOL_OUTPUT" | jq -r '.result.content[0].text')
+if ! echo "$PROB_TEXT" | grep -q "Samples used: 7"; then
+    echo "✗ Verification failed: random_probability tool did not report the expected sample count." && exit 1
+fi
+if ! echo "$PROB_TEXT" | grep -q "Estimated probability:"; then
+    echo "✗ Verification failed: random_probability tool output missing probability summary." && exit 1
+fi
+echo "✓ random_probability tool invocation verified."
 
 
 # The final 'ploinky destroy' from the main cleanup trap will stop the server and agent.

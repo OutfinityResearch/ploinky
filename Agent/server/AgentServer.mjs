@@ -226,6 +226,18 @@ async function createServerInstance() {
   }
   await registerFromConfig(server, config, { ResourceTemplate, McpError, ErrorCode });
 
+  // Ensure core MCP request handlers are in place so the server responds with empty lists
+  // instead of "method not found" when no configuration entries exist.
+  if (typeof server.setToolRequestHandlers === 'function') {
+    server.setToolRequestHandlers();
+  }
+  if (typeof server.setResourceRequestHandlers === 'function') {
+    server.setResourceRequestHandlers();
+  }
+  if (typeof server.setPromptRequestHandlers === 'function') {
+    server.setPromptRequestHandlers();
+  }
+
   return server;
 }
 

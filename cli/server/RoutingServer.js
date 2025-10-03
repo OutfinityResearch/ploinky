@@ -631,13 +631,19 @@ async function handleRouterMcp(req, res) {
             if (command === 'methods' || command === 'list_tools' || command === 'tools') {
                 await collectTools(entries);
                 const aggregated = [];
+                const emptyAgents = [];
                 for (const entry of entries) {
+                    if (!toolsByAgent.has(entry.agentName)) continue;
                     const tools = toolsByAgent.get(entry.agentName) || [];
+                    if (!tools.length) {
+                        emptyAgents.push(entry.agentName);
+                        continue;
+                    }
                     for (const tool of tools) {
                         aggregated.push({ agent: entry.agentName, ...tool });
                     }
                 }
-                return sendJson(200, { ok: true, tools: aggregated, errors });
+                return sendJson(200, { ok: true, tools: aggregated, emptyAgents, errors });
             }
 
             if (command === 'resources' || command === 'list_resources') {
