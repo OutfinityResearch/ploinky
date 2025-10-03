@@ -16,6 +16,7 @@ import { refreshComponentToken, ensureComponentToken, getComponentToken } from '
 import * as dockerSvc from '../services/docker.js';
 import * as workspaceSvc from '../services/workspace.js';
 import { getSsoConfig, setSsoConfig, disableSsoConfig, gatherSsoStatus, getRouterPort as getSsoRouterPort, getAgentHostPort as getSsoAgentHostPort, normalizeBaseUrl as normalizeSsoBaseUrl, extractShortAgentName as extractSsoShortName } from '../services/sso.js';
+import { setupKeycloakRealm, parseRolesString, loadRolesFromFile, DEFAULT_ROLES } from '../services/keycloakSetup.js';
 import ClientCommands from './client.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -417,6 +418,101 @@ function showSsoStatusCommand() {
     printSsoDetails(gatherSsoStatus(), { includeSecrets: true });
 }
 
+async function setupSsoCommand(args = []) {
+    const { flags } = parseFlagArgs(args);
+    
+    // Load SSO config
+    const config = getSsoConfig();
+    if (!config || !config.enabled) {
+        console.log('❌ SSO is not enabled. Run "ploinky sso enable" first.');
+        return;
+    }
+    
+    // Determine roles to create
+    let roles = [...DEFAULT_ROLES];
+    
+    // Load from file if specified
+    if (flags['roles-file']) {
+        try {
+            const fileRoles = await loadRolesFromFile(flags['roles-file']);
+            console.log(`📄 Loaded ${fileRoles.length} role(s) from ${flags['roles-file']}`);
+            roles = fileRoles;
+        } catch (error) {
+            console.log(`❌ Error loading roles file: ${error.message}`);
+            return;
+        }
+    }
+    
+    // Parse inline roles if specified
+    if (flags.roles) {
+        const inlineRoles = parseRolesString(flags.roles);
+        if (inlineRoles.length > 0) {
+            if (flags['roles-file']) {
+                // Merge with file roles
+                console.log(`➕ Adding ${inlineRoles.length} additional role(s) from command line`);
+                roles = [...roles, ...inlineRoles];
+            } else {
+                // Replace default roles
+                roles = inlineRoles;
+            }
+        }
+    }
+    
+    // Remove duplicates by name
+    const uniqueRoles = [];
+    const seen = new Set();
+    for (const role of roles) {
+        if (!seen.has(role.name)) {
+            seen.add(role.name);
+            uniqueRoles.push(role);
+        }
+    }
+    
+    console.log(`\n📋 Roles to create: ${uniqueRoles.map(r => r.name).join(', ')}\n`);
+    
+    // Get admin credentials
+    const adminUser = envSvc.resolveVarValue('KEYCLOAK_ADMIN');
+    const adminPassword = envSvc.resolveVarValue('KEYCLOAK_ADMIN_PASSWORD');
+    
+    if (!adminUser || !adminPassword) {
+        console.log('❌ Keycloak admin credentials not found.');
+        console.log('   Run "ploinky sso enable" to configure them.');
+        return;
+    }
+    
+    try {
+        const result = await setupKeycloakRealm({
+            baseUrl: config.baseUrl,
+            realm: config.realm,
+            clientId: config.clientId,
+            redirectUri: config.redirectUri,
+            logoutRedirectUri: config.logoutRedirectUri,
+            adminUser,
+            adminPassword,
+            roles: uniqueRoles
+        });
+        
+        // Store client secret
+        envSvc.setEnvVar('KEYCLOAK_CLIENT_SECRET', result.clientSecret);
+        console.log('  ✓ Stored client secret in .ploinky/.secrets\n');
+        
+        console.log('✅ Keycloak configured successfully!\n');
+        console.log('📝 Next steps:');
+        console.log(`  1. Open ${config.baseUrl}`);
+        console.log(`  2. Login with: ${adminUser} / [your-password]`);
+        console.log('  3. Create users: Users → Add user');
+        console.log('  4. Assign roles: User → Role mapping → Assign role');
+        console.log('  5. Start Ploinky: ploinky start\n');
+        
+    } catch (error) {
+        console.log(`\n❌ Setup failed: ${error.message}`);
+        console.log('\nTroubleshooting:');
+        console.log('  • Make sure Keycloak is running: ploinky start keycloak');
+        console.log('  • Check admin credentials: ploinky vars | grep KEYCLOAK_ADMIN');
+        console.log(`  • Verify Keycloak URL: ${config.baseUrl}\n`);
+    }
+}
+
 async function handleSsoCommand(options = []) {
     const subcommand = (options[0] || 'status').toLowerCase();
     const rest = options.slice(1);
@@ -430,6 +526,10 @@ async function handleSsoCommand(options = []) {
     }
     if (subcommand === 'status') {
         showSsoStatusCommand();
+        return;
+    }
+    if (subcommand === 'setup') {
+        await setupSsoCommand(rest);
         return;
     }
     showHelp(['sso']);

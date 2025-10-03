@@ -25,7 +25,7 @@ export function showHelp(args = []) {
   webchat [--rotate]             Show or rotate WebChat token and print access URL
   webmeet [moderatorAgent] [--rotate]  Show WebMeet token; --rotate mints a new one
   dashboard [--rotate]           Show or rotate Dashboard token and print access URL
-  sso enable|disable|status      Configure SSO (Keycloak) middleware and secrets
+  sso enable|disable|status|setup  Configure SSO (Keycloak) middleware and secrets
   vars                           List all variable names (no values)
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
@@ -186,6 +186,18 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'sso status',
                     description: 'Show current SSO configuration, stored secrets, and detected ports.',
                     examples: [ 'sso status' ]
+                },
+                'setup': {
+                    syntax: 'sso setup [--roles <role1,role2,...>] [--roles-file <path>]',
+                    description: 'Auto-configure Keycloak: create realm, client, and roles. Requires Keycloak to be running.',
+                    examples: [
+                        'sso setup',
+                        'sso setup --roles admin,moderator,user,guest',
+                        'sso setup --roles admin:Full-access,user:Basic-access',
+                        'sso setup --roles-file ./config/roles.json',
+                        'sso setup --roles-file base-roles.json --roles premium,beta'
+                    ],
+                    notes: 'Default roles: admin, developer, user. Use --roles to override or --roles-file to load from JSON. File format: {"roles": [{"name": "admin", "description": "Administrator"}]}. Roles can merge when both --roles and --roles-file are used.'
                 }
             }
         },
