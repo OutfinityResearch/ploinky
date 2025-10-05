@@ -253,10 +253,26 @@
         if (codeStore[trimmed]) return codeStore[trimmed];
         const tableHtml = tryRenderTable(trimmed, state, processInline);
         if (tableHtml) return tableHtml;
+
+        // If an HR (---, ***, ___) appears inside a larger block because
+        // the text wasn't split with two blank lines, split the block
+        // around each HR and render recursively so <hr/> is produced.
+        // This is more forgiving than strict Markdown and fixes cases like:
+        // "---\n## Next heading" (single blank around HR)
+        const hrLineInBlock = /(^|\n)\s*[-*_]{3,}\s*(\n|$)/;
+        if (hrLineInBlock.test(trimmed) && !/^[-*_]{3,}$/.test(trimmed)) {
+          const segments = trimmed.split(/\n?\s*[-*_]{3,}\s*\n?/g);
+          const rendered = segments
+            .map(seg => seg.trim() ? renderMarkdown(seg) : '')
+            .filter(Boolean)
+            .join('<hr/>' );
+          if (rendered) return rendered;
+        }
         if (/^\s{0,3}[-*+]\s+/.test(trimmed)) return renderList(trimmed, 'ul', state, processInline);
         if (/^\s{0,3}\d+\.\s+/.test(trimmed)) return renderList(trimmed, 'ol', state, processInline);
         if (/^#{1,6}\s/.test(trimmed)) return renderHeading(trimmed, processInline);
         if (/^\s{0,3}>\s?/.test(trimmed)) return renderBlockquote(trimmed, state);
+        if (/^[-*_]{3,}$/.test(trimmed)) return '<hr/>';
         return `<p>${processInline(trimmed)}</p>`;
       })
       .filter(Boolean)

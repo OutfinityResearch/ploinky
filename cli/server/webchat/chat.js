@@ -133,10 +133,19 @@
     wrap.innerHTML = '<div id="sidePanelContent" class="wa-side-panel-body"></div>';
     const el = document.getElementById('sidePanelContent');
     if (el) {
-      el.innerHTML = markdown ? markdown.render(text) : text;
+      if (markdown && typeof markdown.render === 'function') {
+        try {
+          el.innerHTML = markdown.render(text);
+        } catch (e) {
+          console.error('[webchat] Markdown render error:', e);
+          el.innerHTML = text;
+        }
+      } else {
+        el.innerHTML = text;
+      }
       bindLinkDelegation(el);
     }
-    setPanelTitleText('Full Answear');
+    setPanelTitleText('Full Answer');
     sidePanel.style.display = 'flex';
     chatContainer.classList.add('side-panel-open');
   }
@@ -335,7 +344,16 @@
 
     if (activeSidePanelBubble === bubble) {
       const el = document.getElementById('sidePanelContent');
-      if (el) el.innerHTML = markdown ? markdown.render(fullText) : fullText;
+      if (el && markdown && typeof markdown.render === 'function') {
+        try {
+          el.innerHTML = markdown.render(fullText);
+        } catch (e) {
+          console.error('[webchat] Markdown render error in bubble update:', e);
+          el.innerHTML = fullText;
+        }
+      } else if (el) {
+        el.innerHTML = fullText;
+      }
     }
   }
 

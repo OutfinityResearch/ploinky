@@ -446,6 +446,21 @@ body {
   font-weight: 600;
   color: var(--wa-text-primary);
 }
+.wa-side-panel-body h1 { 
+  font-size: 1.25rem; 
+  border-bottom: 1px solid var(--wa-border); 
+  padding-bottom: 8px; 
+}
+.wa-side-panel-body h2 { 
+  font-size: 1.15rem; 
+  margin-top: 20px; 
+}
+.wa-side-panel-body h3 { font-size: 1.05rem; }
+.wa-side-panel-body hr { 
+  border: none; 
+  border-top: 1px solid var(--wa-border); 
+  margin: 16px 0; 
+}
 .wa-side-panel-body .wa-md-table-wrap { overflow-x: auto; margin: 12px 0; }
 .wa-side-panel-body table.wa-md-table { border-collapse: collapse; width: 100%; min-width: 320px; background: transparent; }
 .wa-side-panel-body table.wa-md-table th,
@@ -529,9 +544,10 @@ body {
 .wa-message-text h2,
 .wa-message-text h3,
 .wa-message-text h4 { margin: 0 0 8px; font-weight: 600; color: var(--wa-text-primary); }
-.wa-message-text h1 { font-size: 1.25rem; }
-.wa-message-text h2 { font-size: 1.15rem; }
+.wa-message-text h1 { font-size: 1.25rem; border-bottom: 1px solid var(--wa-border); padding-bottom: 6px; }
+.wa-message-text h2 { font-size: 1.15rem; margin-top: 16px; }
 .wa-message-text h3 { font-size: 1.05rem; }
+.wa-message-text hr { border: none; border-top: 1px solid var(--wa-border); margin: 12px 0; }
 .wa-message-text blockquote { margin: 6px 0; padding-left: 12px; border-left: 3px solid var(--wa-accent); color: var(--wa-text-secondary); }
 .wa-message-text a { color: var(--wa-accent); text-decoration: underline; cursor: pointer; }
 .wa-message-text .wa-md-table-wrap { overflow-x: auto; margin: 8px 0; }
