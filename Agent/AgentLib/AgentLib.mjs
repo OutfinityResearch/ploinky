@@ -502,3 +502,12 @@ export {
 };
 
 export const __resetForTests = resetForTests;
+
+// Export feedback control utilities
+export { 
+    AgentConfig,
+    createSilentAgent,
+    createVerboseAgent,
+    createConfiguredAgent,
+    setGlobalFeedback,
+} from './AgentConfig.mjs';
