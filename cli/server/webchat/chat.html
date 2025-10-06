@@ -46,6 +46,10 @@
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 18c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6zm0-10c-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4-1.8-4-4-4z"/><path d="M13 4h-2V2h2v2zm0 18h-2v-2h2v2zm9-11h-2V9h2v2zM4 13H2v-2h2v2z"/></svg>
         </button>
       </div>
+      <label class="wa-settings-row">
+        <input type="checkbox" id="viewMoreToggle" />
+        <span>Enable "View more" for long messages</span>
+      </label>
     </div>
   </div>
 
@@ -57,7 +61,17 @@
     <div class="wa-chat-container" id="chatContainer">
       <div class="wa-chat-area" id="chatArea">
         <div class="wa-chat-bg"></div>
-        <div class="wa-messages" id="chatList"></div>
+        <div class="wa-messages" id="chatList">
+          <div class="wa-message in wa-typing" id="typingIndicator" aria-hidden="true">
+            <div class="wa-message-bubble">
+              <div class="wa-typing-dots" role="status" aria-live="polite" aria-label="Processing">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="wa-resizer" id="sidePanelResizer" aria-label="Resize panel" title="Drag to resize"></div>
       <div class="wa-side-panel" id="sidePanel">

@@ -13,6 +13,7 @@
   const banner = document.getElementById('connBanner');
   const bannerText = document.getElementById('bannerText');
   const chatList = document.getElementById('chatList');
+  const typingIndicator = document.getElementById('typingIndicator');
   const cmdInput = document.getElementById('cmd');
   const sendBtn = document.getElementById('send');
   const chatContainer = document.getElementById('chatContainer');
@@ -22,6 +23,7 @@
   const sidePanelClose = document.getElementById('sidePanelClose');
   const sidePanelTitle = document.querySelector('.wa-side-panel-title');
   const sidePanelResizer = document.getElementById('sidePanelResizer');
+  const viewMoreToggle = document.getElementById('viewMoreToggle');
 
   // --- State ---
   const requiresAuth = body.dataset.auth === 'true';
@@ -29,6 +31,38 @@
   let activeSidePanelBubble = null;
   let userInputSent = false;
   let lastClientCommand = '';
+  const VIEW_MORE_KEY = 'wa_view_more_enabled';
+  let viewMoreEnabled = false;
+  let typingActive = false;
+
+  function appendMessageEl(node) {
+    if (!node || !chatList) return;
+    try {
+      if (typingIndicator && typingIndicator.parentNode === chatList) {
+        chatList.insertBefore(node, typingIndicator);
+      } else {
+        chatList.appendChild(node);
+      }
+    } catch (_) {
+      try { chatList.appendChild(node); } catch (__) {}
+    }
+  }
+
+  function showTypingIndicator() {
+    if (!typingIndicator) return;
+    typingActive = true;
+    typingIndicator.classList.add('show');
+    typingIndicator.setAttribute('aria-hidden', 'false');
+    try { chatList.scrollTop = chatList.scrollHeight; } catch (_) {}
+  }
+
+  function hideTypingIndicator(force) {
+    if (!typingIndicator) return;
+    if (!typingActive && !force) return;
+    typingActive = false;
+    typingIndicator.classList.remove('show');
+    typingIndicator.setAttribute('aria-hidden', 'true');
+  }
 
   // --- Basic Setup ---
   const appTitle = (body.dataset.title || body.dataset.agent || 'Chat').trim() || 'Chat';
@@ -52,6 +86,18 @@
   function setTheme(t) { document.body.setAttribute('data-theme', t); localStorage.setItem('webchat_theme', t); }
   themeToggle.onclick = () => { setTheme(getTheme() === 'dark' ? 'light' : 'dark'); };
   setTheme(getTheme());
+
+  try {
+    viewMoreEnabled = localStorage.getItem(VIEW_MORE_KEY) === 'true';
+  } catch (_) { viewMoreEnabled = false; }
+  if (viewMoreToggle) {
+    viewMoreToggle.checked = viewMoreEnabled;
+    viewMoreToggle.addEventListener('change', () => {
+      viewMoreEnabled = viewMoreToggle.checked;
+      try { localStorage.setItem(VIEW_MORE_KEY, viewMoreEnabled ? 'true' : 'false'); } catch (_) {}
+      applyViewMoreSettingToAllBubbles();
+    });
+  }
 
   const basePath = (document.body.dataset.base || '').replace(/\/$/, '') || '';
   const toEndpoint = (path) => {
@@ -316,44 +362,65 @@
     const textDiv = msgDiv.querySelector('.wa-message-text');
     textDiv.innerHTML = markdown ? markdown.render(text) : text;
     bindLinkDelegation(textDiv);
-    chatList.appendChild(msgDiv);
+    appendMessageEl(msgDiv);
     chatList.scrollTop = chatList.scrollHeight;
     lastServerMsg.bubble = null; // Reset server message grouping
   }
 
   function updateBubbleContent(bubble, fullText) {
-    const lines = (fullText || '').split('\n');
-    const preview = lines.slice(0, 6).join('\n');
-    const hasMore = lines.length > 6;
+    const safeText = typeof fullText === 'string' ? fullText : '';
+    bubble.dataset.fullText = safeText;
+    const lines = safeText.split('\n');
+    const allowCollapse = viewMoreEnabled && lines.length > 6;
+    const displayText = allowCollapse ? lines.slice(0, 6).join('\n') : safeText;
 
     const textDiv = bubble.querySelector('.wa-message-text');
     const moreDiv = bubble.querySelector('.wa-message-more');
 
-    textDiv.innerHTML = markdown ? markdown.render(preview) : preview;
+    textDiv.innerHTML = markdown ? markdown.render(displayText) : displayText;
     bindLinkDelegation(textDiv);
 
-    if (hasMore && !moreDiv) {
+    if (allowCollapse && !moreDiv) {
       const more = document.createElement('div');
       more.className = 'wa-message-more';
       more.textContent = 'View more';
-      more.onclick = () => openSidePanel(bubble, fullText);
+      more.onclick = () => openSidePanel(bubble, safeText);
       bubble.appendChild(more);
-    } else if (hasMore && moreDiv) {
-      moreDiv.onclick = () => openSidePanel(bubble, fullText);
+    } else if (allowCollapse && moreDiv) {
+      moreDiv.onclick = () => openSidePanel(bubble, safeText);
+    } else if (!allowCollapse && moreDiv) {
+      moreDiv.remove();
     }
 
-    if (activeSidePanelBubble === bubble) {
-      const el = document.getElementById('sidePanelContent');
-      if (el && markdown && typeof markdown.render === 'function') {
-        try {
-          el.innerHTML = markdown.render(fullText);
-        } catch (e) {
-          console.error('[webchat] Markdown render error in bubble update:', e);
-          el.innerHTML = fullText;
+    if (allowCollapse) {
+      if (activeSidePanelBubble === bubble) {
+        const el = document.getElementById('sidePanelContent');
+        if (el && markdown && typeof markdown.render === 'function') {
+          try {
+            el.innerHTML = markdown.render(safeText);
+          } catch (e) {
+            console.error('[webchat] Markdown render error in bubble update:', e);
+            el.innerHTML = safeText;
+          }
+        } else if (el) {
+          el.innerHTML = safeText;
         }
-      } else if (el) {
-        el.innerHTML = fullText;
       }
+    } else if (activeSidePanelBubble === bubble) {
+      closeSidePanel();
+    }
+  }
+
+  function applyViewMoreSettingToAllBubbles() {
+    const bubbles = chatList?.querySelectorAll('.wa-message-bubble') || [];
+    bubbles.forEach((bubble) => {
+      const text = bubble.dataset?.fullText;
+      if (typeof text === 'string') {
+        updateBubbleContent(bubble, text);
+      }
+    });
+    if (!viewMoreEnabled && activeSidePanelBubble) {
+      closeSidePanel();
     }
   }
 
@@ -397,7 +464,7 @@
 
       updateBubbleContent(bubble, text);
       bubble.querySelector('.wa-message-time').textContent = formatTime();
-      chatList.appendChild(msgDiv);
+      appendMessageEl(msgDiv);
     }
     chatList.scrollTop = chatList.scrollHeight;
   }
@@ -728,6 +795,7 @@
       body: cmd + '\n'
     }).catch((e) => {
       dlog('chat error', e);
+      hideTypingIndicator(true);
       addServerMsg('[input error]');
       showBanner('Chat error', 'err');
     });
@@ -752,12 +820,58 @@
     } catch (_) { return s; }
   }
 
+  const PROCESS_PREFIX_RE = /^(?:\s*\.+\s*){3,}/;
+
+  function isProcessingChunk(text) {
+    if (!text) return false;
+    const trimmed = text.replace(/\s/g, '');
+    if (trimmed.length === 0 || !/^[.·…]+$/.test(trimmed)) return false;
+    const hasWhitespace = /\s/.test(text);
+    return hasWhitespace || trimmed.length > 3;
+  }
+
+  function stripProcessingPrefix(text) {
+    if (!text) return text;
+    const match = PROCESS_PREFIX_RE.exec(text);
+    if (!match) return text;
+    if (match[0].length >= text.length) return '';
+    return text.slice(match[0].length);
+  }
+
+  function handleServerChunk(raw) {
+    if (raw === undefined || raw === null) return;
+    let text = String(raw);
+    if (!text) return;
+
+    if (isProcessingChunk(text)) {
+      showTypingIndicator();
+      return;
+    }
+
+    const stripped = stripProcessingPrefix(text);
+    if (stripped !== text) showTypingIndicator();
+
+    if (!stripped.trim()) {
+      return;
+    }
+
+    hideTypingIndicator();
+    addServerMsg(stripped);
+  }
+
   function pushSrvFromBuffer() {
     if (!chatBuffer) return;
     const parts = chatBuffer.split(/\r?\n/);
-    chatBuffer = parts.pop() || '';
-    const blocks = parts.map(stripCtrlAndAnsi).join('\n');
-    if (blocks) addServerMsg(blocks);
+    chatBuffer = parts.pop() ?? '';
+    parts.forEach((part) => {
+      const clean = stripCtrlAndAnsi(part);
+      handleServerChunk(clean);
+    });
+
+    const tailClean = stripCtrlAndAnsi(chatBuffer);
+    if (isProcessingChunk(tailClean)) {
+      showTypingIndicator();
+    }
   }
 
   function startSSE() {
@@ -768,6 +882,7 @@
     es = new EventSource(toEndpoint(`stream?tabId=${TAB_ID}`));
 
     es.onopen = () => {
+      hideTypingIndicator(true);
       statusEl.textContent = 'online';
       statusDot.classList.remove('offline');
       statusDot.classList.add('online');
@@ -776,6 +891,7 @@
     };
 
     es.onerror = (e) => {
+      hideTypingIndicator(true);
       statusEl.textContent = 'offline';
       statusDot.classList.remove('online');
       statusDot.classList.add('offline');

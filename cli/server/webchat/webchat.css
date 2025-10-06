@@ -558,6 +558,26 @@ body {
 .wa-message-text table.wa-md-table tbody tr:nth-child(odd) td { background: var(--wa-table-row-odd-bg); }
 .wa-message-text table.wa-md-table tbody tr:nth-child(even) td { background: var(--wa-table-row-even-bg); }
 
+.wa-typing { display: none; align-self: flex-start; }
+.wa-typing.show { display: block; }
+.wa-typing .wa-message-bubble { padding: 8px 12px; }
+.wa-typing-dots { display: inline-flex; gap: 6px; align-items: center; justify-content: center; min-width: 42px; }
+.wa-typing-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--wa-typing);
+  opacity: 0.35;
+  animation: waTypingBounce 1.2s infinite ease-in-out;
+}
+.wa-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+.wa-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes waTypingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+
 .wa-message-time {
   position: absolute;
   bottom: 4px;

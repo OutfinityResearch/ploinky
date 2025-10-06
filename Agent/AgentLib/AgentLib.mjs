@@ -30,6 +30,7 @@ import {
 import { invokeAgent } from './invocation/modelInvoker.mjs';
 import { safeJsonParse } from './utils/json.mjs';
 import { callOperator, chooseOperator, registerOperator, resetOperatorRegistry } from './operators/operatorRegistry.mjs';
+import { startTyping, stopTyping } from './utils/typingIndicator.mjs';
 
 let agentLibraryInstance = null;
 
@@ -121,13 +122,10 @@ class Agent {
         const verboseMode = options.verbose === true;
         const startTime = options.startTime || Date.now();
         
-        // Progressive display delay (configurable via env var, default 150ms)
-        const progressiveDelay = process.env.LLMAgentClient_VERBOSE_DELAY 
-            ? parseInt(process.env.LLMAgentClient_VERBOSE_DELAY, 10)
-            : 150;
-        const useProgressiveDisplay = verboseMode && progressiveDelay > 0;
-        
-        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        // Show typing indicator during search
+        if (verboseMode) {
+            startTyping();
+        }
         
         const flexSearchStart = Date.now();
         const registryOptions = { ...options, roles };
@@ -135,46 +133,14 @@ class Agent {
 
         if (!Array.isArray(matches) || matches.length === 0) {
             if (verboseMode) {
-                const flexSearchTime = Date.now() - flexSearchStart;
-                console.log(`[FlexSearch] No matches found (${flexSearchTime}ms)`);
+                stopTyping();
             }
             throw new Error('No skills matched the provided task description.');
         }
 
-        if (verboseMode) {
-            const flexSearchTime = Date.now() - flexSearchStart;
-            console.log(`\n[FlexSearch] Found ${matches.length} candidate${matches.length > 1 ? 's' : ''} (${flexSearchTime}ms):\n`);
-            
-            if (useProgressiveDisplay) {
-                // Display candidates progressively with delays
-                for (let index = 0; index < matches.length; index++) {
-                    const name = matches[index];
-                    const skill = this.getSkill(name);
-                    const desc = skill?.description || skill?.what || 'No description';
-                    const truncated = desc.length > 70 ? desc.slice(0, 67) + '...' : desc;
-                    console.log(`  ${name}`);
-                    console.log(`  ${truncated}\n`);
-                    
-                    // Add delay between candidates (but not after the last one)
-                    if (index < matches.length - 1) {
-                        await delay(progressiveDelay);
-                    }
-                }
-            } else {
-                // Display all at once (instant)
-                matches.forEach((name, index) => {
-                    const skill = this.getSkill(name);
-                    const desc = skill?.description || skill?.what || 'No description';
-                    const truncated = desc.length > 70 ? desc.slice(0, 67) + '...' : desc;
-                    console.log(`  ${name}`);
-                    console.log(`  ${truncated}\n`);
-                });
-            }
-        }
-
         if (matches.length === 1) {
             if (verboseMode) {
-                console.log(`[Result] Single match found, using: ${matches[0]}`);
+                stopTyping();
             }
             return matches[0];
         }
@@ -195,18 +161,19 @@ class Agent {
         }).filter(Boolean);
 
         if (!candidates.length) {
+            if (verboseMode) {
+                stopTyping();
+            }
             throw new Error('Unable to load candidate skill specifications for selection.');
-        }
-
-        if (verboseMode) {
-            console.log(`\n[LLM] Analyzing context to select best match...`);
-            console.log(`[LLM] Evaluating ${candidates.length} candidates`);
         }
 
         let selectorAgent;
         try {
             selectorAgent = getAgent(options?.agentName);
         } catch (error) {
+            if (verboseMode) {
+                stopTyping();
+            }
             throw new Error(`Unable to obtain language model for skill selection: ${error.message}`);
         }
 
@@ -238,8 +205,7 @@ class Agent {
         const raw = await invokeAgent(selectorAgent, history, { mode: selectionMode });
         
         if (verboseMode) {
-            const llmTime = Date.now() - llmStart;
-            console.log(`[LLM] Selection completed (${llmTime}ms)`);
+            stopTyping();
         }
 
         const candidateMap = new Map();
@@ -281,10 +247,6 @@ class Agent {
         }
 
         const finalSkill = candidateMap.get(normalizedSelected);
-        
-        if (verboseMode) {
-            console.log(`[Result] LLM selected: ${finalSkill}`);
-        }
 
         return finalSkill;
     }
