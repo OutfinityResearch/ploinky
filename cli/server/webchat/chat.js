@@ -34,6 +34,9 @@
   const VIEW_MORE_KEY = 'wa_view_more_enabled';
   let viewMoreEnabled = false;
   let typingActive = false;
+  let sttActive = false;
+  const sendTriggerRe = /\bsend\b/i;
+  const purgeTriggerRe = /\bpurge\b/i;
 
   function appendMessageEl(node) {
     if (!node || !chatList) return;
@@ -339,8 +342,26 @@
       cmdInput.style.height = next + 'px';
     } catch (_) {} // Ignore errors during auto-resize
   }
+
+  function clearComposer() {
+    cmdInput.value = '';
+    autoResize();
+  }
+
+  function purgeComposer(options = {}) {
+    const { resetVoice = false } = options;
+    clearComposer();
+    if (resetVoice || sttActive) {
+      try { resetTranscriptState(); } catch (_) {}
+    }
+  }
   setTimeout(autoResize, 0);
-  cmdInput.addEventListener('input', autoResize);
+  cmdInput.addEventListener('input', () => {
+    autoResize();
+    if (purgeTriggerRe.test(cmdInput.value)) {
+      purgeComposer();
+    }
+  });
 
   function formatTime() {
     const d = new Date();
@@ -481,11 +502,10 @@
   const sttSupported = typeof SpeechRecognitionClass === 'function';
   const sttLangKey = 'vc_stt_lang';
   const sttEnabledKey = 'vc_stt_enabled';
-  const sendTriggerRe = /\bsend\b/i;
 
   let sttRecognition = null;
   let sttListening = false;
-  let sttActive = false;
+  sttActive = false;
   let sttLangCode = localStorage.getItem(sttLangKey) || 'en-GB';
   let finalSegments = [];
   let interimTranscript = '';
@@ -535,6 +555,9 @@
     }
     cmdInput.scrollTop = prevScroll;
     autoResize();
+    if (purgeTriggerRe.test(cmdInput.value)) {
+      purgeComposer({ resetVoice: true });
+    }
   }
 
   function updateComposerFromVoice() {
@@ -556,10 +579,13 @@
     autoResize();
     if (cleaned) sendCmd();
     else {
-      cmdInput.value = '';
-      autoResize();
+      clearComposer();
     }
     resetTranscriptState();
+  }
+
+  function handleVoicePurge() {
+    purgeComposer({ resetVoice: true });
   }
 
   function stopRecognition() {
@@ -601,6 +627,11 @@
           if (res.isFinal) {
             finalSegments.push(transcript);
             const joined = finalSegments.join(' ');
+            if (purgeTriggerRe.test(joined)) {
+              triggered = true;
+              handleVoicePurge();
+              break;
+            }
             if (sendTriggerRe.test(joined)) {
               triggered = true;
               handleVoiceSend(joined);
@@ -785,10 +816,13 @@
   function sendCmd() {
     const cmd = cmdInput.value.trim();
     if (!cmd) return;
+    if (purgeTriggerRe.test(cmd)) {
+      purgeComposer();
+      return;
+    }
     addClientMsg(cmd);
     userInputSent = true;
-    cmdInput.value = '';
-    autoResize();
+    clearComposer();
     fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },

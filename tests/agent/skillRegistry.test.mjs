@@ -89,6 +89,11 @@ const parseMatches = registry.rankSkill('Need to parse a JSON payload for furthe
 assert.ok(parseMatches.length >= 1, 'Expected at least one skill match for JSON parsing.');
 assert.strictEqual(parseMatches[0], parseSkillName, 'Parse skill should be the most relevant suggestion.');
 
+const scoredMatches = registry.rankSkill('Need to parse a JSON payload for further analysis.', { role: 'analyst', includeScores: true });
+assert.ok(Array.isArray(scoredMatches) && scoredMatches.length > 0, 'Scored FlexSearch results should return an array.');
+assert.strictEqual(scoredMatches[0]?.name, parseSkillName, 'Top scored skill should match the leading string result.');
+assert.strictEqual(typeof scoredMatches[0]?.score, 'number', 'Scored results should provide a numeric confidence score.');
+
 const emailMatches = registry.rankSkill('notify the user by sending an email report', { role: 'admin' });
 assert.ok(emailMatches.includes(emailSkillName), 'Email skill should match email related queries.');
 
