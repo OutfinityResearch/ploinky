@@ -620,6 +620,18 @@ body {
   min-width: 48px;
 }
 
+#sttBtn .wa-mic-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+#sttBtn .wa-mic-icon.off { display: none; }
+#sttBtn.muted .wa-mic-icon.on { display: none; }
+#sttBtn.muted .wa-mic-icon.off { display: inline-flex; }
+
 .wa-voice-control .wa-icon-btn {
   width: 36px;
   height: 36px;

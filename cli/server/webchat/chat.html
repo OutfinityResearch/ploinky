@@ -7,6 +7,18 @@
   <link rel="stylesheet" href="__ASSET_BASE__/webchat.css" />
 </head>
 <body data-page="chat" data-theme="light" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__" data-base="__BASE_PATH__">
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-mic" viewBox="0 0 24 24">
+        <path d="M12 2.25a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0v-6a3 3 0 0 0-3-3z" />
+        <path d="M5.25 11.25a.75.75 0 0 1 1.5 0 5.25 5.25 0 0 0 10.5 0 .75.75 0 0 1 1.5 0 6.75 6.75 0 0 1-6 6.708V21a.75.75 0 0 1-1.5 0v-3.042a6.75 6.75 0 0 1-6-6.708z" />
+      </symbol>
+      <symbol id="i-mic-off" viewBox="0 0 24 24">
+        <path d="M15 10.78V5a3 3 0 0 0-5.248-1.936l8.968 8.968A4.5 4.5 0 0 0 15 10.78z" />
+        <path d="M19.22 19.22a.75.75 0 0 1-1.06 0l-1.414-1.415A6.718 6.718 0 0 1 12 18.75V21a.75.75 0 0 1-1.5 0v-2.25a6.752 6.752 0 0 1-5.25-6.592.75.75 0 0 1 1.5 0 5.25 5.25 0 0 0 5.25 5.25c.892 0 1.735-.22 2.475-.607l-1.54-1.54A3 3 0 0 1 9 12.75V10.5a.75.75 0 0 1 1.5 0v2.25a1.5 1.5 0 0 0 2.506 1.1l-7.7-7.7a.75.75 0 0 1 1.06-1.06l12.854 12.85a.75.75 0 0 1 0 1.06z" />
+      </symbol>
+    </defs>
+  </svg>
   <div class="wa-header">
     <div class="wa-header-avatar">
       <span id="avatarInitial"></span>
@@ -88,8 +100,13 @@
 
   <div class="wa-composer">
     <div class="wa-voice-control">
-      <button class="wa-icon-btn" id="sttBtn" title="Voice input">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1.2-9.1c0-.66.54-1.2 1.2-1.2s1.2.54 1.2 1.2v6.2c0 .66-.54 1.2-1.2 1.2s-1.2-.54-1.2-1.2V4.9zm6.5 6.1c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
+      <button class="wa-icon-btn" id="sttBtn" title="Voice input" aria-pressed="false">
+        <span class="wa-mic-icon on" aria-hidden="true">
+          <svg width="24" height="24" role="img" aria-label="Microphone"><use href="#i-mic" /></svg>
+        </span>
+        <span class="wa-mic-icon off" aria-hidden="true">
+          <svg width="24" height="24" role="img" aria-label="Mute"><use href="#i-mic-off" /></svg>
+        </span>
       </button>
       <span class="wa-voice-status" id="sttStatus">Initializing…</span>
     </div>

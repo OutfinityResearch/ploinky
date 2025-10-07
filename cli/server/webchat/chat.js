@@ -505,7 +505,6 @@
 
   let sttRecognition = null;
   let sttListening = false;
-  sttActive = false;
   let sttLangCode = localStorage.getItem(sttLangKey) || 'en-GB';
   let finalSegments = [];
   let interimTranscript = '';
@@ -518,6 +517,7 @@
   function setMicVisual(active) {
     if (!sttBtn) return;
     sttBtn.classList.toggle('active', active);
+    sttBtn.classList.toggle('muted', !active);
     sttBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
 
@@ -797,7 +797,10 @@
 
   if (!sttSupported) {
     updateVoiceStatus('Unsupported');
-    if (sttBtn) sttBtn.disabled = true;
+    if (sttBtn) {
+      sttBtn.disabled = true;
+      setMicVisual(false);
+    }
   } else if (sttEnable) {
     if (sttEnable.checked) {
       sttActive = true;
