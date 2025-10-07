@@ -215,6 +215,16 @@ body {
   font-size: 13px;
 }
 
+.wa-settings-row input[type="number"] {
+  width: 88px;
+  background: var(--wa-bg-input);
+  color: var(--wa-text-primary);
+  border: 1px solid var(--wa-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
 .wa-settings-label {
   flex: 1;
 }

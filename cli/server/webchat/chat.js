@@ -23,7 +23,7 @@
   const sidePanelClose = document.getElementById('sidePanelClose');
   const sidePanelTitle = document.querySelector('.wa-side-panel-title');
   const sidePanelResizer = document.getElementById('sidePanelResizer');
-  const viewMoreToggle = document.getElementById('viewMoreToggle');
+  const viewMoreLinesInput = document.getElementById('viewMoreLines');
 
   // --- State ---
   const requiresAuth = body.dataset.auth === 'true';
@@ -31,8 +31,9 @@
   let activeSidePanelBubble = null;
   let userInputSent = false;
   let lastClientCommand = '';
-  const VIEW_MORE_KEY = 'wa_view_more_enabled';
-  let viewMoreEnabled = false;
+  const VIEW_MORE_LINES_KEY = 'wa_view_more_lines';
+  const LEGACY_VIEW_MORE_KEY = 'wa_view_more_enabled';
+  let viewMoreLineLimit = 1000;
   let typingActive = false;
   let sttActive = false;
   const sendTriggerRe = /\bsend\b/i;
@@ -91,15 +92,31 @@
   setTheme(getTheme());
 
   try {
-    viewMoreEnabled = localStorage.getItem(VIEW_MORE_KEY) === 'true';
-  } catch (_) { viewMoreEnabled = false; }
-  if (viewMoreToggle) {
-    viewMoreToggle.checked = viewMoreEnabled;
-    viewMoreToggle.addEventListener('change', () => {
-      viewMoreEnabled = viewMoreToggle.checked;
-      try { localStorage.setItem(VIEW_MORE_KEY, viewMoreEnabled ? 'true' : 'false'); } catch (_) {}
+    const storedLimit = localStorage.getItem(VIEW_MORE_LINES_KEY);
+    if (storedLimit !== null) {
+      const parsed = parseInt(storedLimit, 10);
+      if (!Number.isNaN(parsed) && parsed >= 1) {
+        viewMoreLineLimit = parsed;
+      }
+    } else {
+      const legacy = localStorage.getItem(LEGACY_VIEW_MORE_KEY);
+      if (legacy === 'true') viewMoreLineLimit = 6;
+      else if (legacy === 'false') viewMoreLineLimit = 1000;
+    }
+    localStorage.removeItem(LEGACY_VIEW_MORE_KEY);
+    localStorage.setItem(VIEW_MORE_LINES_KEY, String(viewMoreLineLimit));
+  } catch (_) { viewMoreLineLimit = 1000; }
+  if (viewMoreLinesInput) {
+    const normalizeLineLimit = () => {
+      const parsed = parseInt(viewMoreLinesInput.value, 10);
+      viewMoreLineLimit = Number.isNaN(parsed) ? 1 : Math.max(1, parsed);
+      viewMoreLinesInput.value = String(viewMoreLineLimit);
+      try { localStorage.setItem(VIEW_MORE_LINES_KEY, String(viewMoreLineLimit)); } catch (_) {}
       applyViewMoreSettingToAllBubbles();
-    });
+    };
+    viewMoreLinesInput.value = String(viewMoreLineLimit);
+    viewMoreLinesInput.addEventListener('change', normalizeLineLimit);
+    viewMoreLinesInput.addEventListener('blur', normalizeLineLimit);
   }
 
   const basePath = (document.body.dataset.base || '').replace(/\/$/, '') || '';
@@ -392,8 +409,9 @@
     const safeText = typeof fullText === 'string' ? fullText : '';
     bubble.dataset.fullText = safeText;
     const lines = safeText.split('\n');
-    const allowCollapse = viewMoreEnabled && lines.length > 6;
-    const displayText = allowCollapse ? lines.slice(0, 6).join('\n') : safeText;
+    const limit = typeof viewMoreLineLimit === 'number' && viewMoreLineLimit >= 1 ? viewMoreLineLimit : 1;
+    const allowCollapse = lines.length > limit;
+    const displayText = allowCollapse ? lines.slice(0, limit).join('\n') : safeText;
 
     const textDiv = bubble.querySelector('.wa-message-text');
     const moreDiv = bubble.querySelector('.wa-message-more');
@@ -440,9 +458,6 @@
         updateBubbleContent(bubble, text);
       }
     });
-    if (!viewMoreEnabled && activeSidePanelBubble) {
-      closeSidePanel();
-    }
   }
 
   function addServerMsg(text) {
