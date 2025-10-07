@@ -128,10 +128,22 @@ class Agent {
         }
         
         const flexSearchStart = Date.now();
-        const registryOptions = { ...options, roles };
-        const matches = this.skillRegistry.rankSkill(taskDescription, registryOptions);
+        const registryOptions = { ...options, roles, includeScores: true };
+        const rawMatches = this.skillRegistry.rankSkill(taskDescription, registryOptions);
 
-        if (!Array.isArray(matches) || matches.length === 0) {
+        const matches = Array.isArray(rawMatches)
+            ? rawMatches.map((entry) => {
+                if (entry && typeof entry === 'object' && typeof entry.name === 'string') {
+                    return { name: entry.name, score: typeof entry.score === 'number' ? entry.score : null };
+                }
+                if (typeof entry === 'string') {
+                    return { name: entry, score: null };
+                }
+                return null;
+            }).filter(Boolean)
+            : [];
+
+        if (!matches.length) {
             if (verboseMode) {
                 stopTyping();
             }
@@ -142,21 +154,22 @@ class Agent {
             if (verboseMode) {
                 stopTyping();
             }
-            return matches[0];
+            return matches[0].name;
         }
 
         const normalizeName = (value) => typeof value === 'string' ? value.trim().toLowerCase() : '';
 
-        const candidates = matches.map(name => {
-            const skill = this.getSkill(name);
+        const candidates = matches.map(entry => {
+            const skill = this.getSkill(entry.name);
             if (!skill) {
                 return null;
             }
-            const canonical = normalizeName(skill.name || name);
+            const canonical = normalizeName(skill.name || entry.name);
             return {
                 canonical,
-                name: skill.name || name,
+                name: skill.name || entry.name,
                 spec: skill,
+                score: entry.score,
             };
         }).filter(Boolean);
 
@@ -187,6 +200,7 @@ class Agent {
             arguments: entry.spec.arguments,
             requiredArguments: entry.spec.requiredArguments,
             roles: entry.spec.roles,
+            score: entry.score,
         }));
 
         const contextPayload = {
@@ -210,7 +224,7 @@ class Agent {
 
         const candidateMap = new Map();
         for (const candidate of candidates) {
-            candidateMap.set(candidate.canonical, candidate.name);
+            candidateMap.set(candidate.canonical, candidate);
         }
 
         const parseSelection = (value) => {
@@ -228,7 +242,7 @@ class Agent {
                 const trimmed = raw.trim();
                 const normalized = normalizeName(trimmed);
                 if (candidateMap.has(normalized)) {
-                    selected = candidateMap.get(normalized);
+                    selected = candidateMap.get(normalized)?.name;
                 }
             }
         }
@@ -246,7 +260,7 @@ class Agent {
             throw new Error(`Selected skill "${selected}" was not among the matched candidates.`);
         }
 
-        const finalSkill = candidateMap.get(normalizedSelected);
+        const finalSkill = candidateMap.get(normalizedSelected).name;
 
         return finalSkill;
     }
