@@ -5,7 +5,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { REPOS_DIR, PLOINKY_DIR } from './config.js';
-import { buildEnvFlags, getExposedNames, buildEnvMap } from './secretVars.js';
+import { buildEnvFlags, getExposedNames, buildEnvMap, getManifestEnvNames } from './secretVars.js';
 import { loadAgents, saveAgents } from './workspace.js';
 import { debugLog } from './utils.js';
 
@@ -238,7 +238,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
         }
         
         // Collect declared env names (legacy env[] + expose[] names) for registry
-        const declaredEnvNames = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
+        const declaredEnvNames = [ ...getManifestEnvNames(manifest), ...getExposedNames(manifest) ];
         agents[containerName] = {
             agentName,
             repoName,
@@ -406,7 +406,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         }
         // Registrează în agents registry
         const agents = loadAgentsMap();
-        const declaredEnvNamesX = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
+        const declaredEnvNamesX = [ ...getManifestEnvNames(manifest), ...getExposedNames(manifest) ];
         agents[containerName] = {
             agentName,
             repoName,
@@ -766,7 +766,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     if (res.status !== 0) { throw new Error(`${runtime} run failed with code ${res.status}`); }
     // Înregistrează în registry
     const agents = loadAgentsMap();
-    const declaredEnvNames2 = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
+    const declaredEnvNames2 = [ ...getManifestEnvNames(manifest), ...getExposedNames(manifest) ];
     agents[containerName] = {
         agentName,
         repoName: path.basename(path.dirname(agentPath)),
@@ -1009,7 +1009,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
 
     // Save to registry
     const agents = loadAgentsMap();
-    const declaredEnvNames3 = [ ...(manifest.env||[]), ...getExposedNames(manifest) ];
+    const declaredEnvNames3 = [ ...getManifestEnvNames(manifest), ...getExposedNames(manifest) ];
     const projPath = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)));
     agents[containerName] = {
         agentName,

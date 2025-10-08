@@ -90,9 +90,141 @@ export function resolveVarValue(name) {
     return resolveAlias(raw, secrets);
 }
 
+function toBool(value, defaultValue = false) {
+    if (value === undefined) return defaultValue;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (!normalized) return defaultValue;
+        return normalized === 'true' || normalized === '1' || normalized === 'yes';
+    }
+    return defaultValue;
+}
+
+function getManifestEnvSpecs(manifest) {
+    const specs = [];
+    const env = manifest?.env;
+    if (!env) return specs;
+
+    if (Array.isArray(env)) {
+        for (const entry of env) {
+            if (!entry && entry !== 0) continue;
+            const insideName = String(entry).trim();
+            if (!insideName) continue;
+            specs.push({
+                insideName,
+                sourceName: insideName,
+                required: false,
+                defaultValue: undefined
+            });
+        }
+        return specs;
+    }
+
+    if (env && typeof env === 'object') {
+        for (const [insideKey, rawSpec] of Object.entries(env)) {
+            if (!insideKey) continue;
+            const insideName = String(insideKey).trim();
+            if (!insideName) continue;
+
+            let sourceName = insideName;
+            let required = false;
+            let defaultValue;
+
+            if (rawSpec && typeof rawSpec === 'object' && !Array.isArray(rawSpec)) {
+                if (typeof rawSpec.varName === 'string' && rawSpec.varName.trim()) {
+                    sourceName = rawSpec.varName.trim();
+                } else if (typeof rawSpec.name === 'string' && rawSpec.name.trim()) {
+                    sourceName = rawSpec.name.trim();
+                }
+                if (Object.prototype.hasOwnProperty.call(rawSpec, 'required')) {
+                    required = toBool(rawSpec.required, false);
+                }
+                if (Object.prototype.hasOwnProperty.call(rawSpec, 'default')) {
+                    defaultValue = rawSpec.default;
+                } else if (Object.prototype.hasOwnProperty.call(rawSpec, 'value')) {
+                    defaultValue = rawSpec.value;
+                }
+            } else if (typeof rawSpec === 'string' && rawSpec.trim()) {
+                sourceName = rawSpec.trim();
+            } else if (rawSpec !== undefined && rawSpec !== null && rawSpec !== '') {
+                sourceName = String(rawSpec);
+            }
+
+            specs.push({
+                insideName,
+                sourceName,
+                required,
+                defaultValue
+            });
+        }
+    }
+
+    return specs;
+}
+
+function isEmptyValue(value) {
+    if (value === undefined || value === null) return true;
+    const str = String(value);
+    return str.trim().length === 0;
+}
+
+function resolveManifestEnv(manifest, secrets, options = {}) {
+    const specs = getManifestEnvSpecs(manifest);
+    const resolved = [];
+    const missing = [];
+
+    for (const spec of specs) {
+        let resolvedValue;
+        const hasSecret = spec.sourceName && Object.prototype.hasOwnProperty.call(secrets, spec.sourceName);
+        if (hasSecret) {
+            resolvedValue = resolveAlias(secrets[spec.sourceName], secrets);
+        } else if (spec.sourceName && Object.prototype.hasOwnProperty.call(process.env, spec.sourceName)) {
+            resolvedValue = process.env[spec.sourceName];
+        } else if (Object.prototype.hasOwnProperty.call(spec, 'defaultValue')) {
+            resolvedValue = spec.defaultValue;
+        } else {
+            resolvedValue = undefined;
+        }
+
+        const normalizedValue = resolvedValue === undefined || resolvedValue === null
+            ? undefined
+            : String(resolvedValue);
+
+        if (spec.required && isEmptyValue(normalizedValue)) {
+            missing.push(spec);
+        }
+
+        resolved.push({
+            insideName: spec.insideName,
+            sourceName: spec.sourceName,
+            required: spec.required,
+            value: normalizedValue
+        });
+    }
+
+    if ((options?.enforceRequired) && missing.length) {
+        const details = missing.map(spec =>
+            (spec.sourceName && spec.sourceName !== spec.insideName)
+                ? `${spec.insideName} (source: ${spec.sourceName})`
+                : spec.insideName
+        );
+        const error = new Error(`Missing required environment variables: ${details.join(', ')}`);
+        error.code = 'PLOINKY_ENV_REQUIRED_MISSING';
+        error.missing = missing.map(spec => spec.insideName);
+        throw error;
+    }
+
+    return { resolved, missing };
+}
+
+export function getManifestEnvNames(manifest) {
+    return getManifestEnvSpecs(manifest).map(spec => spec.insideName);
+}
+
 export function getExposedNames(manifest) {
-    const names = new Set();
-    if (Array.isArray(manifest?.env)) manifest.env.forEach(n => names.add(String(n)));
+    const names = new Set(getManifestEnvNames(manifest));
     const exp = manifest?.expose;
     if (Array.isArray(exp)) {
         exp.forEach(e => {
@@ -106,11 +238,11 @@ export function getExposedNames(manifest) {
 
 export function buildEnvFlags(manifest) {
     const secrets = parseSecrets();
+    const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: true }).resolved;
     const out = [];
-    if (Array.isArray(manifest?.env)) {
-        for (const k of manifest.env) {
-            const val = resolveAlias(secrets[k], secrets);
-            if (val !== undefined) out.push(`-e ${k}=${val ?? ''}`);
+    for (const entry of envEntries) {
+        if (entry.value !== undefined) {
+            out.push(`-e ${entry.insideName}=${entry.value}`);
         }
     }
     const exp = manifest?.expose;
@@ -140,10 +272,10 @@ export function buildEnvFlags(manifest) {
 export function buildEnvMap(manifest) {
     const secrets = parseSecrets();
     const out = {};
-    if (Array.isArray(manifest?.env)) {
-        for (const k of manifest.env) {
-            const val = resolveAlias(secrets[k], secrets);
-            out[k] = val ?? '';
+    const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: false }).resolved;
+    for (const entry of envEntries) {
+        if (entry.value !== undefined) {
+            out[entry.insideName] = entry.value;
         }
     }
     const exp = manifest?.expose;
