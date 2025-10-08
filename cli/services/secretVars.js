@@ -102,21 +102,42 @@ function toBool(value, defaultValue = false) {
     return defaultValue;
 }
 
-function getManifestEnvSpecs(manifest) {
+export function getManifestEnvSpecs(manifest) {
     const specs = [];
     const env = manifest?.env;
     if (!env) return specs;
 
     if (Array.isArray(env)) {
         for (const entry of env) {
-            if (!entry && entry !== 0) continue;
-            const insideName = String(entry).trim();
+            if (entry === undefined || entry === null) continue;
+            if (typeof entry === 'object' && !Array.isArray(entry)) {
+                const { name, value, varName, required } = entry;
+                const insideName = typeof name === 'string' ? name.trim() : '';
+                if (!insideName) continue;
+                const sourceName = typeof varName === 'string' && varName.trim() ? varName.trim() : insideName;
+                specs.push({
+                    insideName,
+                    sourceName,
+                    required: toBool(required, false),
+                    defaultValue: value
+                });
+                continue;
+            }
+            const text = String(entry).trim();
+            if (!text) continue;
+            let insideName = text;
+            let defaultValue;
+            const eqIdx = text.indexOf('=');
+            if (eqIdx >= 0) {
+                insideName = text.slice(0, eqIdx).trim();
+                defaultValue = text.slice(eqIdx + 1);
+            }
             if (!insideName) continue;
             specs.push({
                 insideName,
                 sourceName: insideName,
                 required: false,
-                defaultValue: undefined
+                defaultValue
             });
         }
         return specs;
@@ -131,7 +152,6 @@ function getManifestEnvSpecs(manifest) {
             let sourceName = insideName;
             let required = false;
             let defaultValue;
-
             if (rawSpec && typeof rawSpec === 'object' && !Array.isArray(rawSpec)) {
                 if (typeof rawSpec.varName === 'string' && rawSpec.varName.trim()) {
                     sourceName = rawSpec.varName.trim();
@@ -177,6 +197,7 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
 
     for (const spec of specs) {
         let resolvedValue;
+        let usedDefault = false;
         const hasSecret = spec.sourceName && Object.prototype.hasOwnProperty.call(secrets, spec.sourceName);
         if (hasSecret) {
             resolvedValue = resolveAlias(secrets[spec.sourceName], secrets);
@@ -184,8 +205,14 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
             resolvedValue = process.env[spec.sourceName];
         } else if (Object.prototype.hasOwnProperty.call(spec, 'defaultValue')) {
             resolvedValue = spec.defaultValue;
+            usedDefault = true;
         } else {
             resolvedValue = undefined;
+        }
+
+        if (!usedDefault && (resolvedValue === undefined || resolvedValue === null) && Object.prototype.hasOwnProperty.call(spec, 'defaultValue')) {
+            resolvedValue = spec.defaultValue;
+            usedDefault = true;
         }
 
         const normalizedValue = resolvedValue === undefined || resolvedValue === null
@@ -200,7 +227,9 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
             insideName: spec.insideName,
             sourceName: spec.sourceName,
             required: spec.required,
-            value: normalizedValue
+            value: normalizedValue,
+            defaultValue: Object.prototype.hasOwnProperty.call(spec, 'defaultValue') ? spec.defaultValue : undefined,
+            usedDefault
         });
     }
 
@@ -221,6 +250,11 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
 
 export function getManifestEnvNames(manifest) {
     return getManifestEnvSpecs(manifest).map(spec => spec.insideName);
+}
+
+export function collectManifestEnv(manifest, { enforceRequired = false } = {}) {
+    const secrets = parseSecrets();
+    return resolveManifestEnv(manifest, secrets, { enforceRequired });
 }
 
 export function getExposedNames(manifest) {

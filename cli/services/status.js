@@ -198,18 +198,20 @@ export function statusWorkspace() {
     } else {
         const baseUrl = ssoStatus.config.baseUrl || ssoStatus.secrets.baseUrl || '(unset)';
         const clientSecretState = ssoStatus.secrets.clientSecret ? '[set]' : '(unset)';
-        const keycloakShort = ssoStatus.config.keycloakAgentShort || ssoStatus.config.keycloakAgent;
-        const keycloakLabel = keycloakShort && keycloakShort !== ssoStatus.config.keycloakAgent
-            ? `${ssoStatus.config.keycloakAgent} (${keycloakShort})`
-            : ssoStatus.config.keycloakAgent;
+        const providerAgent = ssoStatus.config.providerAgent || ssoStatus.config.keycloakAgent;
+        const providerShort = ssoStatus.config.providerAgentShort || ssoStatus.config.keycloakAgentShort || providerAgent;
+        const providerLabel = providerShort && providerShort !== providerAgent
+            ? `${providerAgent} (${providerShort})`
+            : providerAgent;
         console.log('- SSO: enabled');
-        console.log(`    Keycloak agent: ${keycloakLabel}${ssoStatus.keycloakHostPort ? ` (host port ${ssoStatus.keycloakHostPort})` : ''}`);
-        const postgresShort = ssoStatus.config.postgresAgentShort || ssoStatus.config.postgresAgent;
-        const postgresLabel = postgresShort && postgresShort !== ssoStatus.config.postgresAgent
-            ? `${ssoStatus.config.postgresAgent} (${postgresShort})`
-            : ssoStatus.config.postgresAgent;
+        console.log(`    Provider agent: ${providerLabel}${ssoStatus.providerHostPort ? ` (host port ${ssoStatus.providerHostPort})` : ''}`);
+        const databaseAgent = ssoStatus.config.databaseAgent || ssoStatus.config.postgresAgent;
+        const databaseShort = ssoStatus.config.databaseAgentShort || ssoStatus.config.postgresAgentShort || databaseAgent;
+        const databaseLabel = databaseShort && databaseShort !== databaseAgent
+            ? `${databaseAgent} (${databaseShort})`
+            : databaseAgent;
         console.log(`    Realm / Client: ${ssoStatus.config.realm} / ${ssoStatus.config.clientId}`);
-        console.log(`    Postgres agent: ${postgresLabel}`);
+        console.log(`    Database agent: ${databaseLabel}`);
         console.log(`    Base URL: ${baseUrl}`);
         console.log(`    Redirect URI: ${ssoStatus.config.redirectUri || ssoStatus.secrets.redirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/auth/callback`}`);
         console.log(`    Logout redirect: ${ssoStatus.config.logoutRedirectUri || ssoStatus.secrets.logoutRedirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/`}`);

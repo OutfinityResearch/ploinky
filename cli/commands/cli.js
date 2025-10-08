@@ -15,7 +15,18 @@ import { startWorkspace, runCli, runShell, refreshAgent } from '../services/work
 import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/routerEnv.js';
 import * as dockerSvc from '../services/docker.js';
 import * as workspaceSvc from '../services/workspace.js';
-import { getSsoConfig, setSsoConfig, disableSsoConfig, gatherSsoStatus, getRouterPort as getSsoRouterPort, getAgentHostPort as getSsoAgentHostPort, normalizeBaseUrl as normalizeSsoBaseUrl, extractShortAgentName as extractSsoShortName } from '../services/sso.js';
+import {
+    getSsoConfig,
+    setSsoConfig,
+    disableSsoConfig,
+    gatherSsoStatus,
+    getRouterPort as getSsoRouterPort,
+    getAgentHostPort as getSsoAgentHostPort,
+    normalizeBaseUrl as normalizeSsoBaseUrl,
+    extractShortAgentName as extractSsoShortName,
+    SSO_ENV_ROLE_CANDIDATES,
+    resolveEnvRoleValues as resolveSsoEnvRoleValues
+} from '../services/sso.js';
 import { setupKeycloakRealm, parseRolesString, loadRolesFromFile, DEFAULT_ROLES } from '../services/keycloakSetup.js';
 import ClientCommands from './client.js';
 
@@ -275,137 +286,170 @@ function ensureSecretValue(name, generator) {
 }
 
 function printSsoDetails(status, { includeSecrets = false } = {}) {
-    const { config, secrets, routerPort, keycloakHostPort } = status;
+    const { config, secrets, routerPort, providerHostPort } = status;
     if (!config.enabled) {
         console.log('SSO: disabled');
         return;
     }
+
     const baseUrl = config.baseUrl || secrets.baseUrl || '(unset)';
-    const keycloakShort = config.keycloakAgentShort || extractSsoShortName(config.keycloakAgent);
-    const postgresShort = config.postgresAgentShort || extractSsoShortName(config.postgresAgent);
-    const keycloakLabel = keycloakShort && keycloakShort !== config.keycloakAgent
-        ? `${config.keycloakAgent} (${keycloakShort})`
-        : config.keycloakAgent;
-    const postgresLabel = postgresShort && postgresShort !== config.postgresAgent
-        ? `${config.postgresAgent} (${postgresShort})`
-        : config.postgresAgent;
+    const realm = config.realm || secrets.realm || '(unset)';
+    const clientId = config.clientId || secrets.clientId || '(unset)';
+    const scope = config.scope || secrets.scope || '(unset)';
+
+    const providerShort = config.providerAgentShort || config.keycloakAgentShort || extractSsoShortName(config.providerAgent || config.keycloakAgent);
+    const providerAgent = config.providerAgent || config.keycloakAgent;
+    const providerLabel = providerShort && providerShort !== providerAgent
+        ? `${providerAgent} (${providerShort})`
+        : providerAgent;
+
+    const databaseShort = config.databaseAgentShort || config.postgresAgentShort || extractSsoShortName(config.databaseAgent || config.postgresAgent);
+    const databaseAgent = config.databaseAgent || config.postgresAgent;
+    const databaseLabel = databaseShort && databaseShort !== databaseAgent
+        ? `${databaseAgent} (${databaseShort})`
+        : databaseAgent;
+
+    const redirectUri = config.redirectUri || secrets.redirectUri || `http://127.0.0.1:${routerPort}/auth/callback`;
+    const logoutRedirectUri = config.logoutRedirectUri || secrets.logoutRedirectUri || `http://127.0.0.1:${routerPort}/`;
+
     console.log('SSO: enabled');
+    console.log(`  Provider agent: ${providerLabel}${providerHostPort ? ` (host port ${providerHostPort})` : ''}`);
+    console.log(`  Database agent: ${databaseLabel}`);
     console.log(`  Base URL: ${baseUrl}`);
-    console.log(`  Realm: ${config.realm}`);
-    console.log(`  Client ID: ${config.clientId}`);
-    console.log(`  Scope: ${config.scope}`);
-    console.log(`  Keycloak agent: ${keycloakLabel} ${keycloakHostPort ? `(host port ${keycloakHostPort})` : ''}`.trim());
-    console.log(`  Postgres agent: ${postgresLabel}`);
-    console.log(`  Redirect URI: ${config.redirectUri || secrets.redirectUri || `http://127.0.0.1:${routerPort}/auth/callback`}`);
-    console.log(`  Logout redirect: ${config.logoutRedirectUri || secrets.logoutRedirectUri || `http://127.0.0.1:${routerPort}/`}`);
+    console.log(`  Realm: ${realm}`);
+    console.log(`  Client ID: ${clientId}`);
+    console.log(`  Scope: ${scope}`);
+    console.log(`  Redirect URI: ${redirectUri}`);
+    console.log(`  Logout redirect: ${logoutRedirectUri}`);
+
     if (includeSecrets) {
-        const secretDisplay = secrets.clientSecret ? '[set]' : '(unset)';
-        console.log(`  Client secret: ${secretDisplay}`);
-        const adminUser = envSvc.resolveVarValue('KEYCLOAK_ADMIN') || '(unset)';
-        const adminSecret = envSvc.resolveVarValue('KEYCLOAK_ADMIN_PASSWORD') ? '[set]' : '(unset)';
-        console.log(`  Admin user: ${adminUser}`);
-        console.log(`  Admin password: ${adminSecret}`);
+        const clientSecretDisplay = secrets.clientSecret ? '[set]' : '(unset)';
+        const adminUserDisplay = secrets.adminUser || '(unset)';
+        const adminPasswordDisplay = secrets.adminPassword ? '[set]' : '(unset)';
+        console.log(`  Client secret: ${clientSecretDisplay}`);
+        console.log(`  Admin user: ${adminUserDisplay}`);
+        console.log(`  Admin password: ${adminPasswordDisplay}`);
     }
 }
 
-function parseSsoAgents(rest, flags) {
-    let keycloakAgentRaw = flags.agent ?? flags.keycloak ?? rest[0] ?? 'keycloak';
-    if (typeof keycloakAgentRaw === 'boolean') {
-        keycloakAgentRaw = keycloakAgentRaw ? 'keycloak' : '';
-    }
-    if (typeof keycloakAgentRaw !== 'string' || !keycloakAgentRaw.trim()) {
-        keycloakAgentRaw = rest[0];
-    }
-    if (typeof keycloakAgentRaw !== 'string' || !keycloakAgentRaw.trim()) {
-        keycloakAgentRaw = 'keycloak';
-    }
-    let postgresAgentRaw = flags['db-agent'] ?? flags.postgres ?? rest[1] ?? 'postgres';
-    if (typeof postgresAgentRaw === 'boolean') {
-        postgresAgentRaw = postgresAgentRaw ? 'postgres' : '';
-    }
-    if (typeof postgresAgentRaw !== 'string' || !postgresAgentRaw.trim()) {
-        postgresAgentRaw = 'postgres';
-    }
-    const keycloakAgent = String(keycloakAgentRaw).trim();
-    const postgresAgent = String(postgresAgentRaw).trim();
-    return { keycloakAgent, postgresAgent };
-}
+async function enableSsoCommand() {
+    const config = getSsoConfig();
+    const providerAgent = config.providerAgent || config.keycloakAgent || 'keycloak';
+    const databaseAgent = config.databaseAgent || config.postgresAgent || 'postgres';
 
-async function enableSsoCommand(args = []) {
-    const { flags, rest } = parseFlagArgs(args);
-    const { keycloakAgent, postgresAgent } = parseSsoAgents(rest, flags);
+    let manifest;
+    try {
+        const { manifestPath } = findAgent(providerAgent);
+        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    } catch (err) {
+        throw new Error(`Unable to load manifest for SSO provider '${providerAgent}': ${err?.message || err}`);
+    }
 
-    const routerPort = getSsoRouterPort();
-    let baseUrl = flags.url || flags.base || flags['keycloak-url'] || '';
-    if (!baseUrl) {
-        const hostPort = getSsoAgentHostPort(keycloakAgent);
-        if (hostPort) {
-            baseUrl = `http://127.0.0.1:${hostPort}`;
+    const envResolution = envSvc.collectManifestEnv(manifest, { enforceRequired: false });
+    const resolvedEnv = envResolution.resolved || [];
+
+    if (!resolvedEnv.length) {
+        console.log(`⚠ Provider manifest for '${providerAgent}' did not expose any environment bindings.`);
+    }
+
+    const missingRequired = [];
+    for (const entry of resolvedEnv) {
+        const hostName = entry.sourceName || entry.insideName;
+        const value = entry.value !== undefined && entry.value !== null ? String(entry.value).trim() : '';
+        if (entry.required && !value) {
+            missingRequired.push({ host: hostName, inside: entry.insideName });
+        }
+        if (entry.usedDefault && hostName) {
+            envSvc.setEnvVar(hostName, entry.value ?? '');
         }
     }
-    if (!baseUrl) {
-        baseUrl = 'http://127.0.0.1:9090';
-        console.log('⚠ Could not detect Keycloak host port. Using placeholder http://127.0.0.1:9090 (default from manifest). Override with --url once the agent is running.');
-    }
-    baseUrl = normalizeSsoBaseUrl(baseUrl);
 
-    const realm = flags.realm || 'ploinky';
-    const clientId = flags['client-id'] || 'ploinky-router';
-    const clientSecret = flags['client-secret'];
-    const scope = flags.scope || 'openid profile email';
-    const redirectUri = flags.redirect || flags['redirect-uri'] || `http://127.0.0.1:${routerPort}/auth/callback`;
-    const logoutRedirectUri = flags['logout-redirect'] || flags['post-logout'] || `http://127.0.0.1:${routerPort}/`;
-
-    envSvc.setEnvVar('KEYCLOAK_URL', baseUrl);
-    envSvc.setEnvVar('KEYCLOAK_REALM', realm);
-    envSvc.setEnvVar('KEYCLOAK_CLIENT_ID', clientId);
-    envSvc.setEnvVar('KEYCLOAK_SCOPE', scope);
-    envSvc.setEnvVar('KEYCLOAK_REDIRECT_URI', redirectUri);
-    envSvc.setEnvVar('KEYCLOAK_LOGOUT_REDIRECT_URI', logoutRedirectUri);
-    if (typeof clientSecret === 'string' && clientSecret.length) {
-        envSvc.setEnvVar('KEYCLOAK_CLIENT_SECRET', clientSecret);
+    if (missingRequired.length) {
+        const details = missingRequired.map(({ host, inside }) =>
+            host && host !== inside ? `${host} (container: ${inside})` : (host || inside)
+        ).join(', ');
+        throw new Error(`Missing required SSO environment variables: ${details}. Use 'ploinky var <NAME> <value>' to set them and rerun 'ploinky sso enable'.`);
     }
 
-    // Postgres database credentials
+    const envBindings = resolvedEnv.map(entry => ({
+        inside: entry.insideName,
+        host: entry.sourceName || entry.insideName,
+        required: entry.required
+    }));
+
+    const roleValues = resolveSsoEnvRoleValues(envBindings);
+    const routerPort = getSsoRouterPort();
+
+    let baseUrlInput = roleValues.baseUrl || config.baseUrl || '';
+    if (!baseUrlInput) {
+        const detectedPort = getSsoAgentHostPort(providerAgent);
+        if (detectedPort) {
+            baseUrlInput = `http://127.0.0.1:${detectedPort}`;
+        }
+    }
+    if (!baseUrlInput) {
+        const baseUrlVar = SSO_ENV_ROLE_CANDIDATES.baseUrl.find(name =>
+            envBindings.some(binding => (binding.host || binding.inside) === name)
+        ) || SSO_ENV_ROLE_CANDIDATES.baseUrl[0];
+        throw new Error(`Unable to determine SSO provider URL. Set ${baseUrlVar} via 'ploinky var ${baseUrlVar} <value>' and rerun.`);
+    }
+    const baseUrl = normalizeSsoBaseUrl(baseUrlInput);
+
+    const realm = roleValues.realm || config.realm || 'ploinky';
+    const clientId = roleValues.clientId || config.clientId || 'ploinky-router';
+    const scope = roleValues.scope || config.scope || 'openid profile email';
+    const redirectUri = roleValues.redirectUri || config.redirectUri || `http://127.0.0.1:${routerPort}/auth/callback`;
+    const logoutRedirectUri = roleValues.logoutRedirectUri || config.logoutRedirectUri || `http://127.0.0.1:${routerPort}/`;
+
+    const adminUserVar = SSO_ENV_ROLE_CANDIDATES.adminUser.find(name =>
+        envBindings.some(binding => (binding.host || binding.inside) === name)
+    );
+    if (adminUserVar) {
+        ensureSecretValue(adminUserVar, 'admin');
+    }
+    const adminPasswordVar = SSO_ENV_ROLE_CANDIDATES.adminPassword.find(name =>
+        envBindings.some(binding => (binding.host || binding.inside) === name)
+    );
+    if (adminPasswordVar) {
+        ensureSecretValue(adminPasswordVar, () => randomSecret(16));
+    }
+
     ensureSecretValue('POSTGRES_DB', 'keycloak');
     ensureSecretValue('POSTGRES_USER', 'keycloak');
     const pgPassword = ensureSecretValue('POSTGRES_PASSWORD', () => randomSecret(16));
-    
-    // Keycloak admin credentials
-    ensureSecretValue('KEYCLOAK_ADMIN', 'admin');
-    ensureSecretValue('KEYCLOAK_ADMIN_PASSWORD', () => randomSecret(16));
-    
-    // Keycloak database connection (must match Postgres credentials)
-    // On Linux, use container name for direct communication via Docker network
-    // On Mac/Windows, host.docker.internal works but container name is better
-    const postgresContainerName = `ploinky_agent_${extractSsoShortName(postgresAgent)}_${path.basename(process.cwd())}_${crypto.createHash('sha256').update(process.cwd()).digest('hex').substring(0, 6)}`;
-    envSvc.setEnvVar('KC_DB', 'postgres');
-    envSvc.setEnvVar('KC_DB_URL_HOST', postgresContainerName);
-    envSvc.setEnvVar('KC_DB_URL_DATABASE', 'keycloak');
-    envSvc.setEnvVar('KC_DB_USERNAME', 'keycloak');
-    envSvc.setEnvVar('KC_DB_PASSWORD', pgPassword);
+
+    const databaseShort = extractSsoShortName(databaseAgent);
+    const databaseContainerName = `ploinky_agent_${databaseShort}_${path.basename(process.cwd())}_${crypto.createHash('sha256').update(process.cwd()).digest('hex').substring(0, 6)}`;
+
+    if (resolvedEnv.some(entry => entry.insideName === 'KC_DB' || entry.sourceName === 'KC_DB')) {
+        envSvc.setEnvVar('KC_DB', 'postgres');
+        envSvc.setEnvVar('KC_DB_URL_HOST', databaseContainerName);
+        envSvc.setEnvVar('KC_DB_URL_DATABASE', 'keycloak');
+        envSvc.setEnvVar('KC_DB_USERNAME', 'keycloak');
+        envSvc.setEnvVar('KC_DB_PASSWORD', pgPassword);
+    }
 
     setSsoConfig({
-        enabled: true,
-        keycloakAgent,
-        postgresAgent,
+        providerAgent,
+        databaseAgent,
         baseUrl,
         realm,
         clientId,
         redirectUri,
         logoutRedirectUri,
-        scope
+        scope,
+        envBindings
     });
 
     console.log('✓ SSO configuration saved.');
-    console.log(`  Keycloak agent: ${keycloakAgent}`);
-    console.log(`  Postgres agent: ${postgresAgent}`);
+    console.log(`  Provider agent: ${providerAgent}`);
+    console.log(`  Database agent: ${databaseAgent}`);
     console.log(`  Base URL: ${baseUrl}`);
     console.log(`  Realm: ${realm}`);
     console.log(`  Client ID: ${clientId}`);
     console.log(`  Redirect URI: ${redirectUri}`);
 
-    console.log('Remember to clone/enable the Keycloak and Postgres agents (e.g. add repo sso-agent; enable agent keycloak) before restarting the workspace.');
+    console.log(`Remember to clone/enable the '${providerAgent}' and '${databaseAgent}' agents before restarting the workspace.`);
     printSsoDetails(gatherSsoStatus(), { includeSecrets: true });
 }
 
@@ -470,13 +514,21 @@ async function setupSsoCommand(args = []) {
     
     console.log(`\n📋 Roles to create: ${uniqueRoles.map(r => r.name).join(', ')}\n`);
     
-    // Get admin credentials
-    const adminUser = envSvc.resolveVarValue('KEYCLOAK_ADMIN');
-    const adminPassword = envSvc.resolveVarValue('KEYCLOAK_ADMIN_PASSWORD');
+    const status = gatherSsoStatus();
+    const secrets = status.secrets || {};
+
+    const adminUser = secrets.adminUser;
+    const adminPassword = secrets.adminPassword;
     
     if (!adminUser || !adminPassword) {
-        console.log('❌ Keycloak admin credentials not found.');
+        console.log('❌ SSO admin credentials not found.');
         console.log('   Run "ploinky sso enable" to configure them.');
+        return;
+    }
+    
+    const providerAgent = config.providerAgent || config.keycloakAgent || 'keycloak';
+    if (!String(providerAgent || '').toLowerCase().includes('keycloak')) {
+        console.log(`❌ SSO setup currently supports Keycloak providers only (configured provider: ${providerAgent}).`);
         return;
     }
     
@@ -493,10 +545,13 @@ async function setupSsoCommand(args = []) {
         });
         
         // Store client secret
-        envSvc.setEnvVar('KEYCLOAK_CLIENT_SECRET', result.clientSecret);
+        const clientSecretVar = SSO_ENV_ROLE_CANDIDATES.clientSecret.find(name =>
+            Array.isArray(config.envBindings) && config.envBindings.some(binding => (binding.host || binding.inside) === name)
+        ) || 'KEYCLOAK_CLIENT_SECRET';
+        envSvc.setEnvVar(clientSecretVar, result.clientSecret);
         console.log('  ✓ Stored client secret in .ploinky/.secrets\n');
         
-        console.log('✅ Keycloak configured successfully!\n');
+        console.log(`✅ ${providerAgent} configured successfully!\n`);
         console.log('📝 Next steps:');
         console.log(`  1. Open ${config.baseUrl}`);
         console.log(`  2. Login with: ${adminUser} / [your-password]`);
@@ -507,9 +562,15 @@ async function setupSsoCommand(args = []) {
     } catch (error) {
         console.log(`\n❌ Setup failed: ${error.message}`);
         console.log('\nTroubleshooting:');
-        console.log('  • Make sure Keycloak is running: ploinky start keycloak');
-        console.log('  • Check admin credentials: ploinky vars | grep KEYCLOAK_ADMIN');
-        console.log(`  • Verify Keycloak URL: ${config.baseUrl}\n`);
+        console.log(`  • Make sure ${providerAgent} is running: ploinky start ${providerAgent}`);
+        const adminVarName = SSO_ENV_ROLE_CANDIDATES.adminUser.find(name =>
+            Array.isArray(config.envBindings) && config.envBindings.some(binding => (binding.host || binding.inside) === name)
+        ) || 'KEYCLOAK_ADMIN';
+        const urlVarName = SSO_ENV_ROLE_CANDIDATES.baseUrl.find(name =>
+            Array.isArray(config.envBindings) && config.envBindings.some(binding => (binding.host || binding.inside) === name)
+        ) || 'KEYCLOAK_URL';
+        console.log(`  • Check admin credentials: ploinky vars | grep ${adminVarName}`);
+        console.log(`  • Verify provider URL (${urlVarName}): ${config.baseUrl || '[unset]'}\n`);
     }
 }
 
@@ -517,7 +578,10 @@ async function handleSsoCommand(options = []) {
     const subcommand = (options[0] || 'status').toLowerCase();
     const rest = options.slice(1);
     if (subcommand === 'enable') {
-        await enableSsoCommand(rest);
+        if (rest.length > 0) {
+            throw new Error('Usage: ploinky sso enable');
+        }
+        await enableSsoCommand();
         return;
     }
     if (subcommand === 'disable') {
