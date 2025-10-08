@@ -33,7 +33,7 @@
     "dependencies": {
         "flexsearch": "github:PloinkyRepos/flexsearch#main",
         "mcp-sdk": "github:PloinkyRepos/MCPSDK#main",
-        "ploinky-agent-lib": "github:OutfinityResearch/ploinkyAgentLib#main",
+        "ploinky-agent-lib": "github:OutfinityResearch/ploinkyAgentLib#master",
         "node-pty": "^1.0.0"
     },
     "devDependencies": {
