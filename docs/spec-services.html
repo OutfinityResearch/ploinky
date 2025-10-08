@@ -118,7 +118,7 @@ function setConfig(config) {
 
                     <div class="doc-section" id="docker">
                         <h2>Docker Service</h2>
-                        <p><strong>File:</strong> <code>cli/services/docker.js</code></p>
+                        <p><strong>Files:</strong> <code>cli/services/docker/common.js</code>, <code>cli/services/docker/interactive.js</code>, <code>cli/services/docker/management.js</code></p>
                         <p>Handles all container operations including lifecycle management, port mapping, and runtime detection.</p>
                         
                         <h3>Container Naming</h3>
@@ -663,13 +663,13 @@ function killByPidFile(name) {
                         <pre><code>// Service dependency graph
 cli.js
 ├── workspace.js      // Configuration storage
-├── docker.js         // Container management
+├── docker/           // Container management (shared helpers + interactive + management)
 │   └── workspace.js  // Read agent registry
 ├── repos.js          // Repository management
 │   └── workspace.js  // Store enabled repos
 ├── agents.js         // Agent lifecycle
 │   ├── workspace.js  // Update registry
-│   ├── docker.js     // Create containers
+│   ├── docker/       // Create containers
 │   └── utils.js      // Find agents
 ├── secretVars.js     // Environment variables
 │   └── workspace.js  // Store in .secrets
@@ -682,7 +682,7 @@ cli.js
                             <li><strong>Workspace Init:</strong> workspace.js creates .ploinky structure</li>
                             <li><strong>Repo Add:</strong> repos.js clones/registers repositories</li>
                             <li><strong>Agent Enable:</strong> agents.js registers in workspace</li>
-                            <li><strong>Container Start:</strong> docker.js creates/starts containers</li>
+                            <li><strong>Container Start:</strong> docker/ modules create/maintain containers</li>
                             <li><strong>Route Setup:</strong> RoutingServer.js configures proxying</li>
                             <li><strong>Service Run:</strong> Agents serve API endpoints</li>
                         </ol>

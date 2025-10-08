@@ -1,4 +1,4 @@
-import { buildExecArgs } from '../../services/docker.js';
+import { buildExecArgs } from '../../services/docker/index.js';
 
 // Escape special characters for shell arguments
 function shellEscape(str) {

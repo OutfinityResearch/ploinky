@@ -1,4 +1,4 @@
-import { buildExecArgs } from '../../services/docker.js';
+import { buildExecArgs } from '../../services/docker/index.js';
 
 function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
   const DEBUG = process.env.WEBTTY_DEBUG === '1';

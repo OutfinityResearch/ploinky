@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { PLOINKY_DIR } from './config.js';
 import * as reposSvc from './repos.js';
-import { getAgentsRegistry } from './docker.js';
+import { getAgentsRegistry } from './docker/index.js';
 import { findAgent } from './utils.js';
 import { gatherSsoStatus } from './sso.js';
 
