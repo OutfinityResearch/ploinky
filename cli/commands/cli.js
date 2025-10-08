@@ -241,7 +241,14 @@ function configureWebttyShell(input) {
 }
 
 async function destroyAll() {
-    try { const list = dockerSvc.destroyWorkspaceContainers(); if (list.length) { console.log('Removed containers:'); list.forEach(n => console.log(` - ${n}`)); } console.log(`Destroyed ${list.length} containers from this workspace.`); }
+    try {
+        const list = dockerSvc.destroyWorkspaceContainers({ fast: true });
+        if (list.length) {
+            console.log('Removed containers:');
+            list.forEach(n => console.log(` - ${n}`));
+        }
+        console.log(`Destroyed ${list.length} containers from this workspace.`);
+    }
     catch (e) { console.error('Destroy failed:', e.message); }
 }
 

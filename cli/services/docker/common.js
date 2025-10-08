@@ -46,6 +46,7 @@ function getContainerRuntime() {
 }
 
 const containerRuntime = getContainerRuntime();
+const SLEEP_ARRAY = new Int32Array(new SharedArrayBuffer(4));
 const CONTAINER_CONFIG_DIR = '/code';
 const CONTAINER_CONFIG_PATH = `${CONTAINER_CONFIG_DIR}/mcp-config.json`;
 
@@ -144,6 +145,10 @@ function flagsToArgs(flags) {
     return out;
 }
 
+function sleepMs(ms) {
+    Atomics.wait(SLEEP_ARRAY, 0, 0, ms);
+}
+
 function parseManifestPorts(manifest) {
     const ports = manifest.ports || manifest.port;
     if (!ports) return { publishArgs: [], portMappings: [] };
@@ -213,6 +218,22 @@ function getContainerLabel(containerName, key) {
     }
 }
 
+function waitForContainerRunning(containerName, maxAttempts = 20, delayMs = 250) {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        try {
+            const status = execSync(`${containerRuntime} inspect ${containerName} --format '{{ .State.Status }}'`, { stdio: 'pipe' })
+                .toString()
+                .trim()
+                .toLowerCase();
+            if (status === 'running') {
+                return true;
+            }
+        } catch (_) {}
+        sleepMs(delayMs);
+    }
+    return false;
+}
+
 export {
     CONTAINER_CONFIG_DIR,
     CONTAINER_CONFIG_PATH,
@@ -234,6 +255,7 @@ export {
     parseManifestPorts,
     saveAgentsMap,
     syncAgentMcpConfig,
+    waitForContainerRunning,
     flagsToArgs
 };
 
