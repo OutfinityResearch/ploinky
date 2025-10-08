@@ -165,17 +165,15 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
         },
         'sso': {
-            description: 'Manage the Keycloak-based SSO middleware.',
+            description: 'Manage SSO middleware (OIDC providers such as Keycloak).',
             subcommands: {
                 'enable': {
-                    syntax: 'sso enable [agent] [--url <baseUrl>] [--realm <realm>] [--client-id <id>] [--client-secret <secret>] [--redirect <url>] [--logout-redirect <url>] [--db-agent <agent>]',
-                    description: 'Enable SSO, ensure Keycloak/Postgres agents are registered, and store secrets in .ploinky/.secrets.',
+                    syntax: 'sso enable',
+                    description: 'Enable SSO using environment variables declared in the provider manifest and store configuration in .ploinky/config.json.',
                     examples: [
-                        'sso enable',
-                        'sso enable --url http://localhost:18080 --realm staging --client-id router-app',
-                        'sso enable my-keycloak --db-agent my-postgres --redirect https://app.local/auth/callback'
+                        'sso enable'
                     ],
-                    notes: 'Defaults: agent=keycloak, db-agent=postgres, realm=ploinky, client-id=ploinky-router, base URL deduced from routing when possible. Secrets are saved to .ploinky/.secrets. Ensure the Keycloak/Postgres agents exist (for example, add repo sso-agent; enable agent keycloak) before restarting the workspace.'
+                    notes: 'The command reads required variables from the provider manifest (for example KEYCLOAK_URL, KEYCLOAK_REALM). Set them ahead of time with `ploinky var <NAME> <value>`. Ensure the provider and database agents are cloned and enabled before restarting the workspace.'
                 },
                 'disable': {
                     syntax: 'sso disable',
@@ -189,7 +187,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'setup': {
                     syntax: 'sso setup [--roles <role1,role2,...>] [--roles-file <path>]',
-                    description: 'Auto-configure Keycloak: create realm, client, and roles. Requires Keycloak to be running.',
+                    description: 'Auto-configure the Keycloak provider: create realm, client, and roles. Requires the provider to be running.',
                     examples: [
                         'sso setup',
                         'sso setup --roles admin,moderator,user,guest',
