@@ -3,7 +3,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { z } from 'zod';
+import { zod } from 'mcp-sdk';
+const { z } = zod;
 
 // AgentServer (MCP over HTTP): exposes tools/resources via Streamable HTTP transport on PORT (default 7000) at /mcp.
 
@@ -155,6 +156,17 @@ function createFieldSchema(fieldSpec) {
 
     if (!schema) {
         schema = z.any();
+    }
+
+    if (fieldSpec.isArray && type !== 'array') {
+        let arraySchema = z.array(schema);
+        if (typeof fieldSpec.minItems === 'number') {
+            arraySchema = arraySchema.min(fieldSpec.minItems);
+        }
+        if (typeof fieldSpec.maxItems === 'number') {
+            arraySchema = arraySchema.max(fieldSpec.maxItems);
+        }
+        schema = arraySchema;
     }
 
     if (Array.isArray(fieldSpec.enum) && !['string', 'number'].includes(type)) {
