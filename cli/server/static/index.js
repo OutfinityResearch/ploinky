@@ -1,8 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { parse } from 'url';
 
 const ROUTING_FILE = path.resolve('.ploinky/routing.json');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, '../../../');
+const MCP_BROWSER_CLIENT_URL = '/MCPBrowserClient.js';
+const MCP_BROWSER_CLIENT_FILE = path.resolve(PROJECT_ROOT, 'node_modules/ploinky-agent-lib/MCPBrowserClient.js');
 
 function readRouting() {
   try {
@@ -118,11 +123,23 @@ function resolveStaticFile(requestPath) {
 }
 
 function serveStaticRequest(req, res) {
-  const root = getStaticHostPath();
-  if (!root) return false;
   try {
     const parsed = parse(req.url);
     const pathname = decodeURIComponent(parsed.pathname || '/');
+    if (pathname === MCP_BROWSER_CLIENT_URL) {
+      try {
+        const data = fs.readFileSync(MCP_BROWSER_CLIENT_FILE);
+        res.writeHead(200, { 'Content-Type': 'application/javascript' });
+        res.end(data);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    const root = getStaticHostPath();
+    if (!root) return false;
+
     const rel = pathname.replace(/^\/+/, '');
     const target = resolveStaticFile(rel || '');
     if (target && sendFile(res, target)) return true;

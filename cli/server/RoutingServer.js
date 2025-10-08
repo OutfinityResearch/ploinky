@@ -499,6 +499,42 @@ function postJsonToAgent(targetPort, payload, res, agentPath, extraHeaders = {})
     }
 }
 
+function proxyMcpPassthrough(req, res, targetPort, agentPath) {
+    const pathWithLeadingSlash = agentPath.startsWith('/') ? agentPath : `/${agentPath}`;
+    const opts = {
+        hostname: '127.0.0.1',
+        port: targetPort,
+        path: pathWithLeadingSlash,
+        method: req.method,
+        headers: {
+            ...req.headers,
+            host: `127.0.0.1:${targetPort}`
+        }
+    };
+
+    const upstream = http.request(opts, upstreamRes => {
+        res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
+        upstreamRes.pipe(res, { end: true });
+    });
+
+    upstream.on('error', err => {
+        if (!res.headersSent) {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+        }
+        res.end(JSON.stringify({ ok: false, error: 'upstream error', detail: String(err) }));
+    });
+
+    req.on('aborted', () => {
+        upstream.destroy();
+    });
+
+    if (req.method === 'GET' || req.method === 'HEAD') {
+        req.pipe(upstream, { end: true });
+    } else {
+        req.pipe(upstream, { end: true });
+    }
+}
+
 function proxyApi(req, res, targetPort) {
     const method = (req.method || 'GET').toUpperCase();
     const parsed = parse(req.url || '', true);
@@ -776,6 +812,15 @@ async function processRequest(req, res) {
 
         const route = apiRoutes[agent];
         if (!route || !route.hostPort) { res.writeHead(404); return res.end('API Route not found'); }
+
+        //routes to mcp agent server to keep JSON-RPC format
+        const subPath = parts.slice(3).join('/');
+        const isMcpPassthrough = subPath === 'mcp' || subPath.startsWith('mcp/');
+        if (isMcpPassthrough) {
+            const agentPath = subPath.length ? `/${subPath}` : '/mcp';
+            proxyMcpPassthrough(req, res, Number(route.hostPort), agentPath);
+            return;
+        }
 
         const baseUrl = `http://127.0.0.1:${route.hostPort}/mcp`;
         // Cache per-request; could be memoized globally if needed
