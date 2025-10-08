@@ -13,7 +13,6 @@ import {
     getAgentContainerName,
     getConfiguredProjectPath,
     getContainerLabel,
-    getRuntime,
     getSecretsForAgent,
     getServiceContainerName,
     isContainerRunning,
@@ -103,7 +102,7 @@ function getContainerCandidates(name, rec) {
     return Array.from(candidates);
 }
 
-function stopConfiguredAgents() {
+function stopConfiguredAgents({ fast = false } = {}) {
     const agents = loadAgents();
     const entries = Object.entries(agents || {})
         .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'));
@@ -227,6 +226,36 @@ async function ensureAgentCore(manifest, agentPath) {
     }
 }
 
+function runInstallHook(agentName, manifest, agentPath, cwd) {
+    const installCmd = String(manifest.install || '').trim();
+    if (!installCmd) return;
+
+    const runtime = containerRuntime;
+    const image = manifest.container || manifest.image || 'node:18-alpine';
+    const agentLibPath = path.resolve(__dirname, '../../../Agent');
+    const projectRoot = process.env.PLOINKY_ROOT;
+    const nodeModulesPath = projectRoot ? path.join(projectRoot, 'node_modules') : null;
+    const volZ = runtime === 'podman' ? ':z' : '';
+    const roZ = runtime === 'podman' ? ':ro,z' : ':ro';
+
+    const args = ['run', '--rm', '-w', cwd,
+        '-v', `${cwd}:${cwd}${volZ}`,
+        '-v', `${agentLibPath}:/Agent${roZ}`,
+        '-v', `${path.resolve(agentPath)}:/code${roZ}`
+    ];
+    if (nodeModulesPath) {
+        args.push('-v', `${nodeModulesPath}:/node_modules${roZ}`);
+    }
+    const envFlags = flagsToArgs(buildEnvFlags(manifest));
+    if (envFlags.length) args.push(...envFlags);
+    console.log(`[install] ${agentName}: cd '${cwd}' && ${installCmd}`);
+    args.push(image, '/bin/sh', '-lc', `cd '${cwd}' && ${installCmd}`);
+    const res = spawnSync(runtime, args, { stdio: 'inherit' });
+    if (res.status !== 0) {
+        throw new Error(`[install] ${agentName}: command exited with ${res.status}`);
+    }
+}
+
 function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const containerName = getServiceContainerName(agentName);
     try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
@@ -240,6 +269,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const envHash = computeEnvHash(manifest);
     const projectRoot = process.env.PLOINKY_ROOT;
     const nodeModulesPath = path.join(projectRoot, 'node_modules');
+
+    runInstallHook(agentName, manifest, agentPath, cwd);
+
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', cwd,
         '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`,
         '-v', `${agentLibPath}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
@@ -273,18 +305,22 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     args.push('-e', 'NODE_PATH=/node_modules');
 
     args.push(image);
+    let entrySummary = 'sh /Agent/server/AgentServer.sh';
     if (agentCmd) {
         const needsShell = /[;&|$`\n(){}]/.test(agentCmd);
         if (needsShell) {
             args.push('/bin/sh', '-lc', agentCmd);
+            entrySummary = agentCmd;
         } else {
             const cmdParts = agentCmd.split(/\s+/).filter(Boolean);
             args.push(...cmdParts);
+            entrySummary = cmdParts.join(' ');
         }
     } else {
         args.push('/bin/sh', '-lc', 'sh /Agent/server/AgentServer.sh');
     }
 
+    console.log(`[start] ${agentName}: ${runtime} run (cwd='${cwd}') -> ${entrySummary}`);
     const res = spawnSync(runtime, args, { stdio: 'inherit' });
     if (res.status !== 0) { throw new Error(`${runtime} run failed with code ${res.status}`); }
     const agents = loadAgentsMap();
@@ -311,42 +347,45 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     return containerName;
 }
 
-function stopAndRemove(name) {
+function stopAndRemove(name, fast = false) {
     const agents = loadAgents();
     const rec = agents ? agents[name] : null;
     const candidates = getContainerCandidates(name, rec);
     const existing = candidates.filter((candidate) => candidate && containerExists(candidate));
-    if (!existing.length) return;
+    if (!existing.length) return [];
 
-    existing.forEach((candidate) => gracefulStopContainer(candidate, { prefix: '[destroy]' }));
-    const remaining = waitForContainers(existing, 5);
-    if (remaining.length) {
-        forceStopContainers(remaining, { prefix: '[destroy]' });
-        waitForContainers(remaining, 2);
-    }
+    existing.forEach((candidate) => gracefulStopContainer(candidate, { prefix: fast ? '[destroy-fast]' : '[destroy]' }));
+    const waitSeconds = fast ? 0.1 : 5;
+    const remaining = waitForContainers(existing, waitSeconds);
+    const targets = remaining.length ? remaining : existing;
 
-    for (const candidate of existing) {
+    const removed = [];
+    for (const candidate of targets) {
         try {
             console.log(`[destroy] Removing container: ${candidate}`);
-            execSync(`${containerRuntime} rm ${candidate}`, { stdio: 'ignore' });
+            execSync(`${containerRuntime} rm -f ${candidate}`, { stdio: 'ignore' });
             console.log(`[destroy] ✓ removed ${candidate}`);
+            removed.push(candidate);
         } catch (e) {
             console.log(`[destroy] rm failed for ${candidate}: ${e.message}. Trying force removal...`);
-            try {
-                execSync(`${containerRuntime} rm -f ${candidate}`, { stdio: 'ignore' });
-                console.log(`[destroy] ✓ force removed ${candidate}`);
-            } catch (e2) {
-                console.log(`[destroy] force remove failed for ${candidate}: ${e2.message}`);
-            }
+            console.log(`[destroy] force remove failed for ${candidate}: ${e?.message || e}`);
         }
     }
+    return removed;
 }
 
-function stopAndRemoveMany(names) {
-    if (!Array.isArray(names)) return;
+function stopAndRemoveMany(names, { fast = false } = {}) {
+    if (!Array.isArray(names)) return [];
+    const removed = [];
     for (const n of names) {
-        try { stopAndRemove(n); } catch (e) { debugLog(`stopAndRemoveMany ${n} error: ${e?.message || e}`); }
+        try {
+            const list = stopAndRemove(n, fast) || [];
+            removed.push(...list);
+        } catch (e) {
+            debugLog(`stopAndRemoveMany ${n} error: ${e?.message || e}`);
+        }
     }
+    return removed;
 }
 
 function listAllContainerNames() {
@@ -359,22 +398,22 @@ function listAllContainerNames() {
     }
 }
 
-function destroyAllPloinky() {
+function destroyAllPloinky({ fast = false } = {}) {
     const names = listAllContainerNames().filter((n) => n.startsWith('ploinky_'));
-    stopAndRemoveMany(names);
+    stopAndRemoveMany(names, { fast });
     return names.length;
 }
 
-function destroyWorkspaceContainers() {
+function destroyWorkspaceContainers({ fast = false } = {}) {
     const agents = loadAgentsMap();
     const removedList = [];
     for (const [name, rec] of Object.entries(agents || {})) {
         if (!rec || typeof name !== 'string' || name.startsWith('_')) continue;
         if (rec.type === 'agent' || rec.type === 'agentCore') {
             try {
-                stopAndRemove(name);
+                const localRemoved = stopAndRemove(name, fast) || [];
                 delete agents[name];
-                removedList.push(name);
+                removedList.push(...localRemoved);
             } catch (e) {
                 console.log(`[destroy] ${name} error: ${e?.message || e}`);
             }
@@ -489,17 +528,6 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     };
     saveAgentsMap(agents);
 
-    try {
-        if (createdNew && manifest.install && String(manifest.install).trim()) {
-            console.log(`[install] running for '${agentName}'...`);
-            const cwd = projPath;
-            const installCmd = `${containerRuntime} exec ${containerName} sh -lc "cd '${cwd}' && ${manifest.install}"`;
-            debugLog(`Executing install (service): ${installCmd}`);
-            execSync(installCmd, { stdio: 'inherit' });
-        }
-    } catch (e) {
-        console.log(`[install] ${agentName}: ${e?.message || e}`);
-    }
     syncAgentMcpConfig(containerName, agentPath);
     const returnPort = allPortMappings.find((p) => p.containerPort === 7000)?.hostPort || allPortMappings[0]?.hostPort || 0;
     return { containerName, hostPort: returnPort };
@@ -529,7 +557,6 @@ export {
     ensureAgentCore,
     ensureAgentService,
     getAgentsRegistry,
-    getRuntime,
     listAllContainerNames,
     startAgentContainer,
     startConfiguredAgents,

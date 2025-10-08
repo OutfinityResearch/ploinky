@@ -29,5 +29,6 @@ export {
     getRuntime,
     getServiceContainerName,
     isContainerRunning,
-    parseManifestPorts
+    parseManifestPorts,
+    waitForContainerRunning
 } from './common.js';

@@ -17,7 +17,8 @@ import {
     syncAgentMcpConfig,
     computeEnvHash,
     getContainerLabel,
-    REPOS_DIR
+    REPOS_DIR,
+    waitForContainerRunning
 } from './common.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -128,10 +129,15 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     }
 
     if (firstRun && manifest.install) {
-        console.log(`Running install command for '${agentName}'...`);
-        const installCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
-        debugLog(`Executing install command: ${installCommand}`);
-        execSync(installCommand, { stdio: 'inherit' });
+        const ready = waitForContainerRunning(containerName);
+        if (!ready) {
+            console.warn(`[install] ${agentName}: container not running after creation; skipping install.`);
+        } else {
+            console.log(`[install] ${agentName}: cd '${projectDir}' && ${manifest.install}`);
+            const installCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
+            debugLog(`Executing install command: ${installCommand}`);
+            execSync(installCommand, { stdio: 'inherit' });
+        }
     }
 
     console.log(`Running command in '${agentName}': ${command}`);
@@ -262,10 +268,15 @@ function ensureAgentContainer(agentName, repoName, manifest) {
     syncAgentMcpConfig(containerName, absAgentPath);
     try {
         if (createdNew && manifest.install && String(manifest.install).trim()) {
-            console.log(`Running install command for '${agentName}'...`);
-            const installCommand = `${containerRuntime} exec ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
-            debugLog(`Executing install command: ${installCommand}`);
-            execSync(installCommand, { stdio: 'inherit' });
+            const ready = waitForContainerRunning(containerName);
+            if (!ready) {
+                console.warn(`[install] ${agentName}: container not running after creation; skipping install.`);
+            } else {
+                console.log(`[install] ${agentName}: cd '${projectDir}' && ${manifest.install}`);
+                const installCommand = `${containerRuntime} exec ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
+                debugLog(`Executing install command: ${installCommand}`);
+                execSync(installCommand, { stdio: 'inherit' });
+            }
         }
     } catch (e) {
         console.log(`[install] ${agentName}: ${e?.message || e}`);
