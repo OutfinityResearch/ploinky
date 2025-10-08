@@ -25,6 +25,25 @@ function getCliCmd(manifest) {
   );
 }
 
+function shellQuote(str) {
+  if (str === undefined || str === null) return "''";
+  const s = String(str);
+  if (s.length === 0) return "''";
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+function wrapCliWithWebchat(command) {
+  const trimmed = (command || '').trim();
+  if (!trimmed) return trimmed;
+  if (process.env.PLOINKY_SKIP_MANIFEST_CLI_WEBCHAT === '1') {
+    return trimmed;
+  }
+  if (/^(?:\/Agent\/bin\/)?webchat\b/.test(trimmed) || /^ploinky\s+webchat\b/.test(trimmed)) {
+    return trimmed;
+  }
+  return `/Agent/bin/webchat -- ${shellQuote(trimmed)}`;
+}
+
 function findAgentManifest(agentName) {
   const { manifestPath } = utils.findAgent(agentName);
   return manifestPath;
@@ -191,7 +210,8 @@ async function runCli(agentName, args) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const cliBase = getCliCmd(manifest);
   if (!cliBase || !cliBase.trim()) { throw new Error(`Manifest for '${shortAgentName}' has no 'cli' command.`); }
-  const cmd = cliBase + (args && args.length ? (' ' + args.join(' ')) : '');
+  const rawCmd = cliBase + (args && args.length ? (' ' + args.join(' ')) : '');
+  const cmd = wrapCliWithWebchat(rawCmd);
   const { ensureAgentService, attachInteractive, getConfiguredProjectPath } = dockerSvc;
   const containerInfo = ensureAgentService(shortAgentName, manifest, path.dirname(manifestPath));
   const containerName = (containerInfo && containerInfo.containerName) || `ploinky_agent_${shortAgentName}`;
