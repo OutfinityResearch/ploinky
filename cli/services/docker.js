@@ -168,7 +168,7 @@ function flagsToArgs(flags) {
 function runCommandInContainer(agentName, repoName, manifest, command, interactive = false) {
     const containerName = getAgentContainerName(agentName, repoName);
     let agents = loadAgentsMap();
-    const currentDir = process.cwd();
+    const projectDir = getConfiguredProjectPath(agentName, repoName);
 
     let firstRun = false;
     debugLog(`Checking if container '${containerName}' exists...`);
@@ -178,8 +178,8 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
         const envVars = envVarParts.join(' ');
         // Use --mount for podman for better SELinux handling, -v for docker. No --workdir here.
         const mountOption = containerRuntime === 'podman' 
-            ? `--mount type=bind,source="${currentDir}",destination="${currentDir}",relabel=shared` 
-            : `-v "${currentDir}:${currentDir}"`;
+            ? `--mount type=bind,source="${projectDir}",destination="${projectDir}",relabel=shared` 
+            : `-v "${projectDir}:${projectDir}"`;
         
         // Port publishing from manifest
         const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
@@ -237,10 +237,10 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             containerId: containerId,
             containerImage: containerImage,
             createdAt: new Date().toISOString(),
-            projectPath: currentDir,
+            projectPath: projectDir,
             type: 'interactive',
             config: {
-                binds: [ { source: currentDir, target: currentDir } ],
+                binds: [ { source: projectDir, target: projectDir } ],
                 env: Array.from(new Set(declaredEnvNames)).map(name => ({ name })),
                 ports: portMappings
             }
@@ -285,7 +285,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     if (firstRun && manifest.install) {
         console.log(`Running install command for '${agentName}'...`);
         // Prepend cd to the command string itself
-        const installCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} sh -lc "cd '${currentDir}' && ${manifest.install}"`;
+        const installCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
         debugLog(`Executing install command: ${installCommand}`);
         execSync(installCommand, { stdio: 'inherit' });
     }
@@ -298,9 +298,9 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     
     if (interactive && (command === '/bin/sh')) {
         // Use POSIX sh for compatibility
-        bashCommand = `cd '${currentDir}' && exec sh`;
+        bashCommand = `cd '${projectDir}' && exec sh`;
     } else {
-        bashCommand = `cd '${currentDir}' && ${command}`;
+        bashCommand = `cd '${projectDir}' && ${command}`;
     }
 
     const execCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${envVars} ${containerName} sh -lc "${bashCommand}"`;
@@ -309,7 +309,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     if (interactive) {
         // Use spawnSync for interactive sessions to properly handle TTY and signals
         console.log(`[Ploinky] Attaching to container '${containerName}' (interactive TTY).`);
-        console.log(`[Ploinky] Working directory in container: ${currentDir}`);
+        console.log(`[Ploinky] Working directory in container: ${projectDir}`);
         console.log(`[Ploinky] Exit the program or shell to return to the Ploinky prompt.`);
         const args = ['exec'];
         if (interactive) args.push('-it');
@@ -346,7 +346,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
 
 function ensureAgentContainer(agentName, repoName, manifest) {
     const containerName = getAgentContainerName(agentName, repoName);
-    const currentDir = process.cwd();
+    const projectDir = getConfiguredProjectPath(agentName, repoName);
     const agentLibPath = path.resolve(__dirname, '../../Agent');
     const agentPath = path.join(REPOS_DIR, repoName, agentName);
     const absAgentPath = path.resolve(agentPath);
@@ -370,7 +370,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         const portOptions = manifestPorts.map(p => `-p ${p}`).join(' ');
         try {
             const createCommand = `${containerRuntime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
-              -v "${currentDir}:${currentDir}${volZ}" \
+              -v "${projectDir}:${projectDir}${volZ}" \
               -v "${agentLibPath}:/Agent${roOpt}" \
               -v "${absAgentPath}:/code${roOpt}" \
               ${portOptions} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
@@ -383,7 +383,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
                 else if (!containerImage.startsWith('docker.io/') && !containerImage.includes('.')) containerImage = `docker.io/${containerImage}`;
                 console.log(`Retrying with full registry name: ${containerImage}`);
                 const retryCommand = `${containerRuntime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
-                  -v "${currentDir}:${currentDir}${volZ}" \
+                  -v "${projectDir}:${projectDir}${volZ}" \
                   -v "${agentLibPath}:/Agent${roOpt}" \
                   -v "${absAgentPath}:/code${roOpt}" \
                   ${portOptions} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
@@ -404,9 +404,9 @@ function ensureAgentContainer(agentName, repoName, manifest) {
             repoName,
             containerImage,
             createdAt: new Date().toISOString(),
-            projectPath: currentDir,
+            projectPath: projectDir,
             type: 'interactive',
-            config: { binds: [ { source: currentDir, target: currentDir }, { source: agentLibPath, target: '/Agent', ro: true }, { source: absAgentPath, target: '/code', ro: true } ], env: Array.from(new Set(declaredEnvNamesX)).map(name => ({ name })), ports: portMappings }
+            config: { binds: [ { source: projectDir, target: projectDir }, { source: agentLibPath, target: '/Agent', ro: true }, { source: absAgentPath, target: '/code', ro: true } ], env: Array.from(new Set(declaredEnvNamesX)).map(name => ({ name })), ports: portMappings }
         };
         saveAgentsMap(agents);
     }
@@ -421,7 +421,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
     try {
         if (createdNew && manifest.install && String(manifest.install).trim()) {
             console.log(`Running install command for '${agentName}'...`);
-            const installCommand = `${containerRuntime} exec ${containerName} sh -lc "cd '${currentDir}' && ${manifest.install}"`;
+            const installCommand = `${containerRuntime} exec ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
             debugLog(`Executing install command: ${installCommand}`);
             execSync(installCommand, { stdio: 'inherit' });
         }
