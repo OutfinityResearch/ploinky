@@ -48,7 +48,7 @@ function getContainerRuntime() {
 }
 
 const containerRuntime = getContainerRuntime();
-const CONTAINER_CONFIG_DIR = '/tmp/ploinky';
+const CONTAINER_CONFIG_DIR = '/code';
 const CONTAINER_CONFIG_PATH = `${CONTAINER_CONFIG_DIR}/mcp-config.json`;
 
 // Agents registry (AGENTS_FILE): JSON map keyed de numele containerului.
@@ -141,23 +141,11 @@ function getAgentMcpConfigPath(agentPath) {
     return null;
 }
 
-function syncAgentMcpConfig(containerName, agentPath) {
+function syncAgentMcpConfig(_containerName, agentPath) {
+    // No copying required; AgentServer reads /code/mcp-config.json directly via bind mount.
     try {
-        const hostConfig = getAgentMcpConfigPath(agentPath);
-        if (!hostConfig) return false;
-        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-mcp-'));
-        const tmpFile = path.join(tmpDir, 'mcp-config.json');
-        fs.copyFileSync(hostConfig, tmpFile);
-        try {
-            execSync(`${containerRuntime} exec ${containerName} sh -c 'mkdir -p ${CONTAINER_CONFIG_DIR}'`, { stdio: 'ignore' });
-        } catch (err) {
-            debugLog(`syncAgentMcpConfig mkdir failed: ${err?.message || err}`);
-        }
-        execSync(`${containerRuntime} cp "${tmpFile}" ${containerName}:${CONTAINER_CONFIG_PATH}`, { stdio: 'ignore' });
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-        return true;
-    } catch (err) {
-        console.warn(`[Ploinky] Failed to sync MCP config to ${containerName}: ${err?.message || err}`);
+        return !!getAgentMcpConfigPath(agentPath);
+    } catch (_) {
         return false;
     }
 }

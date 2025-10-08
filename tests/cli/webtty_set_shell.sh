@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
-exit 0
+exit 1
+#testul se blocheaza
 # This test verifies that 'webconsole' and 'webtty' provide access
 # information to a workspace that has already been started.
 
