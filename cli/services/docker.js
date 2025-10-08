@@ -30,21 +30,25 @@ function getConfiguredProjectPath(agentName, repoName) {
     return p;
 }
 
-function getContainerRuntime() {
+function isRuntimeInstalled(runtime) {
     try {
-        execSync('command -v docker', { stdio: 'ignore' });
-        debugLog('Using docker as container runtime.');
-        return 'docker';
+        execSync(`command -v ${runtime}`, { stdio: 'ignore' });
+        return true;
     } catch (e) {
-        try {
-            execSync('command -v podman', { stdio: 'ignore' });
-            debugLog('Using podman as container runtime.');
-            return 'podman';
-        } catch (e2) {
-            console.error('Neither docker nor podman found in PATH. Please install one of them.');
-            process.exit(1);
+        return false;
+    }
+}
+
+function getContainerRuntime() {
+    const preferredRuntimes = ['podman', 'docker'];
+    for (const runtime of preferredRuntimes) {
+        if (isRuntimeInstalled(runtime)) {
+            debugLog(`Using ${runtime} as container runtime.`);
+            return runtime;
         }
     }
+    console.error('Neither podman nor docker found in PATH. Please install one of them.');
+    process.exit(1);
 }
 
 const containerRuntime = getContainerRuntime();

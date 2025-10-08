@@ -21,11 +21,11 @@ cd "$TEST_WORKSPACE_DIR"
 DIRNAME=$(basename "$TEST_WORKSPACE_DIR") # Extract dirname for process matching
 echo "Created temporary workspace at: $TEST_WORKSPACE_DIR"
 
-# Determine container runtime
-if command -v docker &> /dev/null; then
-    CONTAINER_RUNTIME="docker"
-elif command -v podman &> /dev/null; then
+# Determine container runtime (prefer podman when available)
+if command -v podman &> /dev/null; then
     CONTAINER_RUNTIME="podman"
+elif command -v docker &> /dev/null; then
+    CONTAINER_RUNTIME="docker"
 else
     echo "Neither docker nor podman found in PATH."
     exit 1
