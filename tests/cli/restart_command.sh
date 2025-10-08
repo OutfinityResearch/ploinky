@@ -17,10 +17,10 @@ trap 'handle_error $LINENO "$BASH_COMMAND"' ERR
 cd "$TEST_WORKSPACE_DIR"
 echo "Created temporary workspace at: $TEST_WORKSPACE_DIR"
 
-if command -v docker &> /dev/null; then
-    CONTAINER_RUNTIME="docker"
-elif command -v podman &> /dev/null; then
+if command -v podman &> /dev/null; then
     CONTAINER_RUNTIME="podman"
+elif command -v docker &> /dev/null; then
+    CONTAINER_RUNTIME="docker"
 else
     echo "Neither docker nor podman found in PATH."
     exit 1
