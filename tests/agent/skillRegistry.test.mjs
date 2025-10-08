@@ -2,12 +2,12 @@ import assert from 'node:assert';
 
 process.env.PLOINKY_SKIP_BUILTIN_PROVIDERS = '1';
 
-const { default: SkillRegistry } = await import('../../Agent/AgentLib/skills/SkillRegistry.mjs');
-const { Agent, __resetForTests } = await import('../../Agent/AgentLib/AgentLib.mjs');
+const { default: SkillRegistry } = await import('ploinky-agent-lib/skills/SkillRegistry.mjs');
+const { Agent, __resetForTests } = await import('ploinky-agent-lib');
 const {
     __setCallLLMWithModelForTests,
     __resetCallLLMWithModelForTests,
-} = await import('../../Agent/AgentLib/LLMClient.mjs');
+} = await import('ploinky-agent-lib/LLMClient.mjs');
 
 const registry = new SkillRegistry();
 

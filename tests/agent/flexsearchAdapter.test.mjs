@@ -1,10 +1,9 @@
 import assert from 'node:assert';
 import FlexSearch from 'flexsearch';
-
-import FlexSearchAdapter, {
+import {
     createFlexSearchAdapter,
     fromFlexSearchInstance,
-} from '../../Agent/AgentLib/search/flexsearchAdapter.mjs';
+} from './helpers/flexsearchAdapter.mjs';
 
 const docs = [
     { id: 'doc-1', text: 'FlexSearch adapter basics and quick usage notes.' },

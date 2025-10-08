@@ -261,10 +261,72 @@ class ClientCommands {
 
                 const toolName = options[0];
                 let idx = 1;
-                const toNumber = (s) => {
+                const coerceValue = (s) => {
                     if (s === undefined || s === null) return s;
-                    const n = Number(s);
-                    return Number.isFinite(n) && String(n) === String(s) ? n : s;
+                    if (typeof s !== 'string') return s;
+                    const trimmed = s.trim();
+                    if (!trimmed) return trimmed;
+                    const lower = trimmed.toLowerCase();
+                    if (lower === 'true') return true;
+                    if (lower === 'false') return false;
+                    if (lower === 'null') return null;
+                    const n = Number(trimmed);
+                    return Number.isFinite(n) && String(n) === trimmed ? n : s;
+                };
+
+                const mergeFields = (target, source) => {
+                    if (!source || typeof source !== 'object') return target;
+                    for (const [key, value] of Object.entries(source)) {
+                        if (Array.isArray(value)) {
+                            if (!Array.isArray(target[key])) {
+                                target[key] = [];
+                            }
+                            target[key].push(...value);
+                            continue;
+                        }
+                        if (value && typeof value === 'object') {
+                            if (!target[key] || typeof target[key] !== 'object' || Array.isArray(target[key])) {
+                                target[key] = {};
+                            }
+                            mergeFields(target[key], value);
+                            continue;
+                        }
+                        target[key] = value;
+                    }
+                    return target;
+                };
+
+                const applyField = (target, rawKey, rawValue) => {
+                    if (!rawKey) return;
+                    const segments = String(rawKey).split('.');
+                    let current = target;
+                    for (let i = 0; i < segments.length; i++) {
+                        let segment = segments[i];
+                        const isArrayKey = segment.endsWith('[]');
+                        if (isArrayKey) {
+                            segment = segment.slice(0, -2);
+                        }
+                        const isLast = i === segments.length - 1;
+                        if (isLast) {
+                            if (isArrayKey) {
+                                if (!Array.isArray(current[segment])) {
+                                    current[segment] = [];
+                                }
+                                const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+                                for (const val of values) {
+                                    if (val === undefined) continue;
+                                    current[segment].push(val);
+                                }
+                            } else {
+                                current[segment] = rawValue;
+                            }
+                        } else {
+                            if (!current[segment] || typeof current[segment] !== 'object' || Array.isArray(current[segment])) {
+                                current[segment] = {};
+                            }
+                            current = current[segment];
+                        }
+                    }
                 };
 
                 let fields = {};
@@ -278,7 +340,7 @@ class ClientCommands {
                         if (parametersString) {
                             try {
                                 const parsedParams = parseParametersString(parametersString);
-                                fields = { ...fields, ...parsedParams };
+                                fields = mergeFields(fields, parsedParams);
                             } catch (e) {
                                 console.error(`Error parsing parameters: ${e.message}`);
                                 return;
@@ -299,22 +361,14 @@ class ClientCommands {
                         continue;
                     }
 
-                    if (tok === '-') {
-                        const key = String(options[idx + 1] || '').replace(/^[-]+/, '');
-                        const val = options[idx + 2];
-                        if (key) { fields[key] = toNumber(val); }
-                        idx += (val !== undefined) ? 3 : 2;
-                        continue;
-                    }
-
                     if (tok.startsWith('-')) {
                         const key = tok.replace(/^[-]+/, '');
                         const next = options[idx + 1];
                         if (next !== undefined && !String(next).startsWith('-')) {
-                            fields[key] = toNumber(next);
+                            applyField(fields, key, coerceValue(next));
                             idx += 2;
                         } else {
-                            fields[key] = true;
+                            applyField(fields, key, true);
                             idx += 1;
                         }
                         continue;

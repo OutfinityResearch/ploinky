@@ -85,8 +85,8 @@ if ! echo "$ECHO_TEXT" | grep -q "Echo: Client Commands Test"; then
 fi
 echo "✓ echo_script tool invocation verified."
 
-echo -e "\n--- Testing 'client tool random_probability --agent demo' ---"
-PROB_TOOL_OUTPUT=$(ploinky client tool random_probability --agent demo -samples 7)
+echo -e "\n--- Testing 'client tool random_probability' ---"
+PROB_TOOL_OUTPUT=$(ploinky client tool random_probability -samples 7)
 echo "Command output: $PROB_TOOL_OUTPUT"
 
 if ! echo "$PROB_TOOL_OUTPUT" | jq -e '.ok == true and .agent == "demo"' >/dev/null; then
