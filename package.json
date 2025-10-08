@@ -8,7 +8,6 @@
         "p-cloud": "./bin/p-cloud"
     },
     "scripts": {
-        "cerbos-test-policies": "podman run --rm -v $(pwd)/cerbos/policies:/policies:z ghcr.io/cerbos/cerbos:0.46.0 compile /policies",
         "start": "cd test_run_dir node bin/p-cloud",
         "clean": "rm -rf test_run_dir",
         "test": "./tests/run-all.sh"
@@ -35,9 +34,5 @@
         "mcp-sdk": "github:PloinkyRepos/MCPSDK#main",
         "ploinky-agent-lib": "github:OutfinityResearch/ploinkyAgentLib#master",
         "node-pty": "^1.0.0"
-    },
-    "devDependencies": {
-        "cerbos": "^0.46.0",
-        "cerbosctl": "^0.46.0"
     }
 }
