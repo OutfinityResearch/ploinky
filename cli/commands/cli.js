@@ -13,7 +13,7 @@ import { listRepos, listAgents, listCurrentAgents, listRoutes, statusWorkspace, 
 import { logsTail, showLast } from '../services/logUtils.js';
 import { startWorkspace, runCli, runShell, refreshAgent } from '../services/workspaceUtil.js';
 import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/routerEnv.js';
-import * as dockerSvc from '../services/docker.js';
+import * as dockerSvc from '../services/docker/index.js';
 import * as workspaceSvc from '../services/workspace.js';
 import {
     getSsoConfig,

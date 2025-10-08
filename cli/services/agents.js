@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadAgents, saveAgents } from './workspace.js';
-import { getAgentContainerName, parseManifestPorts } from './docker.js';
+import { getAgentContainerName, parseManifestPorts } from './docker/index.js';
 import { findAgent } from './utils.js';
 import { REPOS_DIR } from './config.js';
 

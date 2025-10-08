@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import * as utils from './utils.js';
 import * as agentsSvc from './agents.js';
 import * as workspaceSvc from './workspace.js';
-import * as dockerSvc from './docker.js';
+import * as dockerSvc from './docker/index.js';
 import { applyManifestDirectives } from './bootstrapManifest.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,6 +36,10 @@ function wrapCliWithWebchat(command) {
   const trimmed = (command || '').trim();
   if (!trimmed) return trimmed;
   if (process.env.PLOINKY_SKIP_MANIFEST_CLI_WEBCHAT === '1') {
+    return trimmed;
+  }
+  const enableWrap = process.env.PLOINKY_MANIFEST_CLI_WEBCHAT === '1';
+  if (!enableWrap) {
     return trimmed;
   }
   if (/^(?:\/Agent\/bin\/)?webchat\b/.test(trimmed) || /^ploinky\s+webchat\b/.test(trimmed)) {
