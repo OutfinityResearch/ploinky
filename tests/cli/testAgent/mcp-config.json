@@ -1,0 +1,71 @@
+{
+  "tools": [
+    {
+      "name": "type_string",
+      "title": "String Tool",
+      "description": "Validates a string payload",
+      "command": ["/bin/sh", "/code/tools/string_tool.sh"],
+      "inputSchema": {
+        "message": {
+          "type": "string",
+          "description": "Text to echo back"
+        }
+      }
+    },
+    {
+      "name": "type_number",
+      "title": "Number Tool",
+      "description": "Validates numeric input",
+      "command": ["/bin/sh", "/code/tools/number_tool.sh"],
+      "inputSchema": {
+        "value": {
+          "type": "number",
+          "description": "Numeric value",
+          "min": 0
+        }
+      }
+    },
+    {
+      "name": "type_boolean",
+      "title": "Boolean Tool",
+      "description": "Validates boolean input",
+      "command": ["/bin/sh", "/code/tools/boolean_tool.sh"],
+      "inputSchema": {
+        "flag": {
+          "type": "boolean",
+          "description": "Boolean flag"
+        }
+      }
+    },
+    {
+      "name": "type_object",
+      "title": "Object Tool",
+      "description": "Validates object input",
+      "command": ["/bin/sh", "/code/tools/object_tool.sh"],
+      "inputSchema": {
+        "profile": {
+          "type": "object",
+          "description": "Profile information",
+          "properties": {
+            "name": { "type": "string" },
+            "age": { "type": "number", "optional": true }
+          }
+        }
+      }
+    },
+    {
+      "name": "type_array",
+      "title": "Array Tool",
+      "description": "Validates array input",
+      "command": ["/bin/sh", "/code/tools/array_tool.sh"],
+      "inputSchema": {
+        "numbers": {
+          "type": "number",
+          "isArray": true,
+          "description": "List of numeric values",
+          "minItems": 2
+        }
+      }
+    }
+  ]
+}

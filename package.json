@@ -1,42 +1,43 @@
 {
-  "name": "ploinky-cloud",
-  "version": "1.0.0",
-  "description": "Lightweight Node.js-based container orchestration platform",
-  "type": "module",
-  "main": "cloud/core/server.js",
-  "bin": {
-    "p-cloud": "./bin/p-cloud"
-  },
-  "scripts": {
-    "cerbos-test-policies": "podman run --rm -v $(pwd)/cerbos/policies:/policies:z ghcr.io/cerbos/cerbos:0.46.0 compile /policies",
-    "start": "cd test_run_dir node bin/p-cloud",
-    "clean": "rm -rf test_run_dir",
-    "test": "./tests/run-all.sh"
-  },
-  "keywords": [
-    "ploinky",
-    "cloud",
-    "container",
-    "orchestration",
-    "microservices",
-    "agent"
-  ],
-  "author": "Ploinky Team",
-  "license": "MIT",
-  "engines": {
-    "node": ">=14.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/PloinkyCloud/ploinky.git"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.18.2",
-    "flexsearch": "github:AssistOS-AI/flexsearch-releases#main",
-    "node-pty": "^1.0.0"
-  },
-  "devDependencies": {
-    "cerbos": "^0.46.0",
-    "cerbosctl": "^0.46.0"
-  }
+    "name": "ploinky-cloud",
+    "version": "1.0.0",
+    "description": "Lightweight Node.js-based container orchestration platform",
+    "type": "module",
+    "main": "cloud/core/server.js",
+    "bin": {
+        "p-cloud": "./bin/p-cloud"
+    },
+    "scripts": {
+        "cerbos-test-policies": "podman run --rm -v $(pwd)/cerbos/policies:/policies:z ghcr.io/cerbos/cerbos:0.46.0 compile /policies",
+        "start": "cd test_run_dir node bin/p-cloud",
+        "clean": "rm -rf test_run_dir",
+        "test": "./tests/run-all.sh"
+    },
+    "keywords": [
+        "ploinky",
+        "cloud",
+        "container",
+        "orchestration",
+        "microservices",
+        "agent"
+    ],
+    "author": "Ploinky Team",
+    "license": "MIT",
+    "engines": {
+        "node": ">=14.0.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PloinkyCloud/ploinky.git"
+    },
+    "dependencies": {
+        "flexsearch": "github:PloinkyRepos/flexsearch#main",
+        "mcp-sdk": "github:PloinkyRepos/MCPSDK#main",
+        "ploinky-agent-lib": "github:OutfinityResearch/ploinkyAgentLib#main",
+        "node-pty": "^1.0.0"
+    },
+    "devDependencies": {
+        "cerbos": "^0.46.0",
+        "cerbosctl": "^0.46.0"
+    }
 }
