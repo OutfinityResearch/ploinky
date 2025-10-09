@@ -206,9 +206,18 @@ function setSsoConfig(partial) {
     return merged;
 }
 
+function setSsoEnabled(enabled = true) {
+    const current = workspaceSvc.getConfig() || {};
+    const existing = current.sso || {};
+    current.sso = { ...existing, enabled: Boolean(enabled) };
+    workspaceSvc.setConfig(current);
+    return current.sso;
+}
+
 function disableSsoConfig() {
     const current = workspaceSvc.getConfig() || {};
-    current.sso = { enabled: false };
+    const existing = current.sso || {};
+    current.sso = { ...existing, enabled: false };
     workspaceSvc.setConfig(current);
     return current.sso;
 }
@@ -265,6 +274,7 @@ function normalizeBaseUrl(raw) {
 export {
     getSsoConfig,
     setSsoConfig,
+    setSsoEnabled,
     disableSsoConfig,
     getSsoSecrets,
     gatherSsoStatus,
