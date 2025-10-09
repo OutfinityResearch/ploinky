@@ -24,8 +24,12 @@ let pty = null;
 try {
     const ptyModule = await import('node-pty');
     pty = ptyModule.default || ptyModule;
-} catch {
+} catch (error) {
+    const reason = error?.message || error;
     console.warn('node-pty not found, TTY features will be disabled.');
+    if (reason) {
+        console.warn(`node-pty load failure: ${reason}`);
+    }
 }
 
 async function loadTTYModule(primaryRelative, legacyRelative) {
