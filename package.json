@@ -10,7 +10,8 @@
     "scripts": {
         "start": "cd test_run_dir node bin/p-cloud",
         "clean": "rm -rf test_run_dir",
-        "test": "./tests/run-all.sh"
+        "test": "./tests/run-all.sh",
+        "postinstall": "cd node_modules; git clone https://github.com/OutfinityResearch/ploinkyAgentLib.git"
     },
     "keywords": [
         "ploinky",
@@ -32,7 +33,6 @@
     "dependencies": {
         "flexsearch": "github:PloinkyRepos/flexsearch#main",
         "mcp-sdk": "github:PloinkyRepos/MCPSDK#main",
-        "ploinky-agent-lib": "github:OutfinityResearch/ploinkyAgentLib#master",
         "node-pty": "^1.0.0"
     }
 }
