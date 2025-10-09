@@ -17,17 +17,13 @@ import * as dockerSvc from '../services/docker/index.js';
 import * as workspaceSvc from '../services/workspace.js';
 import {
     getSsoConfig,
-    setSsoConfig,
+    setSsoEnabled,
     disableSsoConfig,
     gatherSsoStatus,
-    getRouterPort as getSsoRouterPort,
-    getAgentHostPort as getSsoAgentHostPort,
-    normalizeBaseUrl as normalizeSsoBaseUrl,
     extractShortAgentName as extractSsoShortName,
     SSO_ENV_ROLE_CANDIDATES,
     resolveEnvRoleValues as resolveSsoEnvRoleValues
 } from '../services/sso.js';
-import { setupKeycloakRealm, parseRolesString, loadRolesFromFile, DEFAULT_ROLES } from '../services/keycloakSetup.js';
 import ClientCommands from './client.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -280,18 +276,6 @@ function parseFlagArgs(args = []) {
     return { flags, rest };
 }
 
-function randomSecret(bytes = 16) {
-    return crypto.randomBytes(bytes).toString('hex');
-}
-
-function ensureSecretValue(name, generator) {
-    const existing = envSvc.resolveVarValue(name);
-    if (existing && String(existing).trim()) return existing;
-    const value = typeof generator === 'function' ? generator() : generator;
-    envSvc.setEnvVar(name, value);
-    return value;
-}
-
 function printSsoDetails(status, { includeSecrets = false } = {}) {
     const { config, secrets, routerPort, providerHostPort } = status;
     if (!config.enabled) {
@@ -340,123 +324,38 @@ function printSsoDetails(status, { includeSecrets = false } = {}) {
 }
 
 async function enableSsoCommand() {
-    const config = getSsoConfig();
-    const providerAgent = config.providerAgent || config.keycloakAgent || 'keycloak';
-    const databaseAgent = config.databaseAgent || config.postgresAgent || 'postgres';
+    const requiredChecks = [
+        { key: 'baseUrl', label: 'Keycloak base URL', candidates: SSO_ENV_ROLE_CANDIDATES.baseUrl },
+        { key: 'realm', label: 'Keycloak realm', candidates: SSO_ENV_ROLE_CANDIDATES.realm },
+        { key: 'clientId', label: 'Keycloak client ID', candidates: SSO_ENV_ROLE_CANDIDATES.clientId }
+    ];
+    const optionalChecks = [
+        { key: 'clientSecret', label: 'Keycloak client secret', candidates: SSO_ENV_ROLE_CANDIDATES.clientSecret }
+    ];
 
-    let manifest;
-    try {
-        const { manifestPath } = findAgent(providerAgent);
-        manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    } catch (err) {
-        throw new Error(`Unable to load manifest for SSO provider '${providerAgent}': ${err?.message || err}`);
-    }
+    const resolved = resolveSsoEnvRoleValues();
 
-    const envResolution = envSvc.collectManifestEnv(manifest, { enforceRequired: false });
-    const resolvedEnv = envResolution.resolved || [];
-
-    if (!resolvedEnv.length) {
-        console.log(`⚠ Provider manifest for '${providerAgent}' did not expose any environment bindings.`);
-    }
-
-    const missingRequired = [];
-    for (const entry of resolvedEnv) {
-        const hostName = entry.sourceName || entry.insideName;
-        const value = entry.value !== undefined && entry.value !== null ? String(entry.value).trim() : '';
-        if (entry.required && !value) {
-            missingRequired.push({ host: hostName, inside: entry.insideName });
-        }
-        if (entry.usedDefault && hostName) {
-            envSvc.setEnvVar(hostName, entry.value ?? '');
-        }
-    }
-
-    if (missingRequired.length) {
-        const details = missingRequired.map(({ host, inside }) =>
-            host && host !== inside ? `${host} (container: ${inside})` : (host || inside)
-        ).join(', ');
-        throw new Error(`Missing required SSO environment variables: ${details}. Use 'ploinky var <NAME> <value>' to set them and rerun 'ploinky sso enable'.`);
-    }
-
-    const envBindings = resolvedEnv.map(entry => ({
-        inside: entry.insideName,
-        host: entry.sourceName || entry.insideName,
-        required: entry.required
-    }));
-
-    const roleValues = resolveSsoEnvRoleValues(envBindings);
-    const routerPort = getSsoRouterPort();
-
-    let baseUrlInput = roleValues.baseUrl || config.baseUrl || '';
-    if (!baseUrlInput) {
-        const detectedPort = getSsoAgentHostPort(providerAgent);
-        if (detectedPort) {
-            baseUrlInput = `http://127.0.0.1:${detectedPort}`;
-        }
-    }
-    if (!baseUrlInput) {
-        const baseUrlVar = SSO_ENV_ROLE_CANDIDATES.baseUrl.find(name =>
-            envBindings.some(binding => (binding.host || binding.inside) === name)
-        ) || SSO_ENV_ROLE_CANDIDATES.baseUrl[0];
-        throw new Error(`Unable to determine SSO provider URL. Set ${baseUrlVar} via 'ploinky var ${baseUrlVar} <value>' and rerun.`);
-    }
-    const baseUrl = normalizeSsoBaseUrl(baseUrlInput);
-
-    const realm = roleValues.realm || config.realm || 'ploinky';
-    const clientId = roleValues.clientId || config.clientId || 'ploinky-router';
-    const scope = roleValues.scope || config.scope || 'openid profile email';
-    const redirectUri = roleValues.redirectUri || config.redirectUri || `http://127.0.0.1:${routerPort}/auth/callback`;
-    const logoutRedirectUri = roleValues.logoutRedirectUri || config.logoutRedirectUri || `http://127.0.0.1:${routerPort}/`;
-
-    const adminUserVar = SSO_ENV_ROLE_CANDIDATES.adminUser.find(name =>
-        envBindings.some(binding => (binding.host || binding.inside) === name)
-    );
-    if (adminUserVar) {
-        ensureSecretValue(adminUserVar, 'admin');
-    }
-    const adminPasswordVar = SSO_ENV_ROLE_CANDIDATES.adminPassword.find(name =>
-        envBindings.some(binding => (binding.host || binding.inside) === name)
-    );
-    if (adminPasswordVar) {
-        ensureSecretValue(adminPasswordVar, () => randomSecret(16));
-    }
-
-    ensureSecretValue('POSTGRES_DB', 'keycloak');
-    ensureSecretValue('POSTGRES_USER', 'keycloak');
-    const pgPassword = ensureSecretValue('POSTGRES_PASSWORD', () => randomSecret(16));
-
-    const databaseShort = extractSsoShortName(databaseAgent);
-    const databaseContainerName = `ploinky_agent_${databaseShort}_${path.basename(process.cwd())}_${crypto.createHash('sha256').update(process.cwd()).digest('hex').substring(0, 6)}`;
-
-    if (resolvedEnv.some(entry => entry.insideName === 'KC_DB' || entry.sourceName === 'KC_DB')) {
-        envSvc.setEnvVar('KC_DB', 'postgres');
-        envSvc.setEnvVar('KC_DB_URL_HOST', databaseContainerName);
-        envSvc.setEnvVar('KC_DB_URL_DATABASE', 'keycloak');
-        envSvc.setEnvVar('KC_DB_USERNAME', 'keycloak');
-        envSvc.setEnvVar('KC_DB_PASSWORD', pgPassword);
-    }
-
-    setSsoConfig({
-        providerAgent,
-        databaseAgent,
-        baseUrl,
-        realm,
-        clientId,
-        redirectUri,
-        logoutRedirectUri,
-        scope,
-        envBindings
+    const missing = requiredChecks.filter(item => {
+        const value = resolved[item.key];
+        return !value || !String(value).trim();
     });
 
-    console.log('✓ SSO configuration saved.');
-    console.log(`  Provider agent: ${providerAgent}`);
-    console.log(`  Database agent: ${databaseAgent}`);
-    console.log(`  Base URL: ${baseUrl}`);
-    console.log(`  Realm: ${realm}`);
-    console.log(`  Client ID: ${clientId}`);
-    console.log(`  Redirect URI: ${redirectUri}`);
+    if (missing.length) {
+        const details = missing.map(item => item.candidates.filter(Boolean).join('/') || item.label).join(', ');
+        throw new Error(`Missing required SSO environment variables: ${details}. Set them via 'ploinky var <NAME> <value>' or export them before enabling SSO.`);
+    }
 
-    console.log(`Remember to clone/enable the '${providerAgent}' and '${databaseAgent}' agents before restarting the workspace.`);
+    const missingOptional = optionalChecks.filter(item => {
+        const value = resolved[item.key];
+        return !value || !String(value).trim();
+    });
+    if (missingOptional.length) {
+        const hint = missingOptional.map(item => item.candidates.filter(Boolean).join('/')).join(', ');
+        console.log(`Warning: optional SSO environment variables not set: ${hint}. Router will continue without them.`);
+    }
+
+    setSsoEnabled(true);
+    console.log('✓ SSO enabled. Router will enforce Single Sign-On using existing environment variables.');
     printSsoDetails(gatherSsoStatus(), { includeSecrets: true });
 }
 
@@ -467,118 +366,6 @@ function disableSsoCommand() {
 
 function showSsoStatusCommand() {
     printSsoDetails(gatherSsoStatus(), { includeSecrets: true });
-}
-
-async function setupSsoCommand(args = []) {
-    const { flags } = parseFlagArgs(args);
-    
-    // Load SSO config
-    const config = getSsoConfig();
-    if (!config || !config.enabled) {
-        console.log('❌ SSO is not enabled. Run "ploinky sso enable" first.');
-        return;
-    }
-    
-    // Determine roles to create
-    let roles = [...DEFAULT_ROLES];
-    
-    // Load from file if specified
-    if (flags['roles-file']) {
-        try {
-            const fileRoles = await loadRolesFromFile(flags['roles-file']);
-            console.log(`📄 Loaded ${fileRoles.length} role(s) from ${flags['roles-file']}`);
-            roles = fileRoles;
-        } catch (error) {
-            console.log(`❌ Error loading roles file: ${error.message}`);
-            return;
-        }
-    }
-    
-    // Parse inline roles if specified
-    if (flags.roles) {
-        const inlineRoles = parseRolesString(flags.roles);
-        if (inlineRoles.length > 0) {
-            if (flags['roles-file']) {
-                // Merge with file roles
-                console.log(`➕ Adding ${inlineRoles.length} additional role(s) from command line`);
-                roles = [...roles, ...inlineRoles];
-            } else {
-                // Replace default roles
-                roles = inlineRoles;
-            }
-        }
-    }
-    
-    // Remove duplicates by name
-    const uniqueRoles = [];
-    const seen = new Set();
-    for (const role of roles) {
-        if (!seen.has(role.name)) {
-            seen.add(role.name);
-            uniqueRoles.push(role);
-        }
-    }
-    
-    console.log(`\n📋 Roles to create: ${uniqueRoles.map(r => r.name).join(', ')}\n`);
-    
-    const status = gatherSsoStatus();
-    const secrets = status.secrets || {};
-
-    const adminUser = secrets.adminUser;
-    const adminPassword = secrets.adminPassword;
-    
-    if (!adminUser || !adminPassword) {
-        console.log('❌ SSO admin credentials not found.');
-        console.log('   Run "ploinky sso enable" to configure them.');
-        return;
-    }
-    
-    const providerAgent = config.providerAgent || config.keycloakAgent || 'keycloak';
-    if (!String(providerAgent || '').toLowerCase().includes('keycloak')) {
-        console.log(`❌ SSO setup currently supports Keycloak providers only (configured provider: ${providerAgent}).`);
-        return;
-    }
-    
-    try {
-        const result = await setupKeycloakRealm({
-            baseUrl: config.baseUrl,
-            realm: config.realm,
-            clientId: config.clientId,
-            redirectUri: config.redirectUri,
-            logoutRedirectUri: config.logoutRedirectUri,
-            adminUser,
-            adminPassword,
-            roles: uniqueRoles
-        });
-        
-        // Store client secret
-        const clientSecretVar = SSO_ENV_ROLE_CANDIDATES.clientSecret.find(name =>
-            Array.isArray(config.envBindings) && config.envBindings.some(binding => (binding.host || binding.inside) === name)
-        ) || 'KEYCLOAK_CLIENT_SECRET';
-        envSvc.setEnvVar(clientSecretVar, result.clientSecret);
-        console.log('  ✓ Stored client secret in .ploinky/.secrets\n');
-        
-        console.log(`✅ ${providerAgent} configured successfully!\n`);
-        console.log('📝 Next steps:');
-        console.log(`  1. Open ${config.baseUrl}`);
-        console.log(`  2. Login with: ${adminUser} / [your-password]`);
-        console.log('  3. Create users: Users → Add user');
-        console.log('  4. Assign roles: User → Role mapping → Assign role');
-        console.log('  5. Start Ploinky: ploinky start\n');
-        
-    } catch (error) {
-        console.log(`\n❌ Setup failed: ${error.message}`);
-        console.log('\nTroubleshooting:');
-        console.log(`  • Make sure ${providerAgent} is running: ploinky start ${providerAgent}`);
-        const adminVarName = SSO_ENV_ROLE_CANDIDATES.adminUser.find(name =>
-            Array.isArray(config.envBindings) && config.envBindings.some(binding => (binding.host || binding.inside) === name)
-        ) || 'KEYCLOAK_ADMIN';
-        const urlVarName = SSO_ENV_ROLE_CANDIDATES.baseUrl.find(name =>
-            Array.isArray(config.envBindings) && config.envBindings.some(binding => (binding.host || binding.inside) === name)
-        ) || 'KEYCLOAK_URL';
-        console.log(`  • Check admin credentials: ploinky vars | grep ${adminVarName}`);
-        console.log(`  • Verify provider URL (${urlVarName}): ${config.baseUrl || '[unset]'}\n`);
-    }
 }
 
 async function handleSsoCommand(options = []) {
@@ -597,10 +384,6 @@ async function handleSsoCommand(options = []) {
     }
     if (subcommand === 'status') {
         showSsoStatusCommand();
-        return;
-    }
-    if (subcommand === 'setup') {
-        await setupSsoCommand(rest);
         return;
     }
     showHelp(['sso']);
