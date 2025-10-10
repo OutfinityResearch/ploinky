@@ -2,10 +2,12 @@ import fs from 'fs';
 import path from 'path';
 
 import * as workspaceSvc from './workspace.js';
-import * as envSvc from './secretVars.js';
+import { resolveVarValue } from './secretVars.js';
 
 const ROUTING_FILE = path.resolve('.ploinky/routing.json');
 
+// Standard SSO environment variable naming conventions
+// Used by auth/config.js and CLI commands for consistent variable resolution
 const SSO_ENV_ROLE_CANDIDATES = {
     baseUrl: ['KEYCLOAK_URL', 'SSO_BASE_URL', 'SSO_URL', 'OIDC_BASE_URL'],
     realm: ['KEYCLOAK_REALM', 'SSO_REALM', 'OIDC_REALM'],
@@ -15,8 +17,18 @@ const SSO_ENV_ROLE_CANDIDATES = {
     redirectUri: ['KEYCLOAK_REDIRECT_URI', 'SSO_REDIRECT_URI', 'OIDC_REDIRECT_URI'],
     logoutRedirectUri: ['KEYCLOAK_LOGOUT_REDIRECT_URI', 'SSO_LOGOUT_REDIRECT_URI', 'OIDC_LOGOUT_REDIRECT_URI'],
     adminUser: ['KEYCLOAK_ADMIN', 'SSO_ADMIN', 'OIDC_ADMIN'],
-    adminPassword: ['KEYCLOAK_ADMIN_PASSWORD', 'SSO_ADMIN_PASSWORD', 'OIDC_ADMIN_PASSWORD']
+    adminPassword: ['KEYCLOAK_ADMIN_PASSWORD', 'SSO_ADMIN_PASSWORD', 'OIDC_ADMIN_PASSWORD'],
+    hostname: ['KC_HOSTNAME', 'SSO_HOSTNAME', 'OIDC_HOSTNAME'],
+    hostnameStrict: ['KC_HOSTNAME_STRICT', 'SSO_HOSTNAME_STRICT', 'OIDC_HOSTNAME_STRICT'],
+    httpEnabled: ['KC_HTTP_ENABLED', 'SSO_HTTP_ENABLED', 'OIDC_HTTP_ENABLED'],
+    proxy: ['KC_PROXY', 'SSO_PROXY', 'OIDC_PROXY'],
+    dbEngine: ['KC_DB', 'SSO_DB_ENGINE', 'OIDC_DB_ENGINE'],
+    dbUrl: ['KC_DB_URL', 'SSO_DB_URL', 'OIDC_DB_URL'],
+    dbUsername: ['KC_DB_USERNAME', 'SSO_DB_USERNAME', 'OIDC_DB_USERNAME'],
+    dbPassword: ['KC_DB_PASSWORD', 'SSO_DB_PASSWORD', 'OIDC_DB_PASSWORD']
 };
+
+// Service discovery utilities
 
 function readRouting() {
     try {
@@ -68,39 +80,12 @@ function getAgentHostPort(agentName) {
     return null;
 }
 
-function normalizeEnvBindings(bindings) {
-    if (!Array.isArray(bindings)) return [];
-    const normalized = [];
-    for (const entry of bindings) {
-        if (!entry) continue;
-        const inside = typeof entry.inside === 'string'
-            ? entry.inside.trim()
-            : typeof entry.insideName === 'string'
-                ? entry.insideName.trim()
-                : typeof entry.name === 'string'
-                    ? entry.name.trim()
-                    : '';
-        if (!inside) continue;
-        const host = typeof entry.host === 'string' && entry.host.trim()
-            ? entry.host.trim()
-            : typeof entry.sourceName === 'string' && entry.sourceName.trim()
-                ? entry.sourceName.trim()
-                : typeof entry.varName === 'string' && entry.varName.trim()
-                    ? entry.varName.trim()
-                    : '';
-        normalized.push({
-            inside,
-            host: host || undefined,
-            required: Boolean(entry.required)
-        });
-    }
-    return normalized;
-}
+// Variable resolution - leverages secretVars.js for consistent resolution
 
 function readEnvValue(name) {
     if (!name) return '';
     try {
-        const fromSecrets = envSvc.resolveVarValue(name);
+        const fromSecrets = resolveVarValue(name);
         if (fromSecrets && String(fromSecrets).trim()) {
             return String(fromSecrets).trim();
         }
@@ -115,22 +100,11 @@ function readEnvValue(name) {
     return '';
 }
 
-function resolveEnvRoleValues(bindings = []) {
-    const map = new Map();
-    for (const binding of bindings) {
-        if (!binding) continue;
-        const names = new Set();
-        if (binding.host) names.add(binding.host);
-        names.add(binding.inside);
-        for (const name of names) {
-            const val = readEnvValue(name);
-            if (val) map.set(name, val);
-        }
-    }
+function resolveEnvRoleValues() {
     const valueFromCandidates = (candidates = []) => {
         for (const name of candidates) {
             if (!name) continue;
-            const val = map.get(name) || readEnvValue(name);
+            const val = readEnvValue(name);
             if (val) return val;
         }
         return '';
@@ -144,7 +118,15 @@ function resolveEnvRoleValues(bindings = []) {
         redirectUri: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.redirectUri),
         logoutRedirectUri: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.logoutRedirectUri),
         adminUser: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminUser),
-        adminPassword: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminPassword)
+        adminPassword: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminPassword),
+        hostname: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.hostname),
+        hostnameStrict: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.hostnameStrict),
+        httpEnabled: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.httpEnabled),
+        proxy: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.proxy),
+        dbEngine: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbEngine),
+        dbUrl: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbUrl),
+        dbUsername: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbUsername),
+        dbPassword: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbPassword)
     };
 }
 
@@ -155,7 +137,7 @@ function getSsoConfig() {
     const providerAgentShort = sso.providerAgentShort || sso.keycloakAgentShort || extractShortAgentName(providerAgent);
     const databaseAgent = sso.databaseAgent || sso.postgresAgent || 'postgres';
     const databaseAgentShort = sso.databaseAgentShort || sso.postgresAgentShort || extractShortAgentName(databaseAgent);
-    const envBindings = normalizeEnvBindings(sso.envBindings);
+    
     return {
         enabled: Boolean(sso.enabled),
         providerAgent,
@@ -171,8 +153,7 @@ function getSsoConfig() {
         redirectUri: sso.redirectUri || null,
         logoutRedirectUri: sso.logoutRedirectUri || null,
         baseUrl: sso.baseUrl || null,
-        scope: sso.scope || 'openid profile email',
-        envBindings
+        scope: sso.scope || 'openid profile email'
     };
 }
 
@@ -195,12 +176,6 @@ function setSsoConfig(partial) {
     merged.databaseAgentShort = databaseAgentShort;
     merged.postgresAgentShort = databaseAgentShort;
 
-    if (Array.isArray(partial.envBindings)) {
-        merged.envBindings = normalizeEnvBindings(partial.envBindings);
-    } else if (!Array.isArray(merged.envBindings)) {
-        merged.envBindings = [];
-    }
-
     current.sso = merged;
     workspaceSvc.setConfig(current);
     return merged;
@@ -222,25 +197,30 @@ function disableSsoConfig() {
     return current.sso;
 }
 
+// Resolve SSO configuration with environment variable fallbacks
+
 function getSsoSecrets() {
     const config = getSsoConfig();
-    const roleValues = resolveEnvRoleValues(config.envBindings);
-    const baseUrl = config.baseUrl || roleValues.baseUrl || '';
-    const realm = config.realm || roleValues.realm || '';
-    const clientId = config.clientId || roleValues.clientId || '';
-    const redirectUri = config.redirectUri || roleValues.redirectUri || '';
-    const logoutRedirectUri = config.logoutRedirectUri || roleValues.logoutRedirectUri || '';
-    const scope = config.scope || roleValues.scope || 'openid profile email';
+    const envValues = resolveEnvRoleValues();
+    
     return {
-        baseUrl,
-        realm,
-        clientId,
-        clientSecret: roleValues.clientSecret || '',
-        redirectUri,
-        logoutRedirectUri,
-        scope,
-        adminUser: roleValues.adminUser || '',
-        adminPassword: roleValues.adminPassword || ''
+        baseUrl: config.baseUrl || envValues.baseUrl || '',
+        realm: config.realm || envValues.realm || '',
+        clientId: config.clientId || envValues.clientId || '',
+        clientSecret: envValues.clientSecret || '',
+        redirectUri: config.redirectUri || envValues.redirectUri || '',
+        logoutRedirectUri: config.logoutRedirectUri || envValues.logoutRedirectUri || '',
+        scope: config.scope || envValues.scope || 'openid profile email',
+        adminUser: envValues.adminUser || '',
+        adminPassword: envValues.adminPassword || '',
+        hostname: envValues.hostname || '',
+        hostnameStrict: envValues.hostnameStrict || '',
+        httpEnabled: envValues.httpEnabled || '',
+        proxy: envValues.proxy || '',
+        dbEngine: envValues.dbEngine || '',
+        dbUrl: envValues.dbUrl || '',
+        dbUsername: envValues.dbUsername || '',
+        dbPassword: envValues.dbPassword || ''
     };
 }
 

@@ -16,7 +16,6 @@ import { refreshComponentToken, ensureComponentToken, getComponentToken } from '
 import * as dockerSvc from '../services/docker/index.js';
 import * as workspaceSvc from '../services/workspace.js';
 import {
-    getSsoConfig,
     setSsoEnabled,
     disableSsoConfig,
     gatherSsoStatus,
@@ -326,10 +325,10 @@ function printSsoDetails(status, { includeSecrets = false } = {}) {
 async function enableSsoCommand() {
     const requiredChecks = [
         { key: 'baseUrl', label: 'Keycloak base URL', candidates: SSO_ENV_ROLE_CANDIDATES.baseUrl },
-        { key: 'realm', label: 'Keycloak realm', candidates: SSO_ENV_ROLE_CANDIDATES.realm },
-        { key: 'clientId', label: 'Keycloak client ID', candidates: SSO_ENV_ROLE_CANDIDATES.clientId }
     ];
     const optionalChecks = [
+        { key: 'realm', label: 'Keycloak realm', candidates: SSO_ENV_ROLE_CANDIDATES.realm },
+        { key: 'clientId', label: 'Keycloak client ID', candidates: SSO_ENV_ROLE_CANDIDATES.clientId },
         { key: 'clientSecret', label: 'Keycloak client secret', candidates: SSO_ENV_ROLE_CANDIDATES.clientSecret }
     ];
 
