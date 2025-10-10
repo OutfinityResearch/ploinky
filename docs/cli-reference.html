@@ -478,20 +478,19 @@ help cli       # Help for cli command</code></pre>
                     <div class="doc-section">
                         <h2>Configuration Files</h2>
                         
-                        <h3>.ploinky Directory Structure</h3>
+                        <h3>Workspace Directory Structure</h3>
                         <pre><code>.ploinky/
 ├── agents/           # Agent registry
 ├── repos/            # Downloaded repositories
 ├── routing.json      # Router configuration
 ├── .secrets          # Environment variables
-├── logs/             # Application logs
-│   ├── router.log
-│   └── webtty.log
 └── running/          # PID files
     ├── router.pid
     ├── webtty.pid
     ├── webchat.pid
-    └── dashboard.pid</code></pre>
+    └── dashboard.pid
+logs/                 # Application logs
+└── router.log</code></pre>
 
                         <h3>Agent Manifest (manifest.json)</h3>
                         <pre><code>{

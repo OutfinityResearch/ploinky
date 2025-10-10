@@ -270,13 +270,23 @@ export function getExposedNames(manifest) {
     return Array.from(names);
 }
 
+function quoteEnvValue(value) {
+    const str = String(value ?? '');
+    const escaped = str.replace(/(["\\$`])/g, '\\$1').replace(/\n/g, '\\n');
+    return `"${escaped}"`;
+}
+
+export function formatEnvFlag(name, value) {
+    return `-e ${name}=${quoteEnvValue(value)}`;
+}
+
 export function buildEnvFlags(manifest) {
     const secrets = parseSecrets();
     const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: true }).resolved;
     const out = [];
     for (const entry of envEntries) {
         if (entry.value !== undefined) {
-            out.push(`-e ${entry.insideName}=${entry.value}`);
+            out.push(formatEnvFlag(entry.insideName, entry.value));
         }
     }
     const exp = manifest?.expose;
@@ -284,19 +294,19 @@ export function buildEnvFlags(manifest) {
         for (const spec of exp) {
             if (!spec || !spec.name) continue;
             if (Object.prototype.hasOwnProperty.call(spec, 'value')) {
-                out.push(`-e ${spec.name}=${spec.value}`);
+                out.push(formatEnvFlag(spec.name, spec.value));
             } else if (spec.ref) {
                 const v = resolveAlias('$' + spec.ref, secrets);
-                if (v !== undefined) out.push(`-e ${spec.name}=${v ?? ''}`);
+                if (v !== undefined) out.push(formatEnvFlag(spec.name, v ?? ''));
             }
         }
     } else if (exp && typeof exp === 'object') {
         for (const [name, val] of Object.entries(exp)) {
             if (typeof val === 'string' && val.startsWith('$')) {
                 const v = resolveAlias(val, secrets);
-                if (v !== undefined) out.push(`-e ${name}=${v ?? ''}`);
+                if (v !== undefined) out.push(formatEnvFlag(name, v ?? ''));
             } else if (val !== undefined) {
-                out.push(`-e ${name}=${val}`);
+                out.push(formatEnvFlag(name, val));
             }
         }
     }

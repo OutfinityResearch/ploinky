@@ -28,8 +28,8 @@ echo "Created temporary workspace at: $TEST_WORKSPACE_DIR"
 echo "--- Running Logs Command Test ---"
 
 echo "--- Setup: Preparing a fake router.log ---"
-mkdir -p .ploinky/logs
-ROUTER_LOG=".ploinky/logs/router.log"
+mkdir -p logs
+ROUTER_LOG="logs/router.log"
 echo '{"ts":"2020-01-01T00:00:00Z","path":"/bootstrap"}' > "$ROUTER_LOG"
 echo "✓ Fake router.log prepared."
 

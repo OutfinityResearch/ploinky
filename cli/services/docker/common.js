@@ -135,11 +135,49 @@ function syncAgentMcpConfig(_containerName, agentPath) {
 
 function flagsToArgs(flags) {
     const out = [];
-    for (const f of (flags || [])) {
-        if (!f) continue;
-        const parts = String(f).split(' ');
-        for (const p of parts) {
-            if (p) out.push(p);
+    for (const flag of flags || []) {
+        if (!flag) continue;
+        const str = String(flag);
+        let current = '';
+        let quote = null;
+        for (let i = 0; i < str.length; i += 1) {
+            const ch = str[i];
+            if (quote) {
+                if (ch === quote) {
+                    quote = null;
+                    continue;
+                }
+                if (ch === '\\' && quote === '"' && i + 1 < str.length) {
+                    const next = str[i + 1];
+                    if (next === 'n') {
+                        current += '\n';
+                        i += 1;
+                        continue;
+                    }
+                    if (/["\\$`]/.test(next)) {
+                        current += next;
+                        i += 1;
+                        continue;
+                    }
+                }
+                current += ch;
+                continue;
+            }
+            if (ch === '"' || ch === '\'') {
+                quote = ch;
+                continue;
+            }
+            if (/\s/.test(ch)) {
+                if (current) {
+                    out.push(current);
+                    current = '';
+                }
+                continue;
+            }
+            current += ch;
+        }
+        if (current) {
+            out.push(current);
         }
     }
     return out;

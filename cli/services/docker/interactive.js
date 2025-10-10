@@ -1,7 +1,7 @@
 import { execSync, spawnSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getExposedNames, getManifestEnvNames } from '../secretVars.js';
+import { getExposedNames, getManifestEnvNames, formatEnvFlag } from '../secretVars.js';
 import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
@@ -33,7 +33,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     debugLog(`Checking if container '${containerName}' exists...`);
     if (!containerExists(containerName)) {
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
-        const envVarParts = [...getSecretsForAgent(manifest), `-e PLOINKY_MCP_CONFIG_PATH=${CONTAINER_CONFIG_PATH}`];
+        const envVarParts = [...getSecretsForAgent(manifest), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
         const envVars = envVarParts.join(' ');
         const mountOption = containerRuntime === 'podman'
             ? `--mount type=bind,source="${projectDir}",destination="${projectDir}",relabel=shared`

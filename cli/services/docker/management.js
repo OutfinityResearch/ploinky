@@ -2,7 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getExposedNames, getManifestEnvNames, buildEnvFlags } from '../secretVars.js';
+import { getExposedNames, getManifestEnvNames, buildEnvFlags, formatEnvFlag } from '../secretVars.js';
 import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
@@ -299,7 +299,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (!p) continue;
         args.splice(1, 0, '-p', String(p));
     }
-    const envStrings = [...buildEnvFlags(manifest), `-e PLOINKY_MCP_CONFIG_PATH=${CONTAINER_CONFIG_PATH}`];
+    const envStrings = [...buildEnvFlags(manifest), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
     args.push('-e', 'NODE_PATH=/node_modules');
