@@ -26,7 +26,6 @@ SMOKE_PORT=8081
 
 test_enable_demo_repository() {
   smoke_expect_success "enable repo demo" ploinky enable repo demo || return 1
-  smoke_assert_dir_exists ".ploinky/repos/demo" "Repository directory was not created"
 }
 
 test_client_status_pre_stop() {
@@ -50,7 +49,8 @@ EOF
 }
 
 test_cli_pre_stop() {
-  smoke_assert_cli_pwd_contains ".ploinky/repos/demo|/code"
+  local expected_path="${TEST_WORKSPACE_DIR}/demo"
+  smoke_assert_cli_pwd_contains "$expected_path" || return 1
 }
 
 test_workspace_down_after_stop() {
@@ -80,7 +80,26 @@ test_logs_after_restart() {
 }
 
 test_cli_after_restart() {
-  smoke_assert_cli_pwd_contains ".ploinky/repos/demo|/code"
+  local expected_path="${TEST_WORKSPACE_DIR}/demo"
+  smoke_assert_cli_pwd_contains "$expected_path" || return 1
+}
+
+test_container_mounts_pre_stop() {
+  local host_workspace="${TEST_WORKSPACE_DIR}/demo"
+  smoke_assert_container_path_readonly "/code" || return 1
+  smoke_assert_container_path_readonly "/node_modules" || return 1
+  smoke_assert_container_path_readonly "/Agent" || return 1
+  smoke_assert_container_path_writable "$host_workspace" || return 1
+  return 0
+}
+
+test_container_mounts_after_restart() {
+  local host_workspace="${TEST_WORKSPACE_DIR}/demo"
+  smoke_assert_container_path_readonly "/code" || return 1
+  smoke_assert_container_path_readonly "/node_modules" || return 1
+  smoke_assert_container_path_readonly "/Agent" || return 1
+  smoke_assert_container_path_writable "$host_workspace" || return 1
+  return 0
 }
 
 smoke_init_suite "Start → Stop → Start Sequence"
@@ -95,6 +114,7 @@ smoke_assert_container_running "ploinky_agent_demo" || exit 1
 smoke_run_test "Client status before stop" "Verify status endpoint before stopping." test_client_status_pre_stop
 smoke_run_test "Shell access before stop" "Ensure shell access works before stop." test_shell_pre_stop
 smoke_run_test "CLI workspace before stop" "Check CLI working directory before stop." test_cli_pre_stop
+smoke_run_test "Container mounts before stop" "Validate read-only code mounts and writable workspace." test_container_mounts_pre_stop
 
 echo ">>> Stopping workspace"
 smoke_expect_success "ploinky stop" ploinky stop || exit 1
@@ -109,11 +129,9 @@ smoke_assert_container_running "ploinky_agent_demo" || exit 1
 smoke_run_test "Client status after restart" "Verify status endpoint after restart." test_client_status_after_restart
 smoke_run_test "Router logs after restart" "Ensure logs capture requests after restart." test_logs_after_restart
 smoke_run_test "CLI workspace after restart" "Check CLI working directory after restart." test_cli_after_restart
+smoke_run_test "Container mounts after restart" "Verify mount configuration persists after restart." test_container_mounts_after_restart
 
 echo ">>> Final teardown"
-smoke_expect_success "ploinky shutdown" ploinky shutdown || exit 1
-sleep 2
-smoke_assert_container_stopped "ploinky_agent_demo" || exit 1
 smoke_expect_success "ploinky destroy" ploinky destroy || exit 1
 sleep 2
 smoke_assert_container_stopped "ploinky_agent_demo" || exit 1

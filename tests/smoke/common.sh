@@ -73,7 +73,7 @@ smoke_assert_cli_pwd_contains() {
         matched=0
         break
       fi
-    elif grep -q "$pat" <<<"$output"; then
+    elif grep -Fq "$pat" <<<"$output"; then
       matched=0
       break
     fi
@@ -81,6 +81,42 @@ smoke_assert_cli_pwd_contains() {
 
   if (( matched )); then
     smoke_fail "CLI session did not match expected patterns ($patterns)"
+    echo "$output"
+    return 1
+  fi
+  return 0
+}
+
+smoke_assert_container_path_readonly() {
+  local path="$1"
+  local agent="${2:-demo}"
+  local script
+  printf -v script 'if [ -w %q ]; then echo writable; else echo readonly; fi\nexit\n' "$path"
+  local output
+  if ! output=$(printf '%b' "$script" | ploinky shell "$agent" 2>&1); then
+    smoke_fail "Failed to inspect '${path}' in container for agent '${agent}'"
+    return 1
+  fi
+  if [[ "$output" != *readonly* ]]; then
+    smoke_fail "Expected '${path}' to be mounted read-only for agent '${agent}'"
+    echo "$output"
+    return 1
+  fi
+  return 0
+}
+
+smoke_assert_container_path_writable() {
+  local path="$1"
+  local agent="${2:-demo}"
+  local script
+  printf -v script 'if [ -w %q ]; then echo writable; else echo readonly; fi\nexit\n' "$path"
+  local output
+  if ! output=$(printf '%b' "$script" | ploinky shell "$agent" 2>&1); then
+    smoke_fail "Failed to inspect '${path}' in container for agent '${agent}'"
+    return 1
+  fi
+  if [[ "$output" != *writable* ]]; then
+    smoke_fail "Expected '${path}' to be mounted read-write for agent '${agent}'"
     echo "$output"
     return 1
   fi
