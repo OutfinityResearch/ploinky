@@ -73,7 +73,7 @@ function waitForContainers(names, timeoutSec = 5) {
     while (Date.now() < deadline) {
         const stillRunning = names.filter((name) => isContainerRunning(name));
         if (!stillRunning.length) return [];
-        try { execSync('sleep 1', { stdio: 'ignore' }); } catch (_) {}
+        try { execSync('sleep 1', { stdio: 'ignore' }); } catch (_) { }
     }
     return names.filter((name) => isContainerRunning(name));
 }
@@ -93,11 +93,11 @@ function getContainerCandidates(name, rec) {
     const candidates = new Set();
     if (name) candidates.add(name);
     if (rec && rec.agentName) {
-        try { candidates.add(getServiceContainerName(rec.agentName)); } catch (_) {}
+        try { candidates.add(getServiceContainerName(rec.agentName)); } catch (_) { }
         try {
             const repoName = rec.repoName || '';
             candidates.add(getAgentContainerName(rec.agentName, repoName));
-        } catch (_) {}
+        } catch (_) { }
     }
     return Array.from(candidates);
 }
@@ -157,7 +157,7 @@ async function ensureAgentCore(manifest, agentPath) {
                     if (runningContainer === containerName) {
                         return { containerName, hostPort: cachedPort };
                     }
-                } catch (_) {}
+                } catch (_) { }
             }
         }
 
@@ -188,6 +188,9 @@ async function ensureAgentCore(manifest, agentPath) {
         const agentCorePath = path.resolve(__dirname, '../../../agentCore');
         const args = ['run', '-d', '-p', '8080', '--name', containerName,
             '-v', `${agentPath}:/agent:z`, '-v', `${agentCorePath}:/agentCore:z`];
+        if (containerRuntime === 'podman') {
+            args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
+        }
         if (manifest.runTask) {
             args.push('-e', `RUN_TASK=${manifest.runTask}`, '-e', 'CODE_DIR=/agent');
         }
@@ -222,7 +225,7 @@ async function ensureAgentCore(manifest, agentPath) {
         saveAgentsMap(agents);
         return { containerName, hostPort };
     } finally {
-        try { fs.rmdirSync(lockFile); } catch (_) {}
+        try { fs.rmdirSync(lockFile); } catch (_) { }
     }
 }
 
@@ -243,6 +246,9 @@ function runInstallHook(agentName, manifest, agentPath, cwd) {
         '-v', `${agentLibPath}:/Agent${roZ}`,
         '-v', `${path.resolve(agentPath)}:/code${roZ}`
     ];
+    if (runtime === 'podman') {
+        args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
+    }
     if (nodeModulesPath) {
         args.push('-v', `${nodeModulesPath}:/node_modules${roZ}`);
     }
@@ -258,8 +264,8 @@ function runInstallHook(agentName, manifest, agentPath, cwd) {
 
 function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const containerName = getServiceContainerName(agentName);
-    try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
-    try { execSync(`${containerRuntime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
+    try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+    try { execSync(`${containerRuntime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
 
     const runtime = containerRuntime;
     const image = manifest.container || manifest.image || 'node:18-alpine';
@@ -278,6 +284,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         '-v', `${path.resolve(agentPath)}:/code${runtime === 'podman' ? ':ro,z' : ':ro'}`,
         '-v', `${nodeModulesPath}:/node_modules${runtime === 'podman' ? ':ro,z' : ':ro'}`
     ];
+    if (runtime === 'podman') {
+        args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
+    }
 
     if (manifest.volumes && typeof manifest.volumes === 'object') {
         const workspaceRoot = getConfiguredProjectPath('.', '');
@@ -434,8 +443,8 @@ function applyAgentStartupConfig(agentName, manifest, agentPath, containerName) 
         if (webchatSetupCmd) {
             console.log('Executing webchat config...');
             console.log(`[webchat] configuring for '${agentName}'...`);
-            const out = execSync(`sh -lc "${webchatSetupCmd.replace(/"/g, '\\"')}"`, { stdio: ['ignore','pipe','inherit'] }).toString();
-            try { if (out && out.trim()) process.stdout.write(out); } catch (_) {}
+            const out = execSync(`sh -lc "${webchatSetupCmd.replace(/"/g, '\\"')}"`, { stdio: ['ignore', 'pipe', 'inherit'] }).toString();
+            try { if (out && out.trim()) process.stdout.write(out); } catch (_) { }
             try {
                 const agents = loadAgentsMap();
                 const key = containerName || getServiceContainerName(agentName);
@@ -454,7 +463,7 @@ function applyAgentStartupConfig(agentName, manifest, agentPath, containerName) 
                 record.webchatSetupOutput = (out || '').split(/\n/).slice(-5).join('\n');
                 record.webchatSetupAt = new Date().toISOString();
                 saveAgentsMap(agents);
-            } catch (_) {}
+            } catch (_) { }
         }
     } catch (e) {
         console.log(`[setup] ${agentName}: ${e?.message || e}`);
@@ -472,7 +481,7 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         const desired = computeEnvHash(manifest);
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
-            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
+            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
         }
     }
     if (containerExists(containerName)) {
@@ -487,8 +496,8 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
                 syncAgentMcpConfig(containerName, agentPath);
                 return { containerName, hostPort };
             }
-            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
-        } catch (_) {}
+            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+        } catch (_) { }
     }
 
     applyAgentStartupConfig(agentName, manifest, agentPath, containerName);
@@ -537,7 +546,7 @@ const SESSION = new Set();
 
 function addSessionContainer(name) {
     if (name) {
-        try { SESSION.add(name); } catch (_) {}
+        try { SESSION.add(name); } catch (_) { }
     }
 }
 
