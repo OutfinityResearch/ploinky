@@ -79,7 +79,7 @@ if ((${#SUITE_DETAILS[@]} > 0)); then
   for entry in "${SUITE_DETAILS[@]}"; do
     [[ -z "$entry" ]] && continue
     IFS='|' read -r suite label name status duration err <<<"$entry"
-    local icon
+    icon=""
     if (( status == 0 )); then
       icon="✔"
     else
@@ -87,7 +87,7 @@ if ((${#SUITE_DETAILS[@]} > 0)); then
     fi
     printf "  %s %-24s Test %s: %s (duration: %ss)\n" "$icon" "$suite" "$label" "$name" "$duration"
     if (( status != 0 )); then
-      local decoded=${err//%7C/|}
+      decoded=${err//%7C/|}
       decoded=${decoded//\\n/$'\n'}
       if [[ -n "$decoded" && "$decoded" != "Test returned non-zero status" ]]; then
         printf "      ↳ %s\n" "$decoded"

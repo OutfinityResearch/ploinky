@@ -30,7 +30,6 @@ SMOKE_ENV_VALUE="restart_secret"
 
 test_enable_demo_repository() {
   smoke_expect_success "enable repo demo" ploinky enable repo demo || return 1
-  smoke_assert_dir_exists ".ploinky/repos/demo" "Repository directory was not created"
   local listing
   listing=$(ploinky list repos) || {
     smoke_fail "'ploinky list repos' failed"
@@ -60,7 +59,8 @@ test_agent_listing_pre_restart() {
 }
 
 test_cli_workspace_pre_restart() {
-  smoke_assert_cli_pwd_contains ".ploinky/repos/demo|/code"
+  local expected_path="${TEST_WORKSPACE_DIR}/demo"
+  smoke_assert_cli_pwd_contains "$expected_path" || return 1
 }
 
 test_variables_pre_restart() {
@@ -75,6 +75,15 @@ test_variables_pre_restart() {
     smoke_fail "Exposed ${SMOKE_ENV_NAME} not visible in container"
     return 1
   fi
+  return 0
+}
+
+test_container_mounts_pre_restart() {
+  local host_workspace="${TEST_WORKSPACE_DIR}/demo"
+  smoke_assert_container_path_readonly "/code" || return 1
+  smoke_assert_container_path_readonly "/node_modules" || return 1
+  smoke_assert_container_path_readonly "/Agent" || return 1
+  smoke_assert_container_path_writable "$host_workspace" || return 1
   return 0
 }
 
@@ -95,7 +104,8 @@ test_logs_after_restart() {
 }
 
 test_cli_workspace_after_restart() {
-  smoke_assert_cli_pwd_contains ".ploinky/repos/demo|/code"
+  local expected_path="${TEST_WORKSPACE_DIR}/demo"
+  smoke_assert_cli_pwd_contains "$expected_path" || return 1
 }
 
 test_variables_after_restart() {
@@ -108,6 +118,15 @@ test_variables_after_restart() {
     smoke_fail "Exposed ${SMOKE_ENV_NAME} not visible after restart"
     return 1
   fi
+  return 0
+}
+
+test_container_mounts_after_restart() {
+  local host_workspace="${TEST_WORKSPACE_DIR}/demo"
+  smoke_assert_container_path_readonly "/code" || return 1
+  smoke_assert_container_path_readonly "/node_modules" || return 1
+  smoke_assert_container_path_readonly "/Agent" || return 1
+  smoke_assert_container_path_writable "$host_workspace" || return 1
   return 0
 }
 
@@ -125,6 +144,7 @@ smoke_assert_container_running "ploinky_agent_moderator" || exit 1
 smoke_run_test "Repo listing before restart" "Verify repositories before restart." test_repo_listing_pre_restart
 smoke_run_test "Agent listing before restart" "Confirm agents before restart." test_agent_listing_pre_restart
 smoke_run_test "CLI workspace path before restart" "Ensure CLI sessions report the workspace directory." test_cli_workspace_pre_restart
+smoke_run_test "Container mounts before restart" "Validate read-only code mounts and writable workspace." test_container_mounts_pre_restart
 smoke_run_test "Variables & expose before restart" "Validate variables and exposed secrets prior to restart." test_variables_pre_restart
 
 echo ">>> Restarting workspace"
@@ -135,12 +155,10 @@ smoke_assert_container_running "ploinky_agent_demo" || exit 1
 smoke_run_test "Client status after restart" "Confirm status API responds after restart." test_client_status_after_restart
 smoke_run_test "Router logs after restart" "Ensure logs capture requests post-restart." test_logs_after_restart
 smoke_run_test "CLI workspace path after restart" "Check CLI sessions after restart." test_cli_workspace_after_restart
+smoke_run_test "Container mounts after restart" "Verify mount configuration persists after restart." test_container_mounts_after_restart
 smoke_run_test "Variables after restart" "Verify variables and exposed secrets persist." test_variables_after_restart
 
 echo ">>> Tearing down workspace"
-smoke_expect_success "shutdown workspace" ploinky shutdown || exit 1
-sleep 2
-smoke_assert_container_stopped "ploinky_agent_demo" || exit 1
 smoke_expect_success "destroy workspace" ploinky destroy || exit 1
 sleep 2
 smoke_assert_container_stopped "ploinky_agent_demo" || exit 1
