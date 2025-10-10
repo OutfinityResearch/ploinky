@@ -201,7 +201,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     // Detach so the CLI can exit while the router keeps running.
     child.unref();
     console.log(`[start] RoutingServer launched in background (pid ${child.pid}).`);
-    console.log(`[start] Logs: ${path.resolve('.ploinky/logs/router.log')}`);
+    console.log(`[start] Logs: ${path.resolve('logs/router.log')}`);
     console.log(`[start] Dashboard: http://127.0.0.1:${staticPort}/dashboard`);
   } catch (e) {
     console.error('start (workspace) failed:', e.message);

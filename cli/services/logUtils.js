@@ -3,7 +3,7 @@ import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 
 export function getLogPath(kind) {
-    const base = path.resolve('.ploinky/logs');
+    const base = path.resolve('logs');
     const map = { router: 'router.log' };
     const file = map[kind] || map.router;
     return path.join(base, file);
