@@ -1,0 +1,25 @@
+
+===== PREPARE STAGE =====
+[PASS] Temporary workspace directory exists
+[PASS] Repository directory created
+[PASS] Agent manifest present
+[PASS] Agent entry registered
+[PASS] Repository enabled flag recorded
+[PASS] Isolated agent workspace created
+
+===== START STAGE =====
+
+===== STOP STAGE =====
+
+===== START AGAIN STAGE =====
+
+===== RESTART STAGE =====
+[FATAL] A critical action script failed or timed out.
+
+===== DESTROY STAGE =====
+[PASS] Service container removed
+[PASS] Temporary workspace directory deleted
+[PASS] Agent log removed with workspace
+[PASS] Persistence marker removed with workspace
+
+===== TEST SUMMARY =====
