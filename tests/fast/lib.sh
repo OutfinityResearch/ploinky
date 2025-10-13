@@ -33,6 +33,8 @@ fast_init_results() {
 fast_log_result() {
   if [[ -n "${FAST_RESULTS_FILE:-}" ]]; then
     echo "$1" >> "$FAST_RESULTS_FILE"
+  else
+    echo "[DEBUG] FAST_RESULTS_FILE is not set. Cannot log result: $1" >&2
   fi
 }
 
@@ -264,30 +266,50 @@ fast_assert_container_env() {
 
 fast_assert_port_listening() {
   local port="$1"
-  python - "$port" <<'PY'
-import socket, sys
-port = int(sys.argv[1])
-try:
-    with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-        pass
-except Exception as exc:
-    print(f"Port {port} is not listening: {exc}", file=sys.stderr)
-    sys.exit(1)
-PY
+  node - "$port" <<'NODE'
+const net = require('net');
+const port = parseInt(process.argv[2], 10);
+if (isNaN(port)) {
+  process.exit(1);
+}
+const s = new net.Socket();
+s.setTimeout(500);
+s.on('connect', () => {
+  s.destroy();
+  process.exit(0);
+});
+const fail = () => {
+  s.destroy();
+  process.exit(1);
+};
+s.on('error', fail);
+s.on('timeout', fail);
+s.connect(port, '127.0.0.1');
+NODE
 }
 
 fast_assert_port_not_listening() {
   local port="$1"
-  python - "$port" <<'PY'
-import socket, sys
-port = int(sys.argv[1])
-try:
-    with socket.create_connection(("127.0.0.1", port), timeout=0.5):
-        print(f"Port {port} is unexpectedly accepting connections.", file=sys.stderr)
-        sys.exit(1)
-except Exception:
-    pass
-PY
+  node - "$port" <<'NODE'
+const net = require('net');
+const port = parseInt(process.argv[2], 10);
+if (isNaN(port)) {
+  process.exit(0);
+}
+const s = new net.Socket();
+s.setTimeout(500);
+s.on('connect', () => {
+  s.destroy();
+  process.exit(1);
+});
+const succeed = () => {
+  s.destroy();
+  process.exit(0);
+};
+s.on('error', succeed);
+s.on('timeout', succeed);
+s.connect(port, '127.0.0.1');
+NODE
 }
 
 fast_wait_for_container() {
@@ -371,7 +393,7 @@ fast_assert_router_status_ok() {
   fast_require_var "TEST_ROUTER_PORT" || return 1
   local port="$TEST_ROUTER_PORT"
   local response
-  if ! response=$(curl -fsS "http://127.0.0.1:${port}/status" 2>/dev/null); then
+  if ! response=$(curl -fsS "http://127.0.0.1:${port}/status/data" 2>/dev/null); then
     echo "Failed to fetch router status on port ${port}." >&2
     return 1
   fi

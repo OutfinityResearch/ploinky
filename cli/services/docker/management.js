@@ -309,6 +309,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         args.splice(1, 0, '-p', String(p));
     }
     const envStrings = [...buildEnvFlags(manifest), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
+    envStrings.push(formatEnvFlag('AGENT_NAME', agentName));
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
     args.push('-e', 'NODE_PATH=/node_modules');

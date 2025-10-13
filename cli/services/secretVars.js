@@ -166,10 +166,8 @@ export function getManifestEnvSpecs(manifest) {
                 } else if (Object.prototype.hasOwnProperty.call(rawSpec, 'value')) {
                     defaultValue = rawSpec.value;
                 }
-            } else if (typeof rawSpec === 'string' && rawSpec.trim()) {
-                sourceName = rawSpec.trim();
-            } else if (rawSpec !== undefined && rawSpec !== null && rawSpec !== '') {
-                sourceName = String(rawSpec);
+            } else {
+                defaultValue = rawSpec;
             }
 
             specs.push({
