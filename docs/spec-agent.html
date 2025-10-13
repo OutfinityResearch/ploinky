@@ -76,7 +76,10 @@
   "about": "Express API server",      // Description shown in listings
   
   // Environment configuration
-  "env": ["API_KEY", "DATABASE_URL"], // Required environment variables
+  "env": {
+    "LOG_LEVEL": "info",
+    "DATABASE_URL": null
+  },
   
   // Auto-configuration (optional)
   "enable": ["other-agent"],          // Auto-enable other agents
@@ -125,7 +128,7 @@
                             <tr>
                                 <td><code>env</code></td>
                                 <td>No</td>
-                                <td>List of required environment variables</td>
+                                <td>Defines environment variables. Can be an array of required variable names or an object to specify default values. See details below.</td>
                             </tr>
                             <tr>
                                 <td><code>enable</code></td>
@@ -143,6 +146,24 @@
                                 <td>Bash command executed on the host before the agent container is started. Typical usage: auto-configure WebChat for this agent (e.g., <code>ploinky webchat MyAgent</code> or <code>ploinky webchat ./scripts/menu.sh</code>).</td>
                             </tr>
                         </table>
+
+                        <h4 style="margin-top: 2rem;">The <code>env</code> Property</h4>
+                        <p>The <code>env</code> property is a flexible way to declare an agent's required environment variables and provide defaults.</p>
+                        <h5>1. Array of Strings (Required Variables)</h5>
+                        <p>To declare that an agent requires certain variables to be set in the workspace (e.g., via <code>ploinky var ...</code>), provide an array of names. If a variable is not set, Ploinky will throw an error on start.</p>
+                        <pre><code>"env": ["API_KEY", "DATABASE_URL"]</code></pre>
+
+                        <h5>2. Object (Default Values)</h5>
+                        <p>To provide default values, use an object where the key is the environment variable name.</p>
+                        <pre><code>"env": {
+  "LOG_LEVEL": "info",
+  "API_PORT": 8080,
+  "DATABASE_URL": null
+}</code></pre>
+                        <ul style="margin-left: 1.5rem; margin-top: 1rem;">
+                            <li><code>LOG_LEVEL</code> will be set to <code>"info"</code> if not otherwise defined in the workspace.</li>
+                            <li>If <code>DATABASE_URL</code> is not defined in the workspace, it will be treated as a required variable because its default value is <code>null</code>.</li>
+                        </ul>
                     </div>
 
                     <div class="doc-section" id="lifecycle">

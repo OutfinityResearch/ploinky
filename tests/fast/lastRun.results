@@ -8,13 +8,50 @@
 [PASS] Isolated agent workspace created
 
 ===== START STAGE =====
+[PASS] Service container is running
+[PASS] Router port 25336 listening
+[PASS] Agent host port 7001 listening
+[PASS] Router status endpoint responds
+[PASS] Agent health endpoint reports ok
+[PASS] Container exposes AGENT_NAME
+[PASS] Container exposes FAST_TEST_MARKER
+[PASS] Agent log file created
+[PASS] Persisted data file created
 
 ===== STOP STAGE =====
+[PASS] Container exists after stop
+[PASS] Container is no longer running
+[PASS] Router port 25336 closed
+[PASS] Agent port 7001 closed
+[PASS] Manual persistence marker retained
+[PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
+[PASS] Service container is running
+[PASS] Router port 25336 listening
+[PASS] Agent host port 7001 listening
+[PASS] Router status endpoint responds
+[PASS] Agent health endpoint reports ok
+[PASS] Container exposes AGENT_NAME
+[PASS] Container exposes FAST_TEST_MARKER
+[PASS] Agent log file created
+[PASS] Persisted data file created
+[PASS] Persistence marker survived restart
+[PASS] Agent data file still present after restart
+[PASS] Agent data file retains initialization signature
 
 ===== RESTART STAGE =====
-[FATAL] A critical action script failed or timed out.
+[PASS] Service container is running
+[PASS] Router port 25336 listening
+[PASS] Agent host port 7001 listening
+[PASS] Router status endpoint responds
+[PASS] Agent health endpoint reports ok
+[PASS] Container exposes AGENT_NAME
+[PASS] Container exposes FAST_TEST_MARKER
+[PASS] Agent log file created
+[PASS] Persisted data file created
+[PASS] Container PID changed after restart
+[PASS] Persistence marker retained after restart
 
 ===== DESTROY STAGE =====
 [PASS] Service container removed
