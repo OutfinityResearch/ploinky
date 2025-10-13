@@ -34,23 +34,33 @@ fi
 
 # Give the MCP server a moment to come online
 declare -i attempt=0
-until ploinky client list tools | grep -q "type_string"; do
+TOOLS_OUTPUT=""
+while true; do
+    set +e
+    TOOLS_OUTPUT=$(ploinky client list tools 2>&1)
+    status=$?
+    set -e
+
+    if [ $status -eq 0 ] && grep -q "type_string" <<<"$TOOLS_OUTPUT"; then
+        break
+    fi
+
     attempt+=1
     if [ $attempt -ge 10 ]; then
+        echo "$TOOLS_OUTPUT"
         echo "✗ type_string tool not listed after waiting"
         exit 1
     fi
-    sleep 1
-    ploinky client list tools >/dev/null || true
-    sleep 1
+
     echo "Retrying to fetch tools (attempt $attempt)"
+    sleep 2
 done
 
 echo "✓ testAgent tools registered via MCP"
 
 # Helper to extract result text
 extract_text() {
-    jq -r '.result.content[0].text' <<<"$1"
+    jq -r '.content[0].text // .result.content[0].text // empty' <<<"$1"
 }
 
 # 1. String tool
