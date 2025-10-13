@@ -1,15 +1,40 @@
 import fs from 'fs';
 import path from 'path';
-import http from 'http';
 import { PLOINKY_DIR } from '../services/config.js';
 import { debugLog, parseParametersString } from '../services/utils.js';
-import { showHelp } from '../services/help.js';
+import { createAgentClient as createBrowserClient } from '../../Agent/client/MCPBrowserClient.js';
 
 class ClientCommands {
     constructor() {
         this.configPath = path.join(PLOINKY_DIR, 'cloud.json');
         this.loadConfig();
         this._toolCache = null;
+    }
+
+    getToolAgentName(tool) {
+        const routerInfo = tool && tool.annotations && typeof tool.annotations === 'object'
+            ? tool.annotations.router
+            : null;
+        if (routerInfo && typeof routerInfo.agent === 'string') {
+            return routerInfo.agent;
+        }
+        if (tool && typeof tool.agent === 'string') {
+            return tool.agent;
+        }
+        return null;
+    }
+
+    getResourceAgentName(resource) {
+        const routerInfo = resource && resource.annotations && typeof resource.annotations === 'object'
+            ? resource.annotations.router
+            : null;
+        if (routerInfo && typeof routerInfo.agent === 'string') {
+            return routerInfo.agent;
+        }
+        if (resource && typeof resource.agent === 'string') {
+            return resource.agent;
+        }
+        return null;
     }
 
     loadConfig() {
@@ -31,42 +56,20 @@ class ClientCommands {
         }
     }
 
-    async sendRouterRequest(pathname, payload) {
-        const port = this.getRouterPort();
-        return new Promise((resolve) => {
-            const req = http.request({
-                hostname: '127.0.0.1',
-                port,
-                path: pathname,
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            }, (r) => {
-                const buf = [];
-                r.on('data', d => buf.push(d));
-                r.on('end', () => {
-                    const bodyStr = Buffer.concat(buf).toString('utf8');
-                    try {
-                        const json = JSON.parse(bodyStr || 'null');
-                        resolve({ code: r.statusCode || 0, json, raw: bodyStr });
-                    } catch (_) {
-                        resolve({ code: r.statusCode || 0, json: null, raw: bodyStr });
-                    }
-                });
-            });
-            req.on('error', (e) => resolve({ code: 0, json: null, raw: String(e) }));
-            try {
-                req.write(JSON.stringify(payload || {}));
-            } catch (_) {
-                req.write('{}');
-            }
-            req.end();
-        });
+    async withRouterClient(fn) {
+        const baseUrl = `http://127.0.0.1:${this.getRouterPort()}/mcp`;
+        const client = createBrowserClient(baseUrl);
+        try {
+            return await fn(client);
+        } finally {
+            await client.close().catch(() => { });
+        }
     }
 
     // Removed legacy PloinkyClient-based call; using local RoutingServer instead.
 
     formatToolLine(tool) {
-        const agent = tool && tool.agent ? String(tool.agent) : 'unknown';
+        const agent = this.getToolAgentName(tool) || 'unknown';
         const name = tool && tool.name ? String(tool.name) : '(unnamed)';
         const title = tool && tool.title && tool.title !== name ? ` (${tool.title})` : '';
         const description = tool && tool.description ? ` - ${tool.description}` : '';
@@ -74,16 +77,15 @@ class ClientCommands {
     }
 
     formatResourceLine(resource) {
-        const agent = resource && resource.agent ? String(resource.agent) : 'unknown';
+        const agent = this.getResourceAgentName(resource) || 'unknown';
         const uri = resource && resource.uri ? String(resource.uri) : '(no-uri)';
         const name = resource && resource.name && resource.name !== uri ? ` (${resource.name})` : '';
         const description = resource && resource.description ? ` - ${resource.description}` : '';
         return `- [${agent}] ${uri}${name}${description}`;
     }
 
-    printAggregatedList(items, formatter, errors, emptyAgents) {
+    printAggregatedList(items, formatter) {
         const hasItems = Array.isArray(items) && items.length > 0;
-        const hasEmptyAgents = Array.isArray(emptyAgents) && emptyAgents.length > 0;
 
         if (hasItems) {
             for (const item of items) {
@@ -91,50 +93,31 @@ class ClientCommands {
             }
         }
 
-        if (hasEmptyAgents) {
-            for (const agent of emptyAgents) {
-                const label = typeof agent === 'string' ? agent : 'unknown';
-                console.log(`- [${label}] none`);
-            }
-        }
-
-        if (!hasItems && !hasEmptyAgents) {
+        if (!hasItems) {
             console.log('No entries found.');
-        }
-        if (Array.isArray(errors) && errors.length) {
-            console.log('\nWarnings:');
-            for (const err of errors) {
-                const agent = err && err.agent ? err.agent : 'unknown';
-                const detail = err && err.error ? err.error : 'unknown error';
-                console.log(`- [${agent}] ${detail}`);
-            }
         }
     }
 
     async listTools() {
-        const result = await this.sendRouterRequest('/mcp', { command: 'list_tools' });
-        if (result.code >= 200 && result.code < 300 && result.json && Array.isArray(result.json.tools)) {
-            this.printAggregatedList(result.json.tools, this.formatToolLine.bind(this), result.json.errors, result.json.emptyAgents);
-            return;
+        try {
+            const tools = await this.withRouterClient(async (client) => client.listTools());
+            this._toolCache = Array.isArray(tools) ? tools : [];
+            this.printAggregatedList(this._toolCache, this.formatToolLine.bind(this));
+        } catch (err) {
+            const message = err && err.message ? err.message : String(err || '');
+            console.log(`Failed to retrieve tool list: ${message}`);
         }
-        if (Array.isArray(result.json)) {
-            this.printAggregatedList(result.json, this.formatToolLine.bind(this), result.json.errors, result.json.emptyAgents);
-            return;
-        }
-        console.log(result.raw || 'Failed to retrieve tool list');
     }
 
     async listResources() {
-        const result = await this.sendRouterRequest('/mcp', { command: 'list_resources' });
-        if (result.code >= 200 && result.code < 300 && result.json && Array.isArray(result.json.resources)) {
-            this.printAggregatedList(result.json.resources, this.formatResourceLine.bind(this), result.json.errors);
-            return;
+        try {
+            const resources = await this.withRouterClient(async (client) => client.listResources());
+            const list = Array.isArray(resources) ? resources : [];
+            this.printAggregatedList(list, this.formatResourceLine.bind(this));
+        } catch (err) {
+            const message = err && err.message ? err.message : String(err || '');
+            console.log(`Failed to retrieve resource list: ${message}`);
         }
-        if (Array.isArray(result.json)) {
-            this.printAggregatedList(result.json, this.formatResourceLine.bind(this), result.json.errors);
-            return;
-        }
-        console.log(result.raw || 'Failed to retrieve resource list');
     }
 
     async getAgentStatus(agentName) {
@@ -143,21 +126,48 @@ class ClientCommands {
             console.log('Example: client status myAgent');
             return;
         }
-        const payload = { command: 'status' };
-        const result = await this.sendRouterRequest(`/mcps/${agentName}`, payload);
-        const code = result.code;
-        const hasBody = result.raw && result.raw.length ? 'yes' : 'no';
-        const parsed = result.json ? 'yes' : 'no';
-        const ok = (result.json && typeof result.json.ok === 'boolean') ? String(result.json.ok) : '-';
-        console.log(`${agentName}: http=${code} body=${hasBody} parsed=${parsed} ok=${ok}`);
+        try {
+            await this.withRouterClient(async (client) => {
+                const meta = { router: { agent: agentName } };
+                let ok = true;
+                let text = '';
+
+                try {
+                    const resource = await client.readResource('health://status', meta);
+                    const contents = Array.isArray(resource?.contents) ? resource.contents : [];
+                    text = contents.length ? String(contents[0]?.text ?? '') : '';
+                    if (text) {
+                        try {
+                            const parsed = JSON.parse(text);
+                            if (typeof parsed.ok === 'boolean') {
+                                ok = parsed.ok;
+                            }
+                        } catch (_) { }
+                    }
+                } catch (err) {
+                    // If the agent does not expose a health resource, treat it as OK for backward compatibility.
+                    const reason = err?.message ? ` (${err.message})` : '';
+                    debugLog(`health://status read failed for '${agentName}'${reason}`);
+                    ok = true;
+                }
+
+                console.log(`${agentName}: ok=${ok}`);
+                if (text) {
+                    console.log(text.trim());
+                }
+            });
+        } catch (err) {
+            const message = err && err.message ? err.message : String(err || '');
+            console.log(`Failed to retrieve status for '${agentName}': ${message}`);
+        }
     }
 
     async findToolAgent(toolName) {
         if (!this._toolCache) {
-            const result = await this.sendRouterRequest('/mcp', { command: 'list_tools' });
-            if (result.code >= 200 && result.code < 300 && result.json && Array.isArray(result.json.tools)) {
-                this._toolCache = result.json.tools;
-            } else {
+            try {
+                const tools = await this.withRouterClient(async (client) => client.listTools());
+                this._toolCache = Array.isArray(tools) ? tools : [];
+            } catch (_) {
                 this._toolCache = [];
             }
         }
@@ -166,9 +176,17 @@ class ClientCommands {
             return { agent: null, error: 'not_found' };
         }
         if (matchingTools.length > 1) {
-            return { agent: null, error: 'ambiguous', agents: matchingTools.map(t => t.agent) };
+            const agents = Array.from(new Set(matchingTools
+                .map(tool => this.getToolAgentName(tool))
+                .filter(Boolean)));
+            return { agent: null, error: 'ambiguous', agents };
         }
-        return { agent: matchingTools[0].agent, error: null };
+        const tool = matchingTools[0];
+        const agent = this.getToolAgentName(tool);
+        if (!agent) {
+            return { agent: null, error: 'not_found' };
+        }
+        return { agent, error: null };
     }
 
     async callTool(toolName, payloadObj = {}, targetAgent = null) {
@@ -186,7 +204,6 @@ class ClientCommands {
             }
             if (findResult.error === 'ambiguous') {
                 const errPayload = {
-                    ok: false,
                     error: 'ambiguous tool',
                     message: `Tool '${toolName}' was found on multiple agents. Please specify one with --agent.`,
                     agents: findResult.agents
@@ -198,13 +215,15 @@ class ClientCommands {
             debugLog(`--> Found tool '${toolName}' on agent '${agent}'. Calling...`);
         }
 
-        const payload = { command: 'tool', tool: toolName, agent: agent, ...payloadObj };
-        const result = await this.sendRouterRequest('/mcp', payload);
-
-        if (result.json) {
-            console.log(JSON.stringify(result.json, null, 2));
-        } else {
-            console.log(result.raw || 'Failed to call tool');
+        try {
+            await this.withRouterClient(async (client) => {
+                const meta = agent ? { router: { agent } } : undefined;
+                const result = await client.callTool(toolName, payloadObj, meta);
+                console.log(JSON.stringify(result, null, 2));
+            });
+        } catch (err) {
+            const message = err && err.message ? err.message : String(err || '');
+            console.log(`Failed to call tool: ${message}`);
         }
     }
 
