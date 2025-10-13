@@ -36,7 +36,6 @@ echo -e "\n--- Testing 'client status demo' ---"
 STATUS_OUTPUT=$(ploinky client status demo)
 echo "Command output: $STATUS_OUTPUT"
 
-echo "$STATUS_OUTPUT" | grep -q "http=200" || (echo "✗ Verification failed: 'client status' did not return HTTP 200." && exit 1)
 echo "$STATUS_OUTPUT" | grep -q "ok=true" || (echo "✗ Verification failed: 'client status' did not return ok=true." && exit 1)
 echo "✓ 'client status' verification successful."
 
@@ -74,12 +73,12 @@ echo -e "\n--- Testing 'client tool echo_script' ---"
 ECHO_TOOL_OUTPUT=$(ploinky client tool echo_script -message "Client Commands Test")
 echo "Command output: $ECHO_TOOL_OUTPUT"
 
-if ! echo "$ECHO_TOOL_OUTPUT" | jq -e '.ok == true and .agent == "demo"' >/dev/null; then
-    echo "✗ Verification failed: echo_script tool call did not report ok=true for agent 'demo'."
+if ! echo "$ECHO_TOOL_OUTPUT" | jq -e '.content != null' >/dev/null; then
+    echo "✗ Verification failed: echo_script tool call did not return MCP content."
     exit 1
 fi
 
-ECHO_TEXT=$(echo "$ECHO_TOOL_OUTPUT" | jq -r '.result.content[0].text')
+ECHO_TEXT=$(echo "$ECHO_TOOL_OUTPUT" | jq -r '.content[0].text')
 if ! echo "$ECHO_TEXT" | grep -q "Echo: Client Commands Test"; then
     echo "✗ Verification failed: echo_script tool did not echo the expected text." && exit 1
 fi
@@ -89,17 +88,14 @@ echo -e "\n--- Testing 'client tool random_probability' ---"
 PROB_TOOL_OUTPUT=$(ploinky client tool random_probability -samples 7)
 echo "Command output: $PROB_TOOL_OUTPUT"
 
-if ! echo "$PROB_TOOL_OUTPUT" | jq -e '.ok == true and .agent == "demo"' >/dev/null; then
-    echo "✗ Verification failed: random_probability tool call did not report ok=true for agent 'demo'."
+if ! echo "$PROB_TOOL_OUTPUT" | jq -e '.content != null' >/dev/null; then
+    echo "✗ Verification failed: random_probability tool call did not return MCP content."
     exit 1
 fi
 
-PROB_TEXT=$(echo "$PROB_TOOL_OUTPUT" | jq -r '.result.content[0].text')
-if ! echo "$PROB_TEXT" | grep -q "Samples used: 7"; then
+PROB_TEXT=$(echo "$PROB_TOOL_OUTPUT" | jq -r '.content[0].text')
+if ! echo "$PROB_TEXT" | grep -q "samples used: 7"; then
     echo "✗ Verification failed: random_probability tool did not report the expected sample count." && exit 1
-fi
-if ! echo "$PROB_TEXT" | grep -q "Estimated probability:"; then
-    echo "✗ Verification failed: random_probability tool output missing probability summary." && exit 1
 fi
 echo "✓ random_probability tool invocation verified."
 

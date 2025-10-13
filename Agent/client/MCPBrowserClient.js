@@ -301,12 +301,16 @@ function createAgentClient(baseUrl) {
         return result?.tools ?? [];
     }
 
-    async function callTool(name, args) {
+    async function callTool(name, args, meta) {
         await connect();
-        return await sendRequest('tools/call', {
+        const params = {
             name,
             arguments: args ?? {}
-        });
+        };
+        if (meta && typeof meta === 'object') {
+            params._meta = meta;
+        }
+        return await sendRequest('tools/call', params);
     }
 
     async function listResources() {
@@ -315,9 +319,14 @@ function createAgentClient(baseUrl) {
         return result?.resources ?? [];
     }
 
-    async function readResource(uri) {
+    async function readResource(uri, meta) {
         await connect();
-        return await sendRequest('resources/read', { uri });
+        const params = { uri };
+        if (meta && typeof meta === 'object') {
+            params._meta = meta;
+        }
+        const result = await sendRequest('resources/read', params);
+        return result?.resource ?? result;
     }
 
     async function close() {

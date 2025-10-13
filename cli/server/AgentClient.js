@@ -38,7 +38,7 @@ function createAgentClient(baseUrl) {
   async function readResource(uri) {
     await connect();
     const res = await client.readResource({ uri });
-    return res;
+    return res?.resource ?? res;
   }
 
   async function close() {
