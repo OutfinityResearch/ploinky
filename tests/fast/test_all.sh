@@ -12,7 +12,7 @@ set -euo pipefail
 FAST_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 # State file for sharing variables between scripts
-FAST_STATE_FILE=$(mktemp -p "$FAST_DIR" fast-suite-state-XXXXXX.env)
+FAST_STATE_FILE=$(mktemp "${TMPDIR:-/tmp}/fast-suite-state-XXXXXX.env")
 export FAST_STATE_FILE
 
 # Results file for the final summary
@@ -61,9 +61,10 @@ run_stage() {
     if [[ $exit_code -eq 124 ]]; then
         fast_log_result "[FAIL] ${verify} timed out after 60 seconds."
         TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+    elif [[ $exit_code -ne 0 ]]; then
+        fast_log_result "[FAIL] ${verify} reported ${exit_code} failure(s)."
+        TOTAL_ERRORS=$((TOTAL_ERRORS + exit_code))
     fi
-    
-    TOTAL_ERRORS=$((TOTAL_ERRORS + FAST_CHECK_ERRORS))
 
     set -e
   fi
@@ -78,18 +79,35 @@ run_stage() {
 # The 'set -e' at the top level will cause the script to exit if any 'do*' script fails.
 # We wrap the main stages in a subshell with its own error handling
 # to make sure the final summary and cleanup runs.
-(
-  run_stage "PREPARE STAGE"      "doPrepare.sh"         "testsAfterPrepare.sh"
-  run_stage "START STAGE"        "doStart.sh"           "testsAfterStart.sh"
-  run_stage "STOP STAGE"         "doStop.sh"            "testsAfterStop.sh"
-  run_stage "START AGAIN STAGE"  "doStart.sh"           "testsAfterStartAgain.sh"
-  run_stage "RESTART STAGE"      "doRestart.sh"         "testsAfterRestart.sh"
-) || {
-  # This block catches the exit from 'set -e' if a 'do*' script failed.
-  fast_fail_message "A critical action failed or timed out. Proceeding to cleanup."
-  fast_log_result "[FATAL] A critical action script failed or timed out."
+if ! run_stage "PREPARE STAGE" "doPrepare.sh" "testsAfterPrepare.sh"; then
+  fast_fail_message "PREPARE STAGE aborted. Proceeding to cleanup."
+  fast_log_result "[FATAL] PREPARE STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
-}
+fi
+
+if ! run_stage "START STAGE" "doStart.sh" "testsAfterStart.sh"; then
+  fast_fail_message "START STAGE aborted. Proceeding to cleanup."
+  fast_log_result "[FATAL] START STAGE aborted."
+  TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+fi
+
+if ! run_stage "STOP STAGE" "doStop.sh" "testsAfterStop.sh"; then
+  fast_fail_message "STOP STAGE aborted. Proceeding to cleanup."
+  fast_log_result "[FATAL] STOP STAGE aborted."
+  TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+fi
+
+if ! run_stage "START AGAIN STAGE" "doStart.sh" "testsAfterStartAgain.sh"; then
+  fast_fail_message "START AGAIN STAGE aborted. Proceeding to cleanup."
+  fast_log_result "[FATAL] START AGAIN STAGE aborted."
+  TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+fi
+
+if ! run_stage "RESTART STAGE" "doRestart.sh" "testsAfterRestart.sh"; then
+  fast_fail_message "RESTART STAGE aborted. Proceeding to cleanup."
+  fast_log_result "[FATAL] RESTART STAGE aborted."
+  TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+fi
 
 # --- Cleanup Stage ---
 # This stage runs regardless of the success of previous stages.
@@ -102,12 +120,12 @@ fast_stage_header "TEST SUMMARY"
 
 if (( TOTAL_ERRORS == 0 )); then
   fast_pass_message "All tests passed!"
+  fast_log_result "[PASS] All tests passed!"
   echo "Full report available in: $FAST_RESULTS_FILE"
-  # Show the full report on success
-  cat "$FAST_RESULTS_FILE"
   exit 0
 else
   fast_fail_message "Suite finished with ${TOTAL_ERRORS} failure(s)."
+  fast_log_result "[FAIL] Suite finished with ${TOTAL_ERRORS} failure(s)."
   echo "Full report available in: $FAST_RESULTS_FILE"
   # On failure, print a condensed view of just the failures.
   grep -i "\[FAIL\]\|\[FATAL\]" "$FAST_RESULTS_FILE"

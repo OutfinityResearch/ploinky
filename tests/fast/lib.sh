@@ -52,20 +52,28 @@ fast_info() {
 
 fast_fail_message() {
   local message="$1"
-  printf "%s[FAIL]%s %s\n" "$FAST_COLOR_FAIL" "$FAST_COLOR_RESET" "$message"
+  local label="[FAIL]"
+  if [[ -n "$FAST_COLOR_FAIL" ]]; then
+    printf "%s%s%s %s\n" "$FAST_COLOR_FAIL" "$label" "$FAST_COLOR_RESET" "$message"
+  else
+    printf "%s %s\n" "$label" "$message"
+  fi
 }
 
 fast_pass_message() {
   local message="$1"
-  printf "%s[PASS]%s %s\n" "$FAST_COLOR_PASS" "$FAST_COLOR_RESET" "$message"
+  local label="[PASS]"
+  if [[ -n "$FAST_COLOR_PASS" ]]; then
+    printf "%s%s%s %s\n" "$FAST_COLOR_PASS" "$label" "$FAST_COLOR_RESET" "$message"
+  else
+    printf "%s %s\n" "$label" "$message"
+  fi
 }
 
 fast_check() {
   local description="$1"
   local callback="$2"
   shift 2
-
-  printf "  %s->%s %s\n" "$FAST_COLOR_CHECK" "$FAST_COLOR_RESET" "$description"
 
   local output
   if output=$("$callback" "$@" 2>&1); then
@@ -85,7 +93,7 @@ fast_check() {
 
 fast_finalize_checks() {
   if (( FAST_CHECK_ERRORS > 0 )); then
-    return 1
+    return "$FAST_CHECK_ERRORS"
   fi
   return 0
 }
@@ -153,13 +161,16 @@ fast_require_runtime() {
   fi
 }
 
-fast_compute_service_container_name() {
+compute_container_name() {
+  local agent_name="$1"
+  if [[ -z "$agent_name" ]]; then
+    echo "Agent name is required for computing container name." >&2
+    return 1
+  fi
   fast_load_state
   fast_require_var "TEST_RUN_DIR" || return 1
-  fast_require_var "TEST_AGENT_NAME" || return 1
   local cwd="$TEST_RUN_DIR"
-  local agent="$TEST_AGENT_NAME"
-  FAST_TMP_CWD="$cwd" FAST_TMP_AGENT="$agent" node <<'NODE'
+  FAST_TMP_CWD="$cwd" FAST_TMP_AGENT="$agent_name" node <<'NODE'
 const crypto = require('crypto');
 const path = require('path');
 
