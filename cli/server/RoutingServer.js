@@ -28,6 +28,7 @@ import {
     handleRouterMcp
 } from './routerHandlers.js';
 import { createAgentClient } from './AgentClient.js';
+import { resolveWebchatCommands } from './webchat/commandResolver.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,6 +37,10 @@ const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
 const AGENT_PROXY_SERVER_INFO = { name: 'ploinky-router-proxy', version: '1.0.0' };
 
 const agentSessionStore = new Map();
+const resolvedWebchatCommands = resolveWebchatCommands();
+if (resolvedWebchatCommands.source === 'manifest' && resolvedWebchatCommands.agentName) {
+    logBootEvent('webchat_manifest_cli_fallback', { agent: resolvedWebchatCommands.agentName });
+}
 
 function readAgentSessionId(req) {
     const value = req.headers['mcp-session-id'];
@@ -314,11 +319,13 @@ const webchatFactory = (() => {
         return { factory: null, label: '-', runtime: 'disabled' };
     }
     if (createWebChatLocalFactory) {
-        const secretCommand = resolveVarValue('WEBCHAT_COMMAND');
-        const command = secretCommand || process.env.WEBCHAT_COMMAND || '';
+        const command = resolvedWebchatCommands.host;
         const factory = buildLocalFactory(createWebChatLocalFactory, { command });
         if (factory) {
-            logBootEvent('webchat_local_process_factory_ready', { command: command || null });
+            logBootEvent('webchat_local_process_factory_ready', {
+                command: command || null,
+                source: resolvedWebchatCommands.source
+            });
         }
         return {
             factory,
@@ -328,8 +335,13 @@ const webchatFactory = (() => {
     }
     if (createWebChatTTYFactory) {
         const containerName = process.env.WEBCHAT_CONTAINER || 'ploinky_chat';
-        const factory = createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName });
-        logBootEvent('webchat_container_factory_ready', { containerName });
+        const entry = resolvedWebchatCommands.container;
+        const factory = createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName, entry });
+        logBootEvent('webchat_container_factory_ready', {
+            containerName,
+            command: entry || null,
+            source: resolvedWebchatCommands.source
+        });
         return {
             factory,
             label: containerName,
