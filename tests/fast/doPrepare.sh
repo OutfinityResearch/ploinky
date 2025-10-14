@@ -87,7 +87,7 @@ ploinky enable repo "$TEST_REPO_NAME"
 fast_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_QUALIFIED"
 
-service_container=$(fast_compute_service_container_name)
+service_container=$(compute_container_name "$TEST_AGENT_NAME")
 fast_write_state_var "TEST_SERVICE_CONTAINER" "$service_container"
 fast_info "Service container will be named: $service_container"
 
