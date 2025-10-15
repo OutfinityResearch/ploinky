@@ -100,6 +100,7 @@ fast_write_state_var "TEST_AGENT_WORKSPACE" "$workspace_project"
 fast_write_state_var "TEST_PERSIST_FILE" "$workspace_project/data/fast-persist.txt"
 fast_write_state_var "TEST_AGENT_LOG" "$workspace_project/fast-start.log"
 fast_write_state_var "TEST_PERSIST_MARKER" "$workspace_project/data/manual-marker.txt"
+fast_write_state_var "TEST_AGENT_CONTAINER_PORT" "7000"
 
 mkdir -p "$workspace_project/data"
 

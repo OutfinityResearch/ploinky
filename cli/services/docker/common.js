@@ -200,7 +200,6 @@ function parseManifestPorts(manifest) {
         const portSpec = String(p).trim();
         if (!portSpec) continue;
 
-        publishArgs.push(portSpec);
         const parts = portSpec.split(':');
         let hostPort;
         let containerPort;
@@ -214,7 +213,9 @@ function parseManifestPorts(manifest) {
             containerPort = parseInt(parts[2], 10);
         }
         if (hostPort && containerPort) {
-            portMappings.push({ hostPort, containerPort });
+            const normalized = `127.0.0.1:${hostPort}:${containerPort}`;
+            publishArgs.push(normalized);
+            portMappings.push({ hostPort, containerPort, hostIp: '127.0.0.1' });
         }
     }
 

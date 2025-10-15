@@ -11,12 +11,14 @@ fast_require_var "TEST_AGENT_HOST_PORT"
 fast_require_var "TEST_AGENT_HEALTH_URL"
 fast_require_var "TEST_AGENT_LOG"
 fast_require_var "TEST_PERSIST_FILE"
+fast_require_var "TEST_AGENT_CONTAINER_PORT"
 
 cd "$TEST_RUN_DIR"
 
 fast_check "Service container is running" fast_assert_container_running "$TEST_SERVICE_CONTAINER"
 fast_check "Router port ${TEST_ROUTER_PORT} listening" fast_assert_port_listening "$TEST_ROUTER_PORT"
 fast_check "Agent host port ${TEST_AGENT_HOST_PORT} listening" fast_assert_port_listening "$TEST_AGENT_HOST_PORT"
+fast_check "Agent port ${TEST_AGENT_HOST_PORT} bound to localhost" fast_assert_port_bound_local "$TEST_SERVICE_CONTAINER" "$TEST_AGENT_CONTAINER_PORT" "$TEST_AGENT_HOST_PORT"
 fast_check "Router status endpoint responds" fast_assert_router_status_ok
 fast_check "Agent health endpoint reports ok" fast_assert_http_response_contains "$TEST_AGENT_HEALTH_URL" '"ok":true'
 fast_check "Container exposes AGENT_NAME" fast_assert_container_env "$TEST_SERVICE_CONTAINER" "AGENT_NAME" "$TEST_AGENT_NAME"
