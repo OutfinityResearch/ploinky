@@ -26,8 +26,17 @@ fast_check "Persisted data file created" fast_assert_file_exists "$TEST_PERSIST_
 
 #MCP
 fast_mcp_start_simulator() {
-  ploinky start simulator >/dev/null
-  sleep 2
+  ploinky start simulator
+  local container_name
+  container_name=$(compute_container_name "simulator")
+  fast_wait_for_container "$container_name"
+}
+
+fast_mcp_start_demo() {
+  ploinky start demo
+  local container_name
+  container_name=$(compute_container_name "demo")
+  fast_wait_for_container "$container_name"
 }
 
 fast_mcp_client_status() {
@@ -44,12 +53,12 @@ fast_mcp_list_tools() {
 }
 
 fast_mcp_run_simulation() {
-  ploinky client tool run_simulation -iterations 10 | tee "$TEST_RUN_DIR/mcp_cli_run_simulation.log" | grep -q '"iterations":10'
-}
-
-fast_mcp_start_demo() {
-  ploinky start demo >/dev/null
-  sleep 2
+  local output
+  output=$(ploinky client tool run_simulation -iterations 10)
+   if ! echo "$output" | jq -e '.content[0].text | fromjson | .ok == true' >/dev/null; then
+     echo "run_simulation did not return ok:true. Output: $output" >&2
+     return 1
+   fi
 }
 
 fast_mcp_list_tools_after_demo() {
@@ -69,13 +78,15 @@ fast_mcp_list_tools_after_demo() {
 }
 
 fast_info  "MCP tests"
-fast_check "running: start simulator" fast_mcp_start_simulator
-fast_check "running: client status simulator" fast_mcp_client_status
-fast_check "running: client list tools" fast_mcp_list_tools
-fast_check "running: client tool run_simulation -iterations 10" fast_mcp_run_simulation
+fast_action "Action: Starting simulator agent..." fast_mcp_start_simulator
+
+fast_check "Status check: client status simulator" fast_mcp_client_status
+fast_check "Tool check: client list tools" fast_mcp_list_tools
+fast_check "Tool run check: client tool run_simulation -iterations 10" fast_mcp_run_simulation
 
 fast_info "MCP demo agent tests"
-fast_check "running: start demo" fast_mcp_start_demo
-fast_check "router server mcp agregation" fast_mcp_list_tools_after_demo
+fast_action "Action: Starting demo agent..." fast_mcp_start_demo
+
+fast_check "Aggregation check: router server mcp agregation" fast_mcp_list_tools_after_demo
 
 fast_finalize_checks

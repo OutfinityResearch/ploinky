@@ -91,6 +91,19 @@ fast_check() {
   fi
 }
 
+fast_action() {
+  local description="$1"
+  local callback="$2"
+  shift 2
+
+  fast_info "$description"
+  if ! "$callback" "$@" >/dev/null 2>&1; then
+    fast_fail_message "Action '$description' failed."
+    # Actions are critical, exit the stage if one fails.
+    exit 1
+  fi
+}
+
 fast_finalize_checks() {
   if (( FAST_CHECK_ERRORS > 0 )); then
     return "$FAST_CHECK_ERRORS"

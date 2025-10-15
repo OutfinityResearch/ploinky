@@ -84,6 +84,9 @@ EOF
 fast_info "Enabling repository ${TEST_REPO_NAME}."
 ploinky enable repo "$TEST_REPO_NAME"
 
+fast_info "Enabling repository demo."
+ploinky enable repo demo
+
 fast_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_QUALIFIED"
 

@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 24494 listening
+[PASS] Router port 22546 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -17,31 +17,22 @@
 [PASS] Container exposes FAST_TEST_MARKER
 [PASS] Agent log file created
 [PASS] Persisted data file created
-[PASS] running: start simulator
-[PASS] running: client status simulator
-[FAIL] running: client list tools
-        Error: run_simulation not found in client list tools
-[FAIL] running: client tool run_simulation -iterations 10
-        Error: Tool 'run_simulation' not found on any active agent.
-[PASS] running: start demo
-[FAIL] router server mcp agregation
-        Error: [94m[INFO][0m --- ploinky client list tools output (after demo) ---
-[94m[INFO][0m No entries found.
-[94m[INFO][0m -------------------------------------------------
-run_simulation not found after starting demo
-[FAIL] testsAfterStart.sh reported 3 failure(s).
+[PASS] Status check: client status simulator
+[PASS] Tool check: client list tools
+[PASS] Tool run check: client tool run_simulation -iterations 10
+[PASS] Aggregation check: router server mcp agregation
 
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 24494 closed
+[PASS] Router port 22546 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 24494 listening
+[PASS] Router port 22546 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -49,32 +40,16 @@ run_simulation not found after starting demo
 [PASS] Container exposes FAST_TEST_MARKER
 [PASS] Agent log file created
 [PASS] Persisted data file created
-[PASS] running: start simulator
-[PASS] running: client status simulator
-[FAIL] running: client list tools
-        Error: run_simulation not found in client list tools
-[FAIL] running: client tool run_simulation -iterations 10
-        Error: Tool 'run_simulation' not found on any active agent.
-[PASS] running: start demo
-[FAIL] router server mcp agregation
-        Error: [94m[INFO][0m --- ploinky client list tools output (after demo) ---
-[94m[INFO][0m No entries found.
-[94m[INFO][0m -------------------------------------------------
-run_simulation not found after starting demo
-[FAIL] testsAfterStartAgain.sh reported 3 failure(s).
+[PASS] Status check: client status simulator
+[PASS] Tool check: client list tools
+[PASS] Tool run check: client tool run_simulation -iterations 10
+[PASS] Aggregation check: router server mcp agregation
+[PASS] Persistence marker survived restart
+[PASS] Agent data file still present after restart
+[PASS] Agent data file retains initialization signature
 
 ===== RESTART STAGE =====
-[PASS] Service container is running
-[PASS] Router port 24494 listening
-[PASS] Agent host port 7001 listening
-[PASS] Router status endpoint responds
-[PASS] Agent health endpoint reports ok
-[PASS] Container exposes AGENT_NAME
-[PASS] Container exposes FAST_TEST_MARKER
-[PASS] Agent log file created
-[PASS] Persisted data file created
-[PASS] Container PID changed after restart
-[PASS] Persistence marker retained after restart
+[FATAL] RESTART STAGE aborted.
 
 ===== DESTROY STAGE =====
 [PASS] Service container removed
@@ -83,4 +58,4 @@ run_simulation not found after starting demo
 [PASS] Persistence marker removed with workspace
 
 ===== TEST SUMMARY =====
-[FAIL] Suite finished with 6 failure(s).
+[FAIL] Suite finished with 1 failure(s).
