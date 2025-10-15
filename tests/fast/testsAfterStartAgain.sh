@@ -151,4 +151,7 @@ fast_test_dynamic_webtty_shell() {
 fast_check "Dynamic APP_NAME update without restart" fast_test_dynamic_app_name
 fast_check "Dynamic WEBTTY_SHELL update without restart" fast_test_dynamic_webtty_shell
 
+fast_stage_header "Manifest Environment"
+fast_check "Variable MY_TEST_VAR from manifest is present after start again" fast_assert_container_env "$TEST_SERVICE_CONTAINER" "MY_TEST_VAR" "hello-manifest"
+
 fast_finalize_checks

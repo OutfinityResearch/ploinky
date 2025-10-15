@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 24840 listening
+[PASS] Router port 27239 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -33,17 +33,20 @@
 ===== RoutingServer aggregation test =====
 [PASS] Aggregation check: router server mcp aggregation
 
+===== Manifest Environment =====
+[PASS] Variable MY_TEST_VAR from manifest is present after start
+
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 24840 closed
+[PASS] Router port 27239 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 24840 listening
+[PASS] Router port 27239 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -66,15 +69,21 @@
 
 ===== RoutingServer aggregation test =====
 [PASS] Aggregation check: router server mcp aggregation
+
+===== Manifest Environment =====
+[PASS] Variable MY_TEST_VAR from manifest is present after start
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
 [PASS] Dynamic APP_NAME update without restart
 [PASS] Dynamic WEBTTY_SHELL update without restart
 
+===== Manifest Environment =====
+[PASS] Variable MY_TEST_VAR from manifest is present after start again
+
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 24840 listening
+[PASS] Router port 27239 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -84,6 +93,9 @@
 [PASS] Persisted data file created
 [PASS] Container PID changed after restart
 [PASS] Persistence marker retained after restart
+
+===== Manifest Environment =====
+[PASS] Variable MY_TEST_VAR from manifest is present after restart
 
 ===== DESTROY STAGE =====
 [PASS] Service container removed
