@@ -13,6 +13,7 @@ import { handleStatus } from './handlers/status.js';
 import { handleBlobs } from './handlers/blobs.js';
 import * as staticSrv from './static/index.js';
 import { resolveVarValue } from '../services/secretVars.js';
+import { configCache } from './configCache.js';
 import {
     ensureAuthenticated,
     handleAuthRoutes,
@@ -281,76 +282,94 @@ function buildLocalFactory(createFactoryFn, defaults = {}) {
     return createFactoryFn({ ptyLib: pty, workdir: process.cwd(), ...defaults });
 }
 
-const webttyFactory = (() => {
-    if (!pty) {
-        logBootEvent('webtty_factory_disabled', { reason: 'pty_unavailable' });
-        return { factory: null, label: '-', runtime: 'disabled' };
-    }
-    if (createWebTTYLocalFactory) {
-        const secretShell = resolveVarValue('WEBTTY_SHELL');
-        const command = secretShell || process.env.WEBTTY_COMMAND || '';
-        const factory = buildLocalFactory(createWebTTYLocalFactory, { command });
-        if (factory) {
-            logBootEvent('webtty_local_process_factory_ready', { command: command || null });
+function getWebttyFactory() {
+    return configCache.getOrCreate(
+        'webtty',
+        () => ({
+            shell: resolveVarValue('WEBTTY_SHELL'),
+            command: process.env.WEBTTY_COMMAND || '',
+            container: process.env.WEBTTY_CONTAINER || 'ploinky_interactive'
+        }),
+        (config) => {
+            if (!pty) {
+                logBootEvent('webtty_factory_disabled', { reason: 'pty_unavailable' });
+                return { factory: null, label: '-', runtime: 'disabled' };
+            }
+            if (createWebTTYLocalFactory) {
+                const command = config.shell || config.command;
+                const factory = buildLocalFactory(createWebTTYLocalFactory, { command });
+                if (factory) {
+                    logBootEvent('webtty_local_process_factory_ready', { command: command || null });
+                }
+                return {
+                    factory,
+                    label: command ? command : 'local shell',
+                    runtime: 'local'
+                };
+            }
+            if (createWebTTYTTYFactory) {
+                const factory = createWebTTYTTYFactory({ ptyLib: pty, runtime: 'docker', containerName: config.container });
+                logBootEvent('webtty_container_factory_ready', { containerName: config.container });
+                return {
+                    factory,
+                    label: config.container,
+                    runtime: 'docker'
+                };
+            }
+            logBootEvent('webtty_factory_disabled', { reason: 'no_factory_available' });
+            return { factory: null, label: '-', runtime: 'disabled' };
         }
-        return {
-            factory,
-            label: command ? command : 'local shell',
-            runtime: 'local'
-        };
-    }
-    if (createWebTTYTTYFactory) {
-        const containerName = process.env.WEBTTY_CONTAINER || 'ploinky_interactive';
-        const factory = createWebTTYTTYFactory({ ptyLib: pty, runtime: 'docker', containerName });
-        logBootEvent('webtty_container_factory_ready', { containerName });
-        return {
-            factory,
-            label: containerName,
-            runtime: 'docker'
-        };
-    }
-    logBootEvent('webtty_factory_disabled', { reason: 'no_factory_available' });
-    return { factory: null, label: '-', runtime: 'disabled' };
-})();
+    );
+}
 
-const webchatFactory = (() => {
-    if (!pty) {
-        logBootEvent('webchat_factory_disabled', { reason: 'pty_unavailable' });
-        return { factory: null, label: '-', runtime: 'disabled' };
-    }
-    if (createWebChatLocalFactory) {
-        const command = resolvedWebchatCommands.host;
-        const factory = buildLocalFactory(createWebChatLocalFactory, { command });
-        if (factory) {
-            logBootEvent('webchat_local_process_factory_ready', {
-                command: command || null,
-                source: resolvedWebchatCommands.source
-            });
-        }
-        return {
-            factory,
-            label: command ? command : 'local shell',
-            runtime: 'local'
-        };
-    }
-    if (createWebChatTTYFactory) {
-        const containerName = process.env.WEBCHAT_CONTAINER || 'ploinky_chat';
-        const entry = resolvedWebchatCommands.container;
-        const factory = createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName, entry });
-        logBootEvent('webchat_container_factory_ready', {
-            containerName,
-            command: entry || null,
+function getWebchatFactory() {
+    return configCache.getOrCreate(
+        'webchat',
+        () => ({
+            container: process.env.WEBCHAT_CONTAINER || 'ploinky_chat',
+            hostCommand: resolvedWebchatCommands.host,
+            containerCommand: resolvedWebchatCommands.container,
             source: resolvedWebchatCommands.source
-        });
-        return {
-            factory,
-            label: containerName,
-            runtime: 'docker'
-        };
-    }
-    logBootEvent('webchat_factory_disabled', { reason: 'no_factory_available' });
-    return { factory: null, label: '-', runtime: 'disabled' };
-})();
+        }),
+        (config) => {
+            if (!pty) {
+                logBootEvent('webchat_factory_disabled', { reason: 'pty_unavailable' });
+                return { factory: null, label: '-', runtime: 'disabled' };
+            }
+            if (createWebChatLocalFactory) {
+                const command = config.hostCommand;
+                const factory = buildLocalFactory(createWebChatLocalFactory, { command });
+                if (factory) {
+                    logBootEvent('webchat_local_process_factory_ready', {
+                        command: command || null,
+                        source: config.source
+                    });
+                }
+                return {
+                    factory,
+                    label: command ? command : 'local shell',
+                    runtime: 'local'
+                };
+            }
+            if (createWebChatTTYFactory) {
+                const entry = config.containerCommand;
+                const factory = createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName: config.container, entry });
+                logBootEvent('webchat_container_factory_ready', {
+                    containerName: config.container,
+                    command: entry || null,
+                    source: config.source
+                });
+                return {
+                    factory,
+                    label: config.container,
+                    runtime: 'docker'
+                };
+            }
+            logBootEvent('webchat_factory_disabled', { reason: 'no_factory_available' });
+            return { factory: null, label: '-', runtime: 'disabled' };
+        }
+    );
+}
 
 const PID_FILE = process.env.PLOINKY_ROUTER_PID_FILE || null;
 
@@ -381,20 +400,25 @@ for (const sig of ['SIGINT', 'SIGTERM', 'SIGQUIT']) {
     });
 }
 
-const envAppName = getAppName();
-
 const config = {
-    webtty: {
-        ttyFactory: webttyFactory.factory,
-        agentName: 'Router',
-        containerName: webttyFactory.label,
-        runtime: webttyFactory.runtime
+    get webtty() {
+        const factory = getWebttyFactory();
+        return {
+            ttyFactory: factory.factory,
+            agentName: 'Router',
+            containerName: factory.label,
+            runtime: factory.runtime
+        };
     },
-    webchat: {
-        ttyFactory: webchatFactory.factory,
-        agentName: envAppName || 'ChatAgent',
-        containerName: webchatFactory.label,
-        runtime: webchatFactory.runtime
+    get webchat() {
+        const factory = getWebchatFactory();
+        const appName = getAppName(); // Always get fresh APP_NAME
+        return {
+            ttyFactory: factory.factory,
+            agentName: appName || 'ChatAgent',
+            containerName: factory.label,
+            runtime: factory.runtime
+        };
     },
     dashboard: {
         agentName: 'Dashboard',
