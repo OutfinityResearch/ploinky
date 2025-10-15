@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22546 listening
+[PASS] Router port 30271 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -20,19 +20,19 @@
 [PASS] Status check: client status simulator
 [PASS] Tool check: client list tools
 [PASS] Tool run check: client tool run_simulation -iterations 10
-[PASS] Aggregation check: router server mcp agregation
+[PASS] Aggregation check: router server mcp aggregation
 
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 22546 closed
+[PASS] Router port 30271 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22546 listening
+[PASS] Router port 30271 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -43,13 +43,23 @@
 [PASS] Status check: client status simulator
 [PASS] Tool check: client list tools
 [PASS] Tool run check: client tool run_simulation -iterations 10
-[PASS] Aggregation check: router server mcp agregation
+[PASS] Aggregation check: router server mcp aggregation
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
 
 ===== RESTART STAGE =====
-[FATAL] RESTART STAGE aborted.
+[PASS] Service container is running
+[PASS] Router port 30271 listening
+[PASS] Agent host port 7001 listening
+[PASS] Router status endpoint responds
+[PASS] Agent health endpoint reports ok
+[PASS] Container exposes AGENT_NAME
+[PASS] Container exposes FAST_TEST_MARKER
+[PASS] Agent log file created
+[PASS] Persisted data file created
+[PASS] Container PID changed after restart
+[PASS] Persistence marker retained after restart
 
 ===== DESTROY STAGE =====
 [PASS] Service container removed
@@ -58,4 +68,4 @@
 [PASS] Persistence marker removed with workspace
 
 ===== TEST SUMMARY =====
-[FAIL] Suite finished with 1 failure(s).
+[PASS] All tests passed!

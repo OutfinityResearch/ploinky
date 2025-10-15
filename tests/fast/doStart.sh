@@ -66,4 +66,12 @@ if [[ ! -f "$persist_marker" ]]; then
   echo "first-run" >"$persist_marker"
 fi
 
+fast_mcp_start_demo() {
+  ploinky start demo "$TEST_ROUTER_PORT"
+  local container_name
+  container_name=$(compute_container_name "demo")
+  fast_wait_for_container "$container_name"
+}
+fast_action "Action: Starting demo agent..." fast_mcp_start_demo
+
 fast_info "Start procedure completed."

@@ -25,20 +25,6 @@ fast_check "Agent log file created" fast_assert_file_contains "$TEST_AGENT_LOG" 
 fast_check "Persisted data file created" fast_assert_file_exists "$TEST_PERSIST_FILE"
 
 #MCP
-fast_mcp_start_simulator() {
-  ploinky start simulator
-  local container_name
-  container_name=$(compute_container_name "simulator")
-  fast_wait_for_container "$container_name"
-}
-
-fast_mcp_start_demo() {
-  ploinky start demo
-  local container_name
-  container_name=$(compute_container_name "demo")
-  fast_wait_for_container "$container_name"
-}
-
 fast_mcp_client_status() {
   ploinky client status simulator | grep -q 'ok=true'
 }
@@ -78,15 +64,12 @@ fast_mcp_list_tools_after_demo() {
 }
 
 fast_info  "MCP tests"
-fast_action "Action: Starting simulator agent..." fast_mcp_start_simulator
 
 fast_check "Status check: client status simulator" fast_mcp_client_status
 fast_check "Tool check: client list tools" fast_mcp_list_tools
 fast_check "Tool run check: client tool run_simulation -iterations 10" fast_mcp_run_simulation
 
-fast_info "MCP demo agent tests"
-fast_action "Action: Starting demo agent..." fast_mcp_start_demo
-
-fast_check "Aggregation check: router server mcp agregation" fast_mcp_list_tools_after_demo
+fast_info "RoutingServer aggregation test"
+fast_check "Aggregation check: router server mcp aggregation" fast_mcp_list_tools_after_demo
 
 fast_finalize_checks
