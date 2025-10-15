@@ -19,6 +19,7 @@ function createAuthService(options = {}) {
             baseUrl: cfg.baseUrl,
             realm: cfg.realm,
             clientId: cfg.clientId,
+            clientSecret: cfg.clientSecret, // CRITICAL: Must include to detect changes
             redirectUri: cfg.redirectUri,
             postLogoutRedirectUri: cfg.postLogoutRedirectUri,
             scope: cfg.scope
