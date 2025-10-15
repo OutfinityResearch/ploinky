@@ -42,7 +42,8 @@ cat >"${agent_root}/manifest.json" <<'EOF'
   "container": "node:20-bullseye",
   "agent": "node /code/server.js",
   "env": {
-    "FAST_TEST_MARKER": "fast-suite"
+    "FAST_TEST_MARKER": "fast-suite",
+    "MY_TEST_VAR": "hello-manifest"
   },
   "ports": [
     "7001:7000"

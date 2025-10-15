@@ -110,4 +110,7 @@ fast_check "Tool run check: client tool run_simulation -iterations 10" fast_mcp_
 fast_stage_header "RoutingServer aggregation test"
 fast_check "Aggregation check: router server mcp aggregation" fast_mcp_list_tools_after_demo
 
+fast_stage_header "Manifest Environment"
+fast_check "Variable MY_TEST_VAR from manifest is present after start" fast_assert_container_env "$TEST_SERVICE_CONTAINER" "MY_TEST_VAR" "hello-manifest"
+
 fast_finalize_checks
