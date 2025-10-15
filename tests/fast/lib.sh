@@ -312,6 +312,58 @@ s.connect(port, '127.0.0.1');
 NODE
 }
 
+fast_assert_port_bound_local() {
+  fast_require_runtime || return 1
+  local container="$1"
+  local container_port="$2"
+  local expected_host_port="${3:-}"
+  local expected_ip="${4:-127.0.0.1}"
+
+  if [[ -z "$container" || -z "$container_port" ]]; then
+    echo "Container and container port are required." >&2
+    return 1
+  fi
+
+  local output
+  if ! output=$($FAST_CONTAINER_RUNTIME port "$container" "${container_port}/tcp" 2>/dev/null); then
+    echo "Unable to resolve port mapping for ${container}:${container_port}/tcp." >&2
+    return 1
+  fi
+
+  local found_expected=0
+  local line
+  while IFS= read -r line; do
+    line="${line//[$'\r\n']/}"
+    line=${line# } ; line=${line% }
+    [[ -z "$line" ]] && continue
+
+    local host_part=${line%:*}
+    local host_port=${line##*:}
+    host_part=${host_part#[}
+    host_part=${host_part%]}
+
+    if [[ -n "$expected_host_port" && "$host_port" != "$expected_host_port" ]]; then
+      continue
+    fi
+
+    if [[ "$host_part" == "0.0.0.0" || "$host_part" == "::" ]]; then
+      echo "Port ${container}:${container_port}/tcp is bound to '${host_part}:${host_port}', expected ${expected_ip}." >&2
+      return 1
+    fi
+
+    if [[ "$host_part" == "$expected_ip" ]]; then
+      found_expected=1
+    elif [[ "$host_part" == "::1" && "$expected_ip" == "127.0.0.1" ]]; then
+      found_expected=1
+    fi
+  done <<< "$output"
+
+  if [[ $found_expected -eq 0 ]]; then
+    echo "No binding found on ${expected_ip} for ${container}:${container_port}/tcp (docker port output: ${output})." >&2
+    return 1
+  fi
+}
+
 fast_assert_port_not_listening() {
   local port="$1"
   node - "$port" <<'NODE'
