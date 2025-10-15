@@ -19,7 +19,8 @@ export {
     startConfiguredAgents,
     stopAndRemove,
     stopAndRemoveMany,
-    stopConfiguredAgents
+    stopConfiguredAgents,
+    collectLiveAgentContainers
 } from './management.js';
 
 export {

@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 21963 listening
+[PASS] Router port 24482 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -18,6 +18,15 @@
 [PASS] Container exposes FAST_TEST_MARKER
 [PASS] Agent log file created
 [PASS] Persisted data file created
+
+===== Workspace status command =====
+[PASS] Status reports SSO disabled
+[PASS] Status reports router listening
+[PASS] Status lists testRepo
+[PASS] Status lists testAgent manifest
+[PASS] Status lists demo manifest
+[PASS] Status lists active containers for demo
+[PASS] Status lists active containers for testAgent
 
 ===== Demo agent dependency tests =====
 [PASS] Simulator container is running
@@ -40,14 +49,14 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 21963 closed
+[PASS] Router port 24482 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 21963 listening
+[PASS] Router port 24482 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -56,6 +65,15 @@
 [PASS] Container exposes FAST_TEST_MARKER
 [PASS] Agent log file created
 [PASS] Persisted data file created
+
+===== Workspace status command =====
+[PASS] Status reports SSO disabled
+[PASS] Status reports router listening
+[PASS] Status lists testRepo
+[PASS] Status lists testAgent manifest
+[PASS] Status lists demo manifest
+[PASS] Status lists active containers for demo
+[PASS] Status lists active containers for testAgent
 
 ===== Demo agent dependency tests =====
 [PASS] Simulator container is running
@@ -85,7 +103,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 21963 listening
+[PASS] Router port 24482 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
