@@ -26,6 +26,35 @@ fast_check "Container exposes FAST_TEST_MARKER" fast_assert_container_env "$TEST
 fast_check "Agent log file created" fast_assert_file_contains "$TEST_AGENT_LOG" "listening"
 fast_check "Persisted data file created" fast_assert_file_exists "$TEST_PERSIST_FILE"
 
+FAST_STATUS_OUTPUT=""
+
+fast_collect_status_output() {
+  if [[ -z "$FAST_STATUS_OUTPUT" ]]; then
+    FAST_STATUS_OUTPUT=$(ploinky status 2>&1)
+    fast_info "--- ploinky status output ---"
+    fast_info "$FAST_STATUS_OUTPUT"
+    fast_info "--------------------------------"
+  fi
+}
+
+fast_assert_status_contains() {
+  local needle="$1"
+  fast_collect_status_output
+  if ! grep -Fq -- "$needle" <<<"$FAST_STATUS_OUTPUT"; then
+    echo "Status output missing expected text: $needle" >&2
+    return 1
+  fi
+}
+
+fast_stage_header "Workspace status command"
+fast_check "Status reports SSO disabled" fast_assert_status_contains "- SSO: disabled"
+fast_check "Status reports router listening" fast_assert_status_contains "- Router: listening"
+fast_check "Status lists testRepo" fast_assert_status_contains "[Repo] testRepo"
+fast_check "Status lists testAgent manifest" fast_assert_status_contains "- testAgent:"
+fast_check "Status lists demo manifest" fast_assert_status_contains "- demo:"
+fast_check "Status lists active containers for demo" fast_assert_status_contains "agent: demo"
+fast_check "Status lists active containers for testAgent" fast_assert_status_contains "agent: testAgent"
+
 #MCP
 fast_mcp_client_status() {
   local output

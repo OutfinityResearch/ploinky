@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import net from 'net';
 import { PLOINKY_DIR } from './config.js';
 import * as reposSvc from './repos.js';
-import { getAgentsRegistry } from './docker/index.js';
+import { collectLiveAgentContainers, getAgentsRegistry } from './docker/index.js';
 import { findAgent } from './utils.js';
 import { gatherSsoStatus } from './sso.js';
 
@@ -37,16 +38,17 @@ export function listRepos() {
 }
 
 export function listCurrentAgents() {
-    try {
-        const reg = getAgentsRegistry();
-        const names = Object.keys(reg || {});
+    const live = collectLiveAgentContainers();
+    if (!live.length) {
+        const legacy = getAgentsRegistry();
+        const names = Object.keys(legacy || {});
         if (!names.length) {
-            console.log('No agents recorded for this workspace yet.');
+            console.log('No running agent containers detected.');
             return;
         }
-        console.log('Current agents (from .ploinky/agents):');
+        console.log('No running agent containers detected. Last recorded registry entries:');
         for (const name of names) {
-            const r = reg[name] || {};
+            const r = legacy[name] || {};
             const type = r.type || '-';
             const agent = r.agentName || '-';
             const repo = r.repoName || '-';
@@ -65,12 +67,27 @@ export function listCurrentAgents() {
             console.log(`    cwd: ${cwd}`);
             console.log(`    binds: ${binds}  env: ${envs}${ports ? `  ports: ${ports}` : ''}`);
         }
-    } catch (e) {
-        console.error('Failed to list current agents:', e.message);
+        return;
+    }
+    console.log('Running agent containers:');
+    for (const entry of live) {
+        const binds = entry.config?.binds?.length || 0;
+        const envs = entry.config?.env?.length || 0;
+        const ports = (entry.config?.ports || [])
+            .map(p => `${p.containerPort}->${p.hostPort || ''}`)
+            .filter(Boolean)
+            .join(', ');
+        console.log(`- ${entry.containerName}`);
+        console.log(`    type: agent  agent: ${entry.agentName || '-'}  repo: ${entry.repoName || '-'}`);
+        console.log(`    image: ${entry.containerImage || '-'}`);
+        console.log(`    created: ${entry.createdAt || '-'}`);
+        console.log(`    status: ${entry.state?.status || '-'} (pid ${entry.state?.pid || 0})`);
+        console.log(`    cwd: ${entry.projectPath || '-'}`);
+        console.log(`    binds: ${binds}  env: ${envs}${ports ? `  ports: ${ports}` : ''}`);
     }
 }
 
-export function collectAgentsSummary({ includeInactive = false } = {}) {
+export function collectAgentsSummary({ includeInactive = true } = {}) {
     const repoList = includeInactive
         ? reposSvc.getInstalledRepos(REPOS_DIR)
         : reposSvc.getActiveRepos(REPOS_DIR);
@@ -190,7 +207,27 @@ export function listRoutes() {
     }
 }
 
-export function statusWorkspace() {
+function isPortListening(port, host = '127.0.0.1', timeoutMs = 500) {
+    return new Promise((resolve) => {
+        if (!Number.isFinite(port) || port <= 0) {
+            resolve(false);
+            return;
+        }
+        const socket = net.createConnection({ port, host });
+        let settled = false;
+        const done = (result) => {
+            if (settled) return;
+            settled = true;
+            try { socket.destroy(); } catch (_) {}
+            resolve(result);
+        };
+        socket.once('connect', () => done(true));
+        socket.once('error', () => done(false));
+        socket.setTimeout(timeoutMs, () => done(false));
+    });
+}
+
+export async function statusWorkspace() {
     console.log('Workspace status:');
     const ssoStatus = gatherSsoStatus();
     if (!ssoStatus.config.enabled) {
@@ -217,6 +254,10 @@ export function statusWorkspace() {
         console.log(`    Logout redirect: ${ssoStatus.config.logoutRedirectUri || ssoStatus.secrets.logoutRedirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/`}`);
         console.log(`    Client secret: ${clientSecretState}`);
     }
+
+    const routerPort = Number(ssoStatus.routerPort) || 8080;
+    const routerListening = await isPortListening(routerPort);
+    console.log(`- Router: ${routerListening ? 'listening' : 'not listening'} (127.0.0.1:${routerPort})`);
     listAgents();
     listCurrentAgents();
 }
