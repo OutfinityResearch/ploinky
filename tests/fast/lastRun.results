@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 33750 listening
+[PASS] Router port 33625 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -22,6 +22,8 @@
 [PASS] Simulator container is running
 [PASS] Moderator container is running
 [PASS] Moderator server responds to GET
+[PASS] Verify repo 'webmeet' is cloned
+[PASS] Verify repo 'vibe1' is cloned
 
 ===== MCP tests =====
 [PASS] Status check: client status simulator
@@ -34,14 +36,14 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 33750 closed
+[PASS] Router port 33625 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 33750 listening
+[PASS] Router port 33625 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -54,6 +56,8 @@
 [PASS] Simulator container is running
 [PASS] Moderator container is running
 [PASS] Moderator server responds to GET
+[PASS] Verify repo 'webmeet' is cloned
+[PASS] Verify repo 'vibe1' is cloned
 
 ===== MCP tests =====
 [PASS] Status check: client status simulator
@@ -65,10 +69,12 @@
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
+[PASS] Dynamic APP_NAME update without restart
+[PASS] Dynamic WEBTTY_SHELL update without restart
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 33750 listening
+[PASS] Router port 33625 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
