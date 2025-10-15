@@ -14,8 +14,13 @@ fast_require_var "TEST_PERSIST_MARKER"
 
 cd "$TEST_RUN_DIR"
 
-fast_info "Starting ${TEST_AGENT_NAME} on port ${TEST_ROUTER_PORT}."
-ploinky start "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"
+if [[ $# -ge 2 ]]; then
+  fast_info "Starting workspace with specified agent $1 on port $2."
+  ploinky start "$1" "$2"
+else
+  fast_info "Starting workspace with saved configuration."
+  ploinky start
+fi
 
 fast_wait_for_router
 fast_wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"
