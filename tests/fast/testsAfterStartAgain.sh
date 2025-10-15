@@ -148,8 +148,98 @@ fast_test_dynamic_webtty_shell() {
   return 0
 }
 
+fast_test_sso_client_secret_propagation() {
+  fast_load_state
+  fast_require_var "TEST_RUN_DIR" || return 1
+  fast_require_var "TEST_ROUTER_PORT" || return 1
+  
+  local secrets_file="$TEST_RUN_DIR/.ploinky/.secrets"
+  
+  # Save all original SSO values
+  local original_base_url=""
+  local original_realm=""
+  local original_client_id=""
+  local original_client_secret=""
+  
+  if grep -q "^SSO_BASE_URL=" "$secrets_file" 2>/dev/null; then
+    original_base_url=$(grep "^SSO_BASE_URL=" "$secrets_file" | head -1 | cut -d= -f2-)
+  fi
+  if grep -q "^SSO_REALM=" "$secrets_file" 2>/dev/null; then
+    original_realm=$(grep "^SSO_REALM=" "$secrets_file" | head -1 | cut -d= -f2-)
+  fi
+  if grep -q "^SSO_CLIENT_ID=" "$secrets_file" 2>/dev/null; then
+    original_client_id=$(grep "^SSO_CLIENT_ID=" "$secrets_file" | head -1 | cut -d= -f2-)
+  fi
+  if grep -q "^SSO_CLIENT_SECRET=" "$secrets_file" 2>/dev/null; then
+    original_client_secret=$(grep "^SSO_CLIENT_SECRET=" "$secrets_file" | head -1 | cut -d= -f2-)
+  fi
+  
+  # Set test SSO config
+  sed -i "/^SSO_BASE_URL=/d" "$secrets_file"
+  sed -i "/^SSO_REALM=/d" "$secrets_file"
+  sed -i "/^SSO_CLIENT_ID=/d" "$secrets_file"
+  sed -i "/^SSO_CLIENT_SECRET=/d" "$secrets_file"
+  
+  echo "SSO_BASE_URL=https://test-sso.example.com" >> "$secrets_file"
+  echo "SSO_REALM=test-realm" >> "$secrets_file"
+  echo "SSO_CLIENT_ID=test-client-$RANDOM" >> "$secrets_file"
+  echo "SSO_CLIENT_SECRET=test-secret-$RANDOM" >> "$secrets_file"
+  
+  sleep 0.5
+  
+  # Test that server still responds (config was read)
+  local response
+  if ! response=$(curl -fsS "http://127.0.0.1:${TEST_ROUTER_PORT}/status/data" 2>&1); then
+    echo "Server not responding after SSO config change: ${response}" >&2
+    # Restore original
+    sed -i "/^SSO_/d" "$secrets_file"
+    [[ -n "$original_base_url" ]] && echo "SSO_BASE_URL=${original_base_url}" >> "$secrets_file"
+    [[ -n "$original_realm" ]] && echo "SSO_REALM=${original_realm}" >> "$secrets_file"
+    [[ -n "$original_client_id" ]] && echo "SSO_CLIENT_ID=${original_client_id}" >> "$secrets_file"
+    [[ -n "$original_client_secret" ]] && echo "SSO_CLIENT_SECRET=${original_client_secret}" >> "$secrets_file"
+    return 1
+  fi
+  
+  # Change ONLY the client secret (this was the bug!)
+  local new_secret="test-secret-$RANDOM-changed"
+  sed -i "/^SSO_CLIENT_SECRET=/d" "$secrets_file"
+  echo "SSO_CLIENT_SECRET=${new_secret}" >> "$secrets_file"
+  
+  sleep 0.5
+  
+  # Verify server still responds after changing ONLY client secret
+  if ! curl -fsS "http://127.0.0.1:${TEST_ROUTER_PORT}/status/data" >/dev/null 2>&1; then
+    echo "Server not responding after changing ONLY SSO_CLIENT_SECRET" >&2
+    # Restore original
+    sed -i "/^SSO_/d" "$secrets_file"
+    [[ -n "$original_base_url" ]] && echo "SSO_BASE_URL=${original_base_url}" >> "$secrets_file"
+    [[ -n "$original_realm" ]] && echo "SSO_REALM=${original_realm}" >> "$secrets_file"
+    [[ -n "$original_client_id" ]] && echo "SSO_CLIENT_ID=${original_client_id}" >> "$secrets_file"
+    [[ -n "$original_client_secret" ]] && echo "SSO_CLIENT_SECRET=${original_client_secret}" >> "$secrets_file"
+    return 1
+  fi
+  
+  # Restore original SSO config
+  sed -i "/^SSO_/d" "$secrets_file"
+  if [[ -n "$original_base_url" ]]; then
+    echo "SSO_BASE_URL=${original_base_url}" >> "$secrets_file"
+  fi
+  if [[ -n "$original_realm" ]]; then
+    echo "SSO_REALM=${original_realm}" >> "$secrets_file"
+  fi
+  if [[ -n "$original_client_id" ]]; then
+    echo "SSO_CLIENT_ID=${original_client_id}" >> "$secrets_file"
+  fi
+  if [[ -n "$original_client_secret" ]]; then
+    echo "SSO_CLIENT_SECRET=${original_client_secret}" >> "$secrets_file"
+  fi
+  
+  return 0
+}
+
 fast_check "Dynamic APP_NAME update without restart" fast_test_dynamic_app_name
 fast_check "Dynamic WEBTTY_SHELL update without restart" fast_test_dynamic_webtty_shell
+fast_check "Dynamic SSO_CLIENT_SECRET update without restart" fast_test_sso_client_secret_propagation
 
 fast_stage_header "Manifest Environment"
 fast_check "Variable MY_TEST_VAR from manifest is present after start again" fast_assert_container_env "$TEST_SERVICE_CONTAINER" "MY_TEST_VAR" "hello-manifest"
