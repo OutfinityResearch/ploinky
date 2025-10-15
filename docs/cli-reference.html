@@ -423,8 +423,13 @@ client tool process -p "config.level=high,filters[]=active" --dry-run
                         </div>
 
                         <h3>client status</h3>
-                        <p>Check the health status of a specific agent.</p>
+                        <p>Ping a specific agent over MCP and report whether the session responds.</p>
                         <pre><code>client status &lt;agent&gt;</code></pre>
+                        <div class="alert alert-info">
+                            Example output:
+<pre style="margin-top: 0.5rem;"><code>simulator: ok=true
+MCP ping succeeded.</code></pre>
+                        </div>
                     </div>
 
                     <div class="doc-section" id="system">

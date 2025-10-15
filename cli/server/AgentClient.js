@@ -41,13 +41,18 @@ function createAgentClient(baseUrl) {
     return res?.resource ?? res;
   }
 
+  async function ping() {
+    await connect();
+    return await client.ping();
+  }
+
   async function close() {
     try { if (client) await client.close(); } catch (_) {}
     try { if (transport) await transport.close?.(); } catch (_) {}
     connected = false; client = null; transport = null;
   }
 
-  return { connect, listTools, callTool, listResources, readResource, close };
+  return { connect, listTools, callTool, listResources, readResource, ping, close };
 }
 
 export { createAgentClient };

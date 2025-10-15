@@ -203,6 +203,11 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                 sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
                 break;
             }
+            case 'ping': {
+                await agentClient.ping();
+                sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result: {} }, sessionIdHeader);
+                break;
+            }
             default:
                 sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, error: { code: -32601, message: `Method not found: ${message.method}` } }, sessionIdHeader);
         }

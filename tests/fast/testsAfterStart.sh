@@ -26,7 +26,14 @@ fast_check "Persisted data file created" fast_assert_file_exists "$TEST_PERSIST_
 
 #MCP
 fast_mcp_client_status() {
-  ploinky client status simulator | grep -q 'ok=true'
+  local output
+  output=$(ploinky client status simulator 2>&1)
+  if ! echo "$output" | grep -q 'ok=true'; then
+    echo "Output from 'ploinky client status simulator' did not include 'ok=true'." >&2
+    echo "Output:" >&2
+    echo "$output" >&2
+    return 1
+  fi
 }
 
 fast_mcp_list_tools() {
@@ -62,14 +69,43 @@ fast_mcp_list_tools_after_demo() {
     return 1
   fi
 }
+fast_check_moderator_get() {
+  local routing_file=".ploinky/routing.json"
+  local moderator_port
+  if ! moderator_port=$(node -e "
+    const fs = require('fs');
+    try {
+      const raw = fs.readFileSync('$routing_file', 'utf8');
+      const data = JSON.parse(raw || '{}');
+      const port = (data.routes || {}).moderator?.hostPort;
+      if (!port) throw new Error('moderator port not found in $routing_file');
+      process.stdout.write(String(port));
+    } catch (e) {
+      process.stderr.write(e.message);
+      process.exit(1);
+    }
+  "); then
+    echo "Failed to get moderator port: $moderator_port" >&2
+    return 1
+  fi
 
-fast_info  "MCP tests"
+  # Use curl to send a GET request. -f fails on HTTP errors. -S shows errors, -v is verbose.
+  curl -f -S -v -X GET "http://127.0.0.1:${moderator_port}/"
+}
 
+fast_stage_header "Demo agent dependency tests"
+SIMULATOR_CONTAINER=$(compute_container_name "simulator")
+MODERATOR_CONTAINER=$(compute_container_name "moderator")
+fast_check "Simulator container is running" fast_assert_container_running "$SIMULATOR_CONTAINER"
+fast_check "Moderator container is running" fast_assert_container_running "$MODERATOR_CONTAINER"
+fast_check "Moderator server responds to GET" fast_check_moderator_get
+
+fast_stage_header  "MCP tests"
 fast_check "Status check: client status simulator" fast_mcp_client_status
 fast_check "Tool check: client list tools" fast_mcp_list_tools
 fast_check "Tool run check: client tool run_simulation -iterations 10" fast_mcp_run_simulation
 
-fast_info "RoutingServer aggregation test"
+fast_stage_header "RoutingServer aggregation test"
 fast_check "Aggregation check: router server mcp aggregation" fast_mcp_list_tools_after_demo
 
 fast_finalize_checks
