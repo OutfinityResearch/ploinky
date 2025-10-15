@@ -22,6 +22,7 @@
 - Smoke scripts live in `tests/smoke/` and must avoid redundant container restarts; add new checks as discrete functions that rely on the shared harness in `tests/smoke/common.sh`.
 - CLI regression tests reside in `tests/cli/` and follow the pattern `*.sh` or `*.mjs`; name new files after the command under test (e.g., `agent_lifecycle.sh`).
 - Always run `tests/smoke/test_all.sh` before submitting changes that touch startup, restart, or shell behaviour.
+- Always run `tests/fast/test_all.sh` before submitting changes that touch startup, restart, or shell behaviour.
 
 ## Commit & Pull Request Guidelines
 - Write commits in the style “verb present-tense: summary” (e.g., “Add smoke harness helpers”), grouping unrelated changes into separate commits.
