@@ -26,6 +26,10 @@ fast_check "Container exposes FAST_TEST_MARKER" fast_assert_container_env "$TEST
 fast_check "Agent log file created" fast_assert_file_contains "$TEST_AGENT_LOG" "listening"
 fast_check "Persisted data file created" fast_assert_file_exists "$TEST_PERSIST_FILE"
 
+fast_stage_header "Ploinky only var test"
+export FAST_PLOINKY_ONLY="host-env-value"
+fast_check "Host-only env var not visible inside container" fast_assert_container_env_absent "$TEST_SERVICE_CONTAINER" "FAST_PLOINKY_ONLY"
+
 FAST_STATUS_OUTPUT=""
 
 fast_collect_status_output() {

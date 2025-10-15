@@ -91,6 +91,9 @@ ploinky enable repo demo
 fast_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_QUALIFIED"
 
+fast_info "Setting workspace-only env var FAST_PLOINKY_ONLY"
+ploinky var FAST_PLOINKY_ONLY host-secret-value
+
 service_container=$(compute_container_name "$TEST_AGENT_NAME")
 fast_write_state_var "TEST_SERVICE_CONTAINER" "$service_container"
 fast_info "Service container will be named: $service_container"

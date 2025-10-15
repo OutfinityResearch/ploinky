@@ -288,6 +288,18 @@ fast_assert_container_env() {
   fi
 }
 
+fast_assert_container_env_absent() {
+  fast_require_runtime || return 1
+  local container="$1"
+  local key="$2"
+  local value
+  if value=$($FAST_CONTAINER_RUNTIME exec "$container" printenv "$key" 2>/dev/null); then
+    echo "Container '${container}' unexpectedly exposes ${key}='${value}'." >&2
+    return 1
+  fi
+  return 0
+}
+
 fast_assert_port_listening() {
   local port="$1"
   node - "$port" <<'NODE'
