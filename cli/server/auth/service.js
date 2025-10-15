@@ -11,17 +11,39 @@ function createAuthService(options = {}) {
     const metadataCache = createMetadataCache();
     const jwksCache = createJwksCache();
     let config = loadAuthConfig();
+    let lastConfigHash = null;
+
+    function getConfigHash(cfg) {
+        if (!cfg) return null;
+        return JSON.stringify({
+            baseUrl: cfg.baseUrl,
+            realm: cfg.realm,
+            clientId: cfg.clientId,
+            redirectUri: cfg.redirectUri,
+            postLogoutRedirectUri: cfg.postLogoutRedirectUri,
+            scope: cfg.scope
+        });
+    }
 
     function reloadConfig() {
         config = loadAuthConfig();
         metadataCache.clear();
         jwksCache.clear();
+        lastConfigHash = getConfigHash(config);
     }
 
     function assertConfigured() {
-        if (!config) {
-            reloadConfig();
+        // Check if config needs reload (on first call or if env vars changed)
+        const freshConfig = loadAuthConfig();
+        const freshHash = getConfigHash(freshConfig);
+        
+        if (freshHash !== lastConfigHash) {
+            config = freshConfig;
+            metadataCache.clear();
+            jwksCache.clear();
+            lastConfigHash = freshHash;
         }
+        
         if (!config) {
             throw new Error('SSO is not configured');
         }
