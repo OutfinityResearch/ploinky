@@ -329,6 +329,12 @@ function createAgentClient(baseUrl) {
         return result?.resource ?? result;
     }
 
+    async function ping(meta) {
+        await connect();
+        const params = meta && typeof meta === 'object' ? { _meta: meta } : undefined;
+        return await sendRequest('ping', params);
+    }
+
     async function close() {
         if (abortController) {
             abortController.abort();
@@ -363,6 +369,7 @@ function createAgentClient(baseUrl) {
         callTool,
         listResources,
         readResource,
+        ping,
         close,
         getCapabilities: () => serverCapabilities,
         getServerInfo: () => serverInfo,

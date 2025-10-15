@@ -290,6 +290,7 @@ function canonicalCommand(command) {
     if (trimmed === 'tools/call') return 'tool';
     if (trimmed === 'resources/list') return 'list_resources';
     if (trimmed === 'resources/read') return 'resources/read';
+    if (trimmed === 'ping') return 'ping';
     const lower = trimmed.toLowerCase();
     switch (lower) {
         case 'methods':
@@ -303,6 +304,8 @@ function canonicalCommand(command) {
             return 'tool';
         case 'status':
             return 'status';
+        case 'ping':
+            return 'ping';
         default:
             return trimmed;
     }
@@ -455,6 +458,23 @@ async function executeRouterCommand(command, payload = {}) {
                     return { statusCode: 500, body: { error: message, errors } };
                 }
             }
+            case 'ping': {
+                const requestedAgent = payload && payload.agent ? String(payload.agent) : null;
+                if (!requestedAgent) {
+                    return { statusCode: 400, body: { error: 'missing agent for ping' } };
+                }
+                const entry = entries.find(item => item.agentName === requestedAgent) || null;
+                if (!entry) {
+                    return { statusCode: 404, body: { error: `agent '${requestedAgent}' is not registered` } };
+                }
+                try {
+                    const result = await entry.client.ping();
+                    return { statusCode: 200, body: { result: result ?? {}, agent: entry.agentName } };
+                } catch (err) {
+                    const message = summarizeMcpError(err, 'ping');
+                    return { statusCode: 502, body: { error: message } };
+                }
+            }
             case 'status': {
                 return { statusCode: 400, body: { error: 'status command is not supported on aggregated endpoint' } };
             }
@@ -583,6 +603,17 @@ async function handleRouterJsonRpc(req, res, payload) {
                     result = await executeRouterCommand('resources/read', params);
                     if (result.statusCode < 400) {
                         rpcResultPayload = result.body?.resource;
+                    }
+                    break;
+                }
+                case 'ping': {
+                    const params = message.params && typeof message.params === 'object' ? message.params : {};
+                    if (params._meta && params._meta.router && typeof params._meta.router.agent === 'string' && params.agent === undefined) {
+                        params.agent = params._meta.router.agent;
+                    }
+                    result = await executeRouterCommand('ping', params);
+                    if (result.statusCode < 400) {
+                        rpcResultPayload = result.body?.result ?? {};
                     }
                     break;
                 }

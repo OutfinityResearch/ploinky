@@ -130,30 +130,19 @@ class ClientCommands {
             await this.withRouterClient(async (client) => {
                 const meta = { router: { agent: agentName } };
                 let ok = true;
-                let text = '';
+                let message = 'MCP ping succeeded.';
 
                 try {
-                    const resource = await client.readResource('health://status', meta);
-                    const contents = Array.isArray(resource?.contents) ? resource.contents : [];
-                    text = contents.length ? String(contents[0]?.text ?? '') : '';
-                    if (text) {
-                        try {
-                            const parsed = JSON.parse(text);
-                            if (typeof parsed.ok === 'boolean') {
-                                ok = parsed.ok;
-                            }
-                        } catch (_) { }
-                    }
+                    await client.ping(meta);
                 } catch (err) {
-                    // If the agent does not expose a health resource, treat it as OK for backward compatibility.
-                    const reason = err?.message ? ` (${err.message})` : '';
-                    debugLog(`health://status read failed for '${agentName}'${reason}`);
-                    ok = true;
+                    const reason = err?.message ? err.message : String(err || 'Unknown error');
+                    message = `MCP ping failed: ${reason}`;
+                    ok = false;
                 }
 
                 console.log(`${agentName}: ok=${ok}`);
-                if (text) {
-                    console.log(text.trim());
+                if (message) {
+                    console.log(message.trim());
                 }
             });
         } catch (err) {
