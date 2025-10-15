@@ -99,6 +99,8 @@ MODERATOR_CONTAINER=$(compute_container_name "moderator")
 fast_check "Simulator container is running" fast_assert_container_running "$SIMULATOR_CONTAINER"
 fast_check "Moderator container is running" fast_assert_container_running "$MODERATOR_CONTAINER"
 fast_check "Moderator server responds to GET" fast_check_moderator_get
+fast_check "Verify repo 'webmeet' is cloned" fast_assert_dir_exists ".ploinky/repos/webmeet"
+fast_check "Verify repo 'vibe1' is cloned" fast_assert_dir_exists ".ploinky/repos/vibe1"
 
 fast_stage_header  "MCP tests"
 fast_check "Status check: client status simulator" fast_mcp_client_status
