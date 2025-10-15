@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 24482 listening
+[PASS] Router port 29950 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -18,6 +18,9 @@
 [PASS] Container exposes FAST_TEST_MARKER
 [PASS] Agent log file created
 [PASS] Persisted data file created
+
+===== Ploinky only var test =====
+[PASS] Host-only env var not visible inside container
 
 ===== Workspace status command =====
 [PASS] Status reports SSO disabled
@@ -49,14 +52,14 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 24482 closed
+[PASS] Router port 29950 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 24482 listening
+[PASS] Router port 29950 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -65,6 +68,9 @@
 [PASS] Container exposes FAST_TEST_MARKER
 [PASS] Agent log file created
 [PASS] Persisted data file created
+
+===== Ploinky only var test =====
+[PASS] Host-only env var not visible inside container
 
 ===== Workspace status command =====
 [PASS] Status reports SSO disabled
@@ -103,7 +109,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 24482 listening
+[PASS] Router port 29950 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
