@@ -85,10 +85,27 @@ if ! run_stage "PREPARE STAGE" "doPrepare.sh" "testsAfterPrepare.sh"; then
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
 fi
 
-if ! run_stage "START STAGE" "doStart.sh" "testsAfterStart.sh"; then
+# Load state from prepare stage to get TEST_AGENT_NAME and TEST_ROUTER_PORT
+fast_load_state
+
+fast_stage_header "START STAGE"
+if ! fast_run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$FAST_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"; then
   fast_fail_message "START STAGE aborted. Proceeding to cleanup."
   fast_log_result "[FATAL] START STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+else
+  set +e
+  FAST_CHECK_ERRORS=0
+  fast_run_with_timeout 60 "Running verification script: testsAfterStart.sh" bash "$FAST_DIR/testsAfterStart.sh"
+  exit_code=$?
+  if [[ $exit_code -eq 124 ]]; then
+      fast_log_result "[FAIL] testsAfterStart.sh timed out after 60 seconds."
+      TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
+  elif [[ $exit_code -ne 0 ]]; then
+      fast_log_result "[FAIL] testsAfterStart.sh reported ${exit_code} failure(s)."
+      TOTAL_ERRORS=$((TOTAL_ERRORS + exit_code))
+  fi
+  set -e
 fi
 
 if ! run_stage "STOP STAGE" "doStop.sh" "testsAfterStop.sh"; then
