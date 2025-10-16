@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22349 listening
+[PASS] Router port 26414 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -55,17 +55,20 @@
 ===== Global Agent Verification =====
 [PASS] Global agent working directory is the test root
 
+===== Devel Agent Verification =====
+[PASS] Devel agent working directory is the repo source
+
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 22349 closed
+[PASS] Router port 26414 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22349 listening
+[PASS] Router port 26414 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -110,6 +113,9 @@
 
 ===== Global Agent Verification =====
 [PASS] Global agent working directory is the test root
+
+===== Devel Agent Verification =====
+[PASS] Devel agent working directory is the repo source
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
@@ -122,7 +128,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22349 listening
+[PASS] Router port 26414 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -137,3 +143,10 @@
 [PASS] Variable MY_TEST_VAR from manifest is present after restart
 
 ===== DESTROY STAGE =====
+[PASS] Service container removed
+[PASS] Temporary workspace directory deleted
+[PASS] Agent log removed with workspace
+[PASS] Persistence marker removed with workspace
+
+===== TEST SUMMARY =====
+[PASS] All tests passed!

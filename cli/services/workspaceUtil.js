@@ -222,7 +222,10 @@ async function runCli(agentName, args) {
   console.log(`[cli] container: ${containerName}`);
   console.log(`[cli] command: ${cmd}`);
   console.log(`[cli] agent: ${shortAgentName}`);
-  const projPath = getConfiguredProjectPath(shortAgentName, path.basename(path.dirname(manifestPath)));
+  const agentDir = path.dirname(manifestPath);
+  const repoDir = path.dirname(agentDir);
+  const repoName = path.basename(repoDir);
+  const projPath = getConfiguredProjectPath(shortAgentName, repoName);
   attachInteractive(containerName, projPath, cmd);
 }
 
@@ -237,7 +240,10 @@ async function runShell(agentName) {
   console.log(`[shell] container: ${containerName}`);
   console.log(`[shell] command: ${cmd}`);
   console.log(`[shell] agent: ${shortAgentName}`);
-  const projPath = getConfiguredProjectPath(shortAgentName, path.basename(path.dirname(manifestPath)));
+  const agentDir = path.dirname(manifestPath);
+  const repoDir = path.dirname(agentDir);
+  const repoName = path.basename(repoDir);
+  const projPath = getConfiguredProjectPath(shortAgentName, repoName);
   attachInteractive(containerName, projPath, cmd);
 }
 

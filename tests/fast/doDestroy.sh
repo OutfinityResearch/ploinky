@@ -11,7 +11,9 @@ fast_require_var "TEST_AGENT_NAME"
 cd "$TEST_RUN_DIR"
 
 fast_info "Destroying workspace for ${TEST_AGENT_NAME}."
-ploinky destroy
+if ! timeout 60s ploinky destroy; then
+    fast_fail "ploinky destroy command failed or timed out after 60 seconds."
+fi
 
 # Move out of the workspace before deleting the directory.
 cd "$FAST_DIR"

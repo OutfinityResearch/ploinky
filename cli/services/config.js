@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-export const PLOINKY_DIR = '.ploinky';
+export const PLOINKY_DIR = path.join(process.cwd(), '.ploinky');
 export const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 export const AGENTS_FILE = path.join(PLOINKY_DIR, 'agents');
 export const SECRETS_FILE = path.join(PLOINKY_DIR, '.secrets');
