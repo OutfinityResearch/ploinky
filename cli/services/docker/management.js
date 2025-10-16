@@ -84,6 +84,15 @@ function startConfiguredAgents() {
     return startedList;
 }
 
+function chunkArray(list, size = 8) {
+    const chunks = [];
+    if (!Array.isArray(list) || size <= 0) return chunks;
+    for (let i = 0; i < list.length; i += size) {
+        chunks.push(list.slice(i, i + size));
+    }
+    return chunks;
+}
+
 function gracefulStopContainer(name, { prefix = '[destroy]' } = {}) {
     const exists = containerExists(name);
     if (!exists) return false;
@@ -114,12 +123,21 @@ function waitForContainers(names, timeoutSec = 5) {
 }
 
 function forceStopContainers(names, { prefix } = {}) {
-    for (const name of names) {
+    if (!Array.isArray(names) || !names.length) return;
+    for (const chunk of chunkArray(names)) {
         try {
-            console.log(`${prefix} Forcing kill for ${name}...`);
-            execSync(`${containerRuntime} kill ${name}`, { stdio: 'ignore' });
+            console.log(`${prefix} Forcing kill for ${chunk.join(', ')}...`);
+            execSync(`${containerRuntime} kill ${chunk.join(' ')}`, { stdio: 'ignore' });
         } catch (e) {
-            debugLog(`forceStopContainers kill ${name}: ${e?.message || e}`);
+            debugLog(`forceStopContainers kill ${chunk.join(', ')}: ${e?.message || e}`);
+            for (const name of chunk) {
+                try {
+                    console.log(`${prefix} Forcing kill for ${name}...`);
+                    execSync(`${containerRuntime} kill ${name}`, { stdio: 'ignore' });
+                } catch (err) {
+                    debugLog(`forceStopContainers (single) kill ${name}: ${err?.message || err}`);
+                }
+            }
         }
     }
 }
@@ -392,45 +410,81 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     return containerName;
 }
 
-function stopAndRemove(name, fast = false) {
+function stopAndRemoveMany(names, { fast = false } = {}) {
+    if (!Array.isArray(names) || !names.length) return [];
+
     const agents = loadAgents();
-    const rec = agents ? agents[name] : null;
-    const candidates = getContainerCandidates(name, rec);
-    const existing = candidates.filter((candidate) => candidate && containerExists(candidate));
-    if (!existing.length) return [];
+    const removalSet = new Set();
+    const runningSet = new Set();
 
-    existing.forEach((candidate) => gracefulStopContainer(candidate, { prefix: fast ? '[destroy-fast]' : '[destroy]' }));
-    const waitSeconds = fast ? 0.1 : 5;
-    const remaining = waitForContainers(existing, waitSeconds);
-    const targets = remaining.length ? remaining : existing;
-
-    const removed = [];
-    for (const candidate of targets) {
-        try {
-            console.log(`[destroy] Removing container: ${candidate}`);
-            execSync(`${containerRuntime} rm -f ${candidate}`, { stdio: 'ignore' });
-            console.log(`[destroy] ✓ removed ${candidate}`);
-            removed.push(candidate);
-        } catch (e) {
-            console.log(`[destroy] rm failed for ${candidate}: ${e.message}. Trying force removal...`);
-            console.log(`[destroy] force remove failed for ${candidate}: ${e?.message || e}`);
+    for (const agentName of names) {
+        if (!agentName) continue;
+        const rec = agents ? agents[agentName] : null;
+        const candidates = getContainerCandidates(agentName, rec);
+        for (const candidate of candidates) {
+            if (!candidate || !containerExists(candidate)) continue;
+            removalSet.add(candidate);
+            if (isContainerRunning(candidate)) {
+                runningSet.add(candidate);
+            }
         }
     }
+
+    if (!removalSet.size) return [];
+
+    const prefix = fast ? '[destroy-fast]' : '[destroy]';
+    const runningList = Array.from(runningSet);
+    if (runningList.length) {
+        console.log(`${prefix} Sending SIGTERM to ${runningList.length} container(s)...`);
+        for (const chunk of chunkArray(runningList)) {
+            try {
+                execSync(`${containerRuntime} kill --signal SIGTERM ${chunk.join(' ')}`, { stdio: 'ignore' });
+            } catch (e) {
+                debugLog(`batch SIGTERM failed for ${chunk.join(', ')}: ${e?.message || e}`);
+                for (const name of chunk) {
+                    gracefulStopContainer(name, { prefix });
+                }
+            }
+        }
+    }
+
+    const waitSeconds = fast ? 0.1 : 5;
+    const stillRunning = runningList.length ? waitForContainers(runningList, waitSeconds) : [];
+    if (stillRunning.length) {
+        forceStopContainers(stillRunning, { prefix });
+    }
+
+    const removalList = Array.from(removalSet);
+    const removed = [];
+    for (const chunk of chunkArray(removalList)) {
+        try {
+            console.log(`${prefix} Removing containers: ${chunk.join(', ')}`);
+            execSync(`${containerRuntime} rm -f ${chunk.join(' ')}`, { stdio: 'ignore' });
+            chunk.forEach((name) => {
+                console.log(`${prefix} ✓ removed ${name}`);
+                removed.push(name);
+            });
+        } catch (e) {
+            debugLog(`batch rm failed for ${chunk.join(', ')}: ${e?.message || e}`);
+            for (const name of chunk) {
+                try {
+                    console.log(`${prefix} Removing container: ${name}`);
+                    execSync(`${containerRuntime} rm -f ${name}`, { stdio: 'ignore' });
+                    console.log(`${prefix} ✓ removed ${name}`);
+                    removed.push(name);
+                } catch (err) {
+                    console.log(`${prefix} rm failed for ${name}: ${err?.message || err}`);
+                }
+            }
+        }
+    }
+
     return removed;
 }
 
-function stopAndRemoveMany(names, { fast = false } = {}) {
-    if (!Array.isArray(names)) return [];
-    const removed = [];
-    for (const n of names) {
-        try {
-            const list = stopAndRemove(n, fast) || [];
-            removed.push(...list);
-        } catch (e) {
-            debugLog(`stopAndRemoveMany ${n} error: ${e?.message || e}`);
-        }
-    }
-    return removed;
+function stopAndRemove(name, fast = false) {
+    if (!name) return [];
+    return stopAndRemoveMany([name], { fast }) || [];
 }
 
 function listAllContainerNames() {
@@ -451,19 +505,14 @@ function destroyAllPloinky({ fast = false } = {}) {
 
 function destroyWorkspaceContainers({ fast = false } = {}) {
     const agents = loadAgentsMap();
-    const removedList = [];
+    const names = [];
     for (const [name, rec] of Object.entries(agents || {})) {
         if (!rec || typeof name !== 'string' || name.startsWith('_')) continue;
         if (rec.type === 'agent' || rec.type === 'agentCore') {
-            try {
-                const localRemoved = stopAndRemove(name, fast) || [];
-                removedList.push(...localRemoved);
-            } catch (e) {
-                console.log(`[destroy] ${name} error: ${e?.message || e}`);
-            }
+            names.push(name);
         }
     }
-    return removedList;
+    return stopAndRemoveMany(names, { fast });
 }
 
 function getAgentsRegistry() {

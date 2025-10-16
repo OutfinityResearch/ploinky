@@ -111,6 +111,22 @@ EOF
 fast_info "Enabling agent ${GLOBAL_AGENT_NAME} in global mode."
 ploinky enable agent "$GLOBAL_AGENT_NAME" global
 
+# Create a devel agent for testing devel mode
+fast_info "Creating devel-agent."
+DEVEL_AGENT_NAME="devel-agent"
+fast_write_state_var "TEST_DEVEL_AGENT_NAME" "$DEVEL_AGENT_NAME"
+devel_agent_root="${repo_root}/${DEVEL_AGENT_NAME}"
+mkdir -p "$devel_agent_root"
+
+cat >"${devel_agent_root}/manifest.json" <<'EOF'
+{
+  "container": "node:20-bullseye"
+}
+EOF
+
+fast_info "Enabling agent ${DEVEL_AGENT_NAME} in devel mode."
+ploinky enable agent "${DEVEL_AGENT_NAME}" devel "${TEST_REPO_NAME}"
+
 fast_info "Setting workspace-only env var FAST_PLOINKY_ONLY"
 ploinky var FAST_PLOINKY_ONLY host-secret-value
 
