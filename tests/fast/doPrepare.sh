@@ -92,6 +92,25 @@ ploinky enable repo demo
 fast_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_QUALIFIED"
 
+# Create a global agent for testing global mode
+fast_info "Creating global-agent."
+GLOBAL_AGENT_NAME="global-agent"
+fast_write_state_var "TEST_GLOBAL_AGENT_NAME" "$GLOBAL_AGENT_NAME"
+global_agent_root="${repo_root}/${GLOBAL_AGENT_NAME}"
+mkdir -p "$global_agent_root"
+
+cat >"${global_agent_root}/manifest.json" <<'EOF'
+{
+  "container": "node:20-bullseye",
+  "ports": [
+      "7002:7000"
+    ]
+}
+EOF
+
+fast_info "Enabling agent ${GLOBAL_AGENT_NAME} in global mode."
+ploinky enable agent "$GLOBAL_AGENT_NAME" global
+
 fast_info "Setting workspace-only env var FAST_PLOINKY_ONLY"
 ploinky var FAST_PLOINKY_ONLY host-secret-value
 

@@ -457,14 +457,12 @@ function destroyWorkspaceContainers({ fast = false } = {}) {
         if (rec.type === 'agent' || rec.type === 'agentCore') {
             try {
                 const localRemoved = stopAndRemove(name, fast) || [];
-                delete agents[name];
                 removedList.push(...localRemoved);
             } catch (e) {
                 console.log(`[destroy] ${name} error: ${e?.message || e}`);
             }
         }
     }
-    saveAgentsMap(agents);
     return removedList;
 }
 

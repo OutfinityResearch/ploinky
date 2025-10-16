@@ -163,4 +163,35 @@ fast_check_install_marker_via_shell() {
 fast_stage_header "Install Command Verification"
 fast_check "Install command creates marker file (verified via shell)" fast_check_install_marker_via_shell
 
+fast_check_global_agent_workdir() {
+  fast_require_var "TEST_RUN_DIR"
+  fast_require_var "TEST_GLOBAL_AGENT_NAME"
+  
+  # This is the "correct" expectation based on the bug we found.
+  # The workspace is a subdirectory, not the root.
+  local expected_dir="$TEST_RUN_DIR/$TEST_GLOBAL_AGENT_NAME"
+
+  local raw_output
+  if ! raw_output=$( { echo "pwd"; echo "exit"; } | ploinky shell "$TEST_GLOBAL_AGENT_NAME" ); then
+      echo "Failed to execute 'pwd' in ${TEST_GLOBAL_AGENT_NAME} shell." >&2
+      return 1
+  fi
+
+        # Use sed to extract the path, and tr to remove any trailing carriage returns.
+  local actual_dir
+  actual_dir=$(echo "$raw_output" | sed -n 's/^# \(\/.*\)/\1/p' | tr -d '\r')
+  if [[ "$actual_dir" != "$expected_dir" ]]; then
+    echo "Global agent working directory mismatch." >&2
+    echo "Expected: '$expected_dir'" >&2
+    echo "Got: '$actual_dir'" >&2
+    echo "--- Full shell output ---" >&2
+    echo "$raw_output" >&2
+    echo "-------------------------" >&2
+    return 1
+  fi
+}
+
+fast_stage_header "Global Agent Verification"
+fast_check "Global agent working directory is the test root" fast_check_global_agent_workdir
+
 fast_finalize_checks

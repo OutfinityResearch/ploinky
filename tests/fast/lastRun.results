@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22877 listening
+[PASS] Router port 22349 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -52,17 +52,20 @@
 ===== Install Command Verification =====
 [PASS] Install command creates marker file (verified via shell)
 
+===== Global Agent Verification =====
+[PASS] Global agent working directory is the test root
+
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 22877 closed
+[PASS] Router port 22349 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22877 listening
+[PASS] Router port 22349 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -104,18 +107,22 @@
 
 ===== Install Command Verification =====
 [PASS] Install command creates marker file (verified via shell)
+
+===== Global Agent Verification =====
+[PASS] Global agent working directory is the test root
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
 [PASS] Dynamic APP_NAME update without restart
 [PASS] Dynamic WEBTTY_SHELL update without restart
+[PASS] Dynamic SSO_CLIENT_SECRET update without restart
 
 ===== Manifest Environment =====
 [PASS] Variable MY_TEST_VAR from manifest is present after start again
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22877 listening
+[PASS] Router port 22349 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -130,10 +137,3 @@
 [PASS] Variable MY_TEST_VAR from manifest is present after restart
 
 ===== DESTROY STAGE =====
-[PASS] Service container removed
-[PASS] Temporary workspace directory deleted
-[PASS] Agent log removed with workspace
-[PASS] Persistence marker removed with workspace
-
-===== TEST SUMMARY =====
-[PASS] All tests passed!
