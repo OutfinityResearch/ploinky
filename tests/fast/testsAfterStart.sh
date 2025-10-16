@@ -199,7 +199,11 @@ fast_check_devel_agent_workdir() {
   local expected_dir="$TEST_RUN_DIR/.ploinky/repos/$TEST_REPO_NAME"
 
   local raw_output
-  if ! raw_output=$( { echo "pwd"; echo "exit"; } | ploinky shell "$TEST_DEVEL_AGENT_NAME" ); then
+  if ! raw_output=$( {
+    echo "pwd"
+    echo "if [ -r . ] && [ -w . ]; then echo PERM_OK; else echo PERM_FAIL; fi"
+    echo "exit"
+  } | ploinky shell "$TEST_DEVEL_AGENT_NAME" ); then
       echo "Failed to execute 'pwd' in ${TEST_DEVEL_AGENT_NAME} shell." >&2
       return 1
   fi
@@ -216,12 +220,23 @@ fast_check_devel_agent_workdir() {
     echo "-------------------------" >&2
     return 1
   fi
+
+  local perm_status
+  perm_status=$(echo "$raw_output" | tr -d '\r' | sed -n 's/^# \(PERM_[A-Z0-9]\+\)$/\1/p' | tail -n 1)
+  if [[ "$perm_status" != "PERM_OK" ]]; then
+    echo "Devel agent workspace lacks read/write permissions." >&2
+    echo "Expected PERM_OK marker but saw: '${perm_status}'" >&2
+    echo "--- Full shell output ---" >&2
+    echo "$raw_output" >&2
+    echo "-------------------------" >&2
+    return 1
+  fi
 }
 
 fast_stage_header "Global Agent Verification"
 fast_check "Global agent working directory is the test root" fast_check_global_agent_workdir
 
 fast_stage_header "Devel Agent Verification"
-fast_check "Devel agent working directory is the repo source" fast_check_devel_agent_workdir
+fast_check "Devel agent cwd is the repo source and has RW permissions" fast_check_devel_agent_workdir
 
 fast_finalize_checks
