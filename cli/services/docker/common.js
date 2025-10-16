@@ -201,6 +201,7 @@ function parseManifestPorts(manifest) {
         if (!portSpec) continue;
 
         const parts = portSpec.split(':');
+        let hostIp = '127.0.0.1';  // Default to localhost for security
         let hostPort;
         let containerPort;
         if (parts.length === 1) {
@@ -209,13 +210,14 @@ function parseManifestPorts(manifest) {
             hostPort = parseInt(parts[0], 10);
             containerPort = parseInt(parts[1], 10);
         } else if (parts.length === 3) {
+            hostIp = parts[0];  // Respect the specified IP address
             hostPort = parseInt(parts[1], 10);
             containerPort = parseInt(parts[2], 10);
         }
         if (hostPort && containerPort) {
-            const normalized = `127.0.0.1:${hostPort}:${containerPort}`;
+            const normalized = `${hostIp}:${hostPort}:${containerPort}`;
             publishArgs.push(normalized);
-            portMappings.push({ hostPort, containerPort, hostIp: '127.0.0.1' });
+            portMappings.push({ hostPort, containerPort, hostIp });
         }
     }
 
