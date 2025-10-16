@@ -40,6 +40,7 @@ fast_info "Bootstrapped repository skeleton at ${agent_root}."
 cat >"${agent_root}/manifest.json" <<'EOF'
 {
   "container": "node:20-bullseye",
+  "install": "echo 'install_ok' > ./install_marker.txt",
   "agent": "node /code/server.js",
   "env": {
     "FAST_TEST_MARKER": "fast-suite",

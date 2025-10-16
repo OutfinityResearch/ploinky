@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29950 listening
+[PASS] Router port 22877 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -49,17 +49,20 @@
 ===== Manifest Environment =====
 [PASS] Variable MY_TEST_VAR from manifest is present after start
 
+===== Install Command Verification =====
+[PASS] Install command creates marker file (verified via shell)
+
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 29950 closed
+[PASS] Router port 22877 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29950 listening
+[PASS] Router port 22877 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -98,6 +101,9 @@
 
 ===== Manifest Environment =====
 [PASS] Variable MY_TEST_VAR from manifest is present after start
+
+===== Install Command Verification =====
+[PASS] Install command creates marker file (verified via shell)
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
@@ -109,7 +115,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29950 listening
+[PASS] Router port 22877 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
