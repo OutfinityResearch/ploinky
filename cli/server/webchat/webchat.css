@@ -610,15 +610,20 @@ body {
 /* --- Composer (Footer) --- */
 .wa-composer {
   display: flex;
-  align-items: flex-end;
-  min-height: var(--wa-composer-height);
-  padding: 8px 16px;
+  flex-direction: column;
   background: var(--wa-bg-panel);
   border-top: 1px solid var(--wa-border);
-  gap: 8px;
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+}
+
+.wa-composer-main {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  padding: 8px 16px;
+  gap: 8px;
 }
 
 .wa-voice-control {
@@ -807,7 +812,7 @@ body {
 }
 
 .wa-file-preview-container {
-  padding: 8px 8px 0 8px;
+  padding: 8px 16px 0;
   display: none; /* Hidden by default */
   flex-direction: column;
   gap: 8px;
@@ -825,6 +830,8 @@ body {
   border-radius: 8px;
   gap: 8px;
   position: relative;
+  max-width: 350px;
+  align-self: flex-start;
 }
 
 .wa-file-preview-thumbnail {
