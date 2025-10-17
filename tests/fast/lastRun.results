@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 27634 listening
+[PASS] Router port 30614 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -51,6 +51,9 @@
 
 ===== Install Command Verification =====
 [PASS] Install command creates marker file (verified via shell)
+
+===== Demo Agent Filesystem =====
+[PASS] Demo agent directories exist and are read-only
 
 ===== Global Agent Verification =====
 [PASS] Global agent working directory is the test root
@@ -61,7 +64,7 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 27634 closed
+[PASS] Router port 30614 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
@@ -69,7 +72,7 @@
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 27634 listening
+[PASS] Router port 30614 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -111,6 +114,9 @@
 
 ===== Install Command Verification =====
 [PASS] Install command creates marker file (verified via shell)
+
+===== Demo Agent Filesystem =====
+[PASS] Demo agent directories exist and are read-only
 
 ===== Global Agent Verification =====
 [PASS] Global agent working directory is the test root
@@ -129,7 +135,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 27634 listening
+[PASS] Router port 30614 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -145,7 +151,7 @@
 
 ===== DESTROY STAGE =====
 [PASS] Router log snapshot records shutdown
-[PASS] Service container removed
+[PASS] Test agent container removed
 [PASS] Temporary workspace directory deleted
 [PASS] Agent log removed with workspace
 [PASS] Persistence marker removed with workspace
