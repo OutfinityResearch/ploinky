@@ -1,0 +1,193 @@
+const PROCESS_PREFIX_RE = /^(?:\s*\.+\s*){3,}/;
+
+function stripCtrlAndAnsi(input) {
+    try {
+        let out = input || '';
+        out = out.replace(/\u001b\][^\u0007\u001b]*?(?:\u0007|\u001b\\)/g, '');
+        out = out.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+        out = out.replace(/[\u0000-\u0008\u000B-\u001A\u001C-\u001F]/g, '');
+        return out;
+    } catch (_) {
+        return input;
+    }
+}
+
+function isProcessingChunk(text) {
+    if (!text) {
+        return false;
+    }
+    const trimmed = text.replace(/\s/g, '');
+    if (trimmed.length === 0 || !/^[.·…]+$/.test(trimmed)) {
+        return false;
+    }
+    const hasWhitespace = /\s/.test(text);
+    return hasWhitespace || trimmed.length > 3;
+}
+
+function stripProcessingPrefix(text) {
+    if (!text) {
+        return text;
+    }
+    const match = PROCESS_PREFIX_RE.exec(text);
+    if (!match) {
+        return text;
+    }
+    if (match[0].length >= text.length) {
+        return '';
+    }
+    return text.slice(match[0].length);
+}
+
+export function createNetwork({
+    TAB_ID,
+    toEndpoint,
+    dlog,
+    showBanner,
+    hideBanner,
+    statusEl,
+    statusDot,
+    agentName
+}, {
+    addClientMsg,
+    addServerMsg,
+    showTypingIndicator,
+    hideTypingIndicator,
+    markUserInputSent
+}) {
+    let es = null;
+    let chatBuffer = '';
+
+    function handleServerChunk(raw) {
+        if (raw === undefined || raw === null) {
+            return;
+        }
+        let text = String(raw);
+        if (!text) {
+            return;
+        }
+
+        if (isProcessingChunk(text)) {
+            showTypingIndicator();
+            return;
+        }
+
+        const stripped = stripProcessingPrefix(text);
+        if (stripped !== text) {
+            showTypingIndicator();
+        }
+        if (!stripped.trim()) {
+            return;
+        }
+        hideTypingIndicator();
+        addServerMsg(stripped);
+    }
+
+    function pushSrvFromBuffer() {
+        if (!chatBuffer) {
+            return;
+        }
+        const parts = chatBuffer.split(/\r?\n/);
+        chatBuffer = parts.pop() ?? '';
+        parts.forEach((part) => {
+            const clean = stripCtrlAndAnsi(part);
+            handleServerChunk(clean);
+        });
+
+        const tailClean = stripCtrlAndAnsi(chatBuffer);
+        if (isProcessingChunk(tailClean)) {
+            showTypingIndicator();
+        }
+    }
+
+    function start() {
+        dlog('SSE connecting');
+        showBanner('Connecting…');
+        try {
+            es?.close?.();
+        } catch (_) {
+            // Ignore close failures
+        }
+
+        es = new EventSource(toEndpoint(`stream?tabId=${TAB_ID}`));
+
+        es.onopen = () => {
+            hideTypingIndicator(true);
+            if (statusEl) {
+                statusEl.textContent = 'online';
+            }
+            if (statusDot) {
+                statusDot.classList.remove('offline');
+                statusDot.classList.add('online');
+            }
+            showBanner('Connected', 'ok');
+            setTimeout(() => hideBanner(), 800);
+        };
+
+        es.onerror = () => {
+            hideTypingIndicator(true);
+            if (statusEl) {
+                statusEl.textContent = 'offline';
+            }
+            if (statusDot) {
+                statusDot.classList.remove('online');
+                statusDot.classList.add('offline');
+            }
+            try {
+                es.close();
+            } catch (_) {
+                // Ignore close failures
+            }
+            setTimeout(() => {
+                try {
+                    start();
+                } catch (error) {
+                    dlog('SSE restart error', error);
+                }
+            }, 1000);
+        };
+
+        es.onmessage = (event) => {
+            try {
+                const text = JSON.parse(event.data);
+                chatBuffer += stripCtrlAndAnsi(text);
+                pushSrvFromBuffer();
+            } catch (error) {
+                dlog('term write error', error);
+            }
+        };
+    }
+
+    function stop() {
+        if (!es) {
+            return;
+        }
+        try {
+            es.close();
+        } catch (_) {
+            // Ignore close failures
+        }
+        es = null;
+    }
+
+    function sendCommand(cmd) {
+        addClientMsg(cmd);
+        markUserInputSent();
+        fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: `${cmd}\n`
+        }).catch((error) => {
+            dlog('chat error', error);
+            hideTypingIndicator(true);
+            addServerMsg('[input error]');
+            showBanner('Chat error', 'err');
+        });
+        return true;
+    }
+
+    return {
+        start,
+        stop,
+        sendCommand
+    };
+}

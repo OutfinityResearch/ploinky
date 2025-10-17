@@ -247,10 +247,11 @@ POST /blobs/&lt;agentName&gt;
 Headers:
   Content-Type: application/octet-stream
   X-Mime-Type: text/plain   # optional; falls back to Content-Type
+  X-File-Name: report.pdf   # optional; original filename for metadata
 Body: raw bytes (streamed)
 
 Response: 201 Created
-{ "id": "<uid>", "url": "/blobs/&lt;agentName&gt;/<uid>", "size": N, "mime": "text/plain", "agent": "<agent>" }
+{ "id": "<uid>", "url": "/blobs/&lt;agentName&gt;/<uid>", "size": N, "mime": "text/plain", "agent": "<agent>", "filename": "report.pdf" }
 
 // Download (streaming, supports Range)
 GET /blobs/&lt;agentName&gt;/&lt;id&gt;
