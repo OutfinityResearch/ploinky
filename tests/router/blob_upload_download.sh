@@ -30,6 +30,8 @@ ploinky enable repo demo
 ploinky start demo "$PORT"
 wait_router "$PORT"
 
+AGENT_NAME="demo"
+
 # Generate a 1MB test file
 FILE_PATH="test_1MB.bin"
 dd if=/dev/urandom of="$FILE_PATH" bs=1M count=1 2>/dev/null
@@ -41,13 +43,27 @@ fi
 FILE_SIZE=$(stat -c %s "$FILE_PATH" 2>/dev/null || stat -f %z "$FILE_PATH")
 
 # Upload using streaming from file
-RESP=$(curl -sS -X POST --data-binary @"$FILE_PATH" -H 'Content-Type: application/octet-stream' -H 'X-Mime-Type: application/octet-stream' "http://127.0.0.1:${PORT}/blobs")
+RESP=$(curl -sS -X POST --data-binary @"$FILE_PATH" \
+  -H 'Content-Type: application/octet-stream' \
+  -H 'X-Mime-Type: application/octet-stream' \
+  "http://127.0.0.1:${PORT}/blobs/${AGENT_NAME}")
 echo "Upload response: $RESP"
 ID=$(node -e "const r=process.argv[1]; try{const j=JSON.parse(r); if(j&&j.id) process.stdout.write(j.id);}catch(e){}" "$RESP")
 URL=$(node -e "const r=process.argv[1]; try{const j=JSON.parse(r); if(j&&j.url) process.stdout.write(j.url);}catch(e){}" "$RESP")
+RESP_AGENT=$(node -e "const r=process.argv[1]; try{const j=JSON.parse(r); if(j&&j.agent) process.stdout.write(j.agent);}catch(e){}" "$RESP")
 
 if [[ -z "$ID" || -z "$URL" ]]; then
   echo "✗ Failed to parse upload response"
+  exit 1
+fi
+
+if [[ "$RESP_AGENT" != "$AGENT_NAME" ]]; then
+  echo "✗ Upload response agent mismatch: expected '$AGENT_NAME' got '${RESP_AGENT:-<none>}'"
+  exit 1
+fi
+
+if [[ "$URL" != "/blobs/${AGENT_NAME}/"* ]]; then
+  echo "✗ Upload URL missing agent segment: $URL"
   exit 1
 fi
 
