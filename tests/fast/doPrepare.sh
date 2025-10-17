@@ -130,9 +130,9 @@ ploinky enable agent "${DEVEL_AGENT_NAME}" devel "${TEST_REPO_NAME}"
 fast_info "Setting workspace-only env var FAST_PLOINKY_ONLY"
 ploinky var FAST_PLOINKY_ONLY host-secret-value
 
-service_container=$(compute_container_name "$TEST_AGENT_NAME")
-fast_write_state_var "TEST_SERVICE_CONTAINER" "$service_container"
-fast_info "Service container will be named: $service_container"
+agent_container_name=$(compute_container_name "$TEST_AGENT_NAME")
+fast_write_state_var "TEST_AGENT_CONT_NAME" "$agent_container_name"
+fast_info "Service container will be named: $agent_container_name"
 
 workspace_project="$TEST_RUN_DIR/$TEST_AGENT_NAME"
 fast_write_state_var "TEST_AGENT_WORKSPACE" "$workspace_project"

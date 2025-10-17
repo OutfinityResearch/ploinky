@@ -230,6 +230,50 @@ fast_assert_file_contains() {
   fi
 }
 
+fast_check_router_stop_entry() {
+  local log_file="$1"
+  local expected_port="$2"
+  local state_var="${3:-}"
+  local previous_entry="${4:-}"
+
+  if [[ -z "$log_file" ]]; then
+    echo "Router log path not provided." >&2
+    return 1
+  fi
+  if [[ ! -f "$log_file" ]]; then
+    echo "Router log '${log_file}' missing." >&2
+    return 1
+  fi
+
+  local last_entry
+  last_entry=$(tail -n 1 "$log_file" 2>/dev/null || true)
+  if [[ -z "$last_entry" ]]; then
+    echo "Router log '${log_file}' is empty." >&2
+    return 1
+  fi
+
+  if [[ "$last_entry" != *'"type":"server_stop"'* ]]; then
+    echo "Router log last entry does not record server_stop: ${last_entry}" >&2
+    return 1
+  fi
+
+  if [[ -n "$expected_port" ]] && ! grep -q "\"port\":${expected_port}" <<<"$last_entry"; then
+    echo "Router stop entry missing expected port ${expected_port}: ${last_entry}" >&2
+    return 1
+  fi
+
+  if [[ -n "$previous_entry" && "$last_entry" == "$previous_entry" ]]; then
+    echo "Router stop entry matches previous record." >&2
+    return 1
+  fi
+
+  if [[ -n "$state_var" ]]; then
+    fast_write_state_var "$state_var" "$last_entry"
+  fi
+
+  return 0
+}
+
 fast_assert_container_running() {
   fast_require_runtime || return 1
   local container="$1"

@@ -242,6 +242,6 @@ fast_check "Dynamic WEBTTY_SHELL update without restart" fast_test_dynamic_webtt
 fast_check "Dynamic SSO_CLIENT_SECRET update without restart" fast_test_sso_client_secret_propagation
 
 fast_stage_header "Manifest Environment"
-fast_check "Variable MY_TEST_VAR from manifest is present after start again" fast_assert_container_env "$TEST_SERVICE_CONTAINER" "MY_TEST_VAR" "hello-manifest"
+fast_check "Variable MY_TEST_VAR from manifest is present after start again" fast_assert_container_env "$TEST_AGENT_CONT_NAME" "MY_TEST_VAR" "hello-manifest"
 
 fast_finalize_checks

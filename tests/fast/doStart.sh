@@ -8,7 +8,7 @@ fast_load_state
 fast_require_var "TEST_RUN_DIR"
 fast_require_var "TEST_AGENT_NAME"
 fast_require_var "TEST_ROUTER_PORT"
-fast_require_var "TEST_SERVICE_CONTAINER"
+fast_require_var "TEST_AGENT_CONT_NAME"
 fast_require_var "TEST_AGENT_WORKSPACE"
 fast_require_var "TEST_PERSIST_MARKER"
 
@@ -26,9 +26,9 @@ fast_wait_for_router
 fast_wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"
 
 fast_require_runtime
-container_pid=$(fast_get_container_pid "$TEST_SERVICE_CONTAINER")
+container_pid=$(fast_get_container_pid "$TEST_AGENT_CONT_NAME")
 fast_write_state_var "TEST_LAST_KNOWN_PID" "$container_pid"
-fast_info "Container ${TEST_SERVICE_CONTAINER} is running (pid ${container_pid})."
+fast_info "Container ${TEST_AGENT_CONT_NAME} is running (pid ${container_pid})."
 
 routing_file="$TEST_RUN_DIR/.ploinky/routing.json"
 fast_wait_for_file "$routing_file" 40 0.25

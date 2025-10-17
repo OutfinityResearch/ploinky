@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 36970 listening
+[PASS] Router port 27634 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -61,14 +61,15 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 36970 closed
+[PASS] Router port 27634 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
+[PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 36970 listening
+[PASS] Router port 27634 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -128,7 +129,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 36970 listening
+[PASS] Router port 27634 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
@@ -143,6 +144,7 @@
 [PASS] Variable MY_TEST_VAR from manifest is present after restart
 
 ===== DESTROY STAGE =====
+[PASS] Router log snapshot records shutdown
 [PASS] Service container removed
 [PASS] Temporary workspace directory deleted
 [PASS] Agent log removed with workspace

@@ -15,6 +15,7 @@ import { startWorkspace, runCli, runShell, refreshAgent } from '../services/work
 import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/routerEnv.js';
 import * as dockerSvc from '../services/docker/index.js';
 import * as workspaceSvc from '../services/workspace.js';
+import { appendLog } from '../server/logger.js';
 import {
     setSsoEnabled,
     disableSsoConfig,
@@ -137,26 +138,42 @@ function killRouterIfRunning() {
     try {
         const pidFile = path.resolve('.ploinky/running/router.pid');
         let stopped = false;
+        let port = 8080;
+        try {
+            const routing = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'), 'utf8')) || {};
+            if (routing.port) port = parseInt(routing.port, 10) || port;
+        } catch (_) {}
+
+        const logRouterStop = (pid, signal, source) => {
+            try {
+                appendLog('server_stop', { pid, signal, source, port });
+            } catch (_) {}
+        };
+
         // 1) Stop by recorded PID if present
         if (fs.existsSync(pidFile)) {
             const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
             if (pid && !Number.isNaN(pid)) {
-                try { process.kill(pid, 'SIGTERM'); console.log(`Stopped Router (pid ${pid}).`); stopped = true; } catch(_) {}
+                try {
+                    process.kill(pid, 'SIGTERM');
+                    logRouterStop(pid, 'SIGTERM', 'pid_file');
+                    console.log(`Stopped Router (pid ${pid}).`);
+                    stopped = true;
+                } catch (_) {}
             }
             try { fs.unlinkSync(pidFile); } catch(_) {}
         }
 
         // 2) Fallback: detect by configured port in .ploinky/routing.json
         if (!stopped) {
-            let port = 8080;
-            try {
-                const routing = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'), 'utf8')) || {};
-                if (routing.port) port = parseInt(routing.port, 10) || port;
-            } catch(_) {}
-
             const tryKill = (pid) => {
                 if (!pid) return false;
-                try { process.kill(pid, 'SIGTERM'); console.log(`Stopped Router (port ${port}, pid ${pid}).`); return true; } catch(_) { return false; }
+                try {
+                    process.kill(pid, 'SIGTERM');
+                    logRouterStop(pid, 'SIGTERM', 'port_scan');
+                    console.log(`Stopped Router (port ${port}, pid ${pid}).`);
+                    return true;
+                } catch(_) { return false; }
             };
 
             const findPids = () => {
@@ -185,7 +202,14 @@ function killRouterIfRunning() {
             }
             if (!stopped && pids.length) {
                 // try SIGKILL as last resort
-                for (const pid of pids) { try { process.kill(pid, 'SIGKILL'); console.log(`Killed Router (pid ${pid}).`); stopped = true; } catch(_) {} }
+                for (const pid of pids) {
+                    try {
+                        process.kill(pid, 'SIGKILL');
+                        logRouterStop(pid, 'SIGKILL', 'port_scan');
+                        console.log(`Killed Router (pid ${pid}).`);
+                        stopped = true;
+                    } catch(_) {}
+                }
             }
         }
     } catch(_) {}

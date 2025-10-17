@@ -7,13 +7,13 @@ source "$FAST_DIR/lib.sh"
 fast_load_state
 fast_require_var "TEST_RUN_DIR"
 fast_require_var "TEST_AGENT_NAME"
-fast_require_var "TEST_SERVICE_CONTAINER"
+fast_require_var "TEST_AGENT_CONT_NAME"
 fast_require_var "TEST_ROUTER_PORT"
 
 cd "$TEST_RUN_DIR"
 
 fast_require_runtime
-pre_pid=$(fast_get_container_pid "$TEST_SERVICE_CONTAINER" || echo "")
+pre_pid=$(fast_get_container_pid "$TEST_AGENT_CONT_NAME" || echo "")
 fast_write_state_var "TEST_PRE_RESTART_PID" "$pre_pid"
 fast_info "Restarting workspace (pre-restart pid: ${pre_pid:-unknown})."
 
@@ -22,7 +22,7 @@ ploinky restart
 fast_wait_for_router
 fast_wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"
 
-post_pid=$(fast_get_container_pid "$TEST_SERVICE_CONTAINER")
+post_pid=$(fast_get_container_pid "$TEST_AGENT_CONT_NAME")
 fast_write_state_var "TEST_POST_RESTART_PID" "$post_pid"
 fast_write_state_var "TEST_LAST_KNOWN_PID" "$post_pid"
 fast_info "Restart complete (post-restart pid: ${post_pid})."
