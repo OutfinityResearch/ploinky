@@ -1,4 +1,4 @@
-import { appendLog } from './logger.js';
+import { appendLog } from './utils/logger.js';
 import { parseCookies, buildCookie, readJsonBody, appendSetCookie } from './handlers/common.js';
 import { resolveVarValue } from '../services/secretVars.js';
 import { createAuthService } from './auth/service.js';

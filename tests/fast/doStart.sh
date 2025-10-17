@@ -79,4 +79,6 @@ fast_mcp_start_demo() {
 }
 fast_action "Action: Starting demo agent..." fast_mcp_start_demo
 
+fast_wait_for_router
+
 fast_info "Start procedure completed."

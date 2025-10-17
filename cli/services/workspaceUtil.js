@@ -164,7 +164,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     }
     const runningDir = path.resolve('.ploinky/running');
     fs.mkdirSync(runningDir, { recursive: true });
-    const routerPath = path.resolve(__dirname, '../server/RoutingServer.js');
+    const routerPath = path.resolve(__dirname, '../server/Watchdog.js');
     const updateRoutes = async () => {
       cfg.routes = cfg.routes || {};
       for (const name of names) {
@@ -200,8 +200,10 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     try { fs.writeFileSync(routerPidFile, String(child.pid)); } catch (_) {}
     // Detach so the CLI can exit while the router keeps running.
     child.unref();
-    console.log(`[start] RoutingServer launched in background (pid ${child.pid}).`);
-    console.log(`[start] Logs: ${path.resolve('logs/router.log')}`);
+    console.log(`[start] Watchdog launched in background (pid ${child.pid}).`);
+    console.log(`[start] Watchdog will automatically restart the server if it crashes.`);
+    console.log(`[start] Server logs: ${path.resolve('logs/router.log')}`);
+    console.log(`[start] Watchdog logs: ${path.resolve('logs/watchdog.log')}`);
     console.log(`[start] Dashboard: http://127.0.0.1:${staticPort}/dashboard`);
   } catch (e) {
     console.error('start (workspace) failed:', e.message);
@@ -310,7 +312,7 @@ async function refreshAgent(agentName) {
             if (!isRouterUp(cfg.port)) {
                 const runningDir = path.resolve('.ploinky/running');
                 fs.mkdirSync(runningDir, { recursive: true });
-                const routerPath = path.resolve(__dirname, '../server/RoutingServer.js');
+                const routerPath = path.resolve(__dirname, '../server/Watchdog.js');
                 const routerPidFile = path.join(runningDir, 'router.pid');
                 const child = spawn(process.execPath, [routerPath], {
                     detached: true,
@@ -319,7 +321,8 @@ async function refreshAgent(agentName) {
                 });
                 try { fs.writeFileSync(routerPidFile, String(child.pid)); } catch(_) {}
                 child.unref();
-                console.log(`[refresh] RoutingServer launched (pid ${child.pid}) on port ${cfg.port}.`);
+                console.log(`[refresh] Watchdog launched (pid ${child.pid}) on port ${cfg.port}.`);
+                console.log(`[refresh] Watchdog will automatically restart the server if needed.`);
             }
         } catch (e) {
             console.error('[refresh] routing update/router start failed:', e?.message||e);

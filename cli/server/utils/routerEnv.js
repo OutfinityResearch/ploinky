@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import * as envSvc from '../services/secretVars.js';
+import * as envSvc from '../../services/secretVars.js';
 
 const COMPONENTS = {
   webtty: { varName: 'WEBTTY_TOKEN', label: 'WebTTY', path: '/webtty' },
