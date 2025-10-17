@@ -12,10 +12,10 @@ import * as agentsSvc from '../services/agents.js';
 import { listRepos, listAgents, listCurrentAgents, listRoutes, statusWorkspace, collectAgentsSummary } from '../services/status.js';
 import { logsTail, showLast } from '../services/logUtils.js';
 import { startWorkspace, runCli, runShell, refreshAgent } from '../services/workspaceUtil.js';
-import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/routerEnv.js';
+import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/utils/routerEnv.js';
 import * as dockerSvc from '../services/docker/index.js';
 import * as workspaceSvc from '../services/workspace.js';
-import { appendLog } from '../server/logger.js';
+import { appendLog } from '../server/utils/logger.js';
 import {
     setSsoEnabled,
     disableSsoConfig,
@@ -35,8 +35,8 @@ const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 
 // Track containers started in this CLI session that are not persistent agent containers
 // Session tracking moved to docker.js
-function registerSessionContainer(name) { try { dockerSvc.addSessionContainer(name); } catch (_) {} }
-function cleanupSessionContainers() { try { dockerSvc.cleanupSessionSet(); } catch (_) {} }
+function registerSessionContainer(name) { try { dockerSvc.addSessionContainer(name); } catch (_) { } }
+function cleanupSessionContainers() { try { dockerSvc.cleanupSessionSet(); } catch (_) { } }
 
 function getRepoNames() {
     if (!fs.existsSync(REPOS_DIR)) return [];
@@ -131,7 +131,7 @@ function executeBashCommand(command, args) {
     const fullCommand = [command, ...args].join(' ');
     try {
         execSync(fullCommand, { stdio: 'inherit' });
-    } catch (error) {}
+    } catch (error) { }
 }
 
 function killRouterIfRunning() {
@@ -142,12 +142,12 @@ function killRouterIfRunning() {
         try {
             const routing = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'), 'utf8')) || {};
             if (routing.port) port = parseInt(routing.port, 10) || port;
-        } catch (_) {}
+        } catch (_) { }
 
         const logRouterStop = (pid, signal, source) => {
             try {
                 appendLog('server_stop', { pid, signal, source, port });
-            } catch (_) {}
+            } catch (_) { }
         };
 
         // 1) Stop by recorded PID if present
@@ -159,9 +159,9 @@ function killRouterIfRunning() {
                     logRouterStop(pid, 'SIGTERM', 'pid_file');
                     console.log(`Stopped Router (pid ${pid}).`);
                     stopped = true;
-                } catch (_) {}
+                } catch (_) { }
             }
-            try { fs.unlinkSync(pidFile); } catch(_) {}
+            try { fs.unlinkSync(pidFile); } catch (_) { }
         }
 
         // 2) Fallback: detect by configured port in .ploinky/routing.json
@@ -173,7 +173,7 @@ function killRouterIfRunning() {
                     logRouterStop(pid, 'SIGTERM', 'port_scan');
                     console.log(`Stopped Router (port ${port}, pid ${pid}).`);
                     return true;
-                } catch(_) { return false; }
+                } catch (_) { return false; }
             };
 
             const findPids = () => {
@@ -181,7 +181,7 @@ function killRouterIfRunning() {
                 try {
                     const out = execSync(`lsof -t -i :${port} -sTCP:LISTEN`, { stdio: 'pipe' }).toString();
                     out.split(/\s+/).filter(Boolean).forEach(x => { const n = parseInt(x, 10); if (!Number.isNaN(n)) pids.add(n); });
-                } catch(_) {}
+                } catch (_) { }
                 if (!pids.size) {
                     try {
                         const out = execSync(`ss -ltnp`, { stdio: 'pipe' }).toString();
@@ -191,7 +191,7 @@ function killRouterIfRunning() {
                                 if (m) { const n = parseInt(m[1], 10); if (!Number.isNaN(n)) pids.add(n); }
                             }
                         });
-                    } catch(_) {}
+                    } catch (_) { }
                 }
                 return Array.from(pids);
             };
@@ -208,11 +208,11 @@ function killRouterIfRunning() {
                         logRouterStop(pid, 'SIGKILL', 'port_scan');
                         console.log(`Killed Router (pid ${pid}).`);
                         stopped = true;
-                    } catch(_) {}
+                    } catch (_) { }
                 }
             }
         }
-    } catch(_) {}
+    } catch (_) { }
 }
 
 function findAgentManifest(agentName) {
@@ -230,7 +230,7 @@ async function shutdownSession() {
 
 // Configure the shell used by WebTTY/webconsole
 function configureWebttyShell(input) {
-    const allowed = new Set(['sh','zsh','dash','ksh','csh','tcsh','fish']);
+    const allowed = new Set(['sh', 'zsh', 'dash', 'ksh', 'csh', 'tcsh', 'fish']);
     const name = String(input || '').trim();
     if (!allowed.has(name) && !name.startsWith('/')) {
         console.error(`Unsupported shell '${name}'. Allowed: ${Array.from(allowed).join(', ')}, or an absolute path.`);
@@ -241,7 +241,7 @@ function configureWebttyShell(input) {
     const candidates = name.startsWith('/') ? [name] : pathDirs.map(d => path.join(d, name));
     let found = null;
     for (const p of candidates) {
-        try { fs.accessSync(p, fs.constants.X_OK); found = p; break; } catch (_) {}
+        try { fs.accessSync(p, fs.constants.X_OK); found = p; break; } catch (_) { }
     }
     if (!found) {
         console.error(`Cannot execute shell '${name}': not found or not executable in PATH.`);
@@ -433,12 +433,12 @@ async function handleCommand(args) {
                 const env = envSvc;
                 let secrets = env.parseSecrets();
                 if (!secrets.APP_NAME || !String(secrets.APP_NAME).trim()) {
-                    try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch(_) {}
+                    try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch (_) { }
                 }
                 const tokens = ['WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
                 for (const t of tokens) {
                     if (!secrets[t] || !String(secrets[t]).trim()) {
-                        try { env.setEnvVar(t, crypto.randomBytes(32).toString('hex')); } catch(_) {}
+                        try { env.setEnvVar(t, crypto.randomBytes(32).toString('hex')); } catch (_) { }
                     }
                 }
                 const merged = env.parseSecrets();
@@ -446,18 +446,21 @@ async function handleCommand(args) {
                 const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
                 keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
             } catch (e) { console.error('Failed to list variables:', e.message); }
-            break; }
+            break;
+        }
         case 'var': {
             const name = options[0];
             const value = options.slice(1).join(' ');
             if (!name || !value) { showHelp(); throw new Error('Usage: var <VAR> <value>'); }
             setVar(name, value);
-            break; }
+            break;
+        }
         case 'echo': {
             if (!options[0]) { showHelp(); throw new Error('Usage: echo <VAR|$VAR>'); }
             const output = envSvc.echoVar(options[0]);
             console.log(output);
-            break; }
+            break;
+        }
         case 'update':
             if (options[0] === 'agent') await updateAgent(options[1]);
             else if (options[0] === 'repo') await updateRepo(options[1]);
@@ -479,7 +482,8 @@ async function handleCommand(args) {
             } catch (err) {
                 throw new Error(`expose failed: ${err?.message || err}`);
             }
-            break; }
+            break;
+        }
         case 'disable':
             if (options[0] === 'repo') disableRepo(options[1]); else showHelp();
             break;
@@ -504,11 +508,12 @@ async function handleCommand(args) {
                 const ok = configureWebttyShell(shellCandidate);
                 if (!ok) break;
                 // Apply immediately if workspace start is configured
-                try { await handleCommand(['restart']); } catch (_) {}
+                try { await handleCommand(['restart']); } catch (_) { }
             }
             if (rotate) await refreshComponentToken('webtty');
             else ensureComponentToken('webtty');
-            break; }
+            break;
+        }
         case 'webchat': {
             const argsList = (options || []).filter(Boolean);
             let rotate = false;
@@ -542,19 +547,19 @@ async function handleCommand(args) {
                     try {
                         envSvc.setEnvVar('WEBCHAT_COMMAND', command);
                         console.log(`✓ Configured WebChat to run local script: ${command}`);
-                        try { await handleCommand(['restart']); } catch (_) {}
+                        try { await handleCommand(['restart']); } catch (_) { }
                     } catch (e) {
                         console.error('Failed to configure WebChat command:', e?.message || e);
                     }
                 } else if (positional.length === 1) {
                     // Treat as agent name
                     const agentName = first;
-                    try { await enableAgent(agentName); } catch (_) {}
+                    try { await enableAgent(agentName); } catch (_) { }
                     command = `ploinky cli ${agentName}`;
                     try {
                         envSvc.setEnvVar('WEBCHAT_COMMAND', command);
                         console.log(`✓ Configured WebChat to run: ${command}`);
-                        try { await handleCommand(['restart']); } catch (_) {}
+                        try { await handleCommand(['restart']); } catch (_) { }
                     } catch (e) {
                         console.error('Failed to configure WebChat command:', e?.message || e);
                     }
@@ -565,14 +570,15 @@ async function handleCommand(args) {
                         try {
                             envSvc.setEnvVar('WEBCHAT_COMMAND', command);
                             console.log(`✓ Configured WebChat command: ${command}`);
-                            try { await handleCommand(['restart']); } catch (_) {}
+                            try { await handleCommand(['restart']); } catch (_) { }
                         } catch (e) {
                             console.error('Failed to configure WebChat command:', e?.message || e);
                         }
                     }
                 }
             }
-            break; }
+            break;
+        }
         case 'sso':
             await handleSsoCommand(options);
             break;
@@ -591,11 +597,12 @@ async function handleCommand(args) {
                 const ok = configureWebttyShell(shellCandidate);
                 if (!ok) break;
                 // Apply immediately if workspace start is configured
-                try { await handleCommand(['restart']); } catch (_) {}
+                try { await handleCommand(['restart']); } catch (_) { }
             }
             if (rotate) await refreshComponentToken('webtty');
             else ensureComponentToken('webtty');
-            break; }
+            break;
+        }
         case 'voicechat':
             console.log('voicechat: feature removed; use /webmeet instead.');
             break;
@@ -603,7 +610,8 @@ async function handleCommand(args) {
             const rotate = (options || []).includes('--rotate');
             if (rotate) await refreshComponentToken('dashboard');
             else ensureComponentToken('dashboard');
-            break; }
+            break;
+        }
         case 'webmeet': {
             const argsList = (options || []).filter(Boolean);
             let moderator = null;
@@ -629,7 +637,8 @@ async function handleCommand(args) {
             } else {
                 ensureComponentToken('webmeet');
             }
-            break; }
+            break;
+        }
         case 'admin-mode':
             console.log('admin-mode is handled via the router dashboard at /dashboard.');
             break;
@@ -656,7 +665,7 @@ async function handleCommand(args) {
                     refreshComponentToken,
                     ensureComponentToken,
                     enableAgent,
-                    killRouterIfRunning: () => {}
+                    killRouterIfRunning: () => { }
                 });
                 console.log('[restart] RoutingServer restarted.');
                 break;
@@ -701,7 +710,8 @@ async function handleCommand(args) {
                 await startWorkspace(undefined, undefined, { refreshComponentToken, ensureComponentToken, enableAgent, killRouterIfRunning });
                 console.log('[restart] Done.');
             }
-            break; }
+            break;
+        }
         case 'delete':
             showHelp();
             break;
@@ -715,7 +725,8 @@ async function handleCommand(args) {
                 list.forEach(n => console.log(` - ${n}`));
             }
             console.log(`Destroyed ${list.length} containers from this workspace (per .ploinky/agents).`);
-            break; }
+            break;
+        }
         case 'stop': {
             console.log('[stop] Stopping RoutingServer...');
             killRouterIfRunning();
@@ -726,7 +737,8 @@ async function handleCommand(args) {
                 list.forEach(n => console.log(` - ${n}`));
             }
             console.log(`Stopped ${list.length} configured agent containers.`);
-            break; }
+            break;
+        }
         case 'destroy':
             console.log('[destroy] Stopping RoutingServer...');
             killRouterIfRunning();
@@ -745,7 +757,8 @@ async function handleCommand(args) {
                 if (kind && kind !== 'router') { console.log('Only router logs are available.'); break; }
                 showLast(count, 'router');
             } else { console.log("Usage: logs tail [router] | logs last <count>"); }
-            break; }
+            break;
+        }
         case 'clean':
             console.log('[clean] Removing all workspace containers...');
             await destroyAll();
@@ -758,7 +771,8 @@ async function handleCommand(args) {
             break;
         case 'client': {
             await new ClientCommands().handleClientCommand(options);
-            break; }
+            break;
+        }
         default:
             executeBashCommand(command, options);
     }
