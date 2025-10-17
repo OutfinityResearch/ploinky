@@ -99,7 +99,9 @@
   </div>
 
   <div class="wa-composer">
-    <div class="wa-attachment-container">
+    <div id="filePreviewContainer" class="wa-file-preview-container"></div>
+    <div class="wa-composer-main">
+      <div class="wa-attachment-container">
       <button class="wa-icon-btn" id="attachmentBtn" title="Attach">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 6.75a.75.75 0 0 1 .75.75v3.75h3.75a.75.75 0 0 1 0 1.5h-3.75v3.75a.75.75 0 0 1-1.5 0v-3.75H7.5a.75.75 0 0 1 0-1.5h3.75V7.5a.75.75 0 0 1 .75-.75z"/></svg>
       </button>
@@ -122,7 +124,6 @@
       <span class="wa-voice-status" id="sttStatus">Initializing…</span>
     </div>
     <div class="wa-composer-input-wrapper">
-      <div id="filePreviewContainer" class="wa-file-preview-container"></div>
       <textarea 
         id="cmd" 
         class="wa-composer-input" 
@@ -134,6 +135,7 @@
     <button class="wa-send-btn" id="send" title="Send">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
     </button>
+    </div>
   </div>
   <script src="__ASSET_BASE__/markdown.js"></script>
   <script type="module" src="__ASSET_BASE__/index.js"></script>
