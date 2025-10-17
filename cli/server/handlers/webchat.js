@@ -228,7 +228,7 @@ function handleWebChat(req, res, appConfig, appState) {
         return;
     }
 
-    res.writeHead(404); res.end('Not Found in App');
+    res.writeHead(404); res.end(', Not Found in App');
 }
 
 export { handleWebChat };

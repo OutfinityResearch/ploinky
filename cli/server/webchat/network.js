@@ -185,9 +185,61 @@ export function createNetwork({
         return true;
     }
 
+    function uploadFile(file, caption) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadMessage = caption || file.name;
+        addClientMsg(uploadMessage);
+        markUserInputSent();
+        showTypingIndicator();
+
+        const agentSegment = encodeURIComponent(agentName);
+        const uploadUrl = `/blobs/${agentSegment}`;
+
+        fetch(uploadUrl, {
+            method: 'POST',
+            body: formData,
+        })
+        .then(res => {
+            if (!res.ok) {
+                return res.text().then(text => { throw new Error(text || 'Upload failed') });
+            }
+            return res.json();
+        })
+        .then(data => {
+            hideTypingIndicator();
+            if (data.url) {
+                // If the user provided a caption, send it to the TTY as a normal command.
+                if (caption) {
+                    fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain' },
+                        body: `${caption}\n`
+                    }).catch((error) => {
+                        dlog('chat error after upload', error);
+                        addServerMsg('[input error]');
+                    });
+                }
+                // Display the result of the upload as a separate, informational message.
+                // This does NOT get executed by the shell.
+                addServerMsg(`File uploaded: ${data.url}`);
+            } else {
+                throw new Error(data.error || 'Invalid upload response');
+            }
+        })
+        .catch(error => {
+            dlog('upload error', error);
+            hideTypingIndicator();
+            addServerMsg(`[upload error: ${error.message}]`);
+            showBanner('Upload error', 'err');
+        });
+    }
+
     return {
         start,
         stop,
-        sendCommand
+        sendCommand,
+        uploadFile
     };
 }

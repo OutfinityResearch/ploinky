@@ -37,15 +37,14 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
         if (!cmdInput) {
             return false;
         }
-        const value = cmdInput.value.trim();
-        if (!value) {
-            return false;
-        }
+        const value = cmdInput.value;
         if (purgeTriggerRe.test(value)) {
             purge();
             return false;
         }
+
         const result = typeof onSend === 'function' ? onSend(value) : true;
+
         if (result !== false) {
             clear();
             return true;

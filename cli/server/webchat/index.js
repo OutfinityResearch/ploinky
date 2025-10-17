@@ -4,6 +4,7 @@ import { createMessages } from './messages.js';
 import { createComposer } from './composer.js';
 import { initSpeechToText } from './speechToText.js';
 import { createNetwork } from './network.js';
+import { createUploader } from './upload.js';
 
 const SEND_TRIGGER_RE = /\bsend\b/i;
 const PURGE_TRIGGER_RE = /\bpurge\b/i;
@@ -42,7 +43,13 @@ const {
     sttLang,
     sttEnable,
     settingsBtn,
-    settingsPanel
+    settingsPanel,
+    attachmentBtn,
+    attachmentMenu,
+    uploadFileBtn,
+    fileUploadInput,
+    filePreviewContainer,
+    attachmentContainer
 } = elements;
 
 const sidePanelApi = createSidePanel({
@@ -70,6 +77,7 @@ dom.setViewMoreChangeHandler((limit) => {
 
 sidePanelApi.bindLinkDelegation(chatList);
 
+dlog('Initializing network for agent:', dom.agentName);
 const network = createNetwork({
     TAB_ID,
     toEndpoint,
@@ -94,7 +102,32 @@ const composer = createComposer({
     purgeTriggerRe: PURGE_TRIGGER_RE
 });
 
-composer.setSendHandler((cmd) => network.sendCommand(cmd));
+const uploader = createUploader({
+    attachmentBtn,
+    attachmentMenu,
+    uploadFileBtn,
+    fileUploadInput,
+    filePreviewContainer,
+    attachmentContainer
+}, { composer });
+
+composer.setSendHandler((cmdText) => {
+    const cmd = cmdText.trim();
+    const file = uploader.getSelectedFile();
+
+    if (file) {
+        network.uploadFile(file, cmd);
+        uploader.clearFile();
+        return true;
+    }
+
+    if (cmd) {
+        network.sendCommand(cmd);
+        return true;
+    }
+
+    return false;
+});
 
 initSpeechToText({
     sttBtn,
