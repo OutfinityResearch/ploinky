@@ -63,6 +63,13 @@ export function initDom() {
     const settingsPanel = document.getElementById('settingsPanel');
     const viewMoreLinesInput = document.getElementById('viewMoreLines');
 
+    const attachmentBtn = document.getElementById('attachmentBtn');
+    const attachmentMenu = document.getElementById('attachmentMenu');
+    const uploadFileBtn = document.getElementById('uploadFileBtn');
+    const attachmentContainer = document.querySelector('.wa-attachment-container');
+    const fileUploadInput = document.getElementById('fileUploadInput');
+    const filePreviewContainer = document.getElementById('filePreviewContainer');
+
     const requiresAuth = body.dataset.auth === 'true';
     const agentName = (body.dataset.agent || '').trim();
     const displayName = (body.dataset.title || '').trim();
@@ -198,7 +205,13 @@ export function initDom() {
             sttEnable,
             settingsBtn,
             settingsPanel,
-            viewMoreLinesInput
+            viewMoreLinesInput,
+            attachmentBtn,
+            attachmentMenu,
+            uploadFileBtn,
+            fileUploadInput,
+            filePreviewContainer,
+            attachmentContainer
         }
     };
 }

@@ -42,17 +42,18 @@ function resolveStaticAgentDetails(routingFilePath) {
 
 function resolveWebchatCommands(options = {}) {
     const routingFilePath = options.routingFilePath || path.resolve('.ploinky/routing.json');
+    const { agentName: staticAgentName, hostPath } = resolveStaticAgentDetails(routingFilePath);
+
     const secretCommand = trimCommand(resolveVarValue('WEBCHAT_COMMAND'));
     if (secretCommand) {
-        return { host: secretCommand, container: secretCommand, source: 'secret', agentName: '' };
+        return { host: secretCommand, container: secretCommand, source: 'secret', agentName: staticAgentName || '' };
     }
     const envCommand = trimCommand(process.env.WEBCHAT_COMMAND);
     if (envCommand) {
-        return { host: envCommand, container: envCommand, source: 'env', agentName: '' };
+        return { host: envCommand, container: envCommand, source: 'env', agentName: staticAgentName || '' };
     }
 
-    const { agentName, hostPath } = resolveStaticAgentDetails(routingFilePath);
-    if (!agentName || !hostPath) {
+    if (!staticAgentName || !hostPath) {
         return { host: '', container: '', source: 'unset', agentName: '' };
     }
 
@@ -68,14 +69,17 @@ function resolveWebchatCommands(options = {}) {
     }
 
     if (!manifestCli) {
-        return { host: '', container: '', source: 'unset', agentName: '' };
+        // If we have an agent but no manifest command, we should still return the agent name
+        // as other features like blob storage might depend on it.
+        // The TTY factory will simply have no command to run, which is handled elsewhere.
+        return { host: '', container: '', source: 'unset', agentName: staticAgentName };
     }
 
     return {
-        host: `ploinky cli ${agentName}`,
+        host: `ploinky cli ${staticAgentName}`,
         container: manifestCli,
         source: 'manifest',
-        agentName
+        agentName: staticAgentName
     };
 }
 

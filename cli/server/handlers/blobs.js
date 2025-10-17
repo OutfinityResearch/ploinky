@@ -59,12 +59,16 @@ function resolveAgentRecord(agentSegment) {
     return { ok: false, status: 404, message: `Agent '${name}' not found or not enabled.` };
   }
   if (!repoFilter && matches.length > 1) {
-    const repos = matches.map(rec => String(rec.repoName || '-')).join(', ');
-    return {
-      ok: false,
-      status: 409,
-      message: `Agent '${name}' is ambiguous. Specify as '<repo>:${agentFilter}'. Found in repos: ${repos}.`
-    };
+    const firstPath = matches[0].projectPath;
+    const allSame = matches.every(rec => rec.projectPath === firstPath);
+    if (!allSame) {
+      const repos = matches.map(rec => String(rec.repoName || '-')).join(', ');
+      return {
+        ok: false,
+        status: 409,
+        message: `Agent '${name}' is ambiguous. Specify as '<repo>:${agentFilter}'. Found in repos: ${repos}.`
+      };
+    }
   }
 
   const record = matches[0];
