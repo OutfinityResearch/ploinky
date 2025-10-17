@@ -647,6 +647,7 @@ body {
   height: 36px;
 }
 
+
 .wa-voice-status {
   font-size: 11px;
   color: var(--wa-text-secondary);
@@ -688,6 +689,7 @@ body {
   flex-shrink: 0;
 }
 .wa-send-btn:hover { background: var(--wa-accent-hover); }
+
 
 @media (max-width: 640px) {
   .wa-composer {

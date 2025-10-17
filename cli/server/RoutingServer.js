@@ -334,12 +334,13 @@ function getWebchatFactory() {
             container: process.env.WEBCHAT_CONTAINER || 'ploinky_chat',
             hostCommand: resolvedWebchatCommands.host,
             containerCommand: resolvedWebchatCommands.container,
-            source: resolvedWebchatCommands.source
+            source: resolvedWebchatCommands.source,
+            agentName: resolvedWebchatCommands.agentName || ''
         }),
         (config) => {
             if (!pty) {
                 logBootEvent('webchat_factory_disabled', { reason: 'pty_unavailable' });
-                return { factory: null, label: '-', runtime: 'disabled' };
+                return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '' };
             }
             if (createWebChatLocalFactory) {
                 const command = config.hostCommand;
@@ -347,13 +348,15 @@ function getWebchatFactory() {
                 if (factory) {
                     logBootEvent('webchat_local_process_factory_ready', {
                         command: command || null,
-                        source: config.source
+                        source: config.source,
+                        agent: config.agentName || null
                     });
                 }
                 return {
                     factory,
                     label: command ? command : 'local shell',
-                    runtime: 'local'
+                    runtime: 'local',
+                    agentName: config.agentName || ''
                 };
             }
             if (createWebChatTTYFactory) {
@@ -362,16 +365,18 @@ function getWebchatFactory() {
                 logBootEvent('webchat_container_factory_ready', {
                     containerName: config.container,
                     command: entry || null,
-                    source: config.source
+                    source: config.source,
+                    agent: config.agentName || null
                 });
                 return {
                     factory,
                     label: config.container,
-                    runtime: 'docker'
+                    runtime: 'docker',
+                    agentName: config.agentName || ''
                 };
             }
             logBootEvent('webchat_factory_disabled', { reason: 'no_factory_available' });
-            return { factory: null, label: '-', runtime: 'disabled' };
+            return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '' };
         }
     );
 }
@@ -418,11 +423,14 @@ const config = {
     get webchat() {
         const factory = getWebchatFactory();
         const appName = getAppName(); // Always get fresh APP_NAME
+        const resolvedAgent = factory.agentName || resolvedWebchatCommands.agentName || '';
+        const displayName = appName || resolvedAgent || 'WebChat';
         return {
             ttyFactory: factory.factory,
-            agentName: appName || 'ChatAgent',
+            agentName: resolvedAgent,
             containerName: factory.label,
-            runtime: factory.runtime
+            runtime: factory.runtime,
+            displayName
         };
     },
     dashboard: {

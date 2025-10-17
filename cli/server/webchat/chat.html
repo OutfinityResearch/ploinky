@@ -6,7 +6,7 @@
   <title>Ploinky Chat</title>
   <link rel="stylesheet" href="__ASSET_BASE__/webchat.css" />
 </head>
-<body data-page="chat" data-theme="light" data-agent="__AGENT_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__" data-base="__BASE_PATH__">
+<body data-page="chat" data-theme="light" data-agent="__AGENT_NAME__" data-title="__DISPLAY_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__" data-base="__BASE_PATH__">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
       <symbol id="i-mic" viewBox="0 0 24 24">
@@ -124,6 +124,6 @@
     </button>
   </div>
   <script src="__ASSET_BASE__/markdown.js"></script>
-  <script src="__ASSET_BASE__/chat.js"></script>
+  <script type="module" src="__ASSET_BASE__/index.js"></script>
 </body>
 </html>

@@ -122,7 +122,8 @@ function handleWebChat(req, res, appConfig, appState) {
         }
         const html = renderTemplate(['login.html', 'index.html'], {
             '__ASSET_BASE__': `/${appName}/assets`,
-            '__AGENT_NAME__': appConfig.agentName || 'ChatAgent',
+            '__AGENT_NAME__': appConfig.displayName || appConfig.agentName || '',
+            '__DISPLAY_NAME__': appConfig.displayName || appConfig.agentName || 'WebChat',
             '__CONTAINER_NAME__': appConfig.containerName || '-',
             '__RUNTIME__': appConfig.runtime || 'local',
             '__REQUIRES_AUTH__': 'true',
@@ -138,7 +139,8 @@ function handleWebChat(req, res, appConfig, appState) {
     if (pathname === '/' || pathname === '/index.html') {
         const html = renderTemplate(['chat.html', 'index.html'], {
             '__ASSET_BASE__': `/${appName}/assets`,
-            '__AGENT_NAME__': appConfig.agentName || 'ChatAgent',
+            '__AGENT_NAME__': appConfig.agentName || '',
+            '__DISPLAY_NAME__': appConfig.displayName || appConfig.agentName || 'WebChat',
             '__CONTAINER_NAME__': appConfig.containerName || '-',
             '__RUNTIME__': appConfig.runtime || 'local',
             '__REQUIRES_AUTH__': 'true',

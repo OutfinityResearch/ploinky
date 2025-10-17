@@ -114,6 +114,47 @@ function writeMeta(agent, id, meta) {
   }
 }
 
+function readHeader(req, name) {
+  const target = String(name || '').toLowerCase();
+  if (!target || !req?.headers) return '';
+  const direct = req.headers[target];
+  if (direct) return direct;
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (String(key).toLowerCase() === target) {
+      return value;
+    }
+  }
+  return '';
+}
+
+function parseUploadFilename(req) {
+  const rawHeader = readHeader(req, 'x-file-name') || readHeader(req, 'x-filename');
+  if (rawHeader) {
+    const value = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
+    if (value) {
+      try {
+        return decodeURIComponent(String(value)).slice(0, 512);
+      } catch (_) {
+        return String(value).slice(0, 512);
+      }
+    }
+  }
+
+  const contentDisposition = readHeader(req, 'content-disposition');
+  if (contentDisposition && /filename=/i.test(contentDisposition)) {
+    const match = contentDisposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+    if (match && match[1]) {
+      try {
+        return decodeURIComponent(match[1]).slice(0, 512);
+      } catch (_) {
+        return String(match[1]).slice(0, 512);
+      }
+    }
+  }
+
+  return '';
+}
+
 function handlePost(req, res, agent) {
   try {
     const mime = req.headers['x-mime-type'] || req.headers['content-type'] || 'application/octet-stream';
@@ -123,6 +164,7 @@ function handlePost(req, res, agent) {
     if (!paths) { res.writeHead(400); return res.end('Bad id'); }
     const out = fs.createWriteStream(paths.filePath);
     let size = 0;
+    const originalName = parseUploadFilename(req);
     req.on('data', chunk => { size += chunk.length; });
     req.pipe(out);
     out.on('finish', () => {
@@ -132,12 +174,20 @@ function handlePost(req, res, agent) {
         size,
         createdAt: new Date().toISOString(),
         agent: agent.canonicalName,
-        repo: agent.repoName
+        repo: agent.repoName,
+        filename: originalName || null
       };
       writeMeta(agent, id, meta);
       res.writeHead(201, { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' });
       const agentSegment = encodeURIComponent(normalizeAgentSegment(agent.requestSegment || agent.canonicalName));
-      res.end(JSON.stringify({ id, url: `/blobs/${agentSegment}/${id}`, size, mime, agent: agent.canonicalName }));
+      res.end(JSON.stringify({
+        id,
+        url: `/blobs/${agentSegment}/${id}`,
+        size,
+        mime,
+        agent: agent.canonicalName,
+        filename: originalName || null
+      }));
     });
     out.on('error', (e) => {
       try { fs.unlinkSync(paths.filePath); } catch(_){}
