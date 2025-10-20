@@ -121,8 +121,8 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             if (method !== 'GET') {
                 res.writeHead(405); res.end(); return true;
             }
-            const returnTo = parsedUrl.query?.returnTo ? String(parsedUrl.query.returnTo) : '/';
-            const prompt = parsedUrl.query?.prompt ? String(parsedUrl.query.prompt) : undefined;
+            const returnTo = parsedUrl.searchParams.get('returnTo') || '/';
+            const prompt = parsedUrl.searchParams.get('prompt') || undefined;
             const { redirectUrl } = await authService.beginLogin({ baseUrl, returnTo, prompt });
             res.writeHead(302, { Location: redirectUrl });
             res.end('Redirecting to identity provider...');
@@ -133,8 +133,8 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             if (method !== 'GET') {
                 res.writeHead(405); res.end(); return true;
             }
-            const code = parsedUrl.query?.code ? String(parsedUrl.query.code) : '';
-            const state = parsedUrl.query?.state ? String(parsedUrl.query.state) : '';
+            const code = parsedUrl.searchParams.get('code') || '';
+            const state = parsedUrl.searchParams.get('state') || '';
             if (!code || !state) {
                 sendJson(res, 400, { ok: false, error: 'missing_parameters' });
                 return true;
@@ -159,7 +159,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             const sessionId = cookies.get(AUTH_COOKIE_NAME) || '';
             const outcome = await authService.logout(sessionId, { baseUrl });
             const clearCookie = buildCookie(AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
-            const redirectTarget = parsedUrl.query?.returnTo ? String(parsedUrl.query.returnTo) : outcome.redirect;
+            const redirectTarget = parsedUrl.searchParams.get('returnTo') || outcome.redirect;
             if (method === 'GET' || redirectTarget) {
                 res.writeHead(302, {
                     Location: redirectTarget || '/',

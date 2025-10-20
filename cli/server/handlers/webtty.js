@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { parse } from 'url';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
@@ -81,13 +80,13 @@ function ensureAppSession(req, res, appState) {
 }
 
 function handleWebTTY(req, res, appConfig, appState) {
-    const parsedUrl = parse(req.url, true);
+    const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
 
     if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
     if (pathname === '/whoami') {
-        res.writeHead(200, {'Content-Type': 'application/json'});
-        return res.end(JSON.stringify({ok: authorized(req, appState)}));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ ok: authorized(req, appState) }));
     }
 
     if (req.user) {
@@ -99,7 +98,7 @@ function handleWebTTY(req, res, appConfig, appState) {
         const assetPath = staticSrv.resolveAssetPath(appName, fallbackAppPath, rel);
         if (assetPath && staticSrv.sendFile(res, assetPath)) return;
     }
-    
+
     if (!authorized(req, appState)) {
         if (req.user) {
             res.writeHead(403);
@@ -114,7 +113,7 @@ function handleWebTTY(req, res, appConfig, appState) {
             '__BASE_PATH__': `/${appName}`
         });
         if (html) {
-            res.writeHead(200, {'Content-Type': 'text/html'});
+            res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(html);
         }
         res.writeHead(403); return res.end('Forbidden');
@@ -130,15 +129,15 @@ function handleWebTTY(req, res, appConfig, appState) {
             '__BASE_PATH__': `/${appName}`
         });
         if (html) {
-            res.writeHead(200, {'Content-Type': 'text/html'});
+            res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(html);
         }
     }
-    
+
     if (pathname === '/stream') {
         const sid = getSession(req, appState);
         const session = appState.sessions.get(sid);
-        const tabId = parsedUrl.query.tabId;
+        const tabId = parsedUrl.searchParams.get('tabId');
         if (!session || !tabId) { res.writeHead(400); return res.end(); }
 
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Connection': 'keep-alive', 'Cache-Control': 'no-cache' });
@@ -182,14 +181,14 @@ function handleWebTTY(req, res, appConfig, appState) {
     if (pathname === '/input' && req.method === 'POST') {
         const sid = getSession(req, appState);
         const session = appState.sessions.get(sid);
-        const tabId = parsedUrl.query.tabId;
+        const tabId = parsedUrl.searchParams.get('tabId');
         const tab = session && session.tabs.get(tabId);
         if (!tab) { res.writeHead(400); return res.end(); }
         let body = '';
         req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => { 
-            try { tab.tty.write(body); } catch(_) {}
-            res.writeHead(204); res.end(); 
+        req.on('end', () => {
+            try { tab.tty.write(body); } catch (_) { }
+            res.writeHead(204); res.end();
         });
         return;
     }
@@ -197,12 +196,12 @@ function handleWebTTY(req, res, appConfig, appState) {
     if (pathname === '/resize' && req.method === 'POST') {
         const sid = getSession(req, appState);
         const session = appState.sessions.get(sid);
-        const tabId = parsedUrl.query.tabId;
+        const tabId = parsedUrl.searchParams.get('tabId');
         const tab = session && session.tabs.get(tabId);
         if (!tab) { res.writeHead(400); return res.end(); }
         readJsonBody(req)
             .then(({ cols, rows }) => {
-                try { tab.tty.resize?.(cols, rows); } catch (_) {}
+                try { tab.tty.resize?.(cols, rows); } catch (_) { }
                 res.writeHead(204); res.end();
             })
             .catch(() => { res.writeHead(400); res.end(); });

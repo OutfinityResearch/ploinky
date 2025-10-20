@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { parse } from 'url';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
@@ -84,7 +83,7 @@ function ensureAppSession(req, res, appState) {
 }
 
 function handleWebChat(req, res, appConfig, appState) {
-    const parsedUrl = parse(req.url, true);
+    const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
 
     if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
@@ -155,7 +154,7 @@ function handleWebChat(req, res, appConfig, appState) {
     if (pathname === '/stream') {
         const sid = getSession(req, appState);
         const session = appState.sessions.get(sid);
-        const tabId = parsedUrl.query.tabId;
+        const tabId = parsedUrl.searchParams.get('tabId');
         if (!session || !tabId) { res.writeHead(400); return res.end(); }
 
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Connection': 'keep-alive', 'Cache-Control': 'no-cache' });
@@ -176,7 +175,7 @@ function handleWebChat(req, res, appConfig, appState) {
                     email: req.user.email,
                     roles: req.user.roles || []
                 } : null;
-                
+
                 // Debug: Log SSO user info
                 if (process.env.WEBTTY_DEBUG === '1' && ssoUser) {
                     console.log('[webchat] SSO User:', JSON.stringify({
@@ -185,7 +184,7 @@ function handleWebChat(req, res, appConfig, appState) {
                         rolesLength: ssoUser.roles?.length
                     }));
                 }
-                
+
                 const tty = appConfig.ttyFactory.create(ssoUser);
                 tab = { tty, sseRes: res };
                 session.tabs.set(tabId, tab);
@@ -216,7 +215,7 @@ function handleWebChat(req, res, appConfig, appState) {
     if (pathname === '/input' && req.method === 'POST') {
         const sid = getSession(req, appState);
         const session = appState.sessions.get(sid);
-        const tabId = parsedUrl.query.tabId;
+        const tabId = parsedUrl.searchParams.get('tabId');
         const tab = session && session.tabs.get(tabId);
         if (!tab) { res.writeHead(400); return res.end(); }
         let body = '';

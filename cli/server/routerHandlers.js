@@ -1,8 +1,6 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
-import { parse } from 'url';
-import { parse as parseQueryString } from 'querystring';
 import { randomUUID } from 'node:crypto';
 
 import { sendJson } from './authHandlers.js';
@@ -95,13 +93,15 @@ export function proxyMcpPassthrough(req, res, targetPort, agentPath) {
 
 export function proxyApi(req, res, targetPort, identityHeaders = {}) {
     const method = (req.method || 'GET').toUpperCase();
-    const parsed = parse(req.url || '', true);
+    const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const includeSearch = method !== 'GET';
     const agentPath = buildAgentPath(parsed, includeSearch);
     if (method === 'GET') {
-        const params = parsed && parsed.query && typeof parsed.query === 'object'
-            ? parsed.query
-            : parseQueryString(parsed ? parsed.query : '');
+        // Convert URLSearchParams to plain object
+        const params = {};
+        parsed.searchParams.forEach((value, key) => {
+            params[key] = value;
+        });
         return postJsonToAgent(targetPort, params, res, agentPath, identityHeaders);
     }
 

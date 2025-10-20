@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 30084 listening
+[PASS] Router port 20657 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -68,7 +68,7 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 30084 closed
+[PASS] Router port 20657 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
@@ -76,7 +76,7 @@
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 30084 listening
+[PASS] Router port 20657 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -143,7 +143,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 30084 listening
+[PASS] Router port 20657 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok

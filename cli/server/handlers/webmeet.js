@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { parse } from 'url';
 import http from 'http';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
@@ -73,7 +72,7 @@ function resolveAgentRoute(rawName, routes) {
             if (info && info.shortAgentName) {
                 candidates.unshift(info.shortAgentName);
             }
-        } catch (_) {}
+        } catch (_) { }
 
         if (rawName.includes(':') || rawName.includes('/')) {
             const parts = rawName.split(/[:/]/);
@@ -114,7 +113,7 @@ function callAgent(agentName, data, headers = {}) {
             resp.on('end', () => {
                 const raw = Buffer.concat(chunks).toString('utf8');
                 let parsed = raw;
-                try { parsed = JSON.parse(raw); } catch (_) {}
+                try { parsed = JSON.parse(raw); } catch (_) { }
                 resolve({ status: resp.statusCode || 200, raw, parsed, agentName: effectiveName });
             });
         });
@@ -186,7 +185,7 @@ function sseWrite(res, event, dataObj) {
     try {
         res.write(`event: ${event}\n`);
         res.write(`data: ${JSON.stringify(dataObj || {})}\n\n`);
-    } catch (_) {}
+    } catch (_) { }
 }
 
 function broadcast(appState, event, data, exceptTabId = null) {
@@ -246,14 +245,14 @@ function ensureAppSession(req, res, appState) {
 }
 
 function handleWebMeet(req, res, appConfig, appState) {
-    const parsedUrl = parse(req.url, true);
+    const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
 
     // Auth & Login
     if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
     if (pathname === '/whoami') {
-        res.writeHead(200, {'Content-Type': 'application/json'});
-        return res.end(JSON.stringify({ok: authorized(req, appState)}));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ ok: authorized(req, appState) }));
     }
 
     if (pathname.startsWith('/assets/')) {
@@ -296,7 +295,7 @@ function handleWebMeet(req, res, appConfig, appState) {
             return html;
         })();
         if (loginHtml) {
-            res.writeHead(200, {'Content-Type': 'text/html'});
+            res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(loginHtml);
         }
         res.writeHead(403); return res.end('Forbidden');
@@ -313,7 +312,7 @@ function handleWebMeet(req, res, appConfig, appState) {
             html = html.replace(/__RUNTIME__/g, appConfig.runtime || 'local');
             html = html.replace(/__REQUIRES_AUTH__/g, 'true');
             html = html.replace(/__BASE_PATH__/g, `/${appName}`);
-            res.writeHead(200, {'Content-Type': 'text/html'});
+            res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(html);
         }
     }
@@ -327,7 +326,7 @@ function handleWebMeet(req, res, appConfig, appState) {
     if (pathname === '/events') {
         const sid = getSession(req, appState);
         const session = appState.sessions.get(sid);
-        const tabId = parsedUrl.query.tabId;
+        const tabId = parsedUrl.searchParams.get('tabId');
         if (!session || !tabId) { res.writeHead(400); return res.end(); }
 
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Connection': 'keep-alive', 'Cache-Control': 'no-cache' });
@@ -340,16 +339,16 @@ function handleWebMeet(req, res, appConfig, appState) {
         } else {
             tab.sseRes = res;
         }
-        
-        sseWrite(res, 'init', { 
-            participants: listParticipants(appState), 
-            queue: appState.queue, 
-            currentSpeaker: appState.currentSpeaker, 
+
+        sseWrite(res, 'init', {
+            participants: listParticipants(appState),
+            queue: appState.queue,
+            currentSpeaker: appState.currentSpeaker,
             history: appState.chatHistory.slice(-100),
             privateHistory: appState.privateHistory.get(tabId) || []
         });
 
-        req.on('close', () => { 
+        req.on('close', () => {
             tab.sseRes = null;
             if (appState.participants.has(tabId)) {
                 appState.participants.delete(tabId);
@@ -370,15 +369,15 @@ function handleWebMeet(req, res, appConfig, appState) {
                 const { type, tabId, from, to, command, text } = payload;
 
                 if (!tabId) {
-                    res.writeHead(400); return res.end(JSON.stringify({ok: false, error: 'missing-tabId'}));
+                    res.writeHead(400); return res.end(JSON.stringify({ ok: false, error: 'missing-tabId' }));
                 }
 
-                const reply = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj||{ok:true})); };
+                const reply = (obj) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj || { ok: true })); };
 
                 if (type === 'hello') {
-                    const user = { 
+                    const user = {
                         tabId,
-                        name: String(payload.name || 'Anon'), 
+                        name: String(payload.name || 'Anon'),
                         email: String(payload.email || ''),
                         joinedAt: Date.now(),
                         lastAt: Date.now()
@@ -463,9 +462,9 @@ function handleWebMeet(req, res, appConfig, appState) {
                     }
                     return reply({ ok: true });
                 }
-                
+
                 if (type === 'signal') {
-                    const target = String(payload.target||"").trim();
+                    const target = String(payload.target || "").trim();
                     const signalPayload = payload.payload || {};
                     sendToTab(appState, target, 'signal', { from: tabId, payload: signalPayload });
                     return reply({ ok: true });
@@ -501,7 +500,7 @@ function handleWebMeet(req, res, appConfig, appState) {
                 return reply({ ok: false, error: 'unknown-action' });
 
             } catch (e) {
-                res.writeHead(400); res.end(JSON.stringify({ok: false, error: 'bad-request'}));
+                res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'bad-request' }));
             }
         });
         return;

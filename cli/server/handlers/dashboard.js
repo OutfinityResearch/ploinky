@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { parse } from 'url';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
@@ -81,13 +80,13 @@ function ensureAppSession(req, res, appState) {
 }
 
 function handleDashboard(req, res, appConfig, appState) {
-    const parsedUrl = parse(req.url, true);
+    const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
 
     if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
     if (pathname === '/whoami') {
-        res.writeHead(200, {'Content-Type': 'application/json'});
-        return res.end(JSON.stringify({ok: authorized(req, appState)}));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ ok: authorized(req, appState) }));
     }
 
     if (req.user) {
@@ -114,7 +113,7 @@ function handleDashboard(req, res, appConfig, appState) {
             '__BASE_PATH__': `/${appName}`
         });
         if (html) {
-            res.writeHead(200, {'Content-Type': 'text/html'});
+            res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(html);
         }
         res.writeHead(403); return res.end('Forbidden');
@@ -130,7 +129,7 @@ function handleDashboard(req, res, appConfig, appState) {
             '__BASE_PATH__': `/${appName}`
         });
         if (html) {
-            res.writeHead(200, {'Content-Type': 'text/html'});
+            res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(html);
         }
     }

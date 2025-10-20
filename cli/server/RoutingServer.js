@@ -1,7 +1,6 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
-import { parse } from 'url';
 import { fileURLToPath } from 'url';
 
 // Handler imports
@@ -93,7 +92,7 @@ function serveMcpBrowserClient(req, res) {
  * Main request processor
  */
 async function processRequest(req, res) {
-    const parsedUrl = parse(req.url || '', true);
+    const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname || '/';
     appendLog('http_request', { method: req.method, path: pathname });
 
