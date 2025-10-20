@@ -123,7 +123,7 @@ function resolveStaticFile(requestPath) {
 
 function serveStaticRequest(req, res) {
     try {
-        const parsed = parse(req.url);
+        const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
         const pathname = decodeURIComponent(parsed.pathname || '/');
         if (pathname === MCP_BROWSER_CLIENT_URL) {
             try {
@@ -226,7 +226,7 @@ function resolveAgentStaticFile(agentName, agentRelPath) {
 
 function serveAgentStaticRequest(req, res) {
     try {
-        const parsed = parse(req.url);
+        const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
         const pathname = decodeURIComponent(parsed.pathname || '/');
         const parts = pathname.split('/').filter(Boolean);
         if (parts.length < 2) return false; // need /agent/...
