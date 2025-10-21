@@ -144,3 +144,13 @@ Ploinky is a lightweight multi-agent runtime that turns ordinary console program
 3. `.ploinky/.secrets` stores key-value pairs created by `set`, interface tokens, and other workspace secrets.
 4. The `Agent/` directory inside the codebase is mounted read-only at `/Agent` in every container, providing the default supervisor and boot scripts.
 5. Use `start` and `status` to regenerate derived files (`.ploinky/routing.json`, `.ploinky/running/router.pid`) instead of manual edits.
+
+## Codex Notes (2025-10-21)
+- **CLI core (`cli/index.js`)** boots readline shell, wires commands from `cli/commands/cli.js`, and relies on services under `cli/services/` for repo/agent lifecycle, Docker orchestration, auth tokens, and environment bootstrap (`config.js`, `workspace.js`).
+- **State layout (`.ploinky/`)** keeps JSON registries (`agents`, `enabled_repos.json`), cloned repos, secrets, and runtime pid/port files; `agents.js` builds container configs that mount `/Agent` and agent code alongside project workspaces.
+- **Docker integration** lives in `cli/services/docker/`, providing container name helpers, manifest port parsing, environment hashing, and lifecycle commands (`ensureAgentService`, `stopConfiguredAgents`, `destroyWorkspaceContainers`).
+- **Routing stack (`cli/server/`)** exposes HTTP router (`RoutingServer.js`) that auth-protects dashboards/webtty/webchat/webmeet, proxies `/mcps/<agent>` requests (including MCP websockets), serves static assets, and logs to `logs/router.log` via `utils/logger.js`.
+- **Shared agent runtime (`Agent/`)** supplies the default shell/supervisor scripts (`AgentServer.sh`, `AgentServer.mjs`) and MCP browser client mounted into each container; manifests default to these when no custom agent command is provided.
+- **Front-end assets**: historical dashboard static files live both under `dashboard/` and `cli/server/dashboard/`; webchat/webtty/webmeet handlers pair with assets in their respective directories.
+- **Testing harness** spans shell-based suites in `tests/cli/`, smoke sequences in `tests/smoke/`, fast/unit folders, and additional router checks; `bin/runPlonkyTests.sh` aggregates them when `npm test` runs.
+- **Demo content** under `demo-repo/` includes sample manifests, scripts, and simulator used by docs/tutorial flows; `.ploinky/enabled_repos.json` enables `demo` by default.
