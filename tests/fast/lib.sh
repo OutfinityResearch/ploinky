@@ -444,6 +444,17 @@ s.connect(port, '127.0.0.1');
 NODE
 }
 
+fast_assert_routing_server_stopped() {
+  local matches
+  matches=$(pgrep -f 'cli/server/RoutingServer.js' 2>/dev/null || true)
+  if [[ -n "$matches" ]]; then
+    matches=$(tr '\n' ' ' <<<"$matches" | sed 's/  */ /g; s/ $//')
+    echo "RoutingServer process still running (PIDs: ${matches})." >&2
+    return 1
+  fi
+  return 0
+}
+
 fast_wait_for_container() {
   fast_require_runtime || return 1
   local container="$1"

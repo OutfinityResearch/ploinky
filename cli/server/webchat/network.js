@@ -214,16 +214,16 @@ export function createNetwork({
         })
         .then(data => {
             hideTypingIndicator();
-            if (data.url) {
-                const displayName = data.displayName || data.filename || file.name;
-                const absoluteUrl = data.downloadUrl || new URL(data.url, window.location.origin).href;
+            const localPath = data.localPath || data.url;
+            if (localPath) {
+                const displayName = data.filename || file.name;
+                const basePath = localPath.startsWith('/') ? localPath : `/${localPath}`;
+                const absoluteUrl = data.downloadUrl
+                    || new URL(basePath, window.location.origin).href;
                 // If the user provided a caption, send it to the TTY as a normal command.
                 const metaPayload = {
                     name: displayName,
-                    displayName,
-                    originalName: displayName,
-                    filename: data.filename || null,
-                    url: data.url,
+                    localPath,
                     downloadUrl: absoluteUrl,
                     size: data.size ?? file.size ?? null,
                     mime: data.mime ?? file.type ?? null,

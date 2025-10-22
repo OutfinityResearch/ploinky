@@ -173,7 +173,8 @@ function handlePost(req, res, agent) {
         out.on('finish', () => {
             const displayName = originalName || null;
             const agentSegment = encodeURIComponent(normalizeAgentSegment(agent.requestSegment || agent.canonicalName));
-            const relativeUrl = `/blobs/${agentSegment}/${id}`;
+            const routeUrl = `/blobs/${agentSegment}/${id}`;
+            const localUrl = `blobs/${id}`;
             const protoHeader = readHeader(req, 'x-forwarded-proto');
             const forwardedHost = readHeader(req, 'x-forwarded-host');
             const hostHeader = readHeader(req, 'host');
@@ -181,7 +182,7 @@ function handlePost(req, res, agent) {
             const proto = protoRaw ? String(protoRaw).split(',')[0].trim() : (req.socket?.encrypted ? 'https' : 'http');
             const hostRaw = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) || (Array.isArray(hostHeader) ? hostHeader[0] : hostHeader) || '';
             const host = hostRaw ? String(hostRaw).split(',')[0].trim() : '';
-            const absoluteUrl = host ? `${proto}://${host}${relativeUrl}` : null;
+            const absoluteUrl = host ? `${proto}://${host}${routeUrl}` : null;
             const meta = {
                 id,
                 mime,
@@ -190,20 +191,18 @@ function handlePost(req, res, agent) {
                 agent: agent.canonicalName,
                 repo: agent.repoName,
                 filename: displayName,
-                displayName,
-                url: relativeUrl,
+                localPath: localUrl,
                 downloadUrl: absoluteUrl
             };
             writeMeta(agent, id, meta);
             res.writeHead(201, { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' });
             res.end(JSON.stringify({
                 id,
-                url: relativeUrl,
+                localPath: localUrl,
                 size,
                 mime,
                 agent: agent.canonicalName,
                 filename: displayName,
-                displayName,
                 downloadUrl: absoluteUrl
             }));
         });

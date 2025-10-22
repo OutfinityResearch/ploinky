@@ -197,12 +197,34 @@ fast_check_agent_blob_upload() {
     return 1
   fi
 
+  local blob_download_url
   local blob_url
-  blob_url=$(echo "$response" | jq -r '.url // empty')
-  if [[ -z "$blob_url" || "$blob_url" != "/blobs/${TEST_AGENT_NAME}/"* ]]; then
-    echo "Upload response URL unexpected. url='$blob_url' response='$response'" >&2
-    rm -f "$upload_file"
-    return 1
+  blob_download_url=$(echo "$response" | jq -r '.downloadUrl // empty')
+  if [[ -n "$blob_download_url" ]]; then
+    if [[ "$blob_download_url" != "http://127.0.0.1:${TEST_ROUTER_PORT}/blobs/${TEST_AGENT_NAME}/"* ]]; then
+      echo "Upload downloadUrl unexpected. downloadUrl='$blob_download_url' response='$response'" >&2
+      rm -f "$upload_file"
+      return 1
+    fi
+    blob_url="${blob_download_url#http://127.0.0.1:${TEST_ROUTER_PORT}}"
+    if [[ -z "$blob_url" || "$blob_url" == "$blob_download_url" ]]; then
+      echo "Unable to derive blob path from downloadUrl='$blob_download_url'." >&2
+      rm -f "$upload_file"
+      return 1
+    fi
+    if [[ "$blob_url" != "/blobs/${TEST_AGENT_NAME}/"* ]]; then
+      echo "Derived blob path unexpected. path='$blob_url' downloadUrl='$blob_download_url'" >&2
+      rm -f "$upload_file"
+      return 1
+    fi
+  else
+    blob_url=$(echo "$response" | jq -r '.url // empty')
+    if [[ -z "$blob_url" || "$blob_url" != "/blobs/${TEST_AGENT_NAME}/"* ]]; then
+      echo "Upload response URL unexpected. url='$blob_url' response='$response'" >&2
+      rm -f "$upload_file"
+      return 1
+    fi
+    blob_download_url="http://127.0.0.1:${TEST_ROUTER_PORT}${blob_url}"
   fi
 
   local blob_path="$TEST_AGENT_WORKSPACE/blobs/$blob_id"
@@ -229,6 +251,7 @@ fast_check_agent_blob_upload() {
   fast_write_state_var "FAST_AGENT_UPLOAD_FILE" "$upload_file"
   fast_write_state_var "FAST_AGENT_BLOB_ID" "$blob_id"
   fast_write_state_var "FAST_AGENT_BLOB_URL" "$blob_url"
+  fast_write_state_var "FAST_AGENT_BLOB_DOWNLOAD_URL" "$blob_download_url"
   fast_write_state_var "FAST_AGENT_BLOB_PATH" "$blob_path"
   fast_write_state_var "FAST_AGENT_BLOB_META" "$blob_meta"
 }
@@ -243,7 +266,7 @@ fast_check_agent_blob_download() {
 
   fast_load_state
 
-  if [[ -z "${FAST_AGENT_UPLOAD_FILE:-}" || -z "${FAST_AGENT_BLOB_ID:-}" || -z "${FAST_AGENT_BLOB_URL:-}" ]]; then
+  if [[ -z "${FAST_AGENT_UPLOAD_FILE:-}" || -z "${FAST_AGENT_BLOB_ID:-}" || -z "${FAST_AGENT_BLOB_DOWNLOAD_URL:-}" ]]; then
     echo "Agent blob upload state missing. Did the upload test run?" >&2
     return 1
   fi
@@ -254,8 +277,8 @@ fast_check_agent_blob_download() {
     return 1
   fi
 
-  if ! curl -fsS -o "$download_file" "http://127.0.0.1:${TEST_ROUTER_PORT}${FAST_AGENT_BLOB_URL}"; then
-    echo "curl download request failed for ${FAST_AGENT_BLOB_URL}." >&2
+  if ! curl -fsS -o "$download_file" "$FAST_AGENT_BLOB_DOWNLOAD_URL"; then
+    echo "curl download request failed for ${FAST_AGENT_BLOB_DOWNLOAD_URL}." >&2
     rm -f "$download_file"
     return 1
   fi
@@ -272,6 +295,7 @@ fast_check_agent_blob_download() {
   fast_write_state_var "FAST_AGENT_UPLOAD_FILE" ""
   fast_write_state_var "FAST_AGENT_BLOB_ID" ""
   fast_write_state_var "FAST_AGENT_BLOB_URL" ""
+  fast_write_state_var "FAST_AGENT_BLOB_DOWNLOAD_URL" ""
   fast_write_state_var "FAST_AGENT_BLOB_PATH" ""
   fast_write_state_var "FAST_AGENT_BLOB_META" ""
 }
