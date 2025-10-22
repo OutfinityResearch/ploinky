@@ -186,9 +186,6 @@ export function createNetwork({
     }
 
     function uploadFile(file, caption) {
-        const formData = new FormData();
-        formData.append('file', file);
-
         const uploadMessage = caption || file.name;
         addClientMsg(uploadMessage);
         markUserInputSent();
@@ -197,9 +194,17 @@ export function createNetwork({
         const agentSegment = encodeURIComponent(agentName);
         const uploadUrl = `/blobs/${agentSegment}`;
 
+        const mime = file.type || 'application/octet-stream';
+        const headers = {
+            'Content-Type': mime,
+            'X-Mime-Type': mime,
+            'X-File-Name': encodeURIComponent(file.name)
+        };
+
         fetch(uploadUrl, {
             method: 'POST',
-            body: formData,
+            headers,
+            body: file,
         })
         .then(res => {
             if (!res.ok) {
@@ -210,10 +215,16 @@ export function createNetwork({
         .then(data => {
             hideTypingIndicator();
             if (data.url) {
+                const displayName = data.displayName || data.filename || file.name;
+                const absoluteUrl = data.downloadUrl || new URL(data.url, window.location.origin).href;
                 // If the user provided a caption, send it to the TTY as a normal command.
                 const metaPayload = {
-                    name: file.name,
+                    name: displayName,
+                    displayName,
+                    originalName: displayName,
+                    filename: data.filename || null,
                     url: data.url,
+                    downloadUrl: absoluteUrl,
                     size: data.size ?? file.size ?? null,
                     mime: data.mime ?? file.type ?? null,
                     id: data.id ?? null
@@ -236,7 +247,9 @@ export function createNetwork({
                 });
                 // Display the result of the upload as a separate, informational message.
                 // This does NOT get executed by the shell.
-                addServerMsg(`File uploaded: ${data.url}`);
+                const linkLabel = displayName || absoluteUrl;
+                const infoMessage = `File uploaded: [${linkLabel}](${absoluteUrl})`;
+                addServerMsg(infoMessage);
             } else {
                 throw new Error(data.error || 'Invalid upload response');
             }

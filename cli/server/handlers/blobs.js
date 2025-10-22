@@ -171,6 +171,17 @@ function handlePost(req, res, agent) {
         req.on('data', chunk => { size += chunk.length; });
         req.pipe(out);
         out.on('finish', () => {
+            const displayName = originalName || null;
+            const agentSegment = encodeURIComponent(normalizeAgentSegment(agent.requestSegment || agent.canonicalName));
+            const relativeUrl = `/blobs/${agentSegment}/${id}`;
+            const protoHeader = readHeader(req, 'x-forwarded-proto');
+            const forwardedHost = readHeader(req, 'x-forwarded-host');
+            const hostHeader = readHeader(req, 'host');
+            const protoRaw = (Array.isArray(protoHeader) ? protoHeader[0] : protoHeader) || '';
+            const proto = protoRaw ? String(protoRaw).split(',')[0].trim() : (req.socket?.encrypted ? 'https' : 'http');
+            const hostRaw = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) || (Array.isArray(hostHeader) ? hostHeader[0] : hostHeader) || '';
+            const host = hostRaw ? String(hostRaw).split(',')[0].trim() : '';
+            const absoluteUrl = host ? `${proto}://${host}${relativeUrl}` : null;
             const meta = {
                 id,
                 mime,
@@ -178,18 +189,22 @@ function handlePost(req, res, agent) {
                 createdAt: new Date().toISOString(),
                 agent: agent.canonicalName,
                 repo: agent.repoName,
-                filename: originalName || null
+                filename: displayName,
+                displayName,
+                url: relativeUrl,
+                downloadUrl: absoluteUrl
             };
             writeMeta(agent, id, meta);
             res.writeHead(201, { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' });
-            const agentSegment = encodeURIComponent(normalizeAgentSegment(agent.requestSegment || agent.canonicalName));
             res.end(JSON.stringify({
                 id,
-                url: `/blobs/${agentSegment}/${id}`,
+                url: relativeUrl,
                 size,
                 mime,
                 agent: agent.canonicalName,
-                filename: originalName || null
+                filename: displayName,
+                displayName,
+                downloadUrl: absoluteUrl
             }));
         });
         out.on('error', (e) => {
