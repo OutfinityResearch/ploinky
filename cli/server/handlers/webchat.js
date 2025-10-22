@@ -208,7 +208,22 @@ function handleWebChat(req, res, appConfig, appState) {
             tab.sseRes = res;
         }
 
-        req.on('close', () => { tab.sseRes = null; });
+        req.on('close', () => {
+            if (tab.tty) {
+                if (typeof tab.tty.dispose === 'function') {
+                    try { tab.tty.dispose(); } catch (_) { }
+                } else if (typeof tab.tty.kill === 'function') {
+                    try { tab.tty.kill(); } catch (_) { }
+                }
+            }
+            if (tab.sseRes) {
+                try { tab.sseRes.end(); } catch (_) { }
+            }
+            tab.sseRes = null;
+            if (session.tabs && session.tabs instanceof Map) {
+                session.tabs.delete(tabId);
+            }
+        });
         return;
     }
 

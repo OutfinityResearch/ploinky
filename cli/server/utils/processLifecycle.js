@@ -52,6 +52,43 @@ function resolveServerPort(server) {
     }
 }
 
+function closeWebchatSessions(globalState) {
+    try {
+        const webchat = globalState?.webchat;
+        if (!webchat || !(webchat.sessions instanceof Map)) {
+            return;
+        }
+        for (const [sid, session] of webchat.sessions.entries()) {
+            if (!session || !(session.tabs instanceof Map)) {
+                continue;
+            }
+            for (const [tabId, tab] of session.tabs.entries()) {
+                if (!tab) {
+                    continue;
+                }
+                try {
+                    if (tab.sseRes) {
+                        try { tab.sseRes.end(); } catch (_) { }
+                        try { tab.sseRes.destroy?.(); } catch (_) { }
+                    }
+                } catch (_) { }
+                try {
+                    if (tab.tty) {
+                        if (typeof tab.tty.dispose === 'function') {
+                            tab.tty.dispose();
+                        } else if (typeof tab.tty.kill === 'function') {
+                            tab.tty.kill();
+                        }
+                    }
+                } catch (_) { }
+                session.tabs.delete(tabId);
+            }
+        }
+    } catch (err) {
+        console.error('[SHUTDOWN] Failed closing webchat sessions:', err?.message || err);
+    }
+}
+
 function createGracefulShutdown(server, globalState, agentSessionStore) {
     return function gracefulShutdown(signal, exitCode = 0) {
         if (isShuttingDown) {
@@ -73,6 +110,7 @@ function createGracefulShutdown(server, globalState, agentSessionStore) {
         }, GRACEFUL_SHUTDOWN_TIMEOUT);
 
         // Attempt graceful shutdown
+        closeWebchatSessions(globalState);
         server.close((err) => {
             clearTimeout(forceExitTimer);
             
