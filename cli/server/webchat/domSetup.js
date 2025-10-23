@@ -62,6 +62,10 @@ export function initDom() {
     const settingsBtn = document.getElementById('settingsBtn');
     const settingsPanel = document.getElementById('settingsPanel');
     const viewMoreLinesInput = document.getElementById('viewMoreLines');
+    const ttsEnable = document.getElementById('ttsEnable');
+    const ttsVoice = document.getElementById('ttsVoice');
+    const ttsRate = document.getElementById('ttsRate');
+    const ttsRateValue = document.getElementById('ttsRateValue');
 
     const attachmentBtn = document.getElementById('attachmentBtn');
     const attachmentMenu = document.getElementById('attachmentMenu');
@@ -75,6 +79,8 @@ export function initDom() {
     const agentName = (body.dataset.agent || '').trim();
     const displayName = (body.dataset.title || '').trim();
     const basePath = (body.dataset.base || '').replace(/\/$/, '') || '';
+    const ttsProvider = (body.dataset.ttsProvider || '').trim().toLowerCase();
+    const sttProvider = (body.dataset.sttProvider || '').trim().toLowerCase();
 
     const appTitle = displayName || agentName || 'WebChat';
     if (titleBar) {
@@ -175,6 +181,8 @@ export function initDom() {
         basePath,
         agentName,
         displayName: appTitle,
+        ttsProvider,
+        sttProvider,
         toEndpoint,
         showBanner,
         hideBanner,
@@ -204,6 +212,10 @@ export function initDom() {
             sttStatus,
             sttLang,
             sttEnable,
+            ttsEnable,
+            ttsVoice,
+            ttsRate,
+            ttsRateValue,
             settingsBtn,
             settingsPanel,
             viewMoreLinesInput,

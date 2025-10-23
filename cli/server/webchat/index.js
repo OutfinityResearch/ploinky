@@ -3,6 +3,7 @@ import { createSidePanel } from './sidePanel.js';
 import { createMessages } from './messages.js';
 import { createComposer } from './composer.js';
 import { initSpeechToText } from './speechToText.js';
+import { initTextToSpeech } from './textToSpeech.js';
 import { createNetwork } from './network.js';
 import { createUploader } from './upload.js';
 
@@ -42,6 +43,10 @@ const {
     sttStatus,
     sttLang,
     sttEnable,
+    ttsEnable,
+    ttsVoice,
+    ttsRate,
+    ttsRateValue,
     settingsBtn,
     settingsPanel,
     attachmentBtn,
@@ -63,13 +68,21 @@ const sidePanelApi = createSidePanel({
     sidePanelResizer
 }, { markdown });
 
+const textToSpeech = initTextToSpeech({
+    ttsEnable,
+    ttsVoice,
+    ttsRate,
+    ttsRateValue
+}, { dlog, toEndpoint, provider: dom.ttsProvider });
+
 const messages = createMessages({
     chatList,
     typingIndicator
 }, {
     markdown,
     initialViewMoreLineLimit: getViewMoreLineLimit(),
-    sidePanel: sidePanelApi
+    sidePanel: sidePanelApi,
+    onServerOutput: textToSpeech.handleServerOutput
 });
 
 dom.setViewMoreChangeHandler((limit) => {
@@ -144,7 +157,8 @@ initSpeechToText({
     composer,
     purgeTriggerRe: PURGE_TRIGGER_RE,
     sendTriggerRe: SEND_TRIGGER_RE,
-    dlog
+    dlog,
+    provider: dom.sttProvider
 });
 
 (async () => {

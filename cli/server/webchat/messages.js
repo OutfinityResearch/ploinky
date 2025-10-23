@@ -30,12 +30,15 @@ export function createMessages({
 }, {
     markdown,
     initialViewMoreLineLimit,
-    sidePanel
+    sidePanel,
+    onServerOutput
 }) {
     const lastServerMsg = { bubble: null, fullText: '' };
     let userInputSent = false;
     let lastClientCommand = '';
     let viewMoreLineLimit = Math.max(1, initialViewMoreLineLimit || 1);
+    let serverSpeechHandler = typeof onServerOutput === 'function' ? onServerOutput : null;
+    let speechDebounceTimer = null;
 
     function appendMessageEl(node) {
         if (!node || !chatList) {
@@ -153,6 +156,35 @@ export function createMessages({
                 updateBubbleContent(bubble, text);
             }
         });
+    }
+
+    function emitServerOutput(text) {
+        if (!serverSpeechHandler) {
+            return;
+        }
+        const safe = typeof text === 'string' ? text.trim() : '';
+        if (!safe) {
+            return;
+        }
+        try {
+            serverSpeechHandler(safe);
+        } catch (error) {
+            console.warn('[webchat] tts handler error:', error);
+        }
+    }
+
+    function scheduleSpeech(text) {
+        if (!serverSpeechHandler) {
+            return;
+        }
+        if (speechDebounceTimer) {
+            clearTimeout(speechDebounceTimer);
+        }
+        const captured = typeof text === 'string' ? text : '';
+        speechDebounceTimer = setTimeout(() => {
+            speechDebounceTimer = null;
+            emitServerOutput(captured);
+        }, 250);
     }
 
     function addClientMsg(text) {
@@ -392,9 +424,14 @@ export function createMessages({
             return;
         }
 
-        if (!userInputSent && lastServerMsg.bubble) {
-            lastServerMsg.fullText += `\n${normalized}`;
-            updateBubbleContent(lastServerMsg.bubble, lastServerMsg.fullText);
+        const previousFullText = typeof lastServerMsg.fullText === 'string' ? lastServerMsg.fullText : '';
+        const appendToExisting = !userInputSent && lastServerMsg.bubble;
+
+        if (appendToExisting) {
+            const combined = previousFullText ? `${previousFullText}\n${normalized}` : normalized;
+            lastServerMsg.fullText = combined;
+            updateBubbleContent(lastServerMsg.bubble, combined);
+            scheduleSpeech(combined);
         } else {
             const wrapper = document.createElement('div');
             wrapper.className = 'wa-message in';
@@ -413,6 +450,7 @@ export function createMessages({
                 timeNode.textContent = formatTime();
             }
             appendMessageEl(wrapper);
+            scheduleSpeech(normalized);
         }
 
         if (chatList) {
@@ -437,6 +475,13 @@ export function createMessages({
         },
         markUserInputSent: () => {
             userInputSent = true;
+        },
+        setServerSpeechHandler: (fn) => {
+            serverSpeechHandler = typeof fn === 'function' ? fn : null;
+            if (!serverSpeechHandler && speechDebounceTimer) {
+                clearTimeout(speechDebounceTimer);
+                speechDebounceTimer = null;
+            }
         }
     };
 }

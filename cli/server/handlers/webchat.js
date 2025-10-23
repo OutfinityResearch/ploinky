@@ -5,6 +5,7 @@ import crypto from 'crypto';
 
 import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie } from './common.js';
 import * as staticSrv from '../static/index.js';
+import { createServerTtsStrategy } from './ttsStrategies/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +13,9 @@ const __dirname = path.dirname(__filename);
 const appName = 'webchat';
 const fallbackAppPath = path.join(__dirname, '../', appName);
 const SID_COOKIE = `${appName}_sid`;
+
+const DEFAULT_TTS_PROVIDER = (process.env.WEBCHAT_TTS_PROVIDER || 'openai').trim().toLowerCase();
+const DEFAULT_STT_PROVIDER = (process.env.WEBCHAT_STT_PROVIDER || 'browser').trim().toLowerCase();
 
 function renderTemplate(filenames, replacements) {
     const target = staticSrv.resolveFirstAvailable(appName, fallbackAppPath, filenames);
@@ -82,6 +86,65 @@ function ensureAppSession(req, res, appState) {
     return sid;
 }
 
+async function handleTextToSpeech(req, res) {
+    let body;
+    try {
+        body = await readJsonBody(req);
+    } catch (error) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Invalid request body.' }));
+        return;
+    }
+
+    const textInput = typeof body?.text === 'string' ? body.text.trim() : '';
+    if (!textInput) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Missing text for speech synthesis.' }));
+        return;
+    }
+
+    const strategy = createServerTtsStrategy({ provider: DEFAULT_TTS_PROVIDER });
+    if (!strategy || strategy.isAvailable === false) {
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Text-to-speech unavailable: provider not configured.' }));
+        return;
+    }
+
+    const trimmedText = typeof strategy.trimText === 'function'
+        ? strategy.trimText(textInput)
+        : textInput;
+
+    if (!trimmedText) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Unable to generate speech for empty text.' }));
+        return;
+    }
+
+    const voice = typeof strategy.normalizeVoice === 'function'
+        ? strategy.normalizeVoice(body?.voice)
+        : body?.voice;
+    const speed = typeof strategy.clampSpeed === 'function'
+        ? strategy.clampSpeed(body?.speed)
+        : Number(body?.speed) || 1;
+
+    try {
+        const result = await strategy.synthesize({
+            text: trimmedText,
+            voice,
+            speed
+        });
+        if (!result || !result.audio) {
+            throw new Error('tts_missing_audio');
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ audio: result.audio, contentType: result.contentType || 'audio/mpeg' }));
+    } catch (error) {
+        const status = error?.status && Number.isInteger(error.status) ? error.status : 502;
+        res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: error?.message || 'Text-to-speech request failed.', details: error?.details || error?.cause?.message || undefined }));
+    }
+}
+
 function handleWebChat(req, res, appConfig, appState) {
     const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
@@ -126,13 +189,19 @@ function handleWebChat(req, res, appConfig, appState) {
             '__CONTAINER_NAME__': appConfig.containerName || '-',
             '__RUNTIME__': appConfig.runtime || 'local',
             '__REQUIRES_AUTH__': 'true',
-            '__BASE_PATH__': `/${appName}`
+            '__BASE_PATH__': `/${appName}`,
+            '__TTS_PROVIDER__': DEFAULT_TTS_PROVIDER,
+            '__STT_PROVIDER__': DEFAULT_STT_PROVIDER
         });
         if (html) {
             res.writeHead(200, { 'Content-Type': 'text/html' });
             return res.end(html);
         }
         res.writeHead(403); return res.end('Forbidden');
+    }
+
+    if (pathname === '/tts' && req.method === 'POST') {
+        return handleTextToSpeech(req, res);
     }
 
     if (pathname === '/' || pathname === '/index.html') {
@@ -143,7 +212,9 @@ function handleWebChat(req, res, appConfig, appState) {
             '__CONTAINER_NAME__': appConfig.containerName || '-',
             '__RUNTIME__': appConfig.runtime || 'local',
             '__REQUIRES_AUTH__': 'true',
-            '__BASE_PATH__': `/${appName}`
+            '__BASE_PATH__': `/${appName}`,
+            '__TTS_PROVIDER__': DEFAULT_TTS_PROVIDER,
+            '__STT_PROVIDER__': DEFAULT_STT_PROVIDER
         });
         if (html) {
             res.writeHead(200, { 'Content-Type': 'text/html' });

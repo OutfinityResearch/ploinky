@@ -6,7 +6,7 @@
   <title>Ploinky Chat</title>
   <link rel="stylesheet" href="__ASSET_BASE__/webchat.css" />
 </head>
-<body data-page="chat" data-theme="light" data-agent="__AGENT_NAME__" data-title="__DISPLAY_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__" data-base="__BASE_PATH__">
+<body data-page="chat" data-theme="light" data-agent="__AGENT_NAME__" data-title="__DISPLAY_NAME__" data-container="__CONTAINER_NAME__" data-runtime="__RUNTIME__" data-auth="__REQUIRES_AUTH__" data-base="__BASE_PATH__" data-tts-provider="__TTS_PROVIDER__" data-stt-provider="__STT_PROVIDER__">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
       <symbol id="i-mic" viewBox="0 0 24 24">
@@ -47,6 +47,19 @@
       <label class="wa-settings-row">
         <span class="wa-settings-label">Recognition language</span>
         <select id="sttLang"></select>
+      </label>
+      <label class="wa-settings-row">
+        <input type="checkbox" id="ttsEnable" />
+        <span>Enable spoken replies</span>
+      </label>
+      <label class="wa-settings-row">
+        <span class="wa-settings-label">Voice</span>
+        <select id="ttsVoice"></select>
+      </label>
+      <label class="wa-settings-row">
+        <span class="wa-settings-label">Speech rate</span>
+        <input type="range" id="ttsRate" min="0.5" max="2" step="0.1" value="1" />
+        <span class="wa-settings-value" id="ttsRateValue">1.0×</span>
       </label>
     </div>
     <div class="wa-settings-divider"></div>
