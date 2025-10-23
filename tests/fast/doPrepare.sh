@@ -83,6 +83,11 @@ server.listen(port, '0.0.0.0', () => {
 });
 EOF
 
+# Provide a predictable static asset for router tests (served via /${TEST_AGENT_NAME}/...).
+printf 'fast-static-ok' >"${agent_root}/fast-static.txt"
+fast_write_state_var "TEST_STATIC_ASSET_PATH" "/${TEST_AGENT_NAME}/fast-static.txt"
+fast_write_state_var "TEST_STATIC_ASSET_EXPECTED" "fast-static-ok"
+
 fast_info "Enabling repository ${TEST_REPO_NAME}."
 ploinky enable repo "$TEST_REPO_NAME"
 

@@ -89,6 +89,23 @@ fast_mcp_run_simulation() {
      return 1
    fi
 }
+fast_assert_router_static_asset() {
+  fast_require_var "TEST_ROUTER_PORT"
+  fast_require_var "TEST_STATIC_ASSET_PATH"
+  fast_require_var "TEST_STATIC_ASSET_EXPECTED"
+  local url="http://127.0.0.1:${TEST_ROUTER_PORT}${TEST_STATIC_ASSET_PATH}"
+  local body
+  if ! body=$(curl -fsS "$url" 2>/dev/null); then
+    echo "Failed to fetch static asset at ${url}." >&2
+    return 1
+  fi
+  if [[ "${body}" != "${TEST_STATIC_ASSET_EXPECTED}" ]]; then
+    echo "Static asset content mismatch for ${url}." >&2
+    echo "Expected: '${TEST_STATIC_ASSET_EXPECTED}'" >&2
+    echo "Got: '${body}'" >&2
+    return 1
+  fi
+}
 
 fast_mcp_list_tools_after_demo() {
   local output
@@ -145,6 +162,9 @@ fast_check "Tool run check: client tool run_simulation -iterations 10" fast_mcp_
 
 fast_stage_header "RoutingServer aggregation test"
 fast_check "Aggregation check: router server mcp aggregation" fast_mcp_list_tools_after_demo
+
+fast_stage_header "Router Static Assets"
+fast_check "Router serves configured static asset" fast_assert_router_static_asset
 
 fast_stage_header "Manifest Environment"
 fast_check "Variable MY_TEST_VAR from manifest is present after start" fast_assert_container_env "$TEST_AGENT_CONT_NAME" "MY_TEST_VAR" "hello-manifest"
