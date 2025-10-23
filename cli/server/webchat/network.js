@@ -262,30 +262,17 @@ export function createNetwork({
                     revokePreview();
                 }
                 // If the user provided a caption, send it to the TTY as a normal command.
-                const metaPayload = {
-                    name: displayName,
-                    localPath,
-                    downloadUrl: absoluteUrl,
-                    size: data.size ?? file.size ?? null,
-                    mime: data.mime ?? file.type ?? null,
-                    id: data.id ?? null
-                };
-                const hiddenLine = `: [[uploaded-file]]${JSON.stringify(metaPayload)}`;
-                const parts = [];
                 if (caption) {
-                    parts.push(caption);
+                    const combined = `${caption}\n`;
+                    fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain' },
+                        body: combined
+                    }).catch((error) => {
+                        dlog('chat error after upload', error);
+                        addServerMsg('[input error]');
+                    });
                 }
-                parts.push(hiddenLine);
-                const combined = `${parts.join('\n')}\n`;
-
-                fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain' },
-                    body: combined
-                }).catch((error) => {
-                    dlog('chat error after upload', error);
-                    addServerMsg('[input error]');
-                });
             } else {
                 throw new Error(data.error || 'Invalid upload response');
             }

@@ -505,9 +505,7 @@ export function createUploader({
     attachmentContainer
 }, { composer }) {
 
-    let selectedFile = null;
-    let selectedFilePreviewDataUrl = null;
-    let selectedFileIsImage = false;
+    const selections = [];
     let cameraOverlay;
 
     function toggleMenu(e) {
@@ -520,26 +518,25 @@ export function createUploader({
         attachmentMenu.classList.remove('show');
     }
 
-    function selectFile(file) {
-        if (!file) {
-            return;
+    function updatePreviewVisibility() {
+        if (selections.length > 0) {
+            filePreviewContainer.classList.add('show');
+        } else {
+            filePreviewContainer.classList.remove('show');
+            filePreviewContainer.innerHTML = '';
         }
-        selectedFile = file;
-        selectedFileIsImage = (file.type || '').startsWith('image/');
-        selectedFilePreviewDataUrl = null;
-        displayFilePreview(file);
+        composer.autoResize();
     }
 
-    function displayFilePreview(file) {
-        filePreviewContainer.innerHTML = '';
-        const isImage = file.type.startsWith('image/');
-        
+    function createSelectionPreview(selection) {
+        const { file, isImage } = selection;
         const item = document.createElement('div');
         item.className = 'wa-file-preview-item';
+        item.dataset.selectionId = selection.id;
 
         let thumbnailHTML = '';
         if (isImage) {
-            thumbnailHTML = `<div class="wa-file-preview-thumbnail"><img id="filePreviewImage" src="" alt="Preview"></div>`;
+            thumbnailHTML = '<div class="wa-file-preview-thumbnail"><img src="" alt="Preview"></div>';
         } else {
             thumbnailHTML = `<div class="wa-file-preview-thumbnail">${getFileIcon(file.name)}</div>`;
         }
@@ -555,14 +552,14 @@ export function createUploader({
 
         item.querySelector('.wa-file-preview-name').textContent = file.name;
         item.querySelector('.wa-file-preview-size').textContent = formatBytes(file.size);
-        
+
         if (isImage) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                selectedFilePreviewDataUrl = typeof e.target?.result === 'string' ? e.target.result : null;
-                const previewImg = item.querySelector('#filePreviewImage');
-                if (previewImg && selectedFilePreviewDataUrl) {
-                    previewImg.src = selectedFilePreviewDataUrl;
+                selection.previewDataUrl = typeof e.target?.result === 'string' ? e.target.result : null;
+                const previewImg = item.querySelector('img');
+                if (previewImg && selection.previewDataUrl) {
+                    previewImg.src = selection.previewDataUrl;
                 }
             };
             reader.readAsDataURL(file);
@@ -570,20 +567,51 @@ export function createUploader({
 
         item.querySelector('.wa-file-preview-remove').onclick = (e) => {
             e.stopPropagation();
-            clearFile();
+            removeSelection(selection.id);
         };
 
+        selection.domItem = item;
         filePreviewContainer.appendChild(item);
-        filePreviewContainer.classList.add('show');
-        composer.autoResize();
+    }
+
+    function addSelection(file) {
+        if (!file) {
+            return;
+        }
+        const selection = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            file,
+            isImage: (file.type || '').startsWith('image/'),
+            previewDataUrl: null,
+            domItem: null
+        };
+        selections.push(selection);
+        createSelectionPreview(selection);
+        updatePreviewVisibility();
+    }
+
+    function removeSelection(id) {
+        const index = selections.findIndex((sel) => sel.id === id);
+        if (index === -1) {
+            return;
+        }
+        const [removed] = selections.splice(index, 1);
+        if (removed?.domItem && removed.domItem.parentNode === filePreviewContainer) {
+            filePreviewContainer.removeChild(removed.domItem);
+        }
+        updatePreviewVisibility();
+        if (selections.length === 0) {
+            fileUploadInput.value = '';
+        }
     }
 
     function handleFileSelection(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        selectFile(file);
-        fileUploadInput.value = ''; // Reset for next selection
+        const files = Array.from(event.target.files || []);
+        if (!files.length) {
+            return;
+        }
+        files.forEach(addSelection);
+        fileUploadInput.value = '';
     }
     
     function getCameraOverlay() {
@@ -603,7 +631,7 @@ export function createUploader({
             try {
                 const file = await overlay.open();
                 if (file instanceof File) {
-                    selectFile(file);
+                    addSelection(file);
                 }
                 return;
             } catch (error) {
@@ -612,17 +640,21 @@ export function createUploader({
         }
         const fallbackFile = await openCameraInputFallback();
         if (fallbackFile) {
-            selectFile(fallbackFile);
+            addSelection(fallbackFile);
         }
     }
 
-    function clearFile() {
-        selectedFile = null;
-        selectedFilePreviewDataUrl = null;
-        selectedFileIsImage = false;
+    function clearFiles() {
+        while (selections.length) {
+            const selection = selections.pop();
+            if (selection?.domItem && selection.domItem.parentNode === filePreviewContainer) {
+                filePreviewContainer.removeChild(selection.domItem);
+            }
+        }
+        fileUploadInput.value = '';
         filePreviewContainer.innerHTML = '';
         filePreviewContainer.classList.remove('show');
-        composer.autoResize();
+        updatePreviewVisibility();
     }
 
     attachmentBtn.addEventListener('click', toggleMenu);
@@ -637,34 +669,37 @@ export function createUploader({
     });
 
     return {
-        getSelectedFile: () => {
-            if (!selectedFile) {
-                return null;
+        getSelectedFiles: () => {
+            if (!selections.length) {
+                return [];
             }
-            let previewUrl = null;
-            let revokePreview = null;
-            if (selectedFileIsImage) {
-                if (selectedFilePreviewDataUrl) {
-                    previewUrl = selectedFilePreviewDataUrl;
-                } else {
-                    previewUrl = URL.createObjectURL(selectedFile);
-                    revokePreview = () => {
-                        try {
-                            URL.revokeObjectURL(previewUrl);
-                        } catch (_) {
-                            // Ignore revoke failures
-                        }
-                    };
+            return selections.map((selection) => {
+                let previewUrl = null;
+                let revokePreview = null;
+                if (selection.isImage) {
+                    if (selection.previewDataUrl) {
+                        previewUrl = selection.previewDataUrl;
+                    } else {
+                        previewUrl = URL.createObjectURL(selection.file);
+                        revokePreview = () => {
+                            try {
+                                URL.revokeObjectURL(previewUrl);
+                            } catch (_) {
+                                // Ignore revoke failures
+                            }
+                        };
+                    }
                 }
-            }
-            return {
-                file: selectedFile,
-                previewUrl,
-                previewNeedsRevoke: typeof revokePreview === 'function',
-                revokePreview,
-                isImage: selectedFileIsImage
-            };
+                return {
+                    file: selection.file,
+                    previewUrl,
+                    previewNeedsRevoke: typeof revokePreview === 'function',
+                    revokePreview,
+                    isImage: selection.isImage
+                };
+            });
         },
-        clearFile,
+        clearFile: clearFiles,
+        clearFiles,
     };
 }

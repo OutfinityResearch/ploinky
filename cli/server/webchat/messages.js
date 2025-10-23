@@ -7,23 +7,6 @@ function formatTime() {
     return `${hours}:${minutes}`;
 }
 
-const HIDDEN_UPLOAD_LINE_RE = /^:\s*\[\[(?:uploaded|attached)-file\]\]/i;
-
-function removeHiddenUploadMarkers(text) {
-    if (!text) {
-        return text;
-    }
-    const lines = String(text).split(/\r?\n/);
-    const filtered = lines.filter((line) => {
-        const trimmed = line.trim();
-        if (!trimmed) {
-            return true;
-        }
-        return !HIDDEN_UPLOAD_LINE_RE.test(trimmed);
-    });
-    return filtered.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
-}
-
 export function createMessages({
     chatList,
     typingIndicator
@@ -375,15 +358,6 @@ export function createMessages({
             lastClientCommand = '';
             normalized = normalized.replace(/^\n+/, '');
         }
-
-        if (!normalized.trim()) {
-            lastServerMsg.bubble = null;
-            lastServerMsg.fullText = '';
-            userInputSent = false;
-            return;
-        }
-
-        normalized = removeHiddenUploadMarkers(normalized);
 
         if (!normalized.trim()) {
             lastServerMsg.bubble = null;

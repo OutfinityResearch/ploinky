@@ -116,12 +116,14 @@ const uploader = createUploader({
 
 composer.setSendHandler((cmdText) => {
     const cmd = cmdText.trim();
-    const fileSelection = uploader.getSelectedFile();
-    const file = fileSelection?.file;
+    const fileSelections = uploader.getSelectedFiles();
 
-    if (file) {
-        network.uploadFile(fileSelection, cmd);
-        uploader.clearFile();
+    if (fileSelections.length) {
+        fileSelections.forEach((selection, index) => {
+            const caption = index === 0 ? cmd : '';
+            network.uploadFile(selection, caption);
+        });
+        uploader.clearFiles();
         return true;
     }
 
