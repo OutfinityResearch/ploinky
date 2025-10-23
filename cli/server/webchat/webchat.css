@@ -215,6 +215,11 @@ body {
   font-size: 13px;
 }
 
+.wa-settings-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--wa-accent);
+}
+
 .wa-settings-row input[type="number"] {
   width: 88px;
   background: var(--wa-bg-input);
@@ -227,6 +232,13 @@ body {
 
 .wa-settings-label {
   flex: 1;
+}
+
+.wa-settings-value {
+  min-width: 48px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--wa-text-secondary);
 }
 
 /* --- Main Layout --- */
