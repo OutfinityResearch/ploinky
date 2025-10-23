@@ -49,6 +49,7 @@ export function createNetwork({
     agentName
 }, {
     addClientMsg,
+    addClientAttachment,
     addServerMsg,
     showTypingIndicator,
     hideTypingIndicator,
@@ -185,9 +186,30 @@ export function createNetwork({
         return true;
     }
 
-    function uploadFile(file, caption) {
+    function uploadFile(filePayload, caption) {
+        const { file, previewUrl, revokePreview, previewNeedsRevoke, isImage } = filePayload || {};
+        const isFileObject = (typeof File !== 'undefined' && file instanceof File)
+            || (file && typeof file.name === 'string' && typeof file.size !== 'undefined');
+        if (!isFileObject) {
+            addClientMsg(typeof caption === 'string' && caption.trim() ? caption : '[missing file]');
+            addServerMsg('[upload error: no file selected]');
+            return;
+        }
+
         const uploadMessage = caption || file.name;
-        addClientMsg(uploadMessage);
+        let clientAttachment = null;
+        if (typeof addClientAttachment === 'function') {
+            clientAttachment = addClientAttachment({
+                fileName: file.name,
+                size: file.size,
+                mime: file.type,
+                previewUrl,
+                isImage,
+                caption
+            });
+        } else {
+            addClientMsg(uploadMessage);
+        }
         markUserInputSent();
         showTypingIndicator();
 
@@ -220,6 +242,25 @@ export function createNetwork({
                 const basePath = localPath.startsWith('/') ? localPath : `/${localPath}`;
                 const absoluteUrl = data.downloadUrl
                     || new URL(basePath, window.location.origin).href;
+                if (clientAttachment && typeof clientAttachment.markUploaded === 'function') {
+                    clientAttachment.markUploaded({
+                        downloadUrl: absoluteUrl,
+                        size: data.size ?? file.size ?? null,
+                        mime: data.mime ?? file.type ?? null,
+                        localPath,
+                        id: data.id ?? null
+                    });
+                    if (isImage && typeof clientAttachment.replacePreview === 'function') {
+                        clientAttachment.replacePreview(absoluteUrl);
+                    }
+                } else {
+                    const linkLabel = displayName || absoluteUrl;
+                    const infoMessageFallback = `File uploaded: [${linkLabel}](${absoluteUrl})`;
+                    addServerMsg(infoMessageFallback);
+                }
+                if (previewNeedsRevoke && typeof revokePreview === 'function') {
+                    revokePreview();
+                }
                 // If the user provided a caption, send it to the TTY as a normal command.
                 const metaPayload = {
                     name: displayName,
@@ -245,11 +286,6 @@ export function createNetwork({
                     dlog('chat error after upload', error);
                     addServerMsg('[input error]');
                 });
-                // Display the result of the upload as a separate, informational message.
-                // This does NOT get executed by the shell.
-                const linkLabel = displayName || absoluteUrl;
-                const infoMessage = `File uploaded: [${linkLabel}](${absoluteUrl})`;
-                addServerMsg(infoMessage);
             } else {
                 throw new Error(data.error || 'Invalid upload response');
             }
@@ -257,7 +293,11 @@ export function createNetwork({
         .catch(error => {
             dlog('upload error', error);
             hideTypingIndicator();
-            addServerMsg(`[upload error: ${error.message}]`);
+            if (clientAttachment && typeof clientAttachment.markFailed === 'function') {
+                clientAttachment.markFailed(error.message || 'Upload failed');
+            } else {
+                addServerMsg(`[upload error: ${error.message}]`);
+            }
             showBanner('Upload error', 'err');
         });
     }

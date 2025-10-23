@@ -66,6 +66,7 @@ export function initDom() {
     const attachmentBtn = document.getElementById('attachmentBtn');
     const attachmentMenu = document.getElementById('attachmentMenu');
     const uploadFileBtn = document.getElementById('uploadFileBtn');
+    const cameraActionBtn = document.getElementById('cameraActionBtn');
     const attachmentContainer = document.querySelector('.wa-attachment-container');
     const fileUploadInput = document.getElementById('fileUploadInput');
     const filePreviewContainer = document.getElementById('filePreviewContainer');
@@ -209,6 +210,7 @@ export function initDom() {
             attachmentBtn,
             attachmentMenu,
             uploadFileBtn,
+            cameraActionBtn,
             fileUploadInput,
             filePreviewContainer,
             attachmentContainer

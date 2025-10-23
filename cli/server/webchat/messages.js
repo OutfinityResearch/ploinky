@@ -1,8 +1,27 @@
+import { formatBytes, getFileIcon } from './fileHelpers.js';
+
 function formatTime() {
     const date = new Date();
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
+}
+
+const HIDDEN_UPLOAD_LINE_RE = /^:\s*\[\[(?:uploaded|attached)-file\]\]/i;
+
+function removeHiddenUploadMarkers(text) {
+    if (!text) {
+        return text;
+    }
+    const lines = String(text).split(/\r?\n/);
+    const filtered = lines.filter((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+            return true;
+        }
+        return !HIDDEN_UPLOAD_LINE_RE.test(trimmed);
+    });
+    return filtered.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
 }
 
 export function createMessages({
@@ -160,6 +179,188 @@ export function createMessages({
         lastServerMsg.bubble = null;
     }
 
+    function addClientAttachment({
+        fileName,
+        size,
+        mime,
+        previewUrl,
+        isImage,
+        caption
+    }) {
+        const displayName = fileName || 'Attachment';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'wa-message out wa-message-attachment';
+        wrapper.dataset.attachmentName = displayName;
+        if (mime) {
+            wrapper.dataset.attachmentMime = mime;
+        }
+        if (typeof size === 'number' && Number.isFinite(size)) {
+            wrapper.dataset.attachmentSize = String(size);
+        }
+        if (previewUrl) {
+            wrapper.dataset.attachmentPreviewUrl = previewUrl;
+        }
+        if (caption) {
+            wrapper.dataset.attachmentCaption = caption;
+        }
+        wrapper.dataset.attachmentStatus = 'uploading';
+
+        lastClientCommand = caption || displayName;
+
+        const bubble = document.createElement('div');
+        bubble.className = 'wa-message-bubble';
+
+        const content = document.createElement('div');
+        content.className = 'wa-attachment-message';
+
+        const thumb = document.createElement('div');
+        thumb.className = 'wa-file-preview-thumbnail';
+        let thumbImage = null;
+        if (isImage && previewUrl) {
+            thumbImage = document.createElement('img');
+            thumbImage.src = previewUrl;
+            thumbImage.alt = displayName;
+            thumb.appendChild(thumbImage);
+        } else {
+            thumb.innerHTML = getFileIcon(displayName);
+        }
+
+        const info = document.createElement('div');
+        info.className = 'wa-file-preview-info';
+
+        let nameNode = document.createElement('span');
+        nameNode.className = 'wa-file-preview-name';
+        nameNode.textContent = displayName;
+
+        const sizeNode = document.createElement('div');
+        sizeNode.className = 'wa-file-preview-size';
+        if (typeof size === 'number' && Number.isFinite(size)) {
+            const parts = [formatBytes(size)];
+            if (mime) {
+                parts.push(mime);
+            }
+            sizeNode.textContent = parts.join(' · ');
+        } else if (mime) {
+            sizeNode.textContent = mime;
+        } else {
+            sizeNode.textContent = '';
+        }
+
+        const statusNode = document.createElement('div');
+        statusNode.className = 'wa-file-preview-status';
+        statusNode.textContent = 'Uploading…';
+
+        info.appendChild(nameNode);
+        info.appendChild(sizeNode);
+        info.appendChild(statusNode);
+
+        content.appendChild(thumb);
+        content.appendChild(info);
+        bubble.appendChild(content);
+
+        if (caption) {
+            const captionNode = document.createElement('div');
+            captionNode.className = 'wa-attachment-caption';
+            captionNode.innerHTML = renderMarkdown(caption);
+            sidePanel.bindLinkDelegation(captionNode);
+            bubble.appendChild(captionNode);
+        }
+
+        const timeNode = document.createElement('span');
+        timeNode.className = 'wa-message-time';
+        timeNode.innerHTML = `
+            ${formatTime()}
+            <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor"><path d="M11.071.653a.5.5 0 0 0-.707.707l3.289 3.289a.5.5 0 0 0 .707 0L15.354 3.656a.5.5 0 0 0-.707-.707L14 3.596 11.071.653zm-4.207 0a.5.5 0 0 0-.707.707l3.289 3.289a.5.5 0 0 0 .707 0l.994-.993a.5.5 0 0 0-.707-.707L9.793 3.596 6.864.653z"/></svg>
+        `;
+        bubble.appendChild(timeNode);
+
+        wrapper.appendChild(bubble);
+        sidePanel.bindLinkDelegation(bubble);
+        appendMessageEl(wrapper);
+        if (chatList) {
+            chatList.scrollTop = chatList.scrollHeight;
+        }
+        lastServerMsg.bubble = null;
+
+        function ensureLinkNode(downloadUrl) {
+            if (!downloadUrl) {
+                return;
+            }
+            if (nameNode.tagName.toLowerCase() !== 'a') {
+                const link = document.createElement('a');
+                link.className = 'wa-file-preview-name';
+                link.textContent = nameNode.textContent || displayName;
+                nameNode.replaceWith(link);
+                nameNode = link;
+            }
+            nameNode.href = downloadUrl;
+            nameNode.target = '_blank';
+            nameNode.rel = 'noopener noreferrer';
+        }
+
+        return {
+            markUploaded({
+                downloadUrl,
+                size: uploadedSize,
+                mime: uploadedMime,
+                localPath,
+                id
+            }) {
+                if (downloadUrl) {
+                    wrapper.dataset.attachmentDownloadUrl = downloadUrl;
+                }
+                if (localPath) {
+                    wrapper.dataset.attachmentLocalPath = localPath;
+                }
+                if (id) {
+                    wrapper.dataset.attachmentId = id;
+                }
+                if (uploadedMime) {
+                    wrapper.dataset.attachmentMime = uploadedMime;
+                }
+                wrapper.dataset.attachmentStatus = 'uploaded';
+                if (typeof uploadedSize === 'number' && Number.isFinite(uploadedSize)) {
+                    wrapper.dataset.attachmentSize = String(uploadedSize);
+                    const parts = [formatBytes(uploadedSize)];
+                    const mimeLabel = uploadedMime || mime;
+                    if (mimeLabel) {
+                        parts.push(mimeLabel);
+                    }
+                    sizeNode.textContent = parts.join(' · ');
+                }
+                ensureLinkNode(downloadUrl);
+                statusNode.classList.remove('error');
+                statusNode.textContent = '';
+                if (downloadUrl) {
+                    statusNode.textContent = 'Link: ';
+                    const link = document.createElement('a');
+                    link.className = 'wa-attachment-link';
+                    link.href = downloadUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.textContent = downloadUrl;
+                    statusNode.appendChild(link);
+                } else {
+                    statusNode.textContent = 'Uploaded';
+                }
+            },
+            replacePreview(nextUrl) {
+                if (!nextUrl) {
+                    return;
+                }
+                if (thumbImage) {
+                    thumbImage.src = nextUrl;
+                }
+                wrapper.dataset.attachmentPreviewUrl = nextUrl;
+            },
+            markFailed(message) {
+                wrapper.dataset.attachmentStatus = 'error';
+                statusNode.classList.add('error');
+                statusNode.textContent = message || 'Upload failed';
+            }
+        };
+    }
+
     function addServerMsg(text) {
         let normalized = typeof text === 'string' ? text : '';
         if (lastClientCommand) {
@@ -174,6 +375,15 @@ export function createMessages({
             lastClientCommand = '';
             normalized = normalized.replace(/^\n+/, '');
         }
+
+        if (!normalized.trim()) {
+            lastServerMsg.bubble = null;
+            lastServerMsg.fullText = '';
+            userInputSent = false;
+            return;
+        }
+
+        normalized = removeHiddenUploadMarkers(normalized);
 
         if (!normalized.trim()) {
             lastServerMsg.bubble = null;
@@ -212,6 +422,7 @@ export function createMessages({
 
     return {
         addClientMsg,
+        addClientAttachment,
         addServerMsg,
         showTypingIndicator,
         hideTypingIndicator,

@@ -102,16 +102,20 @@
     <div id="filePreviewContainer" class="wa-file-preview-container"></div>
     <div class="wa-composer-main">
       <div class="wa-attachment-container">
-      <button class="wa-icon-btn" id="attachmentBtn" title="Attach">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 6.75a.75.75 0 0 1 .75.75v3.75h3.75a.75.75 0 0 1 0 1.5h-3.75v3.75a.75.75 0 0 1-1.5 0v-3.75H7.5a.75.75 0 0 1 0-1.5h3.75V7.5a.75.75 0 0 1 .75-.75z"/></svg>
-      </button>
-      <div class="wa-attachment-menu" id="attachmentMenu">
-        <button id="uploadFileBtn">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9.97 4.22A1.25 1.25 0 0 1 11.22 4h1.56a1.25 1.25 0 0 1 1.25 1.25v3.67l1.78-1.78a.75.75 0 0 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L9.28 8.18a.75.75 0 1 1 1.06-1.06l1.63 1.63V5.25h-1.56a.25.25 0 0 0-.25.25v1.31l-1.2-1.2a1.25 1.25 0 0 1 .44-1.39zM4.75 6h3.5a.75.75 0 0 1 0 1.5h-3.5a.25.25 0 0 0-.25.25v11.5c0 .138.112.25.25.25h14.5a.25.25 0 0 0 .25-.25V12a.75.75 0 0 1 1.5 0v7.25A1.75 1.75 0 0 1 19.25 21H4.75A1.75 1.75 0 0 1 3 19.25V7.75A1.75 1.75 0 0 1 4.75 6z"></path></svg>
-          <span>Upload file</span>
+        <button class="wa-icon-btn" id="attachmentBtn" title="Attach">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 6.75a.75.75 0 0 1 .75.75v3.75h3.75a.75.75 0 0 1 0 1.5h-3.75v3.75a.75.75 0 0 1-1.5 0v-3.75H7.5a.75.75 0 0 1 0-1.5h3.75V7.5a.75.75 0 0 1 .75-.75z"/></svg>
         </button>
+        <div class="wa-attachment-menu" id="attachmentMenu">
+          <button id="uploadFileBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9.97 4.22A1.25 1.25 0 0 1 11.22 4h1.56a1.25 1.25 0 0 1 1.25 1.25v3.67l1.78-1.78a.75.75 0 0 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L9.28 8.18a.75.75 0 1 1 1.06-1.06l1.63 1.63V5.25h-1.56a.25.25 0 0 0-.25.25v1.31l-1.2-1.2a1.25 1.25 0 0 1 .44-1.39zM4.75 6h3.5a.75.75 0 0 1 0 1.5h-3.5a.25.25 0 0 0-.25.25v11.5c0 .138.112.25.25.25h14.5a.25.25 0 0 0 .25-.25V12a.75.75 0 0 1 1.5 0v7.25A1.75 1.75 0 0 1 19.25 21H4.75A1.75 1.75 0 0 1 3 19.25V7.75A1.75 1.75 0 0 1 4.75 6z"></path></svg>
+            <span>Upload file</span>
+          </button>
+          <button id="cameraActionBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.75A2.25 2.25 0 0 1 6.75 4.5h1.17l.41-.82A1.5 1.5 0 0 1 9.7 3h4.6a1.5 1.5 0 0 1 1.37.68l.41.82h1.17A2.25 2.25 0 0 1 19.5 6.75v10.5A2.25 2.25 0 0 1 17.25 19.5h-10.5A2.25 2.25 0 0 1 4.5 17.25V6.75zm7.5 9a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5zm0-1.5a2.25 2.25 0 1 1 0-4.5 2.25 2.25 0 0 1 0 4.5z"></path></svg>
+            <span>Camera</span>
+          </button>
+        </div>
       </div>
-    </div>
     <div class="wa-voice-control">
       <button class="wa-icon-btn" id="sttBtn" title="Voice input" aria-pressed="false">
         <span class="wa-mic-icon on" aria-hidden="true">
@@ -138,6 +142,9 @@
     </div>
   </div>
   <script src="__ASSET_BASE__/markdown.js"></script>
+  <script>
+    window.__WEBCHAT_ASSET_BASE__ = "__ASSET_BASE__";
+  </script>
   <script type="module" src="__ASSET_BASE__/index.js"></script>
   <input type="file" id="fileUploadInput" style="display:none" />
 </body>

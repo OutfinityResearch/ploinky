@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 const MCP_BROWSER_CLIENT_URL = '/MCPBrowserClient.js';
 const MCP_BROWSER_CLIENT_FILE = path.resolve(PROJECT_ROOT, 'Agent/client/MCPBrowserClient.js');
+const PROJECT_WEB_LIBS = path.resolve(PROJECT_ROOT, 'webLibs');
 
 function readRouting() {
     try {
@@ -56,6 +57,7 @@ function getBaseDirs(appName, fallbackDir) {
         }
         dirs.push(staticRoot);
     }
+    dirs.push(PROJECT_WEB_LIBS);
     dirs.push(fallbackDir);
     return dedupe(dirs);
 }
@@ -150,6 +152,7 @@ function getMimeType(filePath) {
     const ext = path.extname(filePath).toLowerCase();
     const map = {
         '.js': 'application/javascript',
+        '.mjs': 'application/javascript',
         '.css': 'text/css',
         '.svg': 'image/svg+xml',
         '.html': 'text/html',

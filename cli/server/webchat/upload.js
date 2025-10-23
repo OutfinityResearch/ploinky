@@ -1,35 +1,514 @@
-function formatBytes(bytes, decimals = 2) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-}
+import {
+    formatBytes,
+    getFileIcon,
+    canvasToBlob,
+    openCameraInputFallback,
+    loadQrLib,
+} from './fileHelpers.js';
 
-function getFileIcon(fileName) {
-    const extension = (fileName || '').split('.').pop().toLowerCase();
-    const iconMap = {
-        'pdf': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a.375.375 0 01-.375-.375V6.75A3.75 3.75 0 009 3H5.625zM12.75 12.75a.75.75 0 00-1.5 0v2.25H9a.75.75 0 000 1.5h2.25v2.25a.75.75 0 001.5 0v-2.25H15a.75.75 0 000-1.5h-2.25V12.75zM15 3.75a.75.75 0 00-.75-.75h-1.5a.75.75 0 000 1.5h1.5a.75.75 0 00.75-.75z" clip-rule="evenodd" /></svg>',
-        'doc': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a.375.375 0 01-.375-.375V6.75A3.75 3.75 0 009 3H5.625zM12.75 12.75a.75.75 0 00-1.5 0v2.25H9a.75.75 0 000 1.5h2.25v2.25a.75.75 0 001.5 0v-2.25H15a.75.75 0 000-1.5h-2.25V12.75zM15 3.75a.75.75 0 00-.75-.75h-1.5a.75.75 0 000 1.5h1.5a.75.75 0 00.75-.75z" clip-rule="evenodd" /></svg>',
-        'docx': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a.375.375 0 01-.375-.375V6.75A3.75 3.75 0 009 3H5.625zM12.75 12.75a.75.75 0 00-1.5 0v2.25H9a.75.75 0 000 1.5h2.25v2.25a.75.75 0 001.5 0v-2.25H15a.75.75 0 000-1.5h-2.25V12.75zM15 3.75a.75.75 0 00-.75-.75h-1.5a.75.75 0 000 1.5h1.5a.75.75 0 00.75-.75z" clip-rule="evenodd" /></svg>',
-        'zip': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M2.25 2.25a.75.75 0 000 1.5h.141a2.252 2.252 0 011.984 1.556l.01.035.01.034.008.027.01.035.008.027.006.02.008.027.006.02.005.015.008.026.004.013.005.014.004.01.004.01.004.01.003.008.003.008.003.007.003.006.001.004c.001.003.002.005.003.008l.003.007.001.004.002.005.002.004.001.002.001.002h14.092l.001-.002.001-.002.002-.004.002-.005.001-.004.003-.007c.001-.003.002-.005.003-.008l.001-.004.003-.006.003-.007.003-.008.004-.01.003-.008.004-.01.004-.01.005-.014.004-.013.008-.026.005-.015.006-.02.008-.027.006-.02.01-.035.008-.027.01-.034.01-.035a2.252 2.252 0 011.984-1.556h.141a.75.75 0 000-1.5H2.25zM3.003 9.119l.003-.008.004-.01.005-.012.005-.012.007-.017.005-.012.007-.017.008-.018.007-.015.008-.018.008-.017.008-.016.008-.015.008-.014.008-.012.008-.012.008-.01.008-.01.007-.008.007-.007.007-.006.006-.005.005-.004.004-.003.003-.002.002-.001h17.982l.002.001.003.002.004.003.005.004.006.005.007.006.007.007.007.008.008.01.008.01.008.012.008.012.008.014.008.015.008.016.008.017.008.018.007.015.008.018.007.017.005.012.007.017.005.012.004.01.003.008.001.004V19.5a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 19.5V9.122l.001-.002.002-.001z" clip-rule="evenodd" /></svg>',
-        'default': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M5.25 3.75A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25zm.75 13.5a.75.75 0 000 1.5h12a.75.75 0 000-1.5H6zm0-3a.75.75 0 000 1.5h12a.75.75 0 000-1.5H6zm0-3a.75.75 0 000 1.5h12a.75.75 0 000-1.5H6z" /></svg>'
+function createCameraOverlay({ composer }) {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        return null;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'wa-camera-overlay';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = `
+        <div class="wa-camera-dialog">
+            <div class="wa-camera-mode-toggle" role="tablist">
+                <button type="button" class="wa-camera-mode active" data-camera-mode="photo" role="tab" aria-selected="true">Photo</button>
+                <button type="button" class="wa-camera-mode" data-camera-mode="scan" role="tab" aria-selected="false">Scan QR</button>
+            </div>
+            <div class="wa-camera-view">
+                <video class="wa-camera-video" autoplay playsinline></video>
+                <img class="wa-camera-preview" alt="Captured photo preview" hidden />
+            </div>
+            <div class="wa-camera-footer">
+                <div class="wa-camera-error" role="status" aria-live="polite"></div>
+                <div class="wa-camera-scan-status" aria-live="polite" hidden></div>
+                <div class="wa-camera-actions">
+                    <button type="button" class="wa-camera-btn wa-camera-btn-primary" data-action="capture">Capture</button>
+                    <button type="button" class="wa-camera-btn" data-action="retake" hidden>Retake</button>
+                    <button type="button" class="wa-camera-btn wa-camera-btn-primary" data-action="use" hidden>Use photo</button>
+                    <button type="button" class="wa-camera-btn" data-action="cancel">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const video = overlay.querySelector('.wa-camera-video');
+    const preview = overlay.querySelector('.wa-camera-preview');
+    const modeButtons = Array.from(overlay.querySelectorAll('[data-camera-mode]'));
+    const captureBtn = overlay.querySelector('[data-action="capture"]');
+    const retakeBtn = overlay.querySelector('[data-action="retake"]');
+    const useBtn = overlay.querySelector('[data-action="use"]');
+    const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+    const errorEl = overlay.querySelector('.wa-camera-error');
+    const scanStatusEl = overlay.querySelector('.wa-camera-scan-status');
+
+    const canvas = document.createElement('canvas');
+    const captureCtx = canvas.getContext('2d');
+    const scanCanvas = document.createElement('canvas');
+    const scanCtx = scanCanvas.getContext('2d');
+
+    let stream = null;
+    let resolver = null;
+    let rejecter = null;
+    let active = false;
+    let objectUrl = null;
+    let capturedBlob = null;
+    let selectedMode = 'photo';
+    let defaultMode = 'photo';
+    let scanning = false;
+    let scanAnimation = null;
+
+    function setError(message) {
+        if (!errorEl) {
+            return;
+        }
+        errorEl.textContent = message || '';
+        errorEl.hidden = !message;
+    }
+
+    function setModeButtons(mode) {
+        modeButtons.forEach((btn) => {
+            const isActive = btn.dataset.cameraMode === mode;
+            btn.classList.toggle('active', isActive);
+            btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+    }
+
+    function stopScan(resetStatus = false) {
+        if (scanAnimation !== null) {
+            cancelAnimationFrame(scanAnimation);
+            scanAnimation = null;
+        }
+        scanning = false;
+        if (resetStatus && scanStatusEl) {
+            scanStatusEl.textContent = '';
+            scanStatusEl.hidden = true;
+        }
+    }
+
+    function stopStream() {
+        if (stream) {
+            const tracks = stream.getTracks ? stream.getTracks() : [];
+            tracks.forEach((track) => {
+                try {
+                    track.stop();
+                } catch (_) {
+                    // Ignore stop failures
+                }
+            });
+        }
+        stream = null;
+        if (video) {
+            video.srcObject = null;
+        }
+    }
+
+    function resetPreview() {
+        if (preview) {
+            preview.hidden = true;
+            preview.src = '';
+        }
+        if (video) {
+            video.hidden = false;
+        }
+        capturedBlob = null;
+        if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+        }
+    }
+
+    function resetUi() {
+        stopScan(true);
+        resetPreview();
+        if (captureBtn) {
+            captureBtn.hidden = false;
+            captureBtn.disabled = true;
+        }
+        if (retakeBtn) {
+            retakeBtn.hidden = true;
+        }
+        if (useBtn) {
+            useBtn.hidden = true;
+        }
+        if (scanStatusEl) {
+            scanStatusEl.textContent = '';
+            scanStatusEl.hidden = true;
+        }
+        setError('');
+    }
+
+    function cleanup() {
+        active = false;
+        document.removeEventListener('keydown', handleKeydown, true);
+        overlay.classList.remove('show');
+        overlay.setAttribute('aria-hidden', 'true');
+        stopScan(true);
+        stopStream();
+        resetUi();
+        resolver = null;
+        rejecter = null;
+    }
+
+    function resolveWith(value) {
+        defaultMode = selectedMode;
+        const resolveFn = resolver;
+        cleanup();
+        if (resolveFn) {
+            resolveFn(value);
+        }
+    }
+
+    function rejectWith(error) {
+        defaultMode = selectedMode;
+        const rejectFn = rejecter;
+        cleanup();
+        if (rejectFn) {
+            rejectFn(error);
+        }
+    }
+
+    async function beginStream() {
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            });
+            if (video) {
+                video.srcObject = stream;
+                await video.play().catch(() => {});
+                if (selectedMode === 'photo' && captureBtn) {
+                    captureBtn.disabled = false;
+                    captureBtn.focus();
+                }
+            }
+        } catch (error) {
+            setError('Unable to access camera. Check permissions and try again.');
+            throw error;
+        }
+    }
+
+    async function startScanLoop() {
+        if (scanning) {
+            return;
+        }
+        if (!scanCtx) {
+            setError('QR scanning unavailable in this browser.');
+            return;
+        }
+        scanning = true;
+        if (scanStatusEl) {
+            scanStatusEl.hidden = false;
+            scanStatusEl.textContent = stream ? 'Point the camera at a QR code.' : 'Starting camera…';
+        }
+        try {
+            const qrLib = await loadQrLib();
+            const run = () => {
+                if (!scanning) {
+                    return;
+                }
+                if (!video || !video.videoWidth || !video.videoHeight) {
+                    if (scanStatusEl) {
+                        scanStatusEl.textContent = 'Starting camera…';
+                    }
+                    scanAnimation = requestAnimationFrame(run);
+                    return;
+                }
+                const width = video.videoWidth;
+                const height = video.videoHeight;
+                if (scanCanvas.width !== width) {
+                    scanCanvas.width = width;
+                }
+                if (scanCanvas.height !== height) {
+                    scanCanvas.height = height;
+                }
+                try {
+                    scanCtx.drawImage(video, 0, 0, width, height);
+                    const imageData = scanCtx.getImageData(0, 0, width, height);
+                    const decoded = qrLib.decodeQR(imageData, { cropToSquare: true });
+                    if (decoded) {
+                        handleScanSuccess(String(decoded));
+                        return;
+                    }
+                } catch (_) {
+                    // decode errors are expected until a QR code is found
+                }
+                if (scanStatusEl) {
+                    scanStatusEl.textContent = 'Point the camera at a QR code.';
+                }
+                scanAnimation = requestAnimationFrame(run);
+            };
+            scanAnimation = requestAnimationFrame(run);
+        } catch (error) {
+            scanning = false;
+            if (scanStatusEl) {
+                scanStatusEl.hidden = true;
+            }
+            setError(error.message || 'Unable to start QR scanning.');
+        }
+    }
+
+    async function captureFrame() {
+        if (selectedMode !== 'photo') {
+            return;
+        }
+        if (!video || !stream) {
+            setError('Camera is not ready.');
+            return;
+        }
+        if (!captureCtx) {
+            setError('Unable to prepare capture buffer.');
+            return;
+        }
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+        if (!width || !height) {
+            setError('Camera is still initializing. Please try again.');
+            return;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        captureCtx.drawImage(video, 0, 0, width, height);
+        try {
+            capturedBlob = await canvasToBlob(canvas);
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+            objectUrl = URL.createObjectURL(capturedBlob);
+            if (preview) {
+                preview.src = objectUrl;
+                preview.hidden = false;
+            }
+            if (video) {
+                video.hidden = true;
+            }
+            if (captureBtn) {
+                captureBtn.hidden = true;
+            }
+            if (retakeBtn) {
+                retakeBtn.hidden = false;
+            }
+            if (useBtn) {
+                useBtn.hidden = false;
+            }
+            setError('');
+        } catch (error) {
+            setError('Failed to capture photo. Please try again.');
+            capturedBlob = null;
+        }
+    }
+
+    function handleRetake() {
+        if (selectedMode !== 'photo') {
+            return;
+        }
+        resetPreview();
+        if (video) {
+            video.hidden = false;
+            video.play().catch(() => {});
+        }
+        if (captureBtn) {
+            captureBtn.hidden = false;
+            captureBtn.disabled = false;
+        }
+        if (retakeBtn) {
+            retakeBtn.hidden = true;
+        }
+        if (useBtn) {
+            useBtn.hidden = true;
+        }
+        setError('');
+    }
+
+    async function handleUse() {
+        if (selectedMode !== 'photo') {
+            return;
+        }
+        if (!capturedBlob) {
+            setError('No photo captured yet.');
+            return;
+        }
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `camera-${timestamp}.jpg`;
+        const file = new File([capturedBlob], fileName, { type: capturedBlob.type || 'image/jpeg' });
+        resolveWith(file);
+    }
+
+    function handleScanSuccess(rawValue) {
+        stopScan(false);
+        const decoded = String(rawValue || '').trim();
+        if (!decoded) {
+            if (scanStatusEl) {
+                scanStatusEl.textContent = 'QR code is empty.';
+            }
+            return;
+        }
+        if (scanStatusEl) {
+            scanStatusEl.textContent = `Found: ${decoded}`;
+        }
+
+        if (composer && typeof composer.setValue === 'function' && typeof composer.submit === 'function') {
+            try {
+                const escaped = decoded.replace(/["]/g, '\\"');
+                composer.setValue(`scanned "${escaped}"`);
+                composer.submit();
+            } catch (error) {
+                setError('Failed to send scanned code.');
+                return;
+            }
+        }
+        resolveWith(null);
+    }
+
+    function handleCancel() {
+        resolveWith(null);
+    }
+
+    function handleKeydown(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            handleCancel();
+        }
+    }
+
+    function switchMode(mode, { force = false } = {}) {
+        if (mode !== 'scan' && mode !== 'photo') {
+            mode = 'photo';
+        }
+        if (selectedMode === mode && !force) {
+            if (mode === 'scan' && !scanning) {
+                startScanLoop();
+            }
+            return;
+        }
+        selectedMode = mode;
+        setModeButtons(mode);
+        setError('');
+        if (mode === 'photo') {
+            stopScan(true);
+            if (captureBtn) {
+                captureBtn.hidden = false;
+                captureBtn.disabled = !stream;
+            }
+            if (!capturedBlob) {
+                if (preview) preview.hidden = true;
+                if (video) video.hidden = false;
+                if (retakeBtn) retakeBtn.hidden = true;
+                if (useBtn) useBtn.hidden = true;
+            } else {
+                if (preview) preview.hidden = false;
+                if (video) video.hidden = true;
+                if (retakeBtn) retakeBtn.hidden = false;
+                if (useBtn) useBtn.hidden = false;
+            }
+            if (scanStatusEl) {
+                scanStatusEl.textContent = '';
+                scanStatusEl.hidden = true;
+            }
+        } else {
+            resetPreview();
+            if (captureBtn) {
+                captureBtn.hidden = true;
+                captureBtn.disabled = true;
+            }
+            if (retakeBtn) {
+                retakeBtn.hidden = true;
+            }
+            if (useBtn) {
+                useBtn.hidden = true;
+            }
+            if (video) {
+                video.hidden = false;
+            }
+            if (scanStatusEl) {
+                scanStatusEl.hidden = false;
+                scanStatusEl.textContent = stream ? 'Point the camera at a QR code.' : 'Starting camera…';
+            }
+            startScanLoop();
+        }
+    }
+
+    captureBtn?.addEventListener('click', () => {
+        captureFrame();
+    });
+
+    retakeBtn?.addEventListener('click', () => {
+        handleRetake();
+    });
+
+    useBtn?.addEventListener('click', () => {
+        handleUse();
+    });
+
+    cancelBtn?.addEventListener('click', () => {
+        handleCancel();
+    });
+
+    modeButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const mode = btn.dataset.cameraMode === 'scan' ? 'scan' : 'photo';
+            defaultMode = mode;
+            switchMode(mode, { force: true });
+        });
+    });
+
+    return {
+        open() {
+            if (active) {
+                return Promise.resolve(null);
+            }
+            active = true;
+            overlay.classList.add('show');
+            overlay.removeAttribute('aria-hidden');
+            resetUi();
+            selectedMode = defaultMode;
+            setModeButtons(selectedMode);
+            switchMode(selectedMode, { force: true });
+            document.addEventListener('keydown', handleKeydown, true);
+            return new Promise((resolve, reject) => {
+                resolver = resolve;
+                rejecter = reject;
+                beginStream()
+                    .then(() => {
+                        if (selectedMode === 'photo' && captureBtn) {
+                            captureBtn.disabled = false;
+                        }
+                    })
+                    .catch((error) => {
+                        rejectWith(error);
+                    });
+            });
+        }
     };
-    const icon = iconMap[extension] || iconMap['default'];
-    return `<div class="wa-file-icon">${icon}</div>`;
 }
 
 export function createUploader({
     attachmentBtn,
     attachmentMenu,
     uploadFileBtn,
+    cameraActionBtn,
     fileUploadInput,
     filePreviewContainer,
     attachmentContainer
 }, { composer }) {
 
     let selectedFile = null;
+    let selectedFilePreviewDataUrl = null;
+    let selectedFileIsImage = false;
+    let cameraOverlay;
 
     function toggleMenu(e) {
         e.stopPropagation();
@@ -39,6 +518,16 @@ export function createUploader({
     function openFilePicker() {
         fileUploadInput.click();
         attachmentMenu.classList.remove('show');
+    }
+
+    function selectFile(file) {
+        if (!file) {
+            return;
+        }
+        selectedFile = file;
+        selectedFileIsImage = (file.type || '').startsWith('image/');
+        selectedFilePreviewDataUrl = null;
+        displayFilePreview(file);
     }
 
     function displayFilePreview(file) {
@@ -70,7 +559,11 @@ export function createUploader({
         if (isImage) {
             const reader = new FileReader();
             reader.onload = (e) => {
-                item.querySelector('#filePreviewImage').src = e.target.result;
+                selectedFilePreviewDataUrl = typeof e.target?.result === 'string' ? e.target.result : null;
+                const previewImg = item.querySelector('#filePreviewImage');
+                if (previewImg && selectedFilePreviewDataUrl) {
+                    previewImg.src = selectedFilePreviewDataUrl;
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -89,13 +582,44 @@ export function createUploader({
         const file = event.target.files[0];
         if (!file) return;
 
-        selectedFile = file;
-        displayFilePreview(file);
+        selectFile(file);
         fileUploadInput.value = ''; // Reset for next selection
     }
     
+    function getCameraOverlay() {
+        if (cameraOverlay === undefined) {
+            cameraOverlay = createCameraOverlay({ composer });
+        }
+        return cameraOverlay;
+    }
+
+    async function handleCameraClick(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        attachmentMenu.classList.remove('show');
+
+        const overlay = getCameraOverlay();
+        if (overlay) {
+            try {
+                const file = await overlay.open();
+                if (file instanceof File) {
+                    selectFile(file);
+                }
+                return;
+            } catch (error) {
+                console.warn('Camera capture failed, falling back to file input', error);
+            }
+        }
+        const fallbackFile = await openCameraInputFallback();
+        if (fallbackFile) {
+            selectFile(fallbackFile);
+        }
+    }
+
     function clearFile() {
         selectedFile = null;
+        selectedFilePreviewDataUrl = null;
+        selectedFileIsImage = false;
         filePreviewContainer.innerHTML = '';
         filePreviewContainer.classList.remove('show');
         composer.autoResize();
@@ -104,6 +628,7 @@ export function createUploader({
     attachmentBtn.addEventListener('click', toggleMenu);
     uploadFileBtn.addEventListener('click', openFilePicker);
     fileUploadInput.addEventListener('change', handleFileSelection);
+    cameraActionBtn?.addEventListener('click', handleCameraClick);
     
     document.addEventListener('click', (e) => {
         if (attachmentMenu.classList.contains('show') && !attachmentContainer.contains(e.target)) {
@@ -112,7 +637,34 @@ export function createUploader({
     });
 
     return {
-        getSelectedFile: () => selectedFile,
+        getSelectedFile: () => {
+            if (!selectedFile) {
+                return null;
+            }
+            let previewUrl = null;
+            let revokePreview = null;
+            if (selectedFileIsImage) {
+                if (selectedFilePreviewDataUrl) {
+                    previewUrl = selectedFilePreviewDataUrl;
+                } else {
+                    previewUrl = URL.createObjectURL(selectedFile);
+                    revokePreview = () => {
+                        try {
+                            URL.revokeObjectURL(previewUrl);
+                        } catch (_) {
+                            // Ignore revoke failures
+                        }
+                    };
+                }
+            }
+            return {
+                file: selectedFile,
+                previewUrl,
+                previewNeedsRevoke: typeof revokePreview === 'function',
+                revokePreview,
+                isImage: selectedFileIsImage
+            };
+        },
         clearFile,
     };
 }

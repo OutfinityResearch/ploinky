@@ -47,6 +47,7 @@ const {
     attachmentBtn,
     attachmentMenu,
     uploadFileBtn,
+    cameraActionBtn,
     fileUploadInput,
     filePreviewContainer,
     attachmentContainer
@@ -89,6 +90,7 @@ const network = createNetwork({
     agentName: dom.agentName
 }, {
     addClientMsg: messages.addClientMsg,
+    addClientAttachment: messages.addClientAttachment,
     addServerMsg: messages.addServerMsg,
     showTypingIndicator: messages.showTypingIndicator,
     hideTypingIndicator: messages.hideTypingIndicator,
@@ -106,6 +108,7 @@ const uploader = createUploader({
     attachmentBtn,
     attachmentMenu,
     uploadFileBtn,
+    cameraActionBtn,
     fileUploadInput,
     filePreviewContainer,
     attachmentContainer
@@ -113,10 +116,11 @@ const uploader = createUploader({
 
 composer.setSendHandler((cmdText) => {
     const cmd = cmdText.trim();
-    const file = uploader.getSelectedFile();
+    const fileSelection = uploader.getSelectedFile();
+    const file = fileSelection?.file;
 
     if (file) {
-        network.uploadFile(file, cmd);
+        network.uploadFile(fileSelection, cmd);
         uploader.clearFile();
         return true;
     }
