@@ -360,13 +360,14 @@ function createCameraOverlay({ composer }) {
             scanStatusEl.textContent = `Found: ${decoded}`;
         }
 
-        if (composer && typeof composer.setValue === 'function' && typeof composer.submit === 'function') {
+        if (composer && typeof composer.setValue === 'function') {
             try {
-                const escaped = decoded.replace(/["]/g, '\\"');
-                composer.setValue(`scanned "${escaped}"`);
-                composer.submit();
+                composer.setValue(decoded);
+                if (typeof composer.focus === 'function') {
+                    composer.focus();
+                }
             } catch (error) {
-                setError('Failed to send scanned code.');
+                setError('Failed to populate scanned code.');
                 return;
             }
         }
