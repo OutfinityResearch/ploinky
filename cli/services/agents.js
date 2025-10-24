@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { loadAgents, saveAgents } from './workspace.js';
 import { getAgentContainerName, parseManifestPorts } from './docker/index.js';
@@ -14,6 +15,22 @@ export function enableAgent(agentName, mode, repoNameParam) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
     const containerName = getAgentContainerName(shortAgentName, repoName);
+
+    const preinstallEntry = manifest?.preinstall;
+    const preinstallCommands = Array.isArray(preinstallEntry)
+        ? preinstallEntry.filter(cmd => typeof cmd === 'string' && cmd.trim())
+        : (typeof preinstallEntry === 'string' && preinstallEntry.trim() ? [preinstallEntry] : []);
+
+    if (preinstallCommands.length) {
+        for (const cmd of preinstallCommands) {
+            try {
+                console.log(`Running preinstall for '${shortAgentName}': ${cmd}`);
+                execSync(cmd, { cwd: agentPath, stdio: 'inherit' });
+            } catch (error) {
+                throw new Error(`preinstall command failed ('${cmd}'): ${error?.message || error}`);
+            }
+        }
+    }
 
     const normalizedMode = (mode || '').toLowerCase();
     let runMode = 'isolated';
