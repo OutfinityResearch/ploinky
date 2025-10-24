@@ -280,11 +280,12 @@ echo API_KEY      # Show raw value
 echo $PROD_KEY    # Show resolved alias</code></pre>
 
                         <h3>expose</h3>
-                        <p>Expose variable to agent environment.</p>
-                        <pre><code>expose &lt;ENV_NAME&gt; &lt;$VAR|value&gt; [agent]</code></pre>
+                        <p>Expose a workspace variable to an agent. If the value is omitted, the command defaults to using <code>$&lt;ENV_NAME&gt;</code>. When the agent argument is omitted, the static agent configured via <code>start</code> is used.</p>
+                        <pre><code>expose &lt;ENV_NAME&gt; [<$VAR|value>] [agent]</code></pre>
                         <pre><code># Examples
 expose DATABASE_URL $DB_URL myAgent
-expose API_KEY $PROD_KEY            # Uses static agent</code></pre>
+expose API_KEY $PROD_KEY            # Uses static agent
+expose AUTO_SECRET demo             # Uses value from $AUTO_SECRET</code></pre>
                     </div>
 
                     <div class="doc-section" id="web">

@@ -29,7 +29,7 @@ export function showHelp(args = []) {
   vars                           List all variable names (no values)
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
-  expose <ENV_NAME> <$VAR|value> [agent]  Expose to agent environment
+  expose <ENV_NAME> [<$VAR|value>] [agent]  Expose to agent environment
   list agents | repos            List agents (manifests) or predefined repos
 
 
@@ -224,9 +224,14 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         },
         'expose': {
             description: 'Expose variables to an agent as environment variables',
-            syntax: 'expose <ENV_NAME> <$VAR|value> [agentName] ',
-            examples: [ 'expose API_KEY $MY_API_KEY MyAPI', 'expose MODE prod MyAPI', 'expose API_KEY $MY_API_KEY' ],
-            notes: 'First arg is the environment variable name inside the container. If agentName omitted, uses static agent configured via start.'
+            syntax: 'expose <ENV_NAME> [<$VAR|value>] [agentName] ',
+            examples: [
+                'expose API_KEY $MY_API_KEY MyAPI',
+                'expose MODE prod MyAPI',
+                'expose API_KEY $MY_API_KEY',
+                'expose TEST_TOKEN demo'
+            ],
+            notes: 'If the value argument is omitted, the command defaults to using $<ENV_NAME>. When agentName is omitted, the static agent configured via start is used.'
         },
         'echo': {
             description: 'Print the resolved value of a variable',

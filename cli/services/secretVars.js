@@ -394,7 +394,11 @@ export function exposeEnv(exposedName, valueOrRef, agentNameOpt) {
     if (!agentName) {
         throw new Error('Missing agent name. Provide [agentName] or configure static with start <agent> <port>.');
     }
+    let source = valueOrRef;
+    if (source === undefined || source === null) {
+        source = `$${exposedName}`;
+    }
     const { manifestPath } = findAgent(agentName);
-    updateAgentExpose(manifestPath, exposedName, valueOrRef);
+    updateAgentExpose(manifestPath, exposedName, source);
     return { agentName, manifestPath };
 }
