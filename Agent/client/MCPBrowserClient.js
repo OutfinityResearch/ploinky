@@ -24,6 +24,7 @@ function createAgentClient(baseUrl) {
     let protocolVersion = null;
     let abortController = null;
     let streamTask = null;
+    let streamUnsupported = false;
     let messageId = 0;
 
     const pending = new Map();
@@ -157,7 +158,7 @@ function createAgentClient(baseUrl) {
     }
 
     function ensureStreamTask() {
-        if (streamTask) {
+        if (streamTask || streamUnsupported) {
             return;
         }
 
@@ -179,6 +180,10 @@ function createAgentClient(baseUrl) {
                 });
 
                 if (response.status === 405) {
+                    streamUnsupported = true;
+                    if (typeof window !== 'undefined') {
+                        console.warn('[MCPBrowserClient] SSE stream not supported; falling back to POST responses.');
+                    }
                     // Server does not support SSE; fall back to direct responses.
                     return;
                 }
@@ -341,6 +346,7 @@ function createAgentClient(baseUrl) {
         }
         streamTask = null;
         abortController = null;
+        streamUnsupported = false;
 
         try {
             if (sessionId) {
