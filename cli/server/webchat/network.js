@@ -57,6 +57,7 @@ export function createNetwork({
 }) {
     let es = null;
     let chatBuffer = '';
+    const pendingEchoes = [];
 
     function handleServerChunk(raw) {
         if (raw === undefined || raw === null) {
@@ -73,6 +74,15 @@ export function createNetwork({
         }
 
         const stripped = stripProcessingPrefix(text);
+
+        const normalized = stripped.trim();
+        if (normalized && pendingEchoes.length) {
+            const expected = pendingEchoes[0];
+            if (normalized === expected) {
+                pendingEchoes.shift();
+                return;
+            }
+        }
         if (stripped !== text) {
             showTypingIndicator();
         }
@@ -172,6 +182,10 @@ export function createNetwork({
 
     function sendCommand(cmd) {
         addClientMsg(cmd);
+        pendingEchoes.push(cmd.trim());
+        if (pendingEchoes.length > 25) {
+            pendingEchoes.splice(0, pendingEchoes.length - 25);
+        }
         markUserInputSent();
         fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
             method: 'POST',
@@ -263,6 +277,7 @@ export function createNetwork({
                 }
                 // If the user provided a caption, send it to the TTY as a normal command.
                 if (caption) {
+                    pendingEchoes.push(caption.trim());
                     const combined = `${caption}\n`;
                     fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
                         method: 'POST',
