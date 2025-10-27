@@ -133,7 +133,7 @@
                             <tr>
                                 <td><code>enable</code></td>
                                 <td>No</td>
-                                <td>Agents to auto-enable when this agent is enabled</td>
+                                <td>Agents to auto-enable when this agent is enabled. Can also specify <code>global</code> or <code>devel</code> scope. See details in the Advanced Features section.</td>
                             </tr>
                             <tr>
                                 <td><code>repos</code></td>
@@ -537,21 +537,35 @@ app.get('/mcp/status', (req, res) => {
                         <h2>Advanced Features</h2>
                         
                         <h3>Auto-Configuration</h3>
-                        <p>Agents can automatically configure their environment:</p>
+                        <p>Agents can automatically configure their environment by specifying repositories to add and other agents to enable.</p>
+
+                        <h4>The <code>enable</code> property</h4>
+                        <p>The <code>enable</code> property is an array of strings that specifies which other agents should be automatically enabled when this agent is enabled. It supports different scopes for finding the agent:</p>
+                        <ul>
+                            <li><code>"agentName"</code>: Enables an agent from the same repository. This is the default behavior.</li>
+                            <li><code>"agentName global"</code>: Enables an agent from the global repository.</li>
+                            <li><code>"agentName devel repoName"</code>: Enables an agent from the specified repository (<code>repoName</code>) in development mode.</li>
+                        </ul>
+
                         <pre><code># manifest.json
 {
   "container": "node:18",
   "agent": "node server.js",
-  "enable": ["database", "cache"],  // Enable required agents
-  "repos": {                        // Add required repos
+  "enable": [
+    "database",           // Enable 'database' from the current repo
+    "cache global",       // Enable 'cache' from the global repo
+    "logger devel utils"  // Enable 'logger' from the 'utils' repo in devel mode
+  ],
+  "repos": {
     "utils": "https://github.com/org/utils.git"
   }
 }
 
 # When this agent is enabled:
-1. Adds 'utils' repository
-2. Enables 'database' agent
-3. Enables 'cache' agent</code></pre>
+1. Adds the 'utils' repository.
+2. Enables the 'database' agent from the current agent's repository.
+3. Enables the 'cache' agent from the global repository.
+4. Enables the 'logger' agent from the 'utils' repository in development mode.</code></pre>
 
                         <h3>Custom Supervisor</h3>
                         <p>Override the default supervisor with custom logic:</p>
