@@ -74,7 +74,7 @@ fi
 fast_mcp_start_demo() {
   ploinky start demo "$TEST_ROUTER_PORT"
   local container_name
-  container_name=$(compute_container_name "demo")
+  container_name=$(compute_container_name "demo" "demo")
   fast_wait_for_container "$container_name"
 }
 fast_action "Action: Starting demo agent..." fast_mcp_start_demo

@@ -3,7 +3,13 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { loadAgents, saveAgents } from './workspace.js';
-import { getAgentContainerName, parseManifestPorts } from './docker/index.js';
+import {
+    getAgentContainerName,
+    parseManifestPorts,
+    containerExists,
+    isContainerRunning,
+    collectLiveAgentContainers
+} from './docker/index.js';
 import { findAgent } from './utils.js';
 import { REPOS_DIR } from './config.js';
 
@@ -170,4 +176,147 @@ export function enableAgent(agentName, mode, repoNameParam) {
     map[containerName] = record;
     saveAgents(map);
     return { containerName, repoName, shortAgentName };
+}
+
+export function disableAgent(agentRef) {
+    const input = typeof agentRef === 'string' ? agentRef.trim() : '';
+    if (!input) {
+        throw new Error("disable agent: missing agent name. Usage: disable <agentName>");
+    }
+
+    const hasNamespace = /[:/]/.test(input);
+    let targetRepo = null;
+    let targetAgent = input;
+
+    if (hasNamespace) {
+        const parts = input.split(/[:/]/).filter(Boolean);
+        if (parts.length !== 2) {
+            throw new Error(`disable agent: invalid identifier '${input}'. Use <repo>/<agent>.`);
+        }
+        [targetRepo, targetAgent] = parts;
+    }
+
+    const map = loadAgents();
+    const config = (map && typeof map._config === 'object') ? map._config : null;
+
+    const clearStaticConfig = ({ repoName, shortName, containerName, rawInput }) => {
+        if (!config || !config.static) return false;
+        const comparisons = new Set();
+        if (shortName) comparisons.add(String(shortName).trim().toLowerCase());
+        if (repoName && shortName) {
+            const repo = String(repoName).trim().toLowerCase();
+            const short = String(shortName).trim().toLowerCase();
+            comparisons.add(`${repo}/${short}`);
+            comparisons.add(`${repo}:${short}`);
+        }
+        if (rawInput) comparisons.add(String(rawInput).trim().toLowerCase());
+
+        const staticAgent = String(config.static.agent || '').trim().toLowerCase();
+        const staticContainer = String(config.static.container || '').trim();
+
+        const matchesAgent = staticAgent && (comparisons.has(staticAgent));
+        const matchesContainer = containerName && staticContainer && staticContainer === containerName;
+
+        if (!matchesAgent && !matchesContainer) return false;
+
+        delete config.static;
+        if (Object.keys(config).length === 0) {
+            delete map._config;
+        } else {
+            map._config = config;
+        }
+        return true;
+    };
+
+    const entries = Object.entries(map || {})
+        .filter(([key, value]) => key !== '_config' && value && typeof value === 'object')
+        .filter(([, value]) => value.type === 'agent');
+
+    const matches = entries.filter(([, value]) => {
+        const repoName = String(value.repoName || '').trim();
+        const agentName = String(value.agentName || '').trim();
+        if (!agentName) return false;
+        if (hasNamespace) {
+            return agentName === targetAgent && repoName === targetRepo;
+        }
+        return agentName === targetAgent;
+    });
+
+    if (!matches.length) {
+        const staticCleared = clearStaticConfig({ repoName: targetRepo, shortName: targetAgent, rawInput: input, containerName: null });
+        if (staticCleared) {
+            saveAgents(map);
+            return {
+                status: 'static-removed',
+                requested: input
+            };
+        }
+        return {
+            status: 'not-found',
+            requested: input
+        };
+    }
+
+    if (!hasNamespace && matches.length > 1) {
+        return {
+            status: 'ambiguous',
+            requested: input,
+            matches: matches.map(([, value]) => `${value.repoName}/${value.agentName}`)
+        };
+    }
+
+    const [containerName, record] = matches[0];
+
+    let isActive = false;
+    try {
+        const liveSet = new Set((collectLiveAgentContainers() || []).map(item => item.containerName));
+        if (liveSet.size && liveSet.has(containerName)) {
+            isActive = true;
+        }
+    } catch (_) {}
+
+    if (!isActive) {
+        try {
+            if (isContainerRunning(containerName)) {
+                isActive = true;
+            }
+        } catch (_) {}
+    }
+
+    if (!isActive) {
+        try {
+            if (containerExists(containerName)) {
+                isActive = true;
+            }
+        } catch (error) {
+            // If we cannot determine container existence, err on the safe side
+            isActive = true;
+        }
+    }
+
+    if (isActive) {
+        return {
+            status: 'container-exists',
+            containerName,
+            shortAgentName: record.agentName,
+            repoName: record.repoName
+        };
+    }
+
+    delete map[containerName];
+
+    clearStaticConfig({
+        repoName: record.repoName,
+        shortName: record.agentName,
+        containerName,
+        rawInput: input
+    });
+
+    saveAgents(map);
+    return {
+        status: 'removed',
+        containerName,
+        shortAgentName: record.agentName,
+        repoName: record.repoName
+    };
 }

@@ -16,7 +16,7 @@ const COMMANDS = {
     'add': ['repo'],
     'refresh': ['agent'],
     'enable': ['repo', 'agent'],
-    'disable': ['repo'],
+    'disable': ['repo', 'agent'],
     'shell': [],
     'cli': [],
     'run': ['task'],
@@ -95,7 +95,13 @@ function completer(line) {
             }
         } else {
             if (words.length === 1) context = 'commands';
-            else if (words.length === 2 && subcommands.length > 0) context = 'subcommands';
+            else if (words.length === 2 && subcommands.length > 0) {
+                if (command === 'disable' && !subcommands.includes(words[1])) {
+                    context = 'args';
+                } else {
+                    context = 'subcommands';
+                }
+            }
             else if (command === 'help' && words.length === 2) {
                 // Completing help topics
                 context = 'help-topics';
@@ -123,6 +129,9 @@ function completer(line) {
         // Get potential completions based on context
         if (context === 'subcommands') {
             completions = subcommands;
+            if (command === 'disable') {
+                completions = [...new Set([...subcommands, ...getAgentNames()])];
+            }
         } else if (context === 'help-topics') {
             // For help command, suggest all available commands
             completions = Object.keys(COMMANDS).filter(cmd => cmd !== 'help' && cmd !== 'exit' && cmd !== 'quit' && cmd !== 'clear');
@@ -154,8 +163,12 @@ function completer(line) {
             } else if (command === 'expose') {
                 // expose <EXPOSED> <$VAR|value> <agent>
                 if (words.length >= 4) completions = getAgentNames();
-            } else if (command === 'disable' && subcommand === 'repo') {
-                completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
+            } else if (command === 'disable') {
+                if (subcommand === 'repo') {
+                    completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
+                } else {
+                    completions = getAgentNames();
+                }
             } else if (command === 'enable' && subcommand === 'repo') {
                 completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
             } else if (command === 'add' && subcommand === 'repo') {

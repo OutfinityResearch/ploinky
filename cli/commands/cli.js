@@ -547,9 +547,57 @@ async function handleCommand(args) {
             }
             break;
         }
-        case 'disable':
-            if (options[0] === 'repo') disableRepo(options[1]); else showHelp();
+        case 'disable': {
+            if (!options.length) {
+                showHelp();
+                break;
+            }
+
+            if (options[0] === 'repo') {
+                disableRepo(options[1]);
+                break;
+            }
+
+            let target = options.join(' ').trim();
+            if (options[0] === 'agent') {
+                target = options.slice(1).join(' ').trim();
+            }
+
+            if (!target) {
+                showHelp();
+                break;
+            }
+
+            try {
+                const result = agentsSvc.disableAgent(target);
+                switch (result.status) {
+                    case 'removed':
+                        console.log(`✓ Agent '${result.shortAgentName}' from repo '${result.repoName}' disabled.`);
+                        break;
+                    case 'not-found':
+                        console.log(`Agent '${target}' is not enabled in this workspace.`);
+                        break;
+                    case 'static-removed':
+                        console.log(`✓ Static agent '${target}' configuration cleared.`);
+                        break;
+                    case 'ambiguous':
+                        console.log(`Agent name '${target}' is ambiguous. Please specify one of:`);
+                        for (const entry of result.matches || []) {
+                            console.log(`  - ${entry}`);
+                        }
+                        break;
+                    case 'container-exists':
+                        console.log(`Cannot disable agent '${result.shortAgentName}' because container '${result.containerName}' still exists. Please destroy the container before disabling the agent.`);
+                        break;
+                    default:
+                        console.log(`No changes made for agent '${target}'.`);
+                        break;
+                }
+            } catch (error) {
+                throw new Error(`disable agent failed: ${error?.message || error}`);
+            }
             break;
+        }
         // 'run' legacy commands removed; use 'start', 'cli', 'shell', 'console'.
         case 'start':
             await startWorkspace(options[0], options[1], { refreshComponentToken, ensureComponentToken, enableAgent, killRouterIfRunning });
@@ -736,9 +784,17 @@ async function handleCommand(args) {
 
             if (target) {
                 const agentName = target;
-                const { getServiceContainerName, getRuntime, isContainerRunning } = dockerSvc;
+                const { getAgentContainerName, getRuntime, isContainerRunning } = dockerSvc;
+                let resolved;
+                try {
+                    resolved = findAgent(agentName);
+                } catch (err) {
+                    console.error(err?.message || `Agent '${agentName}' not found.`);
+                    return;
+                }
+
                 const runtime = getRuntime();
-                const containerName = getServiceContainerName(agentName);
+                const containerName = getAgentContainerName(resolved.shortAgentName, resolved.repo);
 
                 if (!isContainerRunning(containerName)) {
                     console.error(`Agent '${agentName}' is not running.`);

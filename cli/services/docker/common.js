@@ -71,16 +71,6 @@ function getAgentContainerName(agentName, repoName) {
     return containerName;
 }
 
-function getServiceContainerName(agentName) {
-    const safeAgentName = String(agentName || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
-    const projectDir = path.basename(process.cwd()).replace(/[^a-zA-Z0-9_.-]/g, '_');
-    const cwdHash = crypto.createHash('sha256')
-        .update(process.cwd())
-        .digest('hex')
-        .substring(0, 6);
-    return `ploinky_agent_${safeAgentName}_${projectDir}_${cwdHash}`;
-}
-
 function isContainerRunning(containerName) {
     const command = `${containerRuntime} ps --format "{{.Names}}" | grep -x "${containerName}"`;
     debugLog(`Checking if container is running with command: ${command}`);
@@ -289,7 +279,6 @@ export {
     getContainerLabel,
     getRuntime,
     getSecretsForAgent,
-    getServiceContainerName,
     isContainerRunning,
     loadAgentsMap,
     parseHostPort,

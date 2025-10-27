@@ -290,6 +290,11 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'disable repo <name>',
                     description: 'Disable a repository from agent listings',
                     examples: [ 'disable repo cloud' ]
+                },
+                'agent': {
+                    syntax: 'disable <agentName>',
+                    description: 'Remove an enabled agent from .ploinky/agents (container must be destroyed first)',
+                    examples: [ 'disable demo', 'disable agent repoName/demo' ]
                 }
             }
         },

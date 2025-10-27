@@ -154,6 +154,15 @@ refresh agent demo  # stop, remove, and re-create the container for the 'demo' a
                         <h3>list agents</h3>
                         <p>List all available agents from enabled repositories.</p>
                         <pre><code>list agents</code></pre>
+                        <h3>disable agent</h3>
+                        <p>Remove an enabled agent from the workspace registry. The agent container must be destroyed first.</p>
+                        <pre><code>disable &lt;agentName|repo/name&gt;</code></pre>
+                        <pre><code># Examples
+disable demo               # remove short-named agent (if unambiguous)
+disable repoName/demo      # remove agent using repo-qualified name</code></pre>
+                        <div class="alert alert-warning">
+                            <strong>Note:</strong> If the agent is configured as the static workspace agent (via <code>start</code>), disabling it also clears the static configuration once the agent entry is removed.
+                        </div>
                     </div>
 
                     <div class="doc-section" id="workspace">

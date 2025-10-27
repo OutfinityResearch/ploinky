@@ -54,8 +54,8 @@ fast_check "Status lists active containers for demo" fast_assert_status_contains
 fast_check "Status lists active containers for testAgent" fast_assert_status_contains "agent: testAgent"
 
 fast_stage_header "Demo agent dependency tests"
-SIMULATOR_CONTAINER=$(compute_container_name "simulator")
-MODERATOR_CONTAINER=$(compute_container_name "moderator")
+SIMULATOR_CONTAINER=$(compute_container_name "simulator" "demo")
+MODERATOR_CONTAINER=$(compute_container_name "moderator" "webmeet")
 fast_check "Simulator container is running" fast_assert_container_running "$SIMULATOR_CONTAINER"
 fast_check "Moderator container is running" fast_assert_container_running "$MODERATOR_CONTAINER"
 fast_check "Moderator server responds to GET" fast_check_moderator_get

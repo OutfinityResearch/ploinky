@@ -28,7 +28,6 @@ export {
     getAgentContainerName,
     getConfiguredProjectPath,
     getRuntime,
-    getServiceContainerName,
     isContainerRunning,
     parseManifestPorts,
     waitForContainerRunning

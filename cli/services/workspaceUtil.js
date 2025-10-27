@@ -139,7 +139,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     workspaceSvc.saveAgents(dedup);
     reg = dedup;
     const names = Object.keys(reg || {});
-    const { ensureAgentService, getServiceContainerName } = dockerSvc;
+    const { ensureAgentService } = dockerSvc;
     const routingFile = path.resolve('.ploinky/routing.json');
     let cfg = { routes: {} };
     try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch (_) {}
@@ -148,16 +148,21 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     const staticPort = cfg0.static.port;
     let staticManifestPath = null;
     let staticAgentPath = null;
+    let staticRepoName = null;
+    let staticShortAgent = null;
     try {
       const res = utils.findAgent(staticAgent);
       staticManifestPath = res.manifestPath;
       staticAgentPath = path.dirname(staticManifestPath);
+      staticRepoName = res.repo;
+      staticShortAgent = res.shortAgentName;
     } catch (e) {
       console.error(`start: static agent '${staticAgent}' not found in any repo. Use 'enable agent <repo/name>' or check repos.`);
       return;
     }
     cfg.port = staticPort;
-    cfg.static = { agent: staticAgent, container: getServiceContainerName(staticAgent), hostPath: staticAgentPath };
+    const staticContainer = getAgentContainerName(staticShortAgent || staticAgent, staticRepoName || '');
+    cfg.static = { agent: staticAgent, container: staticContainer, hostPath: staticAgentPath };
     console.log(`Static: agent=${utils.colorize(staticAgent, 'cyan')} port=${utils.colorize(String(staticPort), 'yellow')}`);
     if (typeof killRouterIfRunning === 'function') {
       try { killRouterIfRunning(); } catch (_) {}
@@ -218,15 +223,14 @@ async function runCli(agentName, args) {
   if (!cliBase || !cliBase.trim()) { throw new Error(`Manifest for '${shortAgentName}' has no 'cli' command.`); }
   const rawCmd = cliBase + (args && args.length ? (' ' + args.join(' ')) : '');
   const cmd = wrapCliWithWebchat(rawCmd);
-  const { ensureAgentService, attachInteractive, getConfiguredProjectPath } = dockerSvc;
-  const containerInfo = ensureAgentService(shortAgentName, manifest, path.dirname(manifestPath));
-  const containerName = (containerInfo && containerInfo.containerName) || `ploinky_agent_${shortAgentName}`;
+  const { ensureAgentService, attachInteractive, getConfiguredProjectPath, getAgentContainerName } = dockerSvc;
+  const agentDir = path.dirname(manifestPath);
+  const repoName = path.basename(path.dirname(agentDir));
+  const containerInfo = ensureAgentService(shortAgentName, manifest, agentDir);
+  const containerName = (containerInfo && containerInfo.containerName) || getAgentContainerName(shortAgentName, repoName);
   console.log(`[cli] container: ${containerName}`);
   console.log(`[cli] command: ${cmd}`);
   console.log(`[cli] agent: ${shortAgentName}`);
-  const agentDir = path.dirname(manifestPath);
-  const repoDir = path.dirname(agentDir);
-  const repoName = path.basename(repoDir);
   const projPath = getConfiguredProjectPath(shortAgentName, repoName);
   attachInteractive(containerName, projPath, cmd);
 }
@@ -235,16 +239,15 @@ async function runShell(agentName) {
   if (!agentName) { throw new Error('Usage: shell <agentName>'); }
   const { manifestPath, shortAgentName } = utils.findAgent(agentName);
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const { ensureAgentService, attachInteractive, getConfiguredProjectPath } = dockerSvc;
-  const containerInfo = ensureAgentService(shortAgentName, manifest, path.dirname(manifestPath));
-  const containerName = (containerInfo && containerInfo.containerName) || `ploinky_agent_${shortAgentName}`;
+  const { ensureAgentService, attachInteractive, getConfiguredProjectPath, getAgentContainerName } = dockerSvc;
+  const agentDir = path.dirname(manifestPath);
+  const repoName = path.basename(path.dirname(agentDir));
+  const containerInfo = ensureAgentService(shortAgentName, manifest, agentDir);
+  const containerName = (containerInfo && containerInfo.containerName) || getAgentContainerName(shortAgentName, repoName);
   const cmd = '/bin/sh';
   console.log(`[shell] container: ${containerName}`);
   console.log(`[shell] command: ${cmd}`);
   console.log(`[shell] agent: ${shortAgentName}`);
-  const agentDir = path.dirname(manifestPath);
-  const repoDir = path.dirname(agentDir);
-  const repoName = path.basename(repoDir);
   const projPath = getConfiguredProjectPath(shortAgentName, repoName);
   attachInteractive(containerName, projPath, cmd);
 }
@@ -252,8 +255,16 @@ async function runShell(agentName) {
 async function refreshAgent(agentName) {
     if (!agentName) { throw new Error('Usage: refresh agent <name>'); }
 
-    const { getServiceContainerName, isContainerRunning, stopAndRemove, ensureAgentService } = dockerSvc;
-    const containerName = getServiceContainerName(agentName);
+    const { getAgentContainerName, isContainerRunning, stopAndRemove, ensureAgentService } = dockerSvc;
+    let resolved;
+    try {
+        resolved = utils.findAgent(agentName);
+    } catch (err) {
+        console.error(err?.message || `Agent '${agentName}' not found.`);
+        return;
+    }
+
+    const containerName = getAgentContainerName(resolved.shortAgentName, resolved.repo);
 
     if (!isContainerRunning(containerName)) {
         console.error(`Agent '${agentName}' is not running.`);
@@ -263,10 +274,9 @@ async function refreshAgent(agentName) {
     console.log(`Refreshing (re-creating) agent '${agentName}'...`);
 
     try {
-        const res = utils.findAgent(agentName);
-        const short = res.shortAgentName;
-        const manifest = JSON.parse(fs.readFileSync(res.manifestPath, 'utf8'));
-        const agentPath = path.dirname(res.manifestPath);
+        const short = resolved.shortAgentName;
+        const manifest = JSON.parse(fs.readFileSync(resolved.manifestPath, 'utf8'));
+        const agentPath = path.dirname(resolved.manifestPath);
         
         stopAndRemove(containerName);
         

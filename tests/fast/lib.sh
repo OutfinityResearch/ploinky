@@ -176,6 +176,7 @@ fast_require_runtime() {
 
 compute_container_name() {
   local agent_name="$1"
+  local repo_name="$2"
   if [[ -z "$agent_name" ]]; then
     echo "Agent name is required for computing container name." >&2
     return 1
@@ -183,21 +184,45 @@ compute_container_name() {
   fast_load_state
   fast_require_var "TEST_RUN_DIR" || return 1
   local cwd="$TEST_RUN_DIR"
-  FAST_TMP_CWD="$cwd" FAST_TMP_AGENT="$agent_name" node <<'NODE'
+  if [[ -z "$repo_name" && -n "${TEST_REPO_NAME:-}" ]]; then
+    repo_name="$TEST_REPO_NAME"
+  fi
+  FAST_TMP_CWD="$cwd" FAST_TMP_AGENT="$agent_name" FAST_TMP_REPO="$repo_name" node <<'NODE'
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 
 const cwd = process.env.FAST_TMP_CWD;
 const agent = process.env.FAST_TMP_AGENT;
+let repo = process.env.FAST_TMP_REPO || '';
 
 function sanitize(value) {
   return String(value || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
 }
 
+try {
+  if (!repo) {
+    const mapPath = path.join(cwd, '.ploinky', 'agents');
+    const raw = fs.readFileSync(mapPath, 'utf8');
+    const data = JSON.parse(raw || '{}');
+    if (data && typeof data === 'object') {
+      for (const value of Object.values(data)) {
+        if (value && typeof value === 'object' && value.agentName === agent && value.repoName) {
+          repo = value.repoName;
+          break;
+        }
+      }
+    }
+  }
+} catch (_) {
+  // ignore lookup failures; fallback to provided repo if any
+}
+
 const safeAgent = sanitize(agent);
+const safeRepo = sanitize(repo);
 const projectDir = sanitize(path.basename(cwd));
-const hash = crypto.createHash('sha256').update(cwd).digest('hex').substring(0, 6);
-console.log(`ploinky_agent_${safeAgent}_${projectDir}_${hash}`);
+const hash = crypto.createHash('sha256').update(cwd).digest('hex').substring(0, 8);
+console.log(`ploinky_${safeRepo}_${safeAgent}_${projectDir}_${hash}`);
 NODE
 }
 

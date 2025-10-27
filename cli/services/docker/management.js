@@ -14,7 +14,6 @@ import {
     getConfiguredProjectPath,
     getContainerLabel,
     getSecretsForAgent,
-    getServiceContainerName,
     isContainerRunning,
     loadAgentsMap,
     parseHostPort,
@@ -146,7 +145,6 @@ function getContainerCandidates(name, rec) {
     const candidates = new Set();
     if (name) candidates.add(name);
     if (rec && rec.agentName) {
-        try { candidates.add(getServiceContainerName(rec.agentName)); } catch (_) { }
         try {
             const repoName = rec.repoName || '';
             candidates.add(getAgentContainerName(rec.agentName, repoName));
@@ -185,7 +183,8 @@ function stopConfiguredAgents({ fast = false } = {}) {
 }
 
 async function ensureAgentCore(manifest, agentPath) {
-    const containerName = getServiceContainerName(manifest.name);
+    const repoName = path.basename(path.dirname(agentPath));
+    const containerName = `${getAgentContainerName(manifest.name, repoName)}_core`;
     const portFilePath = path.join(PLOINKY_DIR, 'running_agents', `${containerName}.port`);
     const lockDir = path.join(PLOINKY_DIR, 'locks');
     const lockFile = path.join(lockDir, `container_${containerName}.lock`);
@@ -316,7 +315,8 @@ function runInstallHook(agentName, manifest, agentPath, cwd) {
 }
 
 function startAgentContainer(agentName, manifest, agentPath, options = {}) {
-    const containerName = getServiceContainerName(agentName);
+    const repoName = path.basename(path.dirname(agentPath));
+    const containerName = getAgentContainerName(agentName, repoName);
     try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
     try { execSync(`${containerRuntime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
 
@@ -390,7 +390,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const declaredEnvNames2 = [...getManifestEnvNames(manifest), ...getExposedNames(manifest)];
     agents[containerName] = {
         agentName,
-        repoName: path.basename(path.dirname(agentPath)),
+        repoName,
         containerImage: image,
         createdAt: new Date().toISOString(),
         projectPath: cwd,
@@ -398,8 +398,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         config: {
             binds: [
                 { source: cwd, target: cwd },
-                { source: agentLibPath, target: '/Agent' },
-                { source: agentPath, target: '/code' }
+                { source: agentLibPath, target: '/Agent', ro: true },
+                { source: agentPath, target: '/code', ro: true }
             ],
             env: Array.from(new Set(declaredEnvNames2)).map((name) => ({ name })),
             ports: portMappings
@@ -586,8 +586,8 @@ function applyAgentStartupConfig(agentName, manifest, agentPath, containerName) 
             try { if (out && out.trim()) process.stdout.write(out); } catch (_) { }
             try {
                 const agents = loadAgentsMap();
-                const key = containerName || getServiceContainerName(agentName);
                 const repoName = path.basename(path.dirname(agentPath));
+                const key = containerName || getAgentContainerName(agentName, repoName);
                 const image = manifest.container || manifest.image || 'node:18-alpine';
                 const projPath = getConfiguredProjectPath(agentName, repoName);
                 const record = agents[key] || (agents[key] = {
@@ -611,7 +611,7 @@ function applyAgentStartupConfig(agentName, manifest, agentPath, containerName) 
 
 function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const repoName = path.basename(path.dirname(agentPath));
-    const containerName = getServiceContainerName(agentName);
+    const containerName = getAgentContainerName(agentName, repoName);
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const webchatSetupCmd = (manifest && typeof manifest.webchat === 'string' && manifest.webchat.trim()) ? manifest.webchat.trim() : '';
 
