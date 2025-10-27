@@ -10,8 +10,73 @@ import { REPOS_DIR } from './config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function normalizeEnableArgs(agentName, mode, repoNameParam) {
+    if (typeof agentName !== 'string') {
+        return { agentName, mode, repoNameParam };
+    }
+    const trimmed = agentName.trim();
+    if (!trimmed) {
+        return { agentName: trimmed, mode, repoNameParam };
+    }
+    if (mode) {
+        return { agentName: trimmed, mode, repoNameParam };
+    }
+
+    let parsedAgent = trimmed;
+    let parsedMode = mode;
+    let parsedRepo = repoNameParam;
+
+    const spaceTokens = trimmed.split(/\s+/).filter(Boolean);
+    if (spaceTokens.length > 1) {
+        const candidateMode = spaceTokens[1].toLowerCase();
+        if (candidateMode === 'global' || candidateMode === 'devel') {
+            parsedAgent = spaceTokens[0];
+            parsedMode = candidateMode;
+            if (candidateMode === 'devel' && parsedRepo === undefined) {
+                const remainder = spaceTokens.slice(2).join(' ').trim();
+                if (remainder) parsedRepo = remainder;
+            }
+        }
+    }
+
+    if (parsedMode) {
+        return { agentName: parsedAgent, mode: parsedMode, repoNameParam: parsedRepo };
+    }
+
+    const colonIndex = trimmed.indexOf(':');
+    if (colonIndex === -1) {
+        return { agentName: parsedAgent, mode: parsedMode, repoNameParam: parsedRepo };
+    }
+
+    const target = trimmed.slice(0, colonIndex).trim();
+    const remainder = trimmed.slice(colonIndex + 1).trim();
+    if (!target || !remainder) {
+        return { agentName: parsedAgent, mode: parsedMode, repoNameParam: parsedRepo };
+    }
+
+    const tokens = remainder.split(/\s+/).filter(Boolean);
+    if (!tokens.length) {
+        return { agentName: parsedAgent, mode: parsedMode, repoNameParam: parsedRepo };
+    }
+
+    const inferredMode = tokens[0].toLowerCase();
+    if (inferredMode !== 'global' && inferredMode !== 'devel') {
+        return { agentName: parsedAgent, mode: parsedMode, repoNameParam: parsedRepo };
+    }
+
+    const repoFromDirective = tokens.slice(1).join(' ');
+    return {
+        agentName: target,
+        mode: inferredMode,
+        repoNameParam: inferredMode === 'devel'
+            ? (repoNameParam !== undefined ? repoNameParam : repoFromDirective)
+            : (repoNameParam !== undefined ? repoNameParam : undefined)
+    };
+}
+
 export function enableAgent(agentName, mode, repoNameParam) {
-    const { manifestPath, repo: repoName, shortAgentName } = findAgent(agentName);
+    const normalized = normalizeEnableArgs(agentName, mode, repoNameParam);
+    const { manifestPath, repo: repoName, shortAgentName } = findAgent(normalized.agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
     const containerName = getAgentContainerName(shortAgentName, repoName);
@@ -32,7 +97,7 @@ export function enableAgent(agentName, mode, repoNameParam) {
         }
     }
 
-    const normalizedMode = (mode || '').toLowerCase();
+    const normalizedMode = (normalized.mode || '').toLowerCase();
     let runMode = 'isolated';
     let projectPath = '';
 
@@ -42,9 +107,9 @@ export function enableAgent(agentName, mode, repoNameParam) {
             const existing = Object.values(current || {}).find(
                 r => r && r.type === 'agent' && r.agentName === shortAgentName && r.repoName === repoName
             );
-            if (existing && existing.projectPath) {
+            if (existing && (!existing.runMode || existing.runMode === 'isolated') && existing.projectPath) {
                 projectPath = existing.projectPath;
-                runMode = existing.runMode === 'default' ? 'isolated' : (existing.runMode || 'isolated');
+                runMode = 'isolated';
             }
         } catch (_) {}
         if (!projectPath) {
@@ -56,7 +121,7 @@ export function enableAgent(agentName, mode, repoNameParam) {
         runMode = 'global';
         projectPath = process.cwd();
     } else if (normalizedMode === 'devel') {
-        const repoCandidate = String(repoNameParam || '').trim();
+        const repoCandidate = String(normalized.repoNameParam || '').trim();
         if (!repoCandidate) {
             throw new Error("enable agent devel: missing repoName. Usage: enable agent <name> devel <repoName>");
         }
@@ -67,7 +132,8 @@ export function enableAgent(agentName, mode, repoNameParam) {
         runMode = 'devel';
         projectPath = repoPath;
     } else {
-        throw new Error(`Unknown mode '${mode}'. Allowed: global | devel`);
+        const errorMode = normalized.mode || mode || '';
+        throw new Error(`Unknown mode '${errorMode}'. Allowed: global | devel`);
     }
 
     // Parse port mappings from manifest
@@ -82,7 +148,7 @@ export function enableAgent(agentName, mode, repoNameParam) {
         createdAt: new Date().toISOString(),
         projectPath,
         runMode,
-        develRepo: runMode === 'devel' ? String(repoNameParam || '') : undefined,
+        develRepo: runMode === 'devel' ? String(normalized.repoNameParam || '') : undefined,
         type: 'agent',
         config: {
             binds: [

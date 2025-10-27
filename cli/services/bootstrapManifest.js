@@ -33,7 +33,10 @@ export async function applyManifestDirectives(agentNameOrPath) {
         for (const a of en) {
             try {
                 enableAgent(a);
-            } catch (_) {}
+            } catch (err) {
+                const message = err && err.message ? err.message : String(err);
+                console.error(`[manifest enable] Failed to enable agent '${a}': ${message}`);
+            }
         }
     }
 }

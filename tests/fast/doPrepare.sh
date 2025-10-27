@@ -12,6 +12,10 @@ TEST_AGENT_QUALIFIED="${TEST_REPO_NAME}/${TEST_AGENT_NAME}"
 fast_write_state_var "TEST_REPO_NAME" "$TEST_REPO_NAME"
 fast_write_state_var "TEST_AGENT_NAME" "$TEST_AGENT_NAME"
 fast_write_state_var "TEST_AGENT_QUALIFIED" "$TEST_AGENT_QUALIFIED"
+TEST_AGENT_DEP_GLOBAL_NAME="testAgentDepGlobal"
+fast_write_state_var "TEST_AGENT_DEP_GLOBAL_NAME" "$TEST_AGENT_DEP_GLOBAL_NAME"
+TEST_AGENT_DEP_DEVEL_NAME="testAgentDepDevel"
+fast_write_state_var "TEST_AGENT_DEP_DEVEL_NAME" "$TEST_AGENT_DEP_DEVEL_NAME"
 
 if [[ -z "${TEST_RUN_DIR:-}" ]]; then
   TEST_RUN_DIR=$(mktemp -d -t ploinky-fast-XXXXXX)
@@ -42,6 +46,10 @@ cat >"${agent_root}/manifest.json" <<'EOF'
   "container": "node:20-bullseye",
   "install": "echo 'install_ok' > ./install_marker.txt",
   "agent": "node /code/server.js",
+  "enable": [
+    "testAgentDepGlobal global",
+    "testAgentDepDevel devel testRepo"
+  ],
   "env": {
     "FAST_TEST_MARKER": "fast-suite",
     "MY_TEST_VAR": "hello-manifest"
@@ -87,6 +95,27 @@ EOF
 printf 'fast-static-ok' >"${agent_root}/fast-static.txt"
 fast_write_state_var "TEST_STATIC_ASSET_PATH" "/${TEST_AGENT_NAME}/fast-static.txt"
 fast_write_state_var "TEST_STATIC_ASSET_EXPECTED" "fast-static-ok"
+
+# Dependency agent that will be enabled in global mode via manifest
+dep_agent_root="${repo_root}/${TEST_AGENT_DEP_GLOBAL_NAME}"
+mkdir -p "$dep_agent_root"
+
+cat >"${dep_agent_root}/manifest.json" <<'EOF'
+{
+  "container": "node:20-bullseye"
+}
+EOF
+
+# Dependency agent that will be enabled in devel mode via manifest
+dep_devel_root="${repo_root}/${TEST_AGENT_DEP_DEVEL_NAME}"
+mkdir -p "$dep_devel_root"
+
+cat >"${dep_devel_root}/manifest.json" <<'EOF'
+{
+  "container": "node:20-bullseye",
+  "agent": "node -e \"setInterval(()=>{}, 1_000_000)\""
+}
+EOF
 
 fast_info "Enabling repository ${TEST_REPO_NAME}."
 ploinky enable repo "$TEST_REPO_NAME"

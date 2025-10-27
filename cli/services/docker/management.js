@@ -657,12 +657,15 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const agents = loadAgentsMap();
     const declaredEnvNames3 = [...getManifestEnvNames(manifest), ...getExposedNames(manifest)];
     const projPath = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)));
+    const existingRecord = agents[containerName] || {};
     agents[containerName] = {
         agentName,
         repoName,
         containerImage: image,
-        createdAt: new Date().toISOString(),
+        createdAt: existingRecord.createdAt || new Date().toISOString(),
         projectPath: projPath,
+        runMode: existingRecord.runMode,
+        develRepo: existingRecord.develRepo,
         type: 'agent',
         config: {
             binds: [
