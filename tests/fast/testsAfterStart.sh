@@ -47,9 +47,9 @@ fast_check "Host-only env var not visible inside container" fast_assert_containe
 fast_stage_header "Workspace status command"
 fast_check "Status reports SSO disabled" fast_assert_status_contains "- SSO: disabled"
 fast_check "Status reports router listening" fast_assert_status_contains "- Router: listening"
-fast_check "Status lists testRepo" fast_assert_status_contains "[Repo] testRepo"
-fast_check "Status lists testAgent manifest" fast_assert_status_contains "- testAgent:"
-fast_check "Status lists demo manifest" fast_assert_status_contains "- demo:"
+fast_check "Status lists repos section" fast_assert_status_contains "- Repos:"
+fast_check "Status lists demo repo" fast_assert_status_contains "  - demo"
+fast_check "Status lists testRepo repo" fast_assert_status_contains "  - testRepo"
 fast_check "Status lists active containers for demo" fast_assert_status_contains "agent: demo"
 fast_check "Status lists active containers for testAgent" fast_assert_status_contains "agent: testAgent"
 

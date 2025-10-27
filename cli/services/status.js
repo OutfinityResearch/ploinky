@@ -10,6 +10,45 @@ import { gatherSsoStatus } from './sso.js';
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 const PREDEFINED_REPOS = reposSvc.getPredefinedRepos();
 
+const ANSI = {
+    reset: '\u001B[0m',
+    bold: '\u001B[1m',
+    dim: '\u001B[2m',
+    red: '\u001B[31m',
+    green: '\u001B[32m',
+    yellow: '\u001B[33m',
+    blue: '\u001B[34m',
+    magenta: '\u001B[35m',
+    cyan: '\u001B[36m',
+    gray: '\u001B[90m'
+};
+
+const supportsColor = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+
+function colorize(text, ...styles) {
+    if (!supportsColor || styles.length === 0) return text;
+    return `${styles.join('')}${text}${ANSI.reset}`;
+}
+
+const styles = {
+    header: (text) => colorize(text, ANSI.bold, ANSI.cyan),
+    label: (text) => colorize(text, ANSI.dim),
+    name: (text) => colorize(text, ANSI.cyan),
+    success: (text) => colorize(text, ANSI.green),
+    warn: (text) => colorize(text, ANSI.yellow),
+    danger: (text) => colorize(text, ANSI.red),
+    info: (text) => colorize(text, ANSI.blue),
+    accent: (text) => colorize(text, ANSI.magenta),
+    muted: (text) => colorize(text, ANSI.gray),
+    bold: (text) => colorize(text, ANSI.bold)
+};
+
+const bulletSymbol = supportsColor ? `${ANSI.gray}\u2022${ANSI.reset}` : '-';
+
+function formatBadge(text, formatter = (value) => value) {
+    return formatter(`[${text}]`);
+}
+
 export function findAgentManifest(agentName) {
     const { manifestPath } = findAgent(agentName);
     return manifestPath;
@@ -43,10 +82,10 @@ export function listCurrentAgents() {
         const legacy = getAgentsRegistry();
         const names = Object.keys(legacy || {});
         if (!names.length) {
-            console.log('No running agent containers detected.');
+            console.log(styles.warn('No running agent containers detected.'));
             return;
         }
-        console.log('No running agent containers detected. Last recorded registry entries:');
+        console.log(styles.warn('No running agent containers detected. Last recorded registry entries:'));
         for (const name of names) {
             const r = legacy[name] || {};
             const type = r.type || '-';
@@ -60,16 +99,16 @@ export function listCurrentAgents() {
             const ports = r.config?.ports
                 ? r.config.ports.map(p => `${p.containerPort}->${p.hostPort}`).join(', ')
                 : '';
-            console.log(`- ${name}`);
-            console.log(`    type: ${type}  agent: ${agent}  repo: ${repo}`);
-            console.log(`    image: ${img}`);
-            console.log(`    created: ${created}`);
-            console.log(`    cwd: ${cwd}`);
-            console.log(`    binds: ${binds}  env: ${envs}${ports ? `  ports: ${ports}` : ''}`);
+            console.log(`- ${styles.name(name)}`);
+            console.log(`    ${styles.label('type')}: ${type}  ${styles.label('agent')}: ${styles.accent(agent)}  ${styles.label('repo')}: ${styles.accent(repo)}`);
+            console.log(`    ${styles.label('image')}: ${img}`);
+            console.log(`    ${styles.label('created')}: ${created}`);
+            console.log(`    ${styles.label('cwd')}: ${cwd}`);
+            console.log(`    ${styles.label('binds')}: ${binds}  ${styles.label('env')}: ${envs}${ports ? `  ${styles.label('ports')}: ${ports}` : ''}`);
         }
         return;
     }
-    console.log('Running agent containers:');
+    console.log(styles.header('Running agent containers:'));
     for (const entry of live) {
         const binds = entry.config?.binds?.length || 0;
         const envs = entry.config?.env?.length || 0;
@@ -77,13 +116,30 @@ export function listCurrentAgents() {
             .map(p => `${p.containerPort}->${p.hostPort || ''}`)
             .filter(Boolean)
             .join(', ');
-        console.log(`- ${entry.containerName}`);
-        console.log(`    type: agent  agent: ${entry.agentName || '-'}  repo: ${entry.repoName || '-'}`);
-        console.log(`    image: ${entry.containerImage || '-'}`);
-        console.log(`    created: ${entry.createdAt || '-'}`);
-        console.log(`    status: ${entry.state?.status || '-'} (pid ${entry.state?.pid || 0})`);
-        console.log(`    cwd: ${entry.projectPath || '-'}`);
-        console.log(`    binds: ${binds}  env: ${envs}${ports ? `  ports: ${ports}` : ''}`);
+        const status = (entry.state?.status || '-').toLowerCase();
+        const statusFormatter = ({
+            running: styles.success,
+            exited: styles.danger,
+            paused: styles.warn,
+            restarting: styles.warn,
+            created: styles.info
+        })[status] || styles.warn;
+        const pidInfo = entry.state?.pid ? ` ${styles.muted(`pid ${entry.state.pid}`)}` : '';
+        console.log(`  ${bulletSymbol} ${styles.name(entry.containerName)} ${statusFormatter(`[${status}]`)}${pidInfo}`);
+        console.log(`     ${styles.label('agent')}: ${styles.accent(entry.agentName || '-')}` +
+            `  ${styles.label('repo')}: ${styles.accent(entry.repoName || '-')}`);
+        console.log(`     ${styles.label('image')}: ${entry.containerImage || '-'}`);
+        console.log(`     ${styles.label('created')}: ${entry.createdAt || '-'}`);
+        console.log(`     ${styles.label('cwd')}: ${entry.projectPath || '-'}`);
+        const resourceParts = [
+            `${styles.label('binds')}: ${binds}`,
+            `${styles.label('env')}: ${envs}`
+        ];
+        if (ports) {
+            resourceParts.push(`${styles.label('ports')}: ${ports}`);
+        }
+        console.log(`     ${resourceParts.join('  ')}`);
+        console.log('');
     }
 }
 
@@ -227,37 +283,92 @@ function isPortListening(port, host = '127.0.0.1', timeoutMs = 500) {
     });
 }
 
-export async function statusWorkspace() {
-    console.log('Workspace status:');
-    const ssoStatus = gatherSsoStatus();
-    if (!ssoStatus.config.enabled) {
-        console.log('- SSO: disabled');
-    } else {
-        const baseUrl = ssoStatus.config.baseUrl || ssoStatus.secrets.baseUrl || '(unset)';
-        const clientSecretState = ssoStatus.secrets.clientSecret ? '[set]' : '(unset)';
-        const providerAgent = ssoStatus.config.providerAgent || ssoStatus.config.keycloakAgent;
-        const providerShort = ssoStatus.config.providerAgentShort || ssoStatus.config.keycloakAgentShort || providerAgent;
-        const providerLabel = providerShort && providerShort !== providerAgent
-            ? `${providerAgent} (${providerShort})`
-            : providerAgent;
-        console.log('- SSO: enabled');
-        console.log(`    Provider agent: ${providerLabel}${ssoStatus.providerHostPort ? ` (host port ${ssoStatus.providerHostPort})` : ''}`);
-        const databaseAgent = ssoStatus.config.databaseAgent || ssoStatus.config.postgresAgent;
-        const databaseShort = ssoStatus.config.databaseAgentShort || ssoStatus.config.postgresAgentShort || databaseAgent;
-        const databaseLabel = databaseShort && databaseShort !== databaseAgent
-            ? `${databaseAgent} (${databaseShort})`
-            : databaseAgent;
-        console.log(`    Realm / Client: ${ssoStatus.config.realm} / ${ssoStatus.config.clientId}`);
-        console.log(`    Database agent: ${databaseLabel}`);
-        console.log(`    Base URL: ${baseUrl}`);
-        console.log(`    Redirect URI: ${ssoStatus.config.redirectUri || ssoStatus.secrets.redirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/auth/callback`}`);
-        console.log(`    Logout redirect: ${ssoStatus.config.logoutRedirectUri || ssoStatus.secrets.logoutRedirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/`}`);
-        console.log(`    Client secret: ${clientSecretState}`);
+function collectRepoStatusRows() {
+    const enabled = new Set(reposSvc.loadEnabledRepos());
+    const installedList = reposSvc.getInstalledRepos(REPOS_DIR);
+    const installed = new Set(installedList);
+    const allNames = new Set([ ...installedList, ...enabled ]);
+    return Array.from(allNames)
+        .sort((a, b) => a.localeCompare(b))
+        .map((name) => ({
+            name,
+            enabled: enabled.has(name),
+            installed: installed.has(name),
+            predefined: PREDEFINED_REPOS[name] !== undefined
+        }));
+}
+
+function listReposForStatus() {
+    const rows = collectRepoStatusRows();
+    if (!rows.length) {
+        console.log(`- ${styles.label('Repos')}: ${styles.warn('none installed')}`);
+        return;
     }
+    console.log(`- ${styles.label('Repos')}:`);
+    for (const row of rows) {
+        const badges = [];
+        if (row.enabled) badges.push(formatBadge('enabled', styles.success));
+        if (!row.installed) badges.push(formatBadge('missing', styles.danger));
+        else if (!row.predefined) badges.push(formatBadge('local', styles.info));
+        const badgeText = badges.length ? ` ${badges.join(' ')}` : '';
+        console.log(`  ${bulletSymbol} ${styles.name(row.name)}${badgeText}`);
+    }
+}
+
+function printSsoStatusSummary(ssoStatus) {
+    if (!ssoStatus.config.enabled) {
+        console.log(`- ${styles.label('SSO')}: ${styles.danger('disabled')}`);
+        return;
+    }
+
+    console.log(`- ${styles.label('SSO')}: ${styles.success('enabled')}`);
+
+    const providerAgent = ssoStatus.config.providerAgent || ssoStatus.config.keycloakAgent;
+    const providerShort = ssoStatus.config.providerAgentShort || ssoStatus.config.keycloakAgentShort || providerAgent;
+    const providerLabel = providerShort && providerShort !== providerAgent
+        ? `${providerAgent} (${providerShort})`
+        : providerAgent;
+    const providerHost = ssoStatus.providerHostPort
+        ? ` ${styles.muted(`(host port ${ssoStatus.providerHostPort})`)}`
+        : '';
+    console.log(`  ${bulletSymbol} ${styles.label('Provider agent')}: ${styles.accent(providerLabel)}${providerHost}`);
+
+    const databaseAgent = ssoStatus.config.databaseAgent || ssoStatus.config.postgresAgent;
+    const databaseShort = ssoStatus.config.databaseAgentShort || ssoStatus.config.postgresAgentShort || databaseAgent;
+    const databaseLabel = databaseShort && databaseShort !== databaseAgent
+        ? `${databaseAgent} (${databaseShort})`
+        : databaseAgent;
+    console.log(`  ${bulletSymbol} ${styles.label('Database agent')}: ${styles.accent(databaseLabel)}`);
+
+    const baseUrl = ssoStatus.config.baseUrl || ssoStatus.secrets.baseUrl || '(unset)';
+    const redirectUri = ssoStatus.config.redirectUri || ssoStatus.secrets.redirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/auth/callback`;
+    const logoutRedirect = ssoStatus.config.logoutRedirectUri || ssoStatus.secrets.logoutRedirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/`;
+    const clientSecretState = ssoStatus.secrets.clientSecret
+        ? formatBadge('set', styles.success)
+        : formatBadge('unset', styles.danger);
+
+    console.log(`  ${bulletSymbol} ${styles.label('Realm / Client')}: ${ssoStatus.config.realm} / ${ssoStatus.config.clientId}`);
+    console.log(`  ${bulletSymbol} ${styles.label('Base URL')}: ${baseUrl}`);
+    console.log(`  ${bulletSymbol} ${styles.label('Redirect URI')}: ${redirectUri}`);
+    console.log(`  ${bulletSymbol} ${styles.label('Logout redirect')}: ${logoutRedirect}`);
+    console.log(`  ${bulletSymbol} ${styles.label('Client secret')}: ${clientSecretState}`);
+}
+
+function printRouterStatus(routerPort, isListening) {
+    const stateText = isListening ? styles.success('listening') : styles.danger('not listening');
+    const endpoint = styles.muted(`(127.0.0.1:${routerPort})`);
+    console.log(`- ${styles.label('Router')}: ${stateText} ${endpoint}`);
+}
+
+export async function statusWorkspace() {
+    console.log(styles.header('Workspace status:'));
+    const ssoStatus = gatherSsoStatus();
+    printSsoStatusSummary(ssoStatus);
 
     const routerPort = Number(ssoStatus.routerPort) || 8080;
     const routerListening = await isPortListening(routerPort);
-    console.log(`- Router: ${routerListening ? 'listening' : 'not listening'} (127.0.0.1:${routerPort})`);
-    listAgents();
+    printRouterStatus(routerPort, routerListening);
+
+    listReposForStatus();
     listCurrentAgents();
 }

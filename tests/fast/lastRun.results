@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22586 listening
+[PASS] Router port 22661 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -25,9 +25,9 @@
 ===== Workspace status command =====
 [PASS] Status reports SSO disabled
 [PASS] Status reports router listening
-[PASS] Status lists testRepo
-[PASS] Status lists testAgent manifest
-[PASS] Status lists demo manifest
+[PASS] Status lists repos section
+[PASS] Status lists demo repo
+[PASS] Status lists testRepo repo
 [PASS] Status lists active containers for demo
 [PASS] Status lists active containers for testAgent
 
@@ -80,7 +80,7 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 22586 closed
+[PASS] Router port 22661 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
@@ -88,7 +88,7 @@
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22586 listening
+[PASS] Router port 22661 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -104,9 +104,9 @@
 ===== Workspace status command =====
 [PASS] Status reports SSO disabled
 [PASS] Status reports router listening
-[PASS] Status lists testRepo
-[PASS] Status lists testAgent manifest
-[PASS] Status lists demo manifest
+[PASS] Status lists repos section
+[PASS] Status lists demo repo
+[PASS] Status lists testRepo repo
 [PASS] Status lists active containers for demo
 [PASS] Status lists active containers for testAgent
 
@@ -167,7 +167,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22586 listening
+[PASS] Router port 22661 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
