@@ -376,6 +376,24 @@ function handleWebChat(req, res, appConfig, appState) {
         const tabId = parsedUrl.searchParams.get('tabId');
         if (!session || !tabId) { res.writeHead(400); return res.end(); }
 
+        // CRITICAL FIX: Global limit across ALL sessions to prevent system-wide overload
+        const MAX_GLOBAL_TTYS = 20;
+        let globalTabCount = 0;
+        for (const sess of appState.sessions.values()) {
+            if (sess.tabs instanceof Map) {
+                globalTabCount += sess.tabs.size;
+            }
+        }
+
+        if (globalTabCount >= MAX_GLOBAL_TTYS) {
+            res.writeHead(503, {
+                'Content-Type': 'text/plain',
+                'Retry-After': '30'
+            });
+            res.end('Server at capacity. Please try again later.');
+            return;
+        }
+
         // CRITICAL FIX: Limit concurrent connections per session to prevent process spawn leak
         const MAX_CONCURRENT_TTYS = 3;
         if (session.tabs.size >= MAX_CONCURRENT_TTYS) {
@@ -408,7 +426,12 @@ function handleWebChat(req, res, appConfig, appState) {
             return;
         }
 
-        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Connection': 'keep-alive', 'Cache-Control': 'no-cache' });
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
+            'alt-svc': 'clear'  // Force HTTP/2, disable HTTP/3 to prevent QUIC errors
+        });
         res.write(': connected\n\n');
 
         if (!tab) {
