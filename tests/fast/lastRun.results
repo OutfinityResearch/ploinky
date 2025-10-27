@@ -9,7 +9,7 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 33365 listening
+[PASS] Router port 22586 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -71,14 +71,16 @@
 
 ===== Global Agent Verification =====
 [PASS] Global agent working directory is the test root
+[PASS] Manifest dependency global agent uses workspace root
 
 ===== Devel Agent Verification =====
 [PASS] Devel agent cwd is the repo source and has RW permissions
+[PASS] Manifest dependency devel agent uses repo root
 
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 33365 closed
+[PASS] Router port 22586 closed
 [PASS] Agent port 7001 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
@@ -86,7 +88,7 @@
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 33365 listening
+[PASS] Router port 22586 listening
 [PASS] Agent host port 7001 listening
 [PASS] Agent port 7001 bound to localhost
 [PASS] Router status endpoint responds
@@ -148,9 +150,11 @@
 
 ===== Global Agent Verification =====
 [PASS] Global agent working directory is the test root
+[PASS] Manifest dependency global agent uses workspace root
 
 ===== Devel Agent Verification =====
 [PASS] Devel agent cwd is the repo source and has RW permissions
+[PASS] Manifest dependency devel agent uses repo root
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
@@ -163,7 +167,7 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 33365 listening
+[PASS] Router port 22586 listening
 [PASS] Agent host port 7001 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
