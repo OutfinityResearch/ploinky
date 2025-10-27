@@ -58,6 +58,8 @@ export function createNetwork({
     let es = null;
     let chatBuffer = '';
     const pendingEchoes = [];
+    let reconnectAttempts = 0;
+    let reconnectTimer = null;
 
     function handleServerChunk(raw) {
         if (raw === undefined || raw === null) {
@@ -122,6 +124,9 @@ export function createNetwork({
         es = new EventSource(toEndpoint(`stream?tabId=${TAB_ID}`));
 
         es.onopen = () => {
+            // Reset reconnect attempts on successful connection
+            reconnectAttempts = 0;
+
             hideTypingIndicator(true);
             if (statusEl) {
                 statusEl.textContent = 'online';
@@ -148,13 +153,37 @@ export function createNetwork({
             } catch (_) {
                 // Ignore close failures
             }
-            setTimeout(() => {
+
+            // Clear any pending reconnect timer
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+
+            // CRITICAL FIX: Exponential backoff to prevent reconnection storms
+            reconnectAttempts++;
+            const baseDelay = 1000; // 1 second
+            const maxDelay = 60000; // 60 seconds max
+            const delay = Math.min(baseDelay * Math.pow(2, reconnectAttempts - 1), maxDelay);
+
+            // Add jitter to prevent thundering herd
+            const jitter = Math.random() * 1000;
+            const totalDelay = delay + jitter;
+
+            if (reconnectAttempts > 1) {
+                showBanner(`Reconnecting in ${Math.ceil(totalDelay / 1000)}s (attempt ${reconnectAttempts})...`);
+            }
+
+            dlog(`SSE reconnect scheduled in ${Math.ceil(totalDelay)}ms (attempt ${reconnectAttempts})`);
+
+            reconnectTimer = setTimeout(() => {
+                reconnectTimer = null;
                 try {
                     start();
                 } catch (error) {
                     dlog('SSE restart error', error);
                 }
-            }, 1000);
+            }, totalDelay);
         };
 
         es.onmessage = (event) => {
@@ -169,6 +198,13 @@ export function createNetwork({
     }
 
     function stop() {
+        // Clear reconnect timer
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        reconnectAttempts = 0;
+
         if (!es) {
             return;
         }
@@ -242,66 +278,66 @@ export function createNetwork({
             headers,
             body: file,
         })
-        .then(res => {
-            if (!res.ok) {
-                return res.text().then(text => { throw new Error(text || 'Upload failed') });
-            }
-            return res.json();
-        })
-        .then(data => {
-            hideTypingIndicator();
-            const localPath = data.localPath || data.url;
-            if (localPath) {
-                const displayName = data.filename || file.name;
-                const basePath = localPath.startsWith('/') ? localPath : `/${localPath}`;
-                const absoluteUrl = data.downloadUrl
-                    || new URL(basePath, window.location.origin).href;
-                if (clientAttachment && typeof clientAttachment.markUploaded === 'function') {
-                    clientAttachment.markUploaded({
-                        downloadUrl: absoluteUrl,
-                        size: data.size ?? file.size ?? null,
-                        mime: data.mime ?? file.type ?? null,
-                        localPath,
-                        id: data.id ?? null
-                    });
-                    if (isImage && typeof clientAttachment.replacePreview === 'function') {
-                        clientAttachment.replacePreview(absoluteUrl);
+            .then(res => {
+                if (!res.ok) {
+                    return res.text().then(text => { throw new Error(text || 'Upload failed') });
+                }
+                return res.json();
+            })
+            .then(data => {
+                hideTypingIndicator();
+                const localPath = data.localPath || data.url;
+                if (localPath) {
+                    const displayName = data.filename || file.name;
+                    const basePath = localPath.startsWith('/') ? localPath : `/${localPath}`;
+                    const absoluteUrl = data.downloadUrl
+                        || new URL(basePath, window.location.origin).href;
+                    if (clientAttachment && typeof clientAttachment.markUploaded === 'function') {
+                        clientAttachment.markUploaded({
+                            downloadUrl: absoluteUrl,
+                            size: data.size ?? file.size ?? null,
+                            mime: data.mime ?? file.type ?? null,
+                            localPath,
+                            id: data.id ?? null
+                        });
+                        if (isImage && typeof clientAttachment.replacePreview === 'function') {
+                            clientAttachment.replacePreview(absoluteUrl);
+                        }
+                    } else {
+                        const linkLabel = displayName || absoluteUrl;
+                        const infoMessageFallback = `File uploaded: [${linkLabel}](${absoluteUrl})`;
+                        addServerMsg(infoMessageFallback);
+                    }
+                    if (previewNeedsRevoke && typeof revokePreview === 'function') {
+                        revokePreview();
+                    }
+                    // If the user provided a caption, send it to the TTY as a normal command.
+                    if (caption) {
+                        pendingEchoes.push(caption.trim());
+                        const combined = `${caption}\n`;
+                        fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain' },
+                            body: combined
+                        }).catch((error) => {
+                            dlog('chat error after upload', error);
+                            addServerMsg('[input error]');
+                        });
                     }
                 } else {
-                    const linkLabel = displayName || absoluteUrl;
-                    const infoMessageFallback = `File uploaded: [${linkLabel}](${absoluteUrl})`;
-                    addServerMsg(infoMessageFallback);
+                    throw new Error(data.error || 'Invalid upload response');
                 }
-                if (previewNeedsRevoke && typeof revokePreview === 'function') {
-                    revokePreview();
+            })
+            .catch(error => {
+                dlog('upload error', error);
+                hideTypingIndicator();
+                if (clientAttachment && typeof clientAttachment.markFailed === 'function') {
+                    clientAttachment.markFailed(error.message || 'Upload failed');
+                } else {
+                    addServerMsg(`[upload error: ${error.message}]`);
                 }
-                // If the user provided a caption, send it to the TTY as a normal command.
-                if (caption) {
-                    pendingEchoes.push(caption.trim());
-                    const combined = `${caption}\n`;
-                    fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain' },
-                        body: combined
-                    }).catch((error) => {
-                        dlog('chat error after upload', error);
-                        addServerMsg('[input error]');
-                    });
-                }
-            } else {
-                throw new Error(data.error || 'Invalid upload response');
-            }
-        })
-        .catch(error => {
-            dlog('upload error', error);
-            hideTypingIndicator();
-            if (clientAttachment && typeof clientAttachment.markFailed === 'function') {
-                clientAttachment.markFailed(error.message || 'Upload failed');
-            } else {
-                addServerMsg(`[upload error: ${error.message}]`);
-            }
-            showBanner('Upload error', 'err');
-        });
+                showBanner('Upload error', 'err');
+            });
     }
 
     return {

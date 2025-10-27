@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
-import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie } from './common.js';
+import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie, parseMultipartFormData } from './common.js';
 import * as staticSrv from '../static/index.js';
 import { createServerTtsStrategy } from './ttsStrategies/index.js';
 
@@ -15,7 +15,7 @@ const fallbackAppPath = path.join(__dirname, '../', appName);
 const SID_COOKIE = `${appName}_sid`;
 
 const DEFAULT_TTS_PROVIDER = (process.env.WEBCHAT_TTS_PROVIDER || 'openai').trim().toLowerCase();
-const DEFAULT_STT_PROVIDER = (process.env.WEBCHAT_STT_PROVIDER || 'browser').trim().toLowerCase();
+const DEFAULT_STT_PROVIDER = (process.env.WEBCHAT_STT_PROVIDER || 'openai-realtime').trim().toLowerCase();
 
 function renderTemplate(filenames, replacements) {
     const target = staticSrv.resolveFirstAvailable(appName, fallbackAppPath, filenames);
@@ -145,6 +145,136 @@ async function handleTextToSpeech(req, res) {
     }
 }
 
+async function handleSpeechToText(req, res) {
+    let formData;
+    try {
+        formData = await parseMultipartFormData(req);
+    } catch (error) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Invalid multipart form data.' }));
+        return;
+    }
+
+    const audioFile = formData.files?.audio;
+    if (!audioFile || !audioFile.data) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Missing audio file.' }));
+        return;
+    }
+
+    const language = formData.fields?.language || 'en';
+    const apiKey = (process.env.OPENAI_API_KEY || '').trim();
+
+    if (!apiKey) {
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Speech-to-text unavailable: OpenAI API key not configured.' }));
+        return;
+    }
+
+    try {
+        // Create form data for OpenAI API
+        const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+        const formParts = [];
+
+        // Add audio file
+        formParts.push(`--${boundary}\r\n`);
+        formParts.push(`Content-Disposition: form-data; name="file"; filename="${audioFile.filename || 'audio.webm'}"\r\n`);
+        formParts.push(`Content-Type: ${audioFile.contentType || 'audio/webm'}\r\n\r\n`);
+        formParts.push(audioFile.data);
+        formParts.push('\r\n');
+
+        // Add model
+        formParts.push(`--${boundary}\r\n`);
+        formParts.push(`Content-Disposition: form-data; name="model"\r\n\r\n`);
+        formParts.push(process.env.WEBCHAT_STT_MODEL || 'whisper-1');
+        formParts.push('\r\n');
+
+        // Add language if specified
+        if (language && language !== 'auto') {
+            formParts.push(`--${boundary}\r\n`);
+            formParts.push(`Content-Disposition: form-data; name="language"\r\n\r\n`);
+            formParts.push(language);
+            formParts.push('\r\n');
+        }
+
+        // End boundary
+        formParts.push(`--${boundary}--\r\n`);
+
+        // Concatenate all parts
+        const bodyParts = [];
+        for (const part of formParts) {
+            if (typeof part === 'string') {
+                bodyParts.push(Buffer.from(part));
+            } else {
+                bodyParts.push(part);
+            }
+        }
+        const body = Buffer.concat(bodyParts);
+
+        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': `multipart/form-data; boundary=${boundary}`
+            },
+            body
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error?.message || `Whisper API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ text: result.text || '' }));
+    } catch (error) {
+        const status = error?.status && Number.isInteger(error.status) ? error.status : 502;
+        res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({
+            error: error?.message || 'Speech-to-text request failed.',
+            details: error?.details || error?.cause?.message || undefined
+        }));
+    }
+}
+
+async function handleRealtimeToken(req, res) {
+    const apiKey = (process.env.OPENAI_API_KEY || '').trim();
+
+    if (!apiKey) {
+        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'OpenAI API key not configured.' }));
+        return;
+    }
+
+    try {
+        const model = process.env.WEBCHAT_REALTIME_MODEL || 'gpt-4o-realtime-preview-2024-12-17';
+
+        // Simply return the API key as the token for now
+        // The browser will connect directly using the API key
+        // In production, you'd want to use ephemeral tokens when available
+        res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, private'
+        });
+        res.end(JSON.stringify({
+            client_secret: {
+                value: apiKey,
+                expires_at: Date.now() + 3600000 // 1 hour
+            }
+        }));
+
+    } catch (error) {
+        const status = error?.status && Number.isInteger(error.status) ? error.status : 502;
+        res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({
+            error: error?.message || 'Failed to create realtime session.',
+            details: error?.details || error?.cause?.message || undefined
+        }));
+    }
+}
+
 function handleWebChat(req, res, appConfig, appState) {
     const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
@@ -194,7 +324,12 @@ function handleWebChat(req, res, appConfig, appState) {
             '__STT_PROVIDER__': DEFAULT_STT_PROVIDER
         });
         if (html) {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.writeHead(200, {
+                'Content-Type': 'text/html',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
             return res.end(html);
         }
         res.writeHead(403); return res.end('Forbidden');
@@ -202,6 +337,14 @@ function handleWebChat(req, res, appConfig, appState) {
 
     if (pathname === '/tts' && req.method === 'POST') {
         return handleTextToSpeech(req, res);
+    }
+
+    if (pathname === '/stt' && req.method === 'POST') {
+        return handleSpeechToText(req, res);
+    }
+
+    if (pathname === '/realtime-token' && req.method === 'POST') {
+        return handleRealtimeToken(req, res);
     }
 
     if (pathname === '/' || pathname === '/index.html') {
@@ -217,7 +360,12 @@ function handleWebChat(req, res, appConfig, appState) {
             '__STT_PROVIDER__': DEFAULT_STT_PROVIDER
         });
         if (html) {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.writeHead(200, {
+                'Content-Type': 'text/html',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
             return res.end(html);
         }
     }
@@ -228,16 +376,42 @@ function handleWebChat(req, res, appConfig, appState) {
         const tabId = parsedUrl.searchParams.get('tabId');
         if (!session || !tabId) { res.writeHead(400); return res.end(); }
 
+        // CRITICAL FIX: Limit concurrent connections per session to prevent process spawn leak
+        const MAX_CONCURRENT_TTYS = 3;
+        if (session.tabs.size >= MAX_CONCURRENT_TTYS) {
+            res.writeHead(429, {
+                'Content-Type': 'text/plain',
+                'Retry-After': '5'
+            });
+            res.end('Too many concurrent connections. Please close other tabs or wait.');
+            return;
+        }
+
+        let tab = session.tabs.get(tabId);
+
+        // CRITICAL FIX: Debounce rapid reconnections to prevent connection storms
+        const now = Date.now();
+        const MIN_RECONNECT_INTERVAL_MS = 1000; // 1 second
+
+        if (tab && tab.lastConnectTime && (now - tab.lastConnectTime) < MIN_RECONNECT_INTERVAL_MS) {
+            res.writeHead(429, {
+                'Content-Type': 'text/plain',
+                'Retry-After': '1'
+            });
+            res.end('Reconnecting too fast. Please wait.');
+            return;
+        }
+
+        if (!tab && !appConfig.ttyFactory) {
+            res.writeHead(503, { 'Content-Type': 'text/plain' });
+            res.end('TTY support unavailable. Install node-pty to enable chat sessions.');
+            return;
+        }
+
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Connection': 'keep-alive', 'Cache-Control': 'no-cache' });
         res.write(': connected\n\n');
 
-        let tab = session.tabs.get(tabId);
         if (!tab) {
-            if (!appConfig.ttyFactory) {
-                res.writeHead(503);
-                res.end('TTY support unavailable. Install node-pty to enable chat sessions.');
-                return;
-            }
             try {
                 // Extract SSO user context if available
                 const ssoUser = req.user ? {
@@ -257,8 +431,19 @@ function handleWebChat(req, res, appConfig, appState) {
                 }
 
                 const tty = appConfig.ttyFactory.create(ssoUser);
-                tab = { tty, sseRes: res };
+                tab = {
+                    tty,
+                    sseRes: res,
+                    lastConnectTime: now,
+                    createdAt: now,
+                    pid: tty.pid || null,
+                    cleanupTimer: null
+                };
                 session.tabs.set(tabId, tab);
+
+                // CRITICAL FIX: Set aggressive cleanup timer in case process doesn't die cleanly
+                const FORCE_KILL_TIMEOUT_MS = 10000; // 10 seconds
+
                 tty.onOutput((data) => {
                     if (tab.sseRes) {
                         tab.sseRes.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -269,28 +454,75 @@ function handleWebChat(req, res, appConfig, appState) {
                         tab.sseRes.write('event: close\n');
                         tab.sseRes.write('data: {}\n\n');
                     }
+                    // Clear force kill timer since process closed normally
+                    if (tab.cleanupTimer) {
+                        clearTimeout(tab.cleanupTimer);
+                        tab.cleanupTimer = null;
+                    }
                 });
+
+                // Set force kill timer for zombie processes
+                tab.cleanupTimer = setTimeout(() => {
+                    if (tab.tty && tab.pid) {
+                        try {
+                            // Try SIGKILL if process still exists
+                            process.kill(tab.pid, 'SIGKILL');
+                            console.warn(`[webchat] Force killed zombie process ${tab.pid} for tab ${tabId}`);
+                        } catch (err) {
+                            // Process already dead, that's fine
+                        }
+                    }
+                    tab.cleanupTimer = null;
+                }, FORCE_KILL_TIMEOUT_MS);
+
             } catch (e) {
                 res.writeHead(500);
                 res.end('Failed to create chat session: ' + (e?.message || e));
                 return;
             }
         } else {
+            // Reusing existing tab
             tab.sseRes = res;
+            tab.lastConnectTime = now;
         }
 
         req.on('close', () => {
+            // Clear the force kill timer
+            if (tab.cleanupTimer) {
+                clearTimeout(tab.cleanupTimer);
+                tab.cleanupTimer = null;
+            }
+
+            // Clean up TTY process
             if (tab.tty) {
+                const pid = tab.pid || tab.tty.pid;
+
                 if (typeof tab.tty.dispose === 'function') {
                     try { tab.tty.dispose(); } catch (_) { }
                 } else if (typeof tab.tty.kill === 'function') {
                     try { tab.tty.kill(); } catch (_) { }
                 }
+
+                // CRITICAL FIX: Ensure process is actually killed
+                if (pid) {
+                    setTimeout(() => {
+                        try {
+                            // Check if process still exists and force kill
+                            process.kill(pid, 0); // Test if process exists
+                            process.kill(pid, 'SIGKILL'); // Force kill
+                            console.warn(`[webchat] Force killed lingering process ${pid}`);
+                        } catch (_) {
+                            // Process already dead, good
+                        }
+                    }, 2000); // Wait 2 seconds then force kill if still alive
+                }
             }
+
             if (tab.sseRes) {
                 try { tab.sseRes.end(); } catch (_) { }
             }
             tab.sseRes = null;
+
             if (session.tabs && session.tabs instanceof Map) {
                 session.tabs.delete(tabId);
             }
