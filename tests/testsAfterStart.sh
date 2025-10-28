@@ -1,18 +1,18 @@
 #!/bin/bash
 
-FAST_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-source "$FAST_DIR/lib.sh"
-source "$FAST_DIR/test-functions/workspace_status_command.sh"
-source "$FAST_DIR/test-functions/demo_agent_dependency_tests.sh"
-source "$FAST_DIR/test-functions/mcp_tests.sh"
-source "$FAST_DIR/test-functions/routingserver_aggregation_test.sh"
-source "$FAST_DIR/test-functions/cli_variable_commands.sh"
-source "$FAST_DIR/test-functions/router_static_assets.sh"
-source "$FAST_DIR/test-functions/install_command_verification.sh"
-source "$FAST_DIR/test-functions/agent_blob_upload_and_download.sh"
-source "$FAST_DIR/test-functions/demo_agent_dir_perm.sh"
-source "$FAST_DIR/test-functions/global_agent_verification.sh"
-source "$FAST_DIR/test-functions/devel_agent_verification.sh"
+TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$TESTS_DIR/lib.sh"
+source "$TESTS_DIR/test-functions/workspace_status_command.sh"
+source "$TESTS_DIR/test-functions/demo_agent_dependency_tests.sh"
+source "$TESTS_DIR/test-functions/mcp_tests.sh"
+source "$TESTS_DIR/test-functions/routingserver_aggregation_test.sh"
+source "$TESTS_DIR/test-functions/cli_variable_commands.sh"
+source "$TESTS_DIR/test-functions/router_static_assets.sh"
+source "$TESTS_DIR/test-functions/install_command_verification.sh"
+source "$TESTS_DIR/test-functions/agent_blob_upload_and_download.sh"
+source "$TESTS_DIR/test-functions/demo_agent_dir_perm.sh"
+source "$TESTS_DIR/test-functions/global_agent_verification.sh"
+source "$TESTS_DIR/test-functions/devel_agent_verification.sh"
 
 fast_load_state
 fast_require_var "TEST_RUN_DIR"

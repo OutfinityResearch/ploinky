@@ -1,11 +1,11 @@
 #!/bin/bash
 
-FAST_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-source "$FAST_DIR/lib.sh"
-source "$FAST_DIR/test-functions/dynamic_configuration_tests.sh"
+TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$TESTS_DIR/lib.sh"
+source "$TESTS_DIR/test-functions/dynamic_configuration_tests.sh"
 
 # Reuse the primary start verification suite.
-bash "$FAST_DIR/testsAfterStart.sh"
+bash "$TESTS_DIR/testsAfterStart.sh"
 
 fast_load_state
 fast_require_var "TEST_PERSIST_MARKER"

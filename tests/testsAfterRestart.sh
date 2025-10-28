@@ -1,7 +1,7 @@
 #!/bin/bash
 
-FAST_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-source "$FAST_DIR/lib.sh"
+TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$TESTS_DIR/lib.sh"
 
 fast_load_state
 fast_require_var "TEST_RUN_DIR"

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-FAST_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-source "$FAST_DIR/lib.sh"
+TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$TESTS_DIR/lib.sh"
 
 fast_load_state
 fast_require_var "TEST_RUN_DIR"
@@ -42,7 +42,7 @@ fast_check "RoutingServer process stopped" fast_assert_routing_server_stopped
 fast_check "Test agent container removed" fast_assert_container_absent "$TEST_AGENT_CONT_NAME"
 
 # Move out of the workspace before deleting the directory.
-cd "$FAST_DIR"
+cd "$TESTS_DIR"
 rm -rf "$TEST_RUN_DIR"
 fast_info "Destroy procedure completed."
 

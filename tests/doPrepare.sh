@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-FAST_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-source "$FAST_DIR/lib.sh"
+TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$TESTS_DIR/lib.sh"
 
 fast_info "Preparing isolated workspace for fast suite."
 

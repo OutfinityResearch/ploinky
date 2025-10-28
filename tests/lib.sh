@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-FAST_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 : "${FAST_STATE_FILE:?FAST_STATE_FILE is not set. Export it before sourcing lib.sh.}"
 touch "$FAST_STATE_FILE"
