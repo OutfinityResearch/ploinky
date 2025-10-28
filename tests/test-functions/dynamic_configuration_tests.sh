@@ -1,7 +1,7 @@
 fast_test_dynamic_app_name() {
-  fast_load_state
-  fast_require_var "TEST_RUN_DIR" || return 1
-  fast_require_var "TEST_ROUTER_PORT" || return 1
+  load_state
+  require_var "TEST_RUN_DIR" || return 1
+  require_var "TEST_ROUTER_PORT" || return 1
   
   local secrets_file="$TEST_RUN_DIR/.ploinky/.secrets"
   local router_port="$TEST_ROUTER_PORT"
@@ -65,9 +65,9 @@ fast_test_dynamic_app_name() {
 }
 
 fast_test_dynamic_webtty_shell() {
-  fast_load_state
-  fast_require_var "TEST_RUN_DIR" || return 1
-  fast_require_var "TEST_ROUTER_PORT" || return 1
+  load_state
+  require_var "TEST_RUN_DIR" || return 1
+  require_var "TEST_ROUTER_PORT" || return 1
   
   local secrets_file="$TEST_RUN_DIR/.ploinky/.secrets"
   local router_port="$TEST_ROUTER_PORT"
@@ -127,9 +127,9 @@ fast_test_dynamic_webtty_shell() {
 }
 
 fast_test_sso_client_secret_propagation() {
-  fast_load_state
-  fast_require_var "TEST_RUN_DIR" || return 1
-  fast_require_var "TEST_ROUTER_PORT" || return 1
+  load_state
+  require_var "TEST_RUN_DIR" || return 1
+  require_var "TEST_ROUTER_PORT" || return 1
   
   local secrets_file="$TEST_RUN_DIR/.ploinky/.secrets"
   

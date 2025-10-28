@@ -3,9 +3,9 @@ FAST_STATUS_OUTPUT=""
 fast_collect_status_output() {
   if [[ -z "$FAST_STATUS_OUTPUT" ]]; then
     FAST_STATUS_OUTPUT=$(ploinky status 2>&1)
-    fast_info "--- ploinky status output ---"
-    fast_info "$FAST_STATUS_OUTPUT"
-    fast_info "--------------------------------"
+    test_info "--- ploinky status output ---"
+    test_info "$FAST_STATUS_OUTPUT"
+    test_info "--------------------------------"
   fi
 }
 

@@ -34,7 +34,7 @@ trap cleanup EXIT
 source "$TESTS_DIR/lib.sh"
 
 # Initialize/clear the results file at the start of the run
-fast_init_results
+init_results
 
 # Function to run a single stage of the test suite.
 # A stage consists of an "action" (do*) and a "verification" (tests*).
@@ -43,10 +43,10 @@ run_stage() {
   local action="$2"
   local verify="$3"
 
-  fast_stage_header "$label"
+  stage_header "$label"
 
   if [[ -n "$action" ]]; then
-    if ! fast_run_with_timeout 60 "Executing action script: ${action}" bash "$TESTS_DIR/$action"; then
+    if ! run_with_timeout 60 "Executing action script: ${action}" bash "$TESTS_DIR/$action"; then
       return 1
     fi
   fi
@@ -55,14 +55,14 @@ run_stage() {
     set +e
     
     FAST_CHECK_ERRORS=0
-    fast_run_with_timeout 60 "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
+    run_with_timeout 60 "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
     local exit_code=$?
 
     if [[ $exit_code -eq 124 ]]; then
-        fast_log_result "[FAIL] ${verify} timed out after 60 seconds."
+        log_result "[FAIL] ${verify} timed out after 60 seconds."
         TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
     elif [[ $exit_code -ne 0 ]]; then
-        fast_log_result "[FAIL] ${verify} reported ${exit_code} failure(s)."
+        log_result "[FAIL] ${verify} reported ${exit_code} failure(s)."
         TOTAL_ERRORS=$((TOTAL_ERRORS + exit_code))
     fi
 
@@ -100,49 +100,49 @@ run_node_unit_tests() {
 # We wrap the main stages in a subshell with its own error handling
 # to make sure the final summary and cleanup runs.
 if ! run_stage "PREPARE STAGE" "doPrepare.sh" "testsAfterPrepare.sh"; then
-  fast_fail_message "PREPARE STAGE aborted. Proceeding to cleanup."
-  fast_log_result "[FATAL] PREPARE STAGE aborted."
+  fail_message "PREPARE STAGE aborted. Proceeding to cleanup."
+  log_result "[FATAL] PREPARE STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
 fi
 
 # Load state from prepare stage to get TEST_AGENT_NAME and TEST_ROUTER_PORT
-fast_load_state
+load_state
 
-fast_stage_header "START STAGE"
-if ! fast_run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"; then
-  fast_fail_message "START STAGE aborted. Proceeding to cleanup."
-  fast_log_result "[FATAL] START STAGE aborted."
+stage_header "START STAGE"
+if ! run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"; then
+  fail_message "START STAGE aborted. Proceeding to cleanup."
+  log_result "[FATAL] START STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
 else
   set +e
   FAST_CHECK_ERRORS=0
-  fast_run_with_timeout 60 "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
+  run_with_timeout 60 "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
   exit_code=$?
   if [[ $exit_code -eq 124 ]]; then
-      fast_log_result "[FAIL] testsAfterStart.sh timed out after 60 seconds."
+      log_result "[FAIL] testsAfterStart.sh timed out after 60 seconds."
       TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
   elif [[ $exit_code -ne 0 ]]; then
-      fast_log_result "[FAIL] testsAfterStart.sh reported ${exit_code} failure(s)."
+      log_result "[FAIL] testsAfterStart.sh reported ${exit_code} failure(s)."
       TOTAL_ERRORS=$((TOTAL_ERRORS + exit_code))
   fi
   set -e
 fi
 
 if ! run_stage "STOP STAGE" "doStop.sh" "testsAfterStop.sh"; then
-  fast_fail_message "STOP STAGE aborted. Proceeding to cleanup."
-  fast_log_result "[FATAL] STOP STAGE aborted."
+  fail_message "STOP STAGE aborted. Proceeding to cleanup."
+  log_result "[FATAL] STOP STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
 fi
 
 if ! run_stage "START AGAIN STAGE" "doStart.sh" "testsAfterStartAgain.sh"; then
-  fast_fail_message "START AGAIN STAGE aborted. Proceeding to cleanup."
-  fast_log_result "[FATAL] START AGAIN STAGE aborted."
+  fail_message "START AGAIN STAGE aborted. Proceeding to cleanup."
+  log_result "[FATAL] START AGAIN STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
 fi
 
 if ! run_stage "RESTART STAGE" "doRestart.sh" "testsAfterRestart.sh"; then
-  fast_fail_message "RESTART STAGE aborted. Proceeding to cleanup."
-  fast_log_result "[FATAL] RESTART STAGE aborted."
+  fail_message "RESTART STAGE aborted. Proceeding to cleanup."
+  log_result "[FATAL] RESTART STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
 fi
 
@@ -153,11 +153,11 @@ run_stage "DESTROY STAGE"      "doDestroy.sh"         "testsAfterDestroy.sh"
 set -e # Re-enable for final summary logic
 
 # --- Post-destroy unit checks ---
-fast_stage_header "NODE UNIT STAGE"
+stage_header "NODE UNIT STAGE"
 set +e
 FAST_CHECK_ERRORS=0
-fast_check "Node unit tests" run_node_unit_tests
-fast_finalize_checks
+test_check "Node unit tests" run_node_unit_tests
+finalize_checks
 node_unit_failures=$?
 if (( node_unit_failures > 0 )); then
   TOTAL_ERRORS=$((TOTAL_ERRORS + node_unit_failures))
@@ -165,16 +165,16 @@ fi
 set -e
 
 # --- Final Summary ---
-fast_stage_header "TEST SUMMARY"
+stage_header "TEST SUMMARY"
 
 if (( TOTAL_ERRORS == 0 )); then
-  fast_pass_message "All tests passed!"
-  fast_log_result "[PASS] All tests passed!"
+  pass_message "All tests passed!"
+  log_result "[PASS] All tests passed!"
   echo "Full report available in: $FAST_RESULTS_FILE"
   exit 0
 else
-  fast_fail_message "Suite finished with ${TOTAL_ERRORS} failure(s)."
-  fast_log_result "[FAIL] Suite finished with ${TOTAL_ERRORS} failure(s)."
+  fail_message "Suite finished with ${TOTAL_ERRORS} failure(s)."
+  log_result "[FAIL] Suite finished with ${TOTAL_ERRORS} failure(s)."
   echo "Full report available in: $FAST_RESULTS_FILE"
   # On failure, print a condensed view of just the failures.
   grep -i "\[FAIL\]\|\[FATAL\]" "$FAST_RESULTS_FILE"

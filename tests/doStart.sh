@@ -4,34 +4,34 @@ set -euo pipefail
 TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$TESTS_DIR/lib.sh"
 
-fast_load_state
-fast_require_var "TEST_RUN_DIR"
-fast_require_var "TEST_AGENT_NAME"
-fast_require_var "TEST_ROUTER_PORT"
-fast_require_var "TEST_AGENT_CONT_NAME"
-fast_require_var "TEST_AGENT_WORKSPACE"
-fast_require_var "TEST_PERSIST_MARKER"
+load_state
+require_var "TEST_RUN_DIR"
+require_var "TEST_AGENT_NAME"
+require_var "TEST_ROUTER_PORT"
+require_var "TEST_AGENT_CONT_NAME"
+require_var "TEST_AGENT_WORKSPACE"
+require_var "TEST_PERSIST_MARKER"
 
 cd "$TEST_RUN_DIR"
 
 if [[ $# -ge 2 ]]; then
-  fast_info "Starting workspace with specified agent $1 on port $2."
+  test_info "Starting workspace with specified agent $1 on port $2."
   ploinky start "$1" "$2"
 else
-  fast_info "Starting workspace with saved configuration."
+  test_info "Starting workspace with saved configuration."
   ploinky start
 fi
 
-fast_wait_for_router
-fast_wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"
+wait_for_router
+wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"
 
-fast_require_runtime
-container_pid=$(fast_get_container_pid "$TEST_AGENT_CONT_NAME")
-fast_write_state_var "TEST_LAST_KNOWN_PID" "$container_pid"
-fast_info "Container ${TEST_AGENT_CONT_NAME} is running (pid ${container_pid})."
+require_runtime
+container_pid=$(get_container_pid "$TEST_AGENT_CONT_NAME")
+write_state_var "TEST_LAST_KNOWN_PID" "$container_pid"
+test_info "Container ${TEST_AGENT_CONT_NAME} is running (pid ${container_pid})."
 
 routing_file="$TEST_RUN_DIR/.ploinky/routing.json"
-fast_wait_for_file "$routing_file" 40 0.25
+wait_for_file "$routing_file" 40 0.25
 
 agent_host_port="7000"
 for _ in {1..10}; do
@@ -61,10 +61,10 @@ if [[ -z "$agent_host_port" || "$agent_host_port" == "0" ]]; then
   agent_host_port="7000"
 fi
 
-fast_write_state_var "TEST_AGENT_HOST_PORT" "$agent_host_port"
-fast_write_state_var "TEST_AGENT_HEALTH_URL" "http://127.0.0.1:${agent_host_port}/health"
-fast_write_state_var "TEST_ROUTER_LOG" "$TEST_RUN_DIR/logs/router.log"
-fast_info "Agent host port resolved to ${agent_host_port}."
+write_state_var "TEST_AGENT_HOST_PORT" "$agent_host_port"
+write_state_var "TEST_AGENT_HEALTH_URL" "http://127.0.0.1:${agent_host_port}/health"
+write_state_var "TEST_ROUTER_LOG" "$TEST_RUN_DIR/logs/router.log"
+test_info "Agent host port resolved to ${agent_host_port}."
 
 persist_marker="$TEST_PERSIST_MARKER"
 if [[ ! -f "$persist_marker" ]]; then
@@ -75,10 +75,10 @@ fast_mcp_start_demo() {
   ploinky start demo "$TEST_ROUTER_PORT"
   local container_name
   container_name=$(compute_container_name "demo" "demo")
-  fast_wait_for_container "$container_name"
+  wait_for_container "$container_name"
 }
-fast_action "Action: Starting demo agent..." fast_mcp_start_demo
+test_action "Action: Starting demo agent..." fast_mcp_start_demo
 
-fast_wait_for_router
+wait_for_router
 
-fast_info "Start procedure completed."
+test_info "Start procedure completed."

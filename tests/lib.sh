@@ -24,13 +24,13 @@ fi
 
 FAST_CHECK_ERRORS=0
 
-fast_init_results() {
+init_results() {
   if [[ -n "${FAST_RESULTS_FILE:-}" ]]; then
     echo -n "" > "$FAST_RESULTS_FILE"
   fi
 }
 
-fast_log_result() {
+log_result() {
   if [[ -n "${FAST_RESULTS_FILE:-}" ]]; then
     echo "$1" >> "$FAST_RESULTS_FILE"
   else
@@ -38,19 +38,19 @@ fast_log_result() {
   fi
 }
 
-fast_stage_header() {
+stage_header() {
   local label="$1"
   printf "%s===== %s =====%s\n" "$FAST_COLOR_STAGE" "$label" "$FAST_COLOR_RESET"
-  fast_log_result ""
-  fast_log_result "===== $label ====="
+  log_result ""
+  log_result "===== $label ====="
 }
 
-fast_info() {
+test_info() {
   local message="$1"
   printf "%s[INFO]%s %s\n" "$FAST_COLOR_INFO" "$FAST_COLOR_RESET" "$message"
 }
 
-fast_fail_message() {
+fail_message() {
   local message="$1"
   local label="[FAIL]"
   if [[ -n "$FAST_COLOR_FAIL" ]]; then
@@ -60,7 +60,7 @@ fast_fail_message() {
   fi
 }
 
-fast_pass_message() {
+pass_message() {
   local message="$1"
   local label="[PASS]"
   if [[ -n "$FAST_COLOR_PASS" ]]; then
@@ -70,19 +70,19 @@ fast_pass_message() {
   fi
 }
 
-fast_check() {
+test_check() {
   local description="$1"
   local callback="$2"
   shift 2
 
   local output
   if output=$("$callback" "$@" 2>&1); then
-    fast_pass_message "$description"
-    fast_log_result "[PASS] $description"
+    pass_message "$description"
+    log_result "[PASS] $description"
   else
     FAST_CHECK_ERRORS=$((FAST_CHECK_ERRORS + 1))
-    fast_fail_message "$description"
-    fast_log_result "[FAIL] $description"
+    fail_message "$description"
+    log_result "[FAIL] $description"
     if [[ -n "$output" ]]; then
       printf '%s' "$output" | sed 's/^/        /'
       echo
@@ -91,27 +91,27 @@ fast_check() {
   fi
 }
 
-fast_action() {
+test_action() {
   local description="$1"
   local callback="$2"
   shift 2
 
-  fast_info "$description"
+  test_info "$description"
   if ! "$callback" "$@" >/dev/null 2>&1; then
-    fast_fail_message "Action '$description' failed."
+    fail_message "Action '$description' failed."
     # Actions are critical, exit the stage if one fails.
     exit 1
   fi
 }
 
-fast_finalize_checks() {
+finalize_checks() {
   if (( FAST_CHECK_ERRORS > 0 )); then
     return "$FAST_CHECK_ERRORS"
   fi
   return 0
 }
 
-fast_write_state_var() {
+write_state_var() {
   local key="$1"
   local value="$2"
   [[ -n "$key" ]] || { echo "State key missing" >&2; return 1; }
@@ -132,14 +132,14 @@ fast_write_state_var() {
   fi
 }
 
-fast_load_state() {
+load_state() {
   set -a
   # shellcheck disable=SC1090
   source "$FAST_STATE_FILE"
   set +a
 }
 
-fast_require_var() {
+require_var() {
   local key="$1"
   if [[ -z "${!key:-}" ]]; then
     echo "Required state variable '${key}' is missing." >&2
@@ -147,7 +147,7 @@ fast_require_var() {
   fi
 }
 
-fast_detect_container_runtime() {
+detect_container_runtime() {
   local runtime
   for runtime in docker podman; do
     if command -v "$runtime" >/dev/null 2>&1; then
@@ -161,13 +161,13 @@ fast_detect_container_runtime() {
   return 1
 }
 
-fast_require_runtime() {
-  fast_load_state
+require_runtime() {
+  load_state
   if [[ -z "${FAST_CONTAINER_RUNTIME:-}" ]]; then
     local runtime
-    if runtime=$(fast_detect_container_runtime); then
+    if runtime=$(detect_container_runtime); then
       FAST_CONTAINER_RUNTIME="$runtime"
-      fast_write_state_var "FAST_CONTAINER_RUNTIME" "$FAST_CONTAINER_RUNTIME"
+      write_state_var "FAST_CONTAINER_RUNTIME" "$FAST_CONTAINER_RUNTIME"
     else
       return 1
     fi
@@ -181,8 +181,8 @@ compute_container_name() {
     echo "Agent name is required for computing container name." >&2
     return 1
   fi
-  fast_load_state
-  fast_require_var "TEST_RUN_DIR" || return 1
+  load_state
+  require_var "TEST_RUN_DIR" || return 1
   local cwd="$TEST_RUN_DIR"
   if [[ -z "$repo_name" && -n "${TEST_REPO_NAME:-}" ]]; then
     repo_name="$TEST_REPO_NAME"
@@ -226,7 +226,7 @@ console.log(`ploinky_${safeRepo}_${safeAgent}_${projectDir}_${hash}`);
 NODE
 }
 
-fast_assert_dir_exists() {
+assert_dir_exists() {
   local path="$1"
   if [[ ! -d "$path" ]]; then
     echo "Expected directory '${path}' to exist." >&2
@@ -234,7 +234,7 @@ fast_assert_dir_exists() {
   fi
 }
 
-fast_assert_file_exists() {
+assert_file_exists() {
   local path="$1"
   if [[ ! -f "$path" ]]; then
     echo "Expected file '${path}' to exist." >&2
@@ -242,7 +242,7 @@ fast_assert_file_exists() {
   fi
 }
 
-fast_assert_file_contains() {
+assert_file_contains() {
   local path="$1"
   local pattern="$2"
   if [[ ! -f "$path" ]]; then
@@ -255,7 +255,7 @@ fast_assert_file_contains() {
   fi
 }
 
-fast_check_router_stop_entry() {
+check_router_stop_entry() {
   local log_file="$1"
   local expected_port="$2"
   local state_var="${3:-}"
@@ -293,14 +293,14 @@ fast_check_router_stop_entry() {
   fi
 
   if [[ -n "$state_var" ]]; then
-    fast_write_state_var "$state_var" "$last_entry"
+    write_state_var "$state_var" "$last_entry"
   fi
 
   return 0
 }
 
-fast_assert_container_running() {
-  fast_require_runtime || return 1
+assert_container_running() {
+  require_runtime || return 1
   local container="$1"
   if ! $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
     echo "Container '${container}' is not running." >&2
@@ -308,8 +308,8 @@ fast_assert_container_running() {
   fi
 }
 
-fast_assert_container_stopped() {
-  fast_require_runtime || return 1
+assert_container_stopped() {
+  require_runtime || return 1
   local container="$1"
   if $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
     echo "Container '${container}' is still running." >&2
@@ -317,8 +317,8 @@ fast_assert_container_stopped() {
   fi
 }
 
-fast_assert_container_exists() {
-  fast_require_runtime || return 1
+assert_container_exists() {
+  require_runtime || return 1
   local container="$1"
   if ! $FAST_CONTAINER_RUNTIME ps -a --format '{{.Names}}' | grep -Fxq "$container"; then
     echo "Container '${container}' does not exist." >&2
@@ -326,8 +326,8 @@ fast_assert_container_exists() {
   fi
 }
 
-fast_assert_container_absent() {
-  fast_require_runtime || return 1
+assert_container_absent() {
+  require_runtime || return 1
   local container="$1"
   if $FAST_CONTAINER_RUNTIME ps -a --format '{{.Names}}' | grep -Fxq "$container"; then
     echo "Container '${container}' still exists." >&2
@@ -335,14 +335,14 @@ fast_assert_container_absent() {
   fi
 }
 
-fast_get_container_pid() {
-  fast_require_runtime || return 1
+get_container_pid() {
+  require_runtime || return 1
   local container="$1"
   $FAST_CONTAINER_RUNTIME inspect --format '{{.State.Pid}}' "$container"
 }
 
-fast_assert_container_env() {
-  fast_require_runtime || return 1
+assert_container_env() {
+  require_runtime || return 1
   local container="$1"
   local key="$2"
   local expected="$3"
@@ -357,8 +357,8 @@ fast_assert_container_env() {
   fi
 }
 
-fast_assert_container_env_absent() {
-  fast_require_runtime || return 1
+assert_container_env_absent() {
+  require_runtime || return 1
   local container="$1"
   local key="$2"
   local value
@@ -369,7 +369,7 @@ fast_assert_container_env_absent() {
   return 0
 }
 
-fast_assert_port_listening() {
+assert_port_listening() {
   local port="$1"
   node - "$port" <<'NODE'
 const net = require('net');
@@ -393,8 +393,8 @@ s.connect(port, '127.0.0.1');
 NODE
 }
 
-fast_assert_port_bound_local() {
-  fast_require_runtime || return 1
+assert_port_bound_local() {
+  require_runtime || return 1
   local container="$1"
   local container_port="$2"
   local expected_host_port="${3:-}"
@@ -445,7 +445,7 @@ fast_assert_port_bound_local() {
   fi
 }
 
-fast_assert_port_not_listening() {
+assert_port_not_listening() {
   local port="$1"
   node - "$port" <<'NODE'
 const net = require('net');
@@ -469,7 +469,7 @@ s.connect(port, '127.0.0.1');
 NODE
 }
 
-fast_assert_routing_server_stopped() {
+assert_routing_server_stopped() {
   local matches
   matches=$(pgrep -f 'cli/server/RoutingServer.js' 2>/dev/null || true)
   if [[ -n "$matches" ]]; then
@@ -480,8 +480,8 @@ fast_assert_routing_server_stopped() {
   return 0
 }
 
-fast_wait_for_container() {
-  fast_require_runtime || return 1
+wait_for_container() {
+  require_runtime || return 1
   local container="$1"
   local attempts=120
   local delay=0.5
@@ -496,17 +496,17 @@ fast_wait_for_container() {
   return 1
 }
 
-fast_wait_for_agent_log_message() {
+wait_for_agent_log_message() {
   local log_file="$1"
   local pattern="$2"
   local attempts=120 # 60 seconds
   local delay=0.5
 
-  fast_info "Waiting for message '${pattern}' in file '${log_file}'"
+  test_info "Waiting for message '${pattern}' in file '${log_file}'"
   
   for (( i=0; i<attempts; i++ )); do
     if [[ -f "$log_file" ]] && grep -q "$pattern" "$log_file"; then
-      fast_info "Message found in log file."
+      test_info "Message found in log file."
       return 0
     fi
     sleep "$delay"
@@ -523,8 +523,8 @@ fast_wait_for_agent_log_message() {
   return 1
 }
 
-fast_wait_for_container_stop() {
-  fast_require_runtime || return 1
+wait_for_container_stop() {
+  require_runtime || return 1
   local container="$1"
   local attempts=120
   local delay=0.5
@@ -539,9 +539,9 @@ fast_wait_for_container_stop() {
   return 1
 }
 
-fast_wait_for_router() {
-  fast_load_state
-  fast_require_var "TEST_ROUTER_PORT" || return 1
+wait_for_router() {
+  load_state
+  require_var "TEST_ROUTER_PORT" || return 1
   local port="$TEST_ROUTER_PORT"
   local attempts=120
   local delay=0.5
@@ -556,9 +556,9 @@ fast_wait_for_router() {
   return 1
 }
 
-fast_assert_router_status_ok() {
-  fast_load_state
-  fast_require_var "TEST_ROUTER_PORT" || return 1
+assert_router_status_ok() {
+  load_state
+  require_var "TEST_ROUTER_PORT" || return 1
   local port="$TEST_ROUTER_PORT"
   local response
   if ! response=$(curl -fsS "http://127.0.0.1:${port}/status/data" 2>/dev/null); then
@@ -571,11 +571,11 @@ fast_assert_router_status_ok() {
   fi
 }
 
-fast_assert_agent_registered() {
-  fast_load_state
-  fast_require_var "TEST_RUN_DIR" || return 1
-  fast_require_var "TEST_AGENT_NAME" || return 1
-  fast_require_var "TEST_REPO_NAME" || return 1
+assert_agent_registered() {
+  load_state
+  require_var "TEST_RUN_DIR" || return 1
+  require_var "TEST_AGENT_NAME" || return 1
+  require_var "TEST_REPO_NAME" || return 1
   local registry="$TEST_RUN_DIR/.ploinky/agents"
   if [[ ! -f "$registry" ]]; then
     echo "Agents registry '${registry}' missing." >&2
@@ -599,10 +599,10 @@ if (!found) {
 NODE
 }
 
-fast_assert_enabled_repo() {
-  fast_load_state
-  fast_require_var "TEST_RUN_DIR" || return 1
-  fast_require_var "TEST_REPO_NAME" || return 1
+assert_enabled_repo() {
+  load_state
+  require_var "TEST_RUN_DIR" || return 1
+  require_var "TEST_REPO_NAME" || return 1
   local enabled_file="$TEST_RUN_DIR/.ploinky/enabled_repos.json"
   if [[ ! -f "$enabled_file" ]]; then
     echo "Enabled repos file '${enabled_file}' missing." >&2
@@ -614,7 +614,7 @@ fast_assert_enabled_repo() {
   fi
 }
 
-fast_assert_file_content_equals() {
+assert_file_content_equals() {
   local path="$1"
   local expected="$2"
   if [[ ! -f "$path" ]]; then
@@ -629,7 +629,7 @@ fast_assert_file_content_equals() {
   fi
 }
 
-fast_assert_http_response_contains() {
+assert_http_response_contains() {
   local url="$1"
   local pattern="$2"
   local body
@@ -643,7 +643,7 @@ fast_assert_http_response_contains() {
   fi
 }
 
-fast_allocate_port() {
+allocate_port() {
   local attempts=50
   local port
   for ((i=0; i<attempts; i++)); do
@@ -657,7 +657,7 @@ fast_allocate_port() {
   return 1
 }
 
-fast_assert_file_not_exists() {
+assert_file_not_exists() {
   local path="$1"
   if [[ -e "$path" ]]; then
     echo "Unexpected path exists: '${path}'." >&2
@@ -665,7 +665,7 @@ fast_assert_file_not_exists() {
   fi
 }
 
-fast_assert_not_equal() {
+assert_not_equal() {
   local left="$1"
   local right="$2"
   local message="${3:-Values should differ.}"
@@ -675,7 +675,7 @@ fast_assert_not_equal() {
   fi
 }
 
-fast_wait_for_file() {
+wait_for_file() {
   local path="$1"
   local attempts="${2:-40}"
   local delay="${3:-0.25}"
@@ -690,19 +690,19 @@ fast_wait_for_file() {
   return 1
 }
 
-fast_run_with_timeout() {
+run_with_timeout() {
   local timeout_seconds="$1"
   local description="$2"
   shift 2
   local command_to_run=($@)
 
-  fast_info "$description"
+  test_info "$description"
   
   timeout "$timeout_seconds" "${command_to_run[@]}"
   local exit_code=$?
 
   if [[ $exit_code -eq 124 ]]; then
-    fast_fail_message "Timeout: '${description}' exceeded ${timeout_seconds} seconds."
+    fail_message "Timeout: '${description}' exceeded ${timeout_seconds} seconds."
     return 124
   fi
 

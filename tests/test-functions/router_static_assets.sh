@@ -1,7 +1,7 @@
 fast_assert_router_static_asset() {
-  fast_require_var "TEST_ROUTER_PORT"
-  fast_require_var "TEST_STATIC_ASSET_PATH"
-  fast_require_var "TEST_STATIC_ASSET_EXPECTED"
+  require_var "TEST_ROUTER_PORT"
+  require_var "TEST_STATIC_ASSET_PATH"
+  require_var "TEST_STATIC_ASSET_EXPECTED"
   local url="http://127.0.0.1:${TEST_ROUTER_PORT}${TEST_STATIC_ASSET_PATH}"
   local body
   if ! body=$(curl -fsS "$url" 2>/dev/null); then

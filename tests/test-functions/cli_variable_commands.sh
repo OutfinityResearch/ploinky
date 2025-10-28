@@ -34,10 +34,10 @@ fast_cli_echo_var_matches() {
 }
 
 fast_cli_expose_and_refresh() {
-  fast_require_var "TEST_AGENT_NAME"
-  fast_require_var "TEST_AGENT_CONT_NAME"
-  fast_require_var "FAST_VAR_TEST_NAME"
-  fast_require_var "FAST_VAR_TEST_VALUE"
+  require_var "TEST_AGENT_NAME"
+  require_var "TEST_AGENT_CONT_NAME"
+  require_var "FAST_VAR_TEST_NAME"
+  require_var "FAST_VAR_TEST_VALUE"
   if ! ploinky expose VAR_SYNTAX_1="val1" "$TEST_AGENT_NAME" >/dev/null; then
     echo "Failed to expose VAR_SYNTAX_1 for agent ${TEST_AGENT_NAME}." >&2
     return 1
@@ -58,14 +58,14 @@ fast_cli_expose_and_refresh() {
     return 1
   fi
 
-  fast_wait_for_container "$TEST_AGENT_CONT_NAME" || return 1
+  wait_for_container "$TEST_AGENT_CONT_NAME" || return 1
   return 0
 }
 
 fast_cli_verify_var_in_shell() {
-  fast_require_var "TEST_AGENT_NAME"
-  fast_require_var "FAST_VAR_TEST_NAME"
-  fast_require_var "FAST_VAR_TEST_VALUE"
+  require_var "TEST_AGENT_NAME"
+  require_var "FAST_VAR_TEST_NAME"
+  require_var "FAST_VAR_TEST_VALUE"
   local output
   if ! output=$( {
     echo "printenv ${FAST_VAR_TEST_NAME}"

@@ -4,31 +4,31 @@ set -euo pipefail
 TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$TESTS_DIR/lib.sh"
 
-fast_load_state
-fast_require_var "TEST_RUN_DIR"
-fast_require_var "TEST_AGENT_NAME"
-fast_require_var "TEST_AGENT_CONT_NAME"
-fast_require_var "TEST_ROUTER_PORT"
+load_state
+require_var "TEST_RUN_DIR"
+require_var "TEST_AGENT_NAME"
+require_var "TEST_AGENT_CONT_NAME"
+require_var "TEST_ROUTER_PORT"
 
 cd "$TEST_RUN_DIR"
 
-fast_require_runtime
-pre_pid=$(fast_get_container_pid "$TEST_AGENT_CONT_NAME" || echo "")
-fast_write_state_var "TEST_PRE_RESTART_PID" "$pre_pid"
-fast_info "Restarting workspace (pre-restart pid: ${pre_pid:-unknown})."
+require_runtime
+pre_pid=$(get_container_pid "$TEST_AGENT_CONT_NAME" || echo "")
+write_state_var "TEST_PRE_RESTART_PID" "$pre_pid"
+test_info "Restarting workspace (pre-restart pid: ${pre_pid:-unknown})."
 
 ploinky restart
 
-fast_wait_for_router
-fast_wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"
+wait_for_router
+wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"
 
-post_pid=$(fast_get_container_pid "$TEST_AGENT_CONT_NAME")
-fast_write_state_var "TEST_POST_RESTART_PID" "$post_pid"
-fast_write_state_var "TEST_LAST_KNOWN_PID" "$post_pid"
-fast_info "Restart complete (post-restart pid: ${post_pid})."
+post_pid=$(get_container_pid "$TEST_AGENT_CONT_NAME")
+write_state_var "TEST_POST_RESTART_PID" "$post_pid"
+write_state_var "TEST_LAST_KNOWN_PID" "$post_pid"
+test_info "Restart complete (post-restart pid: ${post_pid})."
 
 routing_file="$TEST_RUN_DIR/.ploinky/routing.json"
-fast_wait_for_file "$routing_file" 40 0.25
+wait_for_file "$routing_file" 40 0.25
 
 agent_host_port="7000"
 for _ in {1..10}; do
@@ -58,5 +58,5 @@ if [[ -z "$agent_host_port" || "$agent_host_port" == "0" ]]; then
   agent_host_port="7000"
 fi
 
-fast_write_state_var "TEST_AGENT_HOST_PORT" "$agent_host_port"
-fast_write_state_var "TEST_AGENT_HEALTH_URL" "http://127.0.0.1:${agent_host_port}/health"
+write_state_var "TEST_AGENT_HOST_PORT" "$agent_host_port"
+write_state_var "TEST_AGENT_HEALTH_URL" "http://127.0.0.1:${agent_host_port}/health"

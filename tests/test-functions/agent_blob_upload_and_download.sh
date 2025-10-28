@@ -1,8 +1,8 @@
 fast_check_agent_blob_upload() {
-  fast_require_var "TEST_RUN_DIR"
-  fast_require_var "TEST_ROUTER_PORT"
-  fast_require_var "TEST_AGENT_NAME"
-  fast_require_var "TEST_AGENT_WORKSPACE"
+  require_var "TEST_RUN_DIR"
+  require_var "TEST_ROUTER_PORT"
+  require_var "TEST_AGENT_NAME"
+  require_var "TEST_AGENT_WORKSPACE"
 
   local upload_file
   if ! upload_file=$(mktemp -p "$TEST_RUN_DIR" fast-agent-upload.XXXXXX.bin); then
@@ -85,20 +85,20 @@ fast_check_agent_blob_upload() {
     return 1
   fi
 
-  fast_write_state_var "FAST_AGENT_UPLOAD_FILE" "$upload_file"
-  fast_write_state_var "FAST_AGENT_BLOB_ID" "$blob_id"
-  fast_write_state_var "FAST_AGENT_BLOB_URL" "$blob_url"
-  fast_write_state_var "FAST_AGENT_BLOB_DOWNLOAD_URL" "$blob_download_url"
-  fast_write_state_var "FAST_AGENT_BLOB_PATH" "$blob_path"
-  fast_write_state_var "FAST_AGENT_BLOB_META" "$blob_meta"
+  write_state_var "FAST_AGENT_UPLOAD_FILE" "$upload_file"
+  write_state_var "FAST_AGENT_BLOB_ID" "$blob_id"
+  write_state_var "FAST_AGENT_BLOB_URL" "$blob_url"
+  write_state_var "FAST_AGENT_BLOB_DOWNLOAD_URL" "$blob_download_url"
+  write_state_var "FAST_AGENT_BLOB_PATH" "$blob_path"
+  write_state_var "FAST_AGENT_BLOB_META" "$blob_meta"
 }
 
 fast_check_agent_blob_download() {
-  fast_require_var "TEST_ROUTER_PORT"
-  fast_require_var "TEST_AGENT_NAME"
-  fast_require_var "TEST_AGENT_WORKSPACE"
+  require_var "TEST_ROUTER_PORT"
+  require_var "TEST_AGENT_NAME"
+  require_var "TEST_AGENT_WORKSPACE"
 
-  fast_load_state
+  load_state
 
   if [[ -z "${FAST_AGENT_UPLOAD_FILE:-}" || -z "${FAST_AGENT_BLOB_ID:-}" || -z "${FAST_AGENT_BLOB_DOWNLOAD_URL:-}" ]]; then
     echo "Agent blob upload state missing. Did the upload test run?" >&2
@@ -126,10 +126,10 @@ fast_check_agent_blob_download() {
   rm -f "$download_file"
   rm -f "$FAST_AGENT_UPLOAD_FILE"
   rm -f "$FAST_AGENT_BLOB_PATH" "$FAST_AGENT_BLOB_META"
-  fast_write_state_var "FAST_AGENT_UPLOAD_FILE" ""
-  fast_write_state_var "FAST_AGENT_BLOB_ID" ""
-  fast_write_state_var "FAST_AGENT_BLOB_URL" ""
-  fast_write_state_var "FAST_AGENT_BLOB_DOWNLOAD_URL" ""
-  fast_write_state_var "FAST_AGENT_BLOB_PATH" ""
-  fast_write_state_var "FAST_AGENT_BLOB_META" ""
+  write_state_var "FAST_AGENT_UPLOAD_FILE" ""
+  write_state_var "FAST_AGENT_BLOB_ID" ""
+  write_state_var "FAST_AGENT_BLOB_URL" ""
+  write_state_var "FAST_AGENT_BLOB_DOWNLOAD_URL" ""
+  write_state_var "FAST_AGENT_BLOB_PATH" ""
+  write_state_var "FAST_AGENT_BLOB_META" ""
 }

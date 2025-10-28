@@ -1,8 +1,8 @@
 fast_assert_devel_agent_workdir() {
   local agent_var="$1"
-  fast_require_var "TEST_RUN_DIR"
-  fast_require_var "TEST_REPO_NAME"
-  fast_require_var "$agent_var"
+  require_var "TEST_RUN_DIR"
+  require_var "TEST_REPO_NAME"
+  require_var "$agent_var"
 
   local agent_name="${!agent_var}"
 
