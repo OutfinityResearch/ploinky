@@ -140,10 +140,58 @@ function handleWebTTY(req, res, appConfig, appState) {
         const tabId = parsedUrl.searchParams.get('tabId');
         if (!session || !tabId) { res.writeHead(400); return res.end(); }
 
-        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Connection': 'keep-alive', 'Cache-Control': 'no-cache' });
-        res.write(': connected\n\n');
+        // CRITICAL FIX: Global limit across ALL sessions to prevent system-wide overload  
+        const MAX_GLOBAL_TTYS = 20;
+        let globalTabCount = 0;
+        for (const sess of appState.sessions.values()) {
+            if (sess.tabs instanceof Map) {
+                globalTabCount += sess.tabs.size;
+            }
+        }
+
+        if (globalTabCount >= MAX_GLOBAL_TTYS) {
+            res.writeHead(503, {
+                'Content-Type': 'text/plain',
+                'Retry-After': '30'
+            });
+            res.end('Server at capacity. Please try again later.');
+            return;
+        }
+
+        // CRITICAL FIX: Limit concurrent connections per session to prevent process spawn leak
+        const MAX_CONCURRENT_TTYS = 3;
+        if (session.tabs.size >= MAX_CONCURRENT_TTYS) {
+            res.writeHead(429, {
+                'Content-Type': 'text/plain',
+                'Retry-After': '5'
+            });
+            res.end('Too many concurrent connections. Please close other tabs or wait.');
+            return;
+        }
 
         let tab = session.tabs.get(tabId);
+
+        // CRITICAL FIX: Debounce rapid reconnections
+        const now = Date.now();
+        const MIN_RECONNECT_INTERVAL_MS = 1000;
+
+        if (tab && tab.lastConnectTime && (now - tab.lastConnectTime) < MIN_RECONNECT_INTERVAL_MS) {
+            res.writeHead(429, {
+                'Content-Type': 'text/plain',
+                'Retry-After': '1'
+            });
+            res.end('Reconnecting too fast. Please wait.');
+            return;
+        }
+
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
+            'alt-svc': 'clear'  // Force HTTP/2, disable HTTP/3 to prevent QUIC errors
+        });
+        res.write(': connected\n\n');
+
         if (!tab) {
             if (!appConfig.ttyFactory) {
                 res.writeHead(503);
@@ -152,7 +200,14 @@ function handleWebTTY(req, res, appConfig, appState) {
             }
             try {
                 const tty = appConfig.ttyFactory.create();
-                tab = { tty, sseRes: res };
+                tab = {
+                    tty,
+                    sseRes: res,
+                    lastConnectTime: now,
+                    createdAt: now,
+                    pid: tty.pid || null,
+                    cleanupTimer: null
+                };
                 session.tabs.set(tabId, tab);
                 tty.onOutput((data) => {
                     if (tab.sseRes) {
@@ -164,7 +219,24 @@ function handleWebTTY(req, res, appConfig, appState) {
                         tab.sseRes.write('event: close\n');
                         tab.sseRes.write('data: {}\n\n');
                     }
+                    if (tab.cleanupTimer) {
+                        clearTimeout(tab.cleanupTimer);
+                        tab.cleanupTimer = null;
+                    }
                 });
+
+                // CRITICAL FIX: Set aggressive cleanup timer
+                const FORCE_KILL_TIMEOUT_MS = 10000;
+                tab.cleanupTimer = setTimeout(() => {
+                    if (tab.tty && tab.pid) {
+                        try {
+                            process.kill(tab.pid, 'SIGKILL');
+                            console.warn(`[webtty] Force killed zombie process ${tab.pid} for tab ${tabId}`);
+                        } catch (_) { }
+                    }
+                    tab.cleanupTimer = null;
+                }, FORCE_KILL_TIMEOUT_MS);
+
             } catch (e) {
                 res.writeHead(500);
                 res.end('Failed to create TTY: ' + (e?.message || e));
@@ -172,9 +244,42 @@ function handleWebTTY(req, res, appConfig, appState) {
             }
         } else {
             tab.sseRes = res;
+            tab.lastConnectTime = now;
         }
 
-        req.on('close', () => { tab.sseRes = null; });
+        req.on('close', () => {
+            if (tab.cleanupTimer) {
+                clearTimeout(tab.cleanupTimer);
+                tab.cleanupTimer = null;
+            }
+
+            if (tab.tty) {
+                const pid = tab.pid || tab.tty.pid;
+
+                if (typeof tab.tty.dispose === 'function') {
+                    try { tab.tty.dispose(); } catch (_) { }
+                } else if (typeof tab.tty.kill === 'function') {
+                    try { tab.tty.kill(); } catch (_) { }
+                }
+
+                // CRITICAL FIX: Force kill lingering processes
+                if (pid) {
+                    setTimeout(() => {
+                        try {
+                            process.kill(pid, 0);
+                            process.kill(pid, 'SIGKILL');
+                            console.warn(`[webtty] Force killed lingering process ${pid}`);
+                        } catch (_) { }
+                    }, 2000);
+                }
+            }
+
+            tab.sseRes = null;
+
+            if (session.tabs && session.tabs instanceof Map) {
+                session.tabs.delete(tabId);
+            }
+        });
         return;
     }
 

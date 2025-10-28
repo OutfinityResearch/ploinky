@@ -2,6 +2,7 @@ import { createOpenAITtsServerStrategy } from './openai.js';
 import { createNoopTtsServerStrategy } from './noop.js';
 
 const PROVIDERS = new Map([
+    ['browser', () => createNoopTtsServerStrategy()],
     ['openai', createOpenAITtsServerStrategy],
     ['none', () => createNoopTtsServerStrategy()]
 ]);

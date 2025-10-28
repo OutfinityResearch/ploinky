@@ -64,6 +64,7 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
         queue: [],
         playing: false,
         currentAudio: null,
+        currentStop: null,
         currentCleanup: null,
         lastSpokenText: '',
         disableOnError: false
@@ -138,7 +139,7 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
         state.queue.length = 0;
     }
 
-    function stopCurrentAudio() {
+    function stopCurrentPlayback() {
         if (state.currentCleanup) {
             try {
                 state.currentCleanup();
@@ -147,20 +148,27 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
             }
             state.currentCleanup = null;
         }
-        if (!state.currentAudio) {
-            return;
+        if (state.currentStop) {
+            try {
+                state.currentStop();
+            } catch (_) {
+                // Ignore stop failures
+            }
+            state.currentStop = null;
         }
-        try {
-            state.currentAudio.pause();
-        } catch (_) {
-            // Ignore pause failures
+        if (state.currentAudio) {
+            try {
+                state.currentAudio.pause();
+            } catch (_) {
+                // Ignore pause failures
+            }
+            state.currentAudio = null;
         }
-        state.currentAudio = null;
     }
 
     function stopAll() {
         clearQueue();
-        stopCurrentAudio();
+        stopCurrentPlayback();
         state.playing = false;
         if (typeof strategy.cancel === 'function') {
             try {
@@ -217,8 +225,15 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
             ttsVoice.appendChild(node);
         }
 
-        if (!voiceOptions.some((option) => option.value === state.voice)) {
-            state.voice = voiceOptions[0]?.value || null;
+        const defaultVoice = strategy.getDefaultVoice ? strategy.getDefaultVoice() : null;
+        const hasStoredVoice = voiceOptions.some((option) => option.value === state.voice);
+        if (!hasStoredVoice) {
+            const hasDefault = defaultVoice && voiceOptions.some((option) => option.value === defaultVoice);
+            if (hasDefault) {
+                state.voice = defaultVoice;
+            } else {
+                state.voice = voiceOptions[0]?.value || null;
+            }
         }
         if (ttsVoice) {
             ttsVoice.value = state.voice || '';
@@ -241,6 +256,15 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
     if (ttsVoice) {
         refreshVoiceOptions().catch((error) => dlog('tts voice refresh failed', error));
     }
+
+    const unsubscribeVoiceEvents = typeof strategy.onVoicesChanged === 'function'
+        ? strategy.onVoicesChanged(() => {
+            if (!ttsVoice) {
+                return;
+            }
+            refreshVoiceOptions().catch((error) => dlog('tts voice refresh failed', error));
+        })
+        : null;
 
     if (ttsEnable) {
         ttsEnable.addEventListener('change', () => {
@@ -301,21 +325,55 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
             audio.preload = 'auto';
             state.currentAudio = audio;
 
-            const finish = () => {
+            let finished = false;
+
+            const finalize = () => {
+                audio.removeEventListener('ended', handleEnded);
+                audio.removeEventListener('error', handleError);
                 if (state.currentAudio === audio) {
                     state.currentAudio = null;
+                }
+                if (state.currentStop && state.currentAudio === null) {
+                    state.currentStop = null;
                 }
                 resolve();
             };
 
-            audio.addEventListener('ended', finish);
-            audio.addEventListener('error', finish);
+            const handleEnded = () => {
+                if (!finished) {
+                    finished = true;
+                    finalize();
+                }
+            };
+
+            const handleError = () => {
+                if (!finished) {
+                    finished = true;
+                    finalize();
+                }
+            };
+
+            state.currentStop = () => {
+                if (finished) {
+                    return;
+                }
+                finished = true;
+                try {
+                    audio.pause();
+                } catch (_) {
+                    // Ignore pause failures
+                }
+                finalize();
+            };
+
+            audio.addEventListener('ended', handleEnded);
+            audio.addEventListener('error', handleError);
 
             const playPromise = audio.play();
             if (playPromise && typeof playPromise.then === 'function') {
                 playPromise.catch((error) => {
                     dlog('tts playback blocked', error);
-                    finish();
+                    handleError();
                 });
             }
         });
@@ -343,12 +401,21 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
                     voice: state.voice,
                     rate: state.rate
                 });
-                if (!result || !result.url) {
+                if (!result) {
                     throw new Error('tts_missing_audio');
                 }
+                state.currentStop = null;
                 state.lastSpokenText = text;
                 state.currentCleanup = typeof result.cleanup === 'function' ? result.cleanup : null;
-                await playAudioUrl(result.url);
+                if (typeof result.play === 'function') {
+                    state.currentStop = typeof result.stop === 'function' ? result.stop : null;
+                    await result.play();
+                    state.currentStop = null;
+                } else if (result.url) {
+                    await playAudioUrl(result.url);
+                } else {
+                    throw new Error('tts_missing_audio');
+                }
                 if (state.currentCleanup) {
                     state.currentCleanup();
                     state.currentCleanup = null;
@@ -379,6 +446,13 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
 
     function cancel() {
         stopAll();
+        if (typeof unsubscribeVoiceEvents === 'function') {
+            try {
+                unsubscribeVoiceEvents();
+            } catch (_) {
+                // Ignore cleanup failures
+            }
+        }
     }
 
     return {
