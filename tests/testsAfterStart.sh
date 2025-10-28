@@ -8,6 +8,7 @@ source "$TESTS_DIR/test-functions/mcp_tests.sh"
 source "$TESTS_DIR/test-functions/routingserver_aggregation_test.sh"
 source "$TESTS_DIR/test-functions/cli_variable_commands.sh"
 source "$TESTS_DIR/test-functions/router_static_assets.sh"
+source "$TESTS_DIR/test-functions/check_preinstall_run.sh"
 source "$TESTS_DIR/test-functions/install_command_verification.sh"
 source "$TESTS_DIR/test-functions/agent_blob_upload_and_download.sh"
 source "$TESTS_DIR/test-functions/demo_agent_dir_perm.sh"
@@ -65,6 +66,9 @@ test_check "Moderator container is running" assert_container_running "$MODERATOR
 test_check "Moderator server responds to GET" fast_check_moderator_get
 test_check "Verify repo 'webmeet' is cloned" assert_dir_exists ".ploinky/repos/webmeet"
 test_check "Verify repo 'vibe1' is cloned" assert_dir_exists ".ploinky/repos/vibe1"
+
+stage_header "Check preinstall runs"
+test_check "Explorer preinstall command executed" check_preinstall_run
 
 stage_header  "MCP tests"
 test_check "Status check: client status simulator" fast_mcp_client_status

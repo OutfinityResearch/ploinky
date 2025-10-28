@@ -14,6 +14,11 @@ require_var "TEST_PERSIST_MARKER"
 
 cd "$TEST_RUN_DIR"
 
+mkdir -p "$TEST_RUN_DIR/logs"
+start_log="$TEST_RUN_DIR/logs/start-demo.log"
+: >"$start_log"
+write_state_var "TEST_START_LOG" "$start_log"
+
 if [[ $# -ge 2 ]]; then
   test_info "Starting workspace with specified agent $1 on port $2."
   ploinky start "$1" "$2"
@@ -72,11 +77,12 @@ if [[ ! -f "$persist_marker" ]]; then
 fi
 
 fast_mcp_start_demo() {
-  ploinky start demo "$TEST_ROUTER_PORT"
+  ploinky start demo "$TEST_ROUTER_PORT" >>"$start_log" 2>&1
   local container_name
   container_name=$(compute_container_name "demo" "demo")
   wait_for_container "$container_name"
 }
+
 test_action "Action: Starting demo agent..." fast_mcp_start_demo
 
 wait_for_router
