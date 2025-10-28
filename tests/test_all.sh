@@ -9,14 +9,14 @@
 # We will disable this for sections where we want to continue on error.
 set -euo pipefail
 
-FAST_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 # State file for sharing variables between scripts
 FAST_STATE_FILE=$(mktemp "${TMPDIR:-/tmp}/fast-suite-state-XXXXXX.env")
 export FAST_STATE_FILE
 
 # Results file for the final summary
-FAST_RESULTS_FILE="$FAST_DIR/lastRun.results"
+FAST_RESULTS_FILE="$TESTS_DIR/lastRun.results"
 export FAST_RESULTS_FILE
 
 # Global error counter
@@ -31,7 +31,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Source the library of helper functions
-source "$FAST_DIR/lib.sh"
+source "$TESTS_DIR/lib.sh"
 
 # Initialize/clear the results file at the start of the run
 fast_init_results
@@ -46,7 +46,7 @@ run_stage() {
   fast_stage_header "$label"
 
   if [[ -n "$action" ]]; then
-    if ! fast_run_with_timeout 60 "Executing action script: ${action}" bash "$FAST_DIR/$action"; then
+    if ! fast_run_with_timeout 60 "Executing action script: ${action}" bash "$TESTS_DIR/$action"; then
       return 1
     fi
   fi
@@ -55,7 +55,7 @@ run_stage() {
     set +e
     
     FAST_CHECK_ERRORS=0
-    fast_run_with_timeout 60 "Running verification script: ${verify}" bash "$FAST_DIR/$verify"
+    fast_run_with_timeout 60 "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
     local exit_code=$?
 
     if [[ $exit_code -eq 124 ]]; then
@@ -70,6 +70,26 @@ run_stage() {
   fi
 
   return 0
+}
+
+run_node_unit_tests() {
+    local unit_dir="$TESTS_DIR/unit"
+    if [[ ! -d "$unit_dir" ]]; then
+      echo "Unit test directory '$unit_dir' not found." >&2
+      return 1
+    fi
+
+    local test_files=()
+    while IFS= read -r -d '' file; do
+      test_files+=("$file")
+    done < <(find "$unit_dir" -maxdepth 1 -type f \( -name '*.test.js' -o -name '*.test.mjs' -o -name '*.test.cjs' \) -print0)
+
+    if (( ${#test_files[@]} == 0 )); then
+      echo "No unit test files found in '$unit_dir'." >&2
+      return 1
+    fi
+
+    node --test "${test_files[@]}"
 }
 
 # --- Main Test Execution Flow ---
@@ -89,14 +109,14 @@ fi
 fast_load_state
 
 fast_stage_header "START STAGE"
-if ! fast_run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$FAST_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"; then
+if ! fast_run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"; then
   fast_fail_message "START STAGE aborted. Proceeding to cleanup."
   fast_log_result "[FATAL] START STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
 else
   set +e
   FAST_CHECK_ERRORS=0
-  fast_run_with_timeout 60 "Running verification script: testsAfterStart.sh" bash "$FAST_DIR/testsAfterStart.sh"
+  fast_run_with_timeout 60 "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
   exit_code=$?
   if [[ $exit_code -eq 124 ]]; then
       fast_log_result "[FAIL] testsAfterStart.sh timed out after 60 seconds."
@@ -131,6 +151,18 @@ fi
 set +e # Allow cleanup to run fully
 run_stage "DESTROY STAGE"      "doDestroy.sh"         "testsAfterDestroy.sh"
 set -e # Re-enable for final summary logic
+
+# --- Post-destroy unit checks ---
+fast_stage_header "NODE UNIT STAGE"
+set +e
+FAST_CHECK_ERRORS=0
+fast_check "Node unit tests" run_node_unit_tests
+fast_finalize_checks
+node_unit_failures=$?
+if (( node_unit_failures > 0 )); then
+  TOTAL_ERRORS=$((TOTAL_ERRORS + node_unit_failures))
+fi
+set -e
 
 # --- Final Summary ---
 fast_stage_header "TEST SUMMARY"
