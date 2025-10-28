@@ -127,7 +127,7 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
             return;
         }
         if (!sttEnable?.checked) {
-            updateVoiceStatus('Disabled');
+            updateVoiceStatus('Muted');
             setMicVisual(false);
             return;
         }
@@ -198,7 +198,7 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
                         }
                     }, 200);
                 } else {
-                    updateVoiceStatus(sttEnable?.checked ? 'Paused' : 'Disabled');
+                    updateVoiceStatus(sttEnable?.checked ? 'Paused' : 'Muted');
                 }
                 setMicVisual(sttActive && sttEnable?.checked);
             };
@@ -222,7 +222,7 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
             sttActive = false;
             setMicVisual(false);
             stopRecognition();
-            updateVoiceStatus('Disabled');
+            updateVoiceStatus('Muted');
             resetTranscriptState();
         } else {
             sttActive = true;
@@ -306,9 +306,11 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
     }
 
     if (sttEnable) {
-        const stored = localStorage.getItem(sttEnabledKey);
-        if (stored !== null) {
-            sttEnable.checked = stored === 'true';
+        sttEnable.checked = false;
+        try {
+            localStorage.setItem(sttEnabledKey, 'false');
+        } catch (_) {
+            // Ignore storage failures
         }
         sttEnable.addEventListener('change', () => {
             try {
@@ -343,7 +345,7 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
                 startRecognition();
             } else {
                 stopRecognition();
-                updateVoiceStatus('Off');
+                updateVoiceStatus('Muted');
                 resetTranscriptState();
             }
         });
@@ -359,14 +361,7 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
     }
 
     if (sttEnable) {
-        if (sttEnable.checked) {
-            sttActive = true;
-            setMicVisual(true);
-            startRecognition();
-        } else {
-            setMicVisual(false);
-            updateVoiceStatus('Disabled');
-        }
+        applyEnableState(sttEnable.checked);
     } else {
         sttActive = true;
         setMicVisual(true);
@@ -379,7 +374,7 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
         stop: () => {
             sttActive = false;
             stopRecognition();
-            updateVoiceStatus('Off');
+            updateVoiceStatus('Muted');
         }
     };
 }

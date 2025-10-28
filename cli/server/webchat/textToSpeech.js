@@ -107,13 +107,11 @@ export function initTextToSpeech(elements = {}, { dlog = () => {}, toEndpoint, p
     }
 
     function loadPreferences() {
+        state.enabled = false;
         try {
-            const storedEnabled = localStorage.getItem(TTS_ENABLED_KEY);
-            if (storedEnabled === 'true') {
-                state.enabled = true;
-            }
+            localStorage.setItem(TTS_ENABLED_KEY, 'false');
         } catch (_) {
-            state.enabled = false;
+            // Ignore storage issues
         }
 
         try {
