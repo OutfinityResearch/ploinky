@@ -470,13 +470,24 @@ NODE
 }
 
 assert_routing_server_stopped() {
-  local matches
-  matches=$(pgrep -f 'cli/server/RoutingServer.js' 2>/dev/null || true)
-  if [[ -n "$matches" ]]; then
-    matches=$(tr '\n' ' ' <<<"$matches" | sed 's/  */ /g; s/ $//')
-    echo "RoutingServer process still running (PIDs: ${matches})." >&2
+  load_state
+  require_var "TEST_ROUTER_PORT" || return 1
+
+  local port="$TEST_ROUTER_PORT"
+
+  if ! command -v lsof >/dev/null 2>&1; then
+    echo "lsof is required to inspect router PID for port ${port}." >&2
     return 1
   fi
+
+  local pid
+  pid=$(lsof -nP -t -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | head -n 1)
+
+  if [[ -n "$pid" ]]; then
+    echo "RoutingServer process still running on port ${port} (PID: ${pid})." >&2
+    return 1
+  fi
+
   return 0
 }
 

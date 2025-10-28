@@ -13,6 +13,7 @@ source "$TESTS_DIR/test-functions/agent_blob_upload_and_download.sh"
 source "$TESTS_DIR/test-functions/demo_agent_dir_perm.sh"
 source "$TESTS_DIR/test-functions/global_agent_verification.sh"
 source "$TESTS_DIR/test-functions/devel_agent_verification.sh"
+source "$TESTS_DIR/test-functions/watchdog_restart_services.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -39,6 +40,9 @@ test_check "Container exposes AGENT_NAME" assert_container_env "$TEST_AGENT_CONT
 test_check "Container exposes FAST_TEST_MARKER" assert_container_env "$TEST_AGENT_CONT_NAME" "FAST_TEST_MARKER" "fast-suite"
 test_check "Agent log file created" assert_file_contains "$TEST_AGENT_LOG" "listening"
 test_check "Persisted data file created" assert_file_exists "$TEST_PERSIST_FILE"
+
+#stage_header "Watchdog restart services"
+#test_check "Watchdog restarts router and agent container" watchdog_restart_services
 
 stage_header "Ploinky only var test"
 export FAST_PLOINKY_ONLY="host-env-value"

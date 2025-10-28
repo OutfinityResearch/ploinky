@@ -47,7 +47,11 @@ agent_root="${repo_root}/${TEST_AGENT_NAME}"
 mkdir -p "$agent_root"
 test_info "Bootstrapped repository skeleton at ${agent_root}."
 
-cat >"${agent_root}/manifest.json" <<'EOF'
+agent_host_port=$(allocate_port)
+write_state_var "TEST_AGENT_HOST_PORT" "$agent_host_port"
+test_info "Assigned host port ${agent_host_port} for ${TEST_AGENT_NAME}."
+
+cat >"${agent_root}/manifest.json" <<EOF
 {
   "container": "node:20-bullseye",
   "install": "echo 'install_ok' > ./install_marker.txt",
@@ -61,7 +65,7 @@ cat >"${agent_root}/manifest.json" <<'EOF'
     "MY_TEST_VAR": "hello-manifest"
   },
   "ports": [
-    "7001:7000"
+    "${agent_host_port}:7000"
   ]
 }
 EOF
@@ -152,12 +156,16 @@ write_state_var "TEST_GLOBAL_AGENT_NAME" "$GLOBAL_AGENT_NAME"
 global_agent_root="${repo_root}/${GLOBAL_AGENT_NAME}"
 mkdir -p "$global_agent_root"
 
-cat >"${global_agent_root}/manifest.json" <<'EOF'
+global_agent_host_port=$(allocate_port)
+write_state_var "TEST_GLOBAL_AGENT_HOST_PORT" "$global_agent_host_port"
+test_info "Assigned host port ${global_agent_host_port} for ${GLOBAL_AGENT_NAME}."
+
+cat >"${global_agent_root}/manifest.json" <<EOF
 {
   "container": "node:20-bullseye",
   "ports": [
-      "7002:7000"
-    ]
+    "${global_agent_host_port}:7000"
+  ]
 }
 EOF
 
