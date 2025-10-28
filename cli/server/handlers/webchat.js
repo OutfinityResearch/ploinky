@@ -14,8 +14,8 @@ const appName = 'webchat';
 const fallbackAppPath = path.join(__dirname, '../', appName);
 const SID_COOKIE = `${appName}_sid`;
 
-const DEFAULT_TTS_PROVIDER = (process.env.WEBCHAT_TTS_PROVIDER || 'openai').trim().toLowerCase();
-const DEFAULT_STT_PROVIDER = (process.env.WEBCHAT_STT_PROVIDER || 'openai-realtime').trim().toLowerCase();
+const DEFAULT_TTS_PROVIDER = (process.env.WEBCHAT_TTS_PROVIDER || 'browser').trim().toLowerCase();
+const DEFAULT_STT_PROVIDER = (process.env.WEBCHAT_STT_PROVIDER || 'browser').trim().toLowerCase();
 
 function renderTemplate(filenames, replacements) {
     const target = staticSrv.resolveFirstAvailable(appName, fallbackAppPath, filenames);
@@ -430,9 +430,30 @@ function handleWebChat(req, res, appConfig, appState) {
             'Content-Type': 'text/event-stream',
             'Connection': 'keep-alive',
             'Cache-Control': 'no-cache',
+            'x-accel-buffering': 'no',
             'alt-svc': 'clear'  // Force HTTP/2, disable HTTP/3 to prevent QUIC errors
         });
         res.write(': connected\n\n');
+
+        const KEEPALIVE_INTERVAL_MS = 15000;
+        let keepaliveTimer = null;
+
+        const startKeepalive = () => {
+            if (keepaliveTimer || !Number.isFinite(KEEPALIVE_INTERVAL_MS) || KEEPALIVE_INTERVAL_MS <= 0) {
+                return;
+            }
+            keepaliveTimer = setInterval(() => {
+                try {
+                    res.write(': keepalive\n\n');
+                } catch (_) {
+                    clearInterval(keepaliveTimer);
+                    keepaliveTimer = null;
+                }
+            }, KEEPALIVE_INTERVAL_MS);
+            keepaliveTimer.unref?.();
+        };
+
+        startKeepalive();
 
         if (!tab) {
             try {
@@ -510,6 +531,10 @@ function handleWebChat(req, res, appConfig, appState) {
         }
 
         req.on('close', () => {
+            if (keepaliveTimer) {
+                clearInterval(keepaliveTimer);
+                keepaliveTimer = null;
+            }
             // Clear the force kill timer
             if (tab.cleanupTimer) {
                 clearTimeout(tab.cleanupTimer);
