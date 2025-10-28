@@ -41,8 +41,8 @@ test_check "Container exposes FAST_TEST_MARKER" assert_container_env "$TEST_AGEN
 test_check "Agent log file created" assert_file_contains "$TEST_AGENT_LOG" "listening"
 test_check "Persisted data file created" assert_file_exists "$TEST_PERSIST_FILE"
 
-#stage_header "Watchdog restart services"
-#test_check "Watchdog restarts router and agent container" watchdog_restart_services
+stage_header "Watchdog restart services"
+test_check "Watchdog restarts router and agent container" watchdog_restart_services
 
 stage_header "Ploinky only var test"
 export FAST_PLOINKY_ONLY="host-env-value"
