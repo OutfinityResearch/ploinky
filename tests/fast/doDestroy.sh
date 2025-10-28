@@ -24,12 +24,3 @@ if [[ -f "$TEST_ROUTER_LOG" ]]; then
     fi
 fi
 fast_write_state_var "TEST_ROUTER_LOG_SNAPSHOT" "$router_log_snapshot"
-
-# Move out of the workspace before deleting the directory.
-cd "$FAST_DIR"
-
-rm -rf "$TEST_RUN_DIR"
-fast_write_state_var "TEST_RUN_DIR" "$TEST_RUN_DIR"
-fast_write_state_var "TEST_RUN_DIR_REMOVED" "1"
-
-fast_info "Destroy procedure completed."

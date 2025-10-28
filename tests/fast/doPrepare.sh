@@ -12,6 +12,12 @@ TEST_AGENT_QUALIFIED="${TEST_REPO_NAME}/${TEST_AGENT_NAME}"
 fast_write_state_var "TEST_REPO_NAME" "$TEST_REPO_NAME"
 fast_write_state_var "TEST_AGENT_NAME" "$TEST_AGENT_NAME"
 fast_write_state_var "TEST_AGENT_QUALIFIED" "$TEST_AGENT_QUALIFIED"
+TEST_AGENT_TO_DISABLE_NAME="agentToBeDisabled"
+TEST_AGENT_TO_DISABLE_QUALIFIED="${TEST_REPO_NAME}/${TEST_AGENT_TO_DISABLE_NAME}"
+fast_write_state_var "TEST_AGENT_TO_DISABLE_NAME" "$TEST_AGENT_TO_DISABLE_NAME"
+fast_write_state_var "TEST_AGENT_TO_DISABLE_QUALIFIED" "$TEST_AGENT_TO_DISABLE_QUALIFIED"
+fast_write_state_var "TEST_AGENT_TO_DISABLE_SHOULD_START" "1"
+fast_write_state_var "TEST_AGENT_TO_DISABLE_EXPECT_RUNNING" "1"
 TEST_AGENT_DEP_GLOBAL_NAME="testAgentDepGlobal"
 fast_write_state_var "TEST_AGENT_DEP_GLOBAL_NAME" "$TEST_AGENT_DEP_GLOBAL_NAME"
 TEST_AGENT_DEP_DEVEL_NAME="testAgentDepDevel"
@@ -96,6 +102,16 @@ printf 'fast-static-ok' >"${agent_root}/fast-static.txt"
 fast_write_state_var "TEST_STATIC_ASSET_PATH" "/${TEST_AGENT_NAME}/fast-static.txt"
 fast_write_state_var "TEST_STATIC_ASSET_EXPECTED" "fast-static-ok"
 
+# Agent used to exercise disable flows later in the suite
+disable_agent_root="${repo_root}/${TEST_AGENT_TO_DISABLE_NAME}"
+mkdir -p "$disable_agent_root"
+
+cat >"${disable_agent_root}/manifest.json" <<'EOF'
+{
+  "container": "node:20-bullseye",
+  "agent": "node -e \"setInterval(()=>{}, 1_000_000)\""
+}
+EOF
 # Dependency agent that will be enabled in global mode via manifest
 dep_agent_root="${repo_root}/${TEST_AGENT_DEP_GLOBAL_NAME}"
 mkdir -p "$dep_agent_root"
@@ -125,6 +141,9 @@ ploinky enable repo demo
 
 fast_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_QUALIFIED"
+
+fast_info "Enabling agent ${TEST_AGENT_TO_DISABLE_QUALIFIED}."
+ploinky enable agent "$TEST_AGENT_TO_DISABLE_QUALIFIED"
 
 # Create a global agent for testing global mode
 fast_info "Creating global-agent."
@@ -167,6 +186,10 @@ ploinky var FAST_PLOINKY_ONLY host-secret-value
 agent_container_name=$(compute_container_name "$TEST_AGENT_NAME" "$TEST_REPO_NAME")
 fast_write_state_var "TEST_AGENT_CONT_NAME" "$agent_container_name"
 fast_info "Service container will be named: $agent_container_name"
+
+disable_agent_container_name=$(compute_container_name "$TEST_AGENT_TO_DISABLE_NAME" "$TEST_REPO_NAME")
+fast_write_state_var "TEST_AGENT_TO_DISABLE_CONT_NAME" "$disable_agent_container_name"
+fast_info "Disable-target container will be named: $disable_agent_container_name"
 
 workspace_project="$TEST_RUN_DIR/$TEST_AGENT_NAME"
 fast_write_state_var "TEST_AGENT_WORKSPACE" "$workspace_project"
