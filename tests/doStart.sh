@@ -19,13 +19,19 @@ start_log="$TEST_RUN_DIR/logs/start-demo.log"
 : >"$start_log"
 write_state_var "TEST_START_LOG" "$start_log"
 
+test_agent_start_log="$TEST_RUN_DIR/logs/testAgent_start_log"
+: >"$test_agent_start_log"
+write_state_var "TEST_AGENT_START_LOG" "$test_agent_start_log"
+
 if [[ $# -ge 2 ]]; then
   test_info "Starting workspace with specified agent $1 on port $2."
-  ploinky start "$1" "$2"
+  ploinky start "$1" "$2" >>"$test_agent_start_log" 2>&1
 else
   test_info "Starting workspace with saved configuration."
-  ploinky start
+  ploinky start >>"$test_agent_start_log" 2>&1
 fi
+
+test_info "Workspace start output captured in $test_agent_start_log."
 
 wait_for_router
 wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"

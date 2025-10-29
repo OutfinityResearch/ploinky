@@ -15,6 +15,7 @@ source "$TESTS_DIR/test-functions/demo_agent_dir_perm.sh"
 source "$TESTS_DIR/test-functions/global_agent_verification.sh"
 source "$TESTS_DIR/test-functions/devel_agent_verification.sh"
 source "$TESTS_DIR/test-functions/watchdog_restart_services.sh"
+source "$TESTS_DIR/test-functions/webchat_commands.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -84,6 +85,10 @@ test_check "vars lists ${FAST_VAR_TEST_NAME}" fast_cli_vars_contains
 test_check "echo returns ${FAST_VAR_TEST_NAME}" fast_cli_echo_var_matches
 test_check "expose applies to ${FAST_VAR_TEST_NAME}" fast_cli_expose_and_refresh
 test_check "Agent sees exposed ${FAST_VAR_TEST_NAME} via shell" fast_cli_verify_var_in_shell
+
+stage_header "WebChat Command"
+test_check "webchat --rotate regenerates token" fast_check_webchat_token_rotation
+test_check "webchat manifest command echoes Hello" check_webchat_command_output
 
 stage_header "Router Static Assets"
 test_check "Router serves configured static asset" fast_assert_router_static_asset

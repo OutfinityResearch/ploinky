@@ -60,6 +60,7 @@ cat >"${agent_root}/manifest.json" <<EOF
     "testAgentDepGlobal global",
     "testAgentDepDevel devel testRepo"
   ],
+  "webchat" : "echo Hello",
   "env": {
     "FAST_TEST_MARKER": "fast-suite",
     "MY_TEST_VAR": "hello-manifest"

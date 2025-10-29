@@ -17,7 +17,12 @@ pre_pid=$(get_container_pid "$TEST_AGENT_CONT_NAME" || echo "")
 write_state_var "TEST_PRE_RESTART_PID" "$pre_pid"
 test_info "Restarting workspace (pre-restart pid: ${pre_pid:-unknown})."
 
-ploinky restart
+mkdir -p "$TEST_RUN_DIR/logs"
+restart_log="$TEST_RUN_DIR/logs/restart.log"
+: >"$restart_log"
+write_state_var "TEST_RESTART_LOG" "$restart_log"
+
+ploinky restart >>"$restart_log" 2>&1
 
 wait_for_router
 wait_for_agent_log_message "$TEST_AGENT_LOG" "listening"
