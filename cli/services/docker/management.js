@@ -388,12 +388,15 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     if (res.status !== 0) { throw new Error(`${runtime} run failed with code ${res.status}`); }
     const agents = loadAgentsMap();
     const declaredEnvNames2 = [...getManifestEnvNames(manifest), ...getExposedNames(manifest)];
+    const existingRecord = agents[containerName] || {};
     agents[containerName] = {
         agentName,
         repoName,
         containerImage: image,
-        createdAt: new Date().toISOString(),
+        createdAt: existingRecord.createdAt || new Date().toISOString(),
         projectPath: cwd,
+        runMode: existingRecord.runMode,
+        develRepo: existingRecord.develRepo,
         type: 'agent',
         config: {
             binds: [

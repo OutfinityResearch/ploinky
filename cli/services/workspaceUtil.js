@@ -56,18 +56,47 @@ function findAgentManifest(agentName) {
 async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, ensureComponentToken, enableAgent, killRouterIfRunning } = {}) {
   try {
     if (staticAgentArg) {
-      if (enableAgent) {
-        await enableAgent(staticAgentArg);
-      } else {
+      let alreadyEnabled = false;
+      let resolvedAgent = null;
+      try {
+        resolvedAgent = utils.findAgent(staticAgentArg);
+      } catch (_) { resolvedAgent = null; }
+
+      if (resolvedAgent) {
         try {
-          const info = agentsSvc.enableAgent(staticAgentArg);
-          if (info && info.shortAgentName) {
-            console.log(`✓ Agent '${info.shortAgentName}' from repo '${info.repoName}' enabled. Use 'start' to start all configured agents.`);
+          const agentsMap = workspaceSvc.loadAgents();
+          const expectedKey = dockerSvc.getAgentContainerName(resolvedAgent.shortAgentName, resolvedAgent.repo);
+          const existingByKey = agentsMap[expectedKey];
+          if (existingByKey && existingByKey.type === 'agent') {
+            alreadyEnabled = true;
+          } else {
+            alreadyEnabled = Object.values(agentsMap).some((value) => (
+              value && value.type === 'agent' &&
+              value.agentName === resolvedAgent.shortAgentName &&
+              value.repoName === resolvedAgent.repo
+            ));
           }
-        } catch (e) {
-          console.error(`start: failed to enable agent '${staticAgentArg}': ${e?.message || e}`);
-          return;
+        } catch (_) {
+          alreadyEnabled = false;
         }
+      }
+
+      if (!alreadyEnabled) {
+        if (enableAgent) {
+          await enableAgent(staticAgentArg);
+        } else {
+          try {
+            const info = agentsSvc.enableAgent(staticAgentArg);
+            if (info && info.shortAgentName) {
+              console.log(`✓ Agent '${info.shortAgentName}' from repo '${info.repoName}' enabled. Use 'start' to start all configured agents.`);
+            }
+          } catch (e) {
+            console.error(`start: failed to enable agent '${staticAgentArg}': ${e?.message || e}`);
+            return;
+          }
+        }
+      } else {
+        utils.debugLog(`startWorkspace: static agent '${staticAgentArg}' already enabled; reusing existing record.`);
       }
       const portNum = parseInt(portArg || '0', 10) || 8080;
       const cfg = workspaceSvc.getConfig() || {};
