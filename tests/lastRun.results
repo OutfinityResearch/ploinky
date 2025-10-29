@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29252 listening
-[PASS] Agent host port 25490 listening
-[PASS] Agent port 25490 bound to localhost
+[PASS] Router port 35574 listening
+[PASS] Agent host port 26223 listening
+[PASS] Agent port 26223 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -90,17 +90,17 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 29252 closed
-[PASS] Agent port 25490 closed
+[PASS] Router port 35574 closed
+[PASS] Agent port 26223 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29252 listening
-[PASS] Agent host port 25490 listening
-[PASS] Agent port 25490 bound to localhost
+[PASS] Router port 35574 listening
+[PASS] Agent host port 26223 listening
+[PASS] Agent port 26223 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -187,8 +187,8 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29252 listening
-[PASS] Agent host port 25490 listening
+[PASS] Router port 35574 listening
+[PASS] Agent host port 26223 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME

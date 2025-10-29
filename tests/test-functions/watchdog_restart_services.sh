@@ -28,19 +28,14 @@ watchdog_restart_services() {
     return 1
   fi
 
-  #test_info "Sending SIGKILL to agent container ${TEST_AGENT_CONT_NAME}."
-  #if ! $FAST_CONTAINER_RUNTIME kill --signal SIGKILL "$TEST_AGENT_CONT_NAME" >/dev/null 2>&1; then
-    #echo "Failed to send SIGKILL to container '${TEST_AGENT_CONT_NAME}'." >&2
-    #return 1
-  #fi
+  test_info "Sending SIGKILL to agent container ${TEST_AGENT_CONT_NAME}."
+  if ! $FAST_CONTAINER_RUNTIME kill --signal SIGKILL "$TEST_AGENT_CONT_NAME" >/dev/null 2>&1; then
+    echo "Failed to send SIGKILL to container '${TEST_AGENT_CONT_NAME}'." >&2
+    return 1
+  fi
 
   sleep 3
   test_info "Waiting for watchdog to restore services."
-
-  #if ! wait_for_router; then
-   # echo "Watchdog did not restart router within expected time." >&2
-    #return 1
-  #fi
 
   local new_router_pid
   new_router_pid=$(lsof -nP -t -iTCP:"$TEST_ROUTER_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1)
@@ -54,28 +49,28 @@ watchdog_restart_services() {
     return 1
   fi
 
-  # Container restart checks temporarily disabled while watchdog behavior stabilizes.
-  # if ! wait_for_container "$TEST_AGENT_CONT_NAME"; then
-  #   echo "Watchdog did not restart container '${TEST_AGENT_CONT_NAME}' within expected time." >&2
-  #   return 1
-  # fi
-  #
-  # if ! assert_container_running "$TEST_AGENT_CONT_NAME"; then
-  #   echo "Container '${TEST_AGENT_CONT_NAME}' not running after watchdog restart." >&2
-  #   return 1
-  # fi
-  #
-  # local restarted_pid
-  # restarted_pid=$(get_container_pid "$TEST_AGENT_CONT_NAME" 2>/dev/null || true)
-  # if [[ -z "$restarted_pid" || "$restarted_pid" == "0" ]]; then
-  #   echo "Container PID not reported after watchdog restart." >&2
-  #   return 1
-  # fi
-  #
-  # if [[ -n "$original_container_pid" && "$original_container_pid" != "0" && "$original_container_pid" == "$restarted_pid" ]]; then
-  #   echo "Container PID did not change after watchdog restart." >&2
-  #   return 1
-  # fi
+  if ! wait_for_container "$TEST_AGENT_CONT_NAME"; then
+    echo "Watchdog did not restart container '${TEST_AGENT_CONT_NAME}' within expected time." >&2
+    return 1
+  fi
+
+  if ! assert_container_running "$TEST_AGENT_CONT_NAME"; then
+    echo "Container '${TEST_AGENT_CONT_NAME}' not running after watchdog restart." >&2
+    return 1
+  fi
+
+  local restarted_pid
+  restarted_pid=$(get_container_pid "$TEST_AGENT_CONT_NAME" 2>/dev/null || true)
+
+  if [[ -z "$restarted_pid" || "$restarted_pid" == "0" ]]; then
+    echo "Container PID not reported after watchdog restart." >&2
+    return 1
+  fi
+
+  if [[ -n "$original_container_pid" && "$original_container_pid" != "0" && "$original_container_pid" == "$restarted_pid" ]]; then
+    echo "Container PID did not change after watchdog restart." >&2
+    return 1
+  fi
 
   if ! assert_router_status_ok; then
     echo "Router status check failed after watchdog restart." >&2

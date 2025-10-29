@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs';
 import http from 'http';
 
+import { createContainerMonitor, startContainerMonitor, stopContainerMonitor, clearContainerTargets } from './containerMonitor.js';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -19,16 +21,19 @@ const CONFIG = {
     INITIAL_BACKOFF_MS: 1000,          // Initial backoff (1 second)
     MAX_BACKOFF_MS: 30000,             // Max backoff (30 seconds)
     BACKOFF_MULTIPLIER: 2,             // Exponential backoff multiplier
-    
+
     // Health check configuration
     HEALTH_CHECK_ENABLED: process.env.HEALTH_CHECK_ENABLED !== 'false',
     HEALTH_CHECK_INTERVAL_MS: 30000,   // Check every 30 seconds
     HEALTH_CHECK_TIMEOUT_MS: 5000,     // 5 second timeout
     HEALTH_CHECK_FAILURES_THRESHOLD: 3, // Restart after 3 consecutive failures
-    
+
     // Process configuration
     PORT: process.env.PORT || 8080,
     NODE_OPTIONS: process.env.NODE_OPTIONS || '',
+
+    // Container monitoring
+    CONTAINER_CHECK_INTERVAL_MS: 5000, // Poll containers every 5 seconds
 };
 
 const IS_TEST_MODE = process.env.PLOINKY_WATCHDOG_TEST_MODE === '1';
@@ -46,6 +51,7 @@ function createInitialState() {
         totalRestarts: 0,
         lastStartTime: null,
         circuitBreakerTripped: false,
+        containerMonitor: null
     };
 }
 
@@ -110,6 +116,18 @@ function log(level, event, data = {}) {
         }
     }
 }
+
+function ensureContainerMonitor() {
+    if (!state.containerMonitor) {
+        state.containerMonitor = createContainerMonitor({
+            config: CONFIG,
+            log,
+            isShuttingDown: () => state.isShuttingDown
+        });
+    }
+}
+
+ensureContainerMonitor();
 
 // Clean old restart history entries
 function cleanRestartHistory() {
@@ -250,10 +268,12 @@ function stopHealthCheckMonitoring() {
 
 function resetManagerState() {
     stopHealthCheckMonitoring();
+    clearContainerTargets(state.containerMonitor);
     const initial = createInitialState();
     for (const key of Object.keys(initial)) {
         state[key] = initial[key];
     }
+    ensureContainerMonitor();
 }
 
 function getTestLogs() {
@@ -446,6 +466,7 @@ function shutdownManager(signal) {
     log('info', 'watchdog_shutting_down', { signal });
     
     stopHealthCheckMonitoring();
+    stopContainerMonitor(state.containerMonitor);
     
     if (state.childProcess) {
         log('info', 'stopping_child_process', { pid: state.childProcess.pid });
@@ -513,9 +534,11 @@ function main() {
         log('info', 'watchdog_exiting', { exitCode: code });
     });
     
-    // Start the server
+    // Start the server and monitoring
+    ensureContainerMonitor();
     spawnServer();
-    
+    startContainerMonitor(state.containerMonitor);
+
     console.log('\n========================================');
     console.log('Watchdog Started');
     console.log('========================================');
