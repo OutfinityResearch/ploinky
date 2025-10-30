@@ -8,6 +8,7 @@ source "$TESTS_DIR/test-functions/mcp_tests.sh"
 source "$TESTS_DIR/test-functions/routingserver_aggregation_test.sh"
 source "$TESTS_DIR/test-functions/cli_variable_commands.sh"
 source "$TESTS_DIR/test-functions/router_static_assets.sh"
+source "$TESTS_DIR/test-functions/router_var_check.sh"
 source "$TESTS_DIR/test-functions/check_preinstall_run.sh"
 source "$TESTS_DIR/test-functions/install_command_verification.sh"
 source "$TESTS_DIR/test-functions/agent_blob_upload_and_download.sh"
@@ -50,6 +51,9 @@ test_check "Watchdog restarts router and agent container" watchdog_restart_servi
 stage_header "Ploinky only var test"
 export FAST_PLOINKY_ONLY="host-env-value"
 test_check "Host-only env var not visible inside container" assert_container_env_absent "$TEST_AGENT_CONT_NAME" "FAST_PLOINKY_ONLY"
+
+stage_header "Router var change"
+test_check "Router reflects updated testVar without restart" fast_router_verify_test_var_dynamic
 
 stage_header "Workspace status command"
 test_check "Status reports SSO disabled" fast_assert_status_contains "- SSO: disabled"
