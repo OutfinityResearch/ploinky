@@ -378,6 +378,18 @@ export function createMessages({
 
     function addServerMsg(text) {
         let normalized = typeof text === 'string' ? text : '';
+
+        // Filter out raw envelope JSON to prevent it from appearing in chat
+        const trimmedNormalized = normalized.trim();
+        // Envelopes can start with various characters depending on how they're echoed
+        if (trimmedNormalized.includes('"__webchatMessage"') &&
+            trimmedNormalized.includes('"version"') &&
+            trimmedNormalized.includes('"text"') &&
+            trimmedNormalized.includes('"attachments"')) {
+            // This looks like a raw envelope echo - skip it
+            return;
+        }
+
         if (lastClientCommand) {
             const trimmed = lastClientCommand.trim();
             if (trimmed) {

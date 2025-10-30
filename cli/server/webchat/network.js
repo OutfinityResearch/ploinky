@@ -1,4 +1,6 @@
 const PROCESS_PREFIX_RE = /^(?:\s*\.+\s*){3,}/;
+const ENVELOPE_FLAG = '__webchatMessage';
+const ENVELOPE_VERSION = 1;
 
 function stripCtrlAndAnsi(input) {
     try {
@@ -38,6 +40,33 @@ function stripProcessingPrefix(text) {
     return text.slice(match[0].length);
 }
 
+function serializeEnvelope({ text = '', attachments = [] } = {}) {
+    const normalizedAttachments = Array.isArray(attachments)
+        ? attachments.map((raw) => {
+            if (!raw || typeof raw !== 'object') {
+                return null;
+            }
+            const record = {
+                id: typeof raw.id === 'string' ? raw.id : null,
+                filename: typeof raw.filename === 'string' ? raw.filename : null,
+                mime: typeof raw.mime === 'string' ? raw.mime : null,
+                size: Number.isFinite(raw.size) ? raw.size : null,
+                downloadUrl: typeof raw.downloadUrl === 'string' ? raw.downloadUrl : null,
+                localPath: typeof raw.localPath === 'string' ? raw.localPath : null
+            };
+            const hasValue = Object.values(record).some((value) => value !== null);
+            return hasValue ? record : null;
+        }).filter(Boolean)
+        : [];
+
+    return JSON.stringify({
+        [ENVELOPE_FLAG]: ENVELOPE_VERSION,
+        version: ENVELOPE_VERSION,
+        text: typeof text === 'string' ? text : '',
+        attachments: normalizedAttachments
+    });
+}
+
 export function createNetwork({
     TAB_ID,
     toEndpoint,
@@ -60,6 +89,19 @@ export function createNetwork({
     const pendingEchoes = [];
     let reconnectAttempts = 0;
     let reconnectTimer = null;
+    let pendingUploads = 0;
+
+    function trackUploadStart() {
+        pendingUploads += 1;
+        showTypingIndicator();
+    }
+
+    function trackUploadEnd() {
+        pendingUploads = Math.max(0, pendingUploads - 1);
+        if (pendingUploads === 0) {
+            hideTypingIndicator(true);
+        }
+    }
 
     function handleServerChunk(raw) {
         if (raw === undefined || raw === null) {
@@ -78,6 +120,17 @@ export function createNetwork({
         const stripped = stripProcessingPrefix(text);
 
         const normalized = stripped.trim();
+
+        // Check if this looks like an envelope echo - filter it out
+        // Envelopes can start with { or [ or other characters depending on how they're echoed
+        if (normalized.includes('"__webchatMessage"') &&
+            normalized.includes('"version"') &&
+            normalized.includes('"text"') &&
+            normalized.includes('"attachments"')) {
+            // This is an envelope echo - suppress it
+            return;
+        }
+
         if (normalized && pendingEchoes.length) {
             const expected = pendingEchoes[0];
             if (normalized === expected) {
@@ -91,7 +144,9 @@ export function createNetwork({
         if (!stripped.trim()) {
             return;
         }
-        hideTypingIndicator();
+        if (pendingUploads === 0) {
+            hideTypingIndicator();
+        }
         addServerMsg(stripped);
     }
 
@@ -216,37 +271,62 @@ export function createNetwork({
         es = null;
     }
 
-    function sendCommand(cmd) {
-        addClientMsg(cmd);
-        pendingEchoes.push(cmd.trim());
+    function postEnvelope(payload = {}) {
+        const text = typeof payload.text === 'string' ? payload.text : '';
+        const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+        const serialized = serializeEnvelope({ text, attachments });
+        const trimmedEnvelope = serialized.trim();
+        const trimmedText = text.trim();
+
+        if (trimmedEnvelope) {
+            pendingEchoes.push(trimmedEnvelope);
+            pendingEchoes.push(serialized);
+            pendingEchoes.push(`${serialized}\n`);
+        }
+        if (trimmedText) {
+            pendingEchoes.push(trimmedText);
+        }
         if (pendingEchoes.length > 25) {
             pendingEchoes.splice(0, pendingEchoes.length - 25);
         }
+
         markUserInputSent();
-        fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
+
+        return fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
-            body: `${cmd}\n`
+            headers: { 'Content-Type': 'application/json' },
+            body: `${serialized}\n`
         }).catch((error) => {
             dlog('chat error', error);
-            hideTypingIndicator(true);
+            if (pendingUploads === 0) {
+                hideTypingIndicator(true);
+            }
             addServerMsg('[input error]');
             showBanner('Chat error', 'err');
+            throw error;
         });
+    }
+
+    function sendCommand(cmd) {
+        const message = typeof cmd === 'string' ? cmd : '';
+        addClientMsg(message);
+        postEnvelope({ text: message });
         return true;
     }
 
-    function uploadFile(filePayload, caption) {
+    function uploadAttachment(filePayload, caption) {
         const { file, previewUrl, revokePreview, previewNeedsRevoke, isImage } = filePayload || {};
         const isFileObject = (typeof File !== 'undefined' && file instanceof File)
             || (file && typeof file.name === 'string' && typeof file.size !== 'undefined');
         if (!isFileObject) {
-            addClientMsg(typeof caption === 'string' && caption.trim() ? caption : '[missing file]');
-            addServerMsg('[upload error: no file selected]');
-            return;
+            if (typeof caption === 'string' && caption.trim()) {
+                addClientMsg(caption);
+            } else {
+                addServerMsg('[upload error: no file selected]');
+            }
+            return Promise.reject(new Error('no file selected'));
         }
 
-        const uploadMessage = caption || file.name;
         let clientAttachment = null;
         if (typeof addClientAttachment === 'function') {
             clientAttachment = addClientAttachment({
@@ -258,10 +338,9 @@ export function createNetwork({
                 caption
             });
         } else {
-            addClientMsg(uploadMessage);
+            addClientMsg(caption || file.name);
         }
-        markUserInputSent();
-        showTypingIndicator();
+        trackUploadStart();
 
         const agentSegment = encodeURIComponent(agentName);
         const uploadUrl = `/blobs/${agentSegment}`;
@@ -273,7 +352,7 @@ export function createNetwork({
             'X-File-Name': encodeURIComponent(file.name)
         };
 
-        fetch(uploadUrl, {
+        return fetch(uploadUrl, {
             method: 'POST',
             headers,
             body: file,
@@ -285,65 +364,96 @@ export function createNetwork({
                 return res.json();
             })
             .then(data => {
-                hideTypingIndicator();
-                const localPath = data.localPath || data.url;
-                if (localPath) {
-                    const displayName = data.filename || file.name;
-                    const basePath = localPath.startsWith('/') ? localPath : `/${localPath}`;
-                    const absoluteUrl = data.downloadUrl
-                        || new URL(basePath, window.location.origin).href;
-                    if (clientAttachment && typeof clientAttachment.markUploaded === 'function') {
-                        clientAttachment.markUploaded({
-                            downloadUrl: absoluteUrl,
-                            size: data.size ?? file.size ?? null,
-                            mime: data.mime ?? file.type ?? null,
-                            localPath,
-                            id: data.id ?? null
-                        });
-                        if (isImage && typeof clientAttachment.replacePreview === 'function') {
-                            clientAttachment.replacePreview(absoluteUrl);
-                        }
-                    } else {
-                        const linkLabel = displayName || absoluteUrl;
-                        const infoMessageFallback = `File uploaded: [${linkLabel}](${absoluteUrl})`;
-                        addServerMsg(infoMessageFallback);
-                    }
-                    if (previewNeedsRevoke && typeof revokePreview === 'function') {
-                        revokePreview();
-                    }
-                    // If the user provided a caption, send it to the TTY as a normal command.
-                    if (caption) {
-                        pendingEchoes.push(caption.trim());
-                        const combined = `${caption}\n`;
-                        fetch(toEndpoint(`input?tabId=${TAB_ID}`), {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'text/plain' },
-                            body: combined
-                        }).catch((error) => {
-                            dlog('chat error after upload', error);
-                            addServerMsg('[input error]');
-                        });
-                    }
-                } else {
+                trackUploadEnd();
+                const localPath = data.localPath || data.url || null;
+                if (!localPath) {
                     throw new Error(data.error || 'Invalid upload response');
                 }
+                const displayName = data.filename || file.name;
+                const basePath = localPath.startsWith('/') ? localPath : `/${localPath}`;
+                const absoluteUrl = data.downloadUrl
+                    || new URL(basePath, window.location.origin).href;
+                if (clientAttachment && typeof clientAttachment.markUploaded === 'function') {
+                    clientAttachment.markUploaded({
+                        downloadUrl: absoluteUrl,
+                        size: data.size ?? (Number.isFinite(file.size) ? file.size : null),
+                        mime: data.mime ?? file.type ?? null,
+                        localPath,
+                        id: data.id ?? null
+                    });
+                    if (isImage && typeof clientAttachment.replacePreview === 'function') {
+                        clientAttachment.replacePreview(absoluteUrl);
+                    }
+                } else {
+                    const linkLabel = displayName || absoluteUrl;
+                    const infoMessageFallback = `File uploaded: [${linkLabel}](${absoluteUrl})`;
+                    addServerMsg(infoMessageFallback);
+                }
+                if (previewNeedsRevoke && typeof revokePreview === 'function') {
+                    revokePreview();
+                }
+                return {
+                    id: data.id ?? null,
+                    filename: displayName || null,
+                    mime: data.mime ?? file.type ?? null,
+                    size: data.size ?? (Number.isFinite(file.size) ? file.size : null),
+                    downloadUrl: absoluteUrl || null,
+                    localPath
+                };
             })
             .catch(error => {
+                trackUploadEnd();
                 dlog('upload error', error);
-                hideTypingIndicator();
                 if (clientAttachment && typeof clientAttachment.markFailed === 'function') {
                     clientAttachment.markFailed(error.message || 'Upload failed');
                 } else {
                     addServerMsg(`[upload error: ${error.message}]`);
                 }
                 showBanner('Upload error', 'err');
+                throw error;
             });
+    }
+
+    function sendAttachments(fileSelections, caption) {
+        const selections = Array.isArray(fileSelections) ? fileSelections : [];
+        const text = typeof caption === 'string' ? caption : '';
+
+        if (!selections.length) {
+            if (text.trim()) {
+                sendCommand(text);
+            }
+            return;
+        }
+
+        const uploads = selections.map((selection, index) => uploadAttachment(selection, index === 0 ? text : ''));
+
+        Promise.allSettled(uploads).then((results) => {
+            const attachments = [];
+            let hasSuccess = false;
+
+            results.forEach((result) => {
+                if (result.status === 'fulfilled' && result.value) {
+                    hasSuccess = true;
+                    attachments.push(result.value);
+                }
+            });
+
+            const trimmedText = text.trim();
+
+            if (!hasSuccess && !trimmedText) {
+                return;
+            }
+
+            postEnvelope({ text, attachments });
+        }).catch(() => {
+            // Individual upload rejections already handled with UI feedback.
+        });
     }
 
     return {
         start,
         stop,
         sendCommand,
-        uploadFile
+        sendAttachments
     };
 }

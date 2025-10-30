@@ -132,10 +132,7 @@ composer.setSendHandler((cmdText) => {
     const fileSelections = uploader.getSelectedFiles();
 
     if (fileSelections.length) {
-        fileSelections.forEach((selection, index) => {
-            const caption = index === 0 ? cmd : '';
-            network.uploadFile(selection, caption);
-        });
+        network.sendAttachments(fileSelections, cmd);
         uploader.clearFiles();
         return true;
     }
