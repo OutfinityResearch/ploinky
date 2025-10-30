@@ -538,7 +538,7 @@ body {
 }
 
 /* --- Message Bubbles --- */
-.wa-message { max-width: 65%; position: relative; margin-bottom: 2px; animation: fadeInUp 0.3s ease; }
+.wa-message { max-width: 85%; position: relative; margin-bottom: 2px; animation: fadeInUp 0.3s ease; }
 .wa-message.out { align-self: flex-end; }
 .wa-message.in { align-self: flex-start; }
 
@@ -591,7 +591,8 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  max-width: 320px;
+  max-width: 520px;
+  width: 100%;
 }
 
 .wa-message-attachment .wa-file-preview-thumbnail {
