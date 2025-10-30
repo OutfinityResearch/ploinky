@@ -46,61 +46,20 @@ repo_root=".ploinky/repos/${TEST_REPO_NAME}"
 agent_root="${repo_root}/${TEST_AGENT_NAME}"
 mkdir -p "$agent_root"
 test_info "Bootstrapped repository skeleton at ${agent_root}."
+write_state_var "TEST_AGENT_REPO_PATH" "$agent_root"
 
 agent_host_port=$(allocate_port)
 write_state_var "TEST_AGENT_HOST_PORT" "$agent_host_port"
 test_info "Assigned host port ${agent_host_port} for ${TEST_AGENT_NAME}."
 
-cat >"${agent_root}/manifest.json" <<EOF
-{
-  "container": "node:20-bullseye",
-  "install": "echo 'install_ok' > ./install_marker.txt",
-  "agent": "node /code/server.js",
-  "enable": [
-    "testAgentDepGlobal global",
-    "testAgentDepDevel devel testRepo"
-  ],
-  "webchat" : "echo Hello",
-  "env": {
-    "FAST_TEST_MARKER": "fast-suite",
-    "MY_TEST_VAR": "hello-manifest"
-  },
-  "ports": [
-    "${agent_host_port}:7000"
-  ]
-}
-EOF
+manifest_template="${TESTS_DIR}/testAgent/manifest.json"
+script_template="${TESTS_DIR}/testAgent/testSSOParams.sh"
 
-cat >"${agent_root}/server.js" <<'EOF'
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+sed "s/__HOST_PORT__/${agent_host_port}/g" "$manifest_template" >"${agent_root}/manifest.json"
+cp "$script_template" "${agent_root}/testSSOParams.sh"
+chmod +x "${agent_root}/testSSOParams.sh"
 
-const agentName = process.env.AGENT_NAME || 'unknown-agent';
-const port = Number(process.env.PORT || 7000);
-const workspacePath = process.env.WORKSPACE_PATH || process.cwd();
-const logPath = path.join(workspacePath, 'fast-start.log');
-const dataDir = path.join(workspacePath, 'data');
-const dataFile = path.join(dataDir, 'fast-persist.txt');
-
-try { fs.mkdirSync(dataDir, { recursive: true }); } catch (_) {}
-try { fs.appendFileSync(logPath, `[${new Date().toISOString()}] boot ${agentName}\n`); } catch (_) {}
-try { fs.writeFileSync(dataFile, `initialized:${agentName}`); } catch (_) {}
-
-const server = http.createServer((req, res) => {
-  if (req.url === '/health') {
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, agent: agentName }));
-    return;
-  }
-  res.writeHead(200, { 'content-type': 'text/plain' });
-  res.end('fast-suite');
-});
-
-server.listen(port, '0.0.0.0', () => {
-  try { fs.appendFileSync(logPath, `[${new Date().toISOString()}] listening:${port}\n`); } catch (_) {}
-});
-EOF
+cp "${TESTS_DIR}/testAgent/server.js" "${agent_root}/server.js"
 
 # Provide a predictable static asset for router tests (served via /${TEST_AGENT_NAME}/...).
 printf 'fast-static-ok' >"${agent_root}/fast-static.txt"
@@ -191,6 +150,9 @@ ploinky enable agent "${DEVEL_AGENT_NAME}" devel "${TEST_REPO_NAME}"
 
 test_info "Setting workspace-only env var FAST_PLOINKY_ONLY"
 ploinky var FAST_PLOINKY_ONLY host-secret-value
+
+test_info "Setting var testVar"
+ploinky var testVar "123"
 
 agent_container_name=$(compute_container_name "$TEST_AGENT_NAME" "$TEST_REPO_NAME")
 write_state_var "TEST_AGENT_CONT_NAME" "$agent_container_name"

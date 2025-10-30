@@ -16,6 +16,7 @@ source "$TESTS_DIR/test-functions/global_agent_verification.sh"
 source "$TESTS_DIR/test-functions/devel_agent_verification.sh"
 source "$TESTS_DIR/test-functions/watchdog_restart_services.sh"
 source "$TESTS_DIR/test-functions/webchat_commands.sh"
+source "$TESTS_DIR/test-functions/test_sso_params.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -89,6 +90,12 @@ test_check "Agent sees exposed ${FAST_VAR_TEST_NAME} via shell" fast_cli_verify_
 stage_header "WebChat Command"
 test_check "webchat --rotate regenerates token" fast_check_webchat_token_rotation
 test_check "webchat manifest command echoes Hello" check_webchat_command_output
+
+stage_header "WebChat SSO Parameters"
+test_action "Configure WebChat CLI for test agent" configure_webchat_cli_for_test_agent
+wait_for_router
+test_check "WebChat CLI session logs guest SSO args" test_sso_params_disabled
+#test_check "WebChat CLI session logs SSO identity when enabled" test_sso_params_enabled
 
 stage_header "Router Static Assets"
 test_check "Router serves configured static asset" fast_assert_router_static_asset

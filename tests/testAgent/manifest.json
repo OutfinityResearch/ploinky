@@ -1,0 +1,18 @@
+{
+  "container": "node:20-bullseye",
+  "install": "echo 'install_ok' > ./install_marker.txt",
+  "agent": "node /code/server.js",
+  "cli": "/code/testSSOParams.sh",
+  "enable": [
+    "testAgentDepGlobal global",
+    "testAgentDepDevel devel testRepo"
+  ],
+  "webchat" : "echo Hello",
+  "env": {
+    "FAST_TEST_MARKER": "fast-suite",
+    "MY_TEST_VAR": "hello-manifest"
+  },
+  "ports": [
+    "__HOST_PORT__:7000"
+  ]
+}

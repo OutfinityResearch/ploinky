@@ -257,9 +257,6 @@ async function runCli(agentName, args) {
   const repoName = path.basename(path.dirname(agentDir));
   const containerInfo = ensureAgentService(shortAgentName, manifest, agentDir);
   const containerName = (containerInfo && containerInfo.containerName) || getAgentContainerName(shortAgentName, repoName);
-  console.log(`[cli] container: ${containerName}`);
-  console.log(`[cli] command: ${cmd}`);
-  console.log(`[cli] agent: ${shortAgentName}`);
   const projPath = getConfiguredProjectPath(shortAgentName, repoName);
   attachInteractive(containerName, projPath, cmd);
 }

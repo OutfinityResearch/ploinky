@@ -34,6 +34,9 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
         ssoCliArgs.push(`--sso-roles=${rolesStr}`);
       }
     }
+    if (!ssoCliArgs.length) {
+      ssoCliArgs.push('--sso-user=guest', '--sso-user-id=guest', '--sso-roles=guest');
+    }
     
     // Append SSO args to entry command
     let shellCmd = entry && String(entry).trim()
@@ -130,6 +133,9 @@ function createLocalTTYFactory({ ptyLib, workdir, command }) {
         const rolesStr = ssoUser.roles.join(',');
         ssoCliArgs.push(`--sso-roles=${rolesStr}`);
       }
+    }
+    if (!ssoCliArgs.length) {
+      ssoCliArgs.push('--sso-user=guest', '--sso-user-id=guest', '--sso-roles=guest');
     }
     
     let ptyProc = null;
