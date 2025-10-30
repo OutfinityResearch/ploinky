@@ -7,7 +7,6 @@ export {
 
 export {
     addSessionContainer,
-    applyAgentStartupConfig,
     cleanupSessionSet,
     destroyAllPloinky,
     destroyWorkspaceContainers,

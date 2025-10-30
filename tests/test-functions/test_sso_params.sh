@@ -4,7 +4,9 @@ set -euo pipefail
 configure_webchat_cli_for_test_agent() {
   load_state
   require_var "TEST_AGENT_NAME"
-  ploinky webchat "$TEST_AGENT_NAME" >/dev/null
+  require_var "TEST_ROUTER_PORT"
+  ploinky start "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT" >/dev/null 2>&1 || return 1
+  ploinky webchat >/dev/null 2>&1 || return 1
 }
 
 ensure_webchat_cli_session() {

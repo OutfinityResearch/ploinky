@@ -69,9 +69,6 @@
   "cli": "node repl.js",            // Interactive CLI command (cli)
   "agent": "node server.js",          // Long-running service (start)
   
-  // Optional WebChat auto-configuration (runs on host before starting this agent)
-  "webchat": "ploinky webchat MyAgent",
-  
   // Metadata
   "about": "Express API server",      // Description shown in listings
   
@@ -113,7 +110,7 @@
                             <tr>
                                 <td><code>cli</code></td>
                                 <td>No</td>
-                                <td>Interactive command for <code>ploinky cli</code> (executed inside the container via the WebChat wrapper)</td>
+                                <td>Interactive command for <code>ploinky cli</code> (runs inside the agent container)</td>
                             </tr>
                             <tr>
                                 <td><code>agent</code></td>
@@ -139,11 +136,6 @@
                                 <td><code>repos</code></td>
                                 <td>No</td>
                                 <td>Repositories to auto-add when this agent is enabled</td>
-                            </tr>
-                            <tr>
-                                <td><code>webchat</code></td>
-                                <td>No</td>
-                                <td>Bash command executed on the host before the agent container is started. Typical usage: auto-configure WebChat for this agent (e.g., <code>ploinky webchat MyAgent</code> or <code>ploinky webchat ./scripts/menu.sh</code>).</td>
                             </tr>
                         </table>
 
@@ -203,10 +195,6 @@ enable agent MyAgent
                         <h3>4. Startup</h3>
                         <pre><code># Start all enabled agents
 start</code></pre>
-                        <div class="alert alert-info">
-                            If the manifest defines <code>webchat</code>, Ploinky executes that command on the host before starting the agent container. This lets you automatically bind WebChat to the agent's CLI or to a local script/program.
-                        </div>
-
                         <h3>5. Runtime</h3>
                         <p>During runtime, agents can be in different states:</p>
                         <ul style="margin-left: 2rem;">

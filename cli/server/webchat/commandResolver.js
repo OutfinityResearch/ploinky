@@ -1,7 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { resolveVarValue } from '../../services/secretVars.js';
-
 function trimCommand(value) {
     if (!value) return '';
     const text = String(value).trim();
@@ -43,15 +41,6 @@ function resolveStaticAgentDetails(routingFilePath) {
 function resolveWebchatCommands(options = {}) {
     const routingFilePath = options.routingFilePath || path.resolve('.ploinky/routing.json');
     const { agentName: staticAgentName, hostPath } = resolveStaticAgentDetails(routingFilePath);
-
-    const secretCommand = trimCommand(resolveVarValue('WEBCHAT_COMMAND'));
-    if (secretCommand) {
-        return { host: secretCommand, container: secretCommand, source: 'secret', agentName: staticAgentName || '' };
-    }
-    const envCommand = trimCommand(process.env.WEBCHAT_COMMAND);
-    if (envCommand) {
-        return { host: envCommand, container: envCommand, source: 'env', agentName: staticAgentName || '' };
-    }
 
     if (!staticAgentName || !hostPath) {
         return { host: '', container: '', source: 'unset', agentName: '' };

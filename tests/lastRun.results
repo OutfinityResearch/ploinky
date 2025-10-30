@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 35574 listening
-[PASS] Agent host port 26223 listening
-[PASS] Agent port 26223 bound to localhost
+[PASS] Router port 31050 listening
+[PASS] Agent host port 30116 listening
+[PASS] Agent port 30116 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -61,7 +61,9 @@
 
 ===== WebChat Command =====
 [PASS] webchat --rotate regenerates token
-[PASS] webchat manifest command echoes Hello
+
+===== WebChat SSO Parameters =====
+[PASS] WebChat CLI session logs guest SSO args
 
 ===== Router Static Assets =====
 [PASS] Router serves configured static asset
@@ -90,17 +92,17 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 35574 closed
-[PASS] Agent port 26223 closed
+[PASS] Router port 31050 closed
+[PASS] Agent port 30116 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 35574 listening
-[PASS] Agent host port 26223 listening
-[PASS] Agent port 26223 bound to localhost
+[PASS] Router port 31050 listening
+[PASS] Agent host port 30116 listening
+[PASS] Agent port 30116 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -150,7 +152,9 @@
 
 ===== WebChat Command =====
 [PASS] webchat --rotate regenerates token
-[PASS] webchat manifest command echoes Hello
+
+===== WebChat SSO Parameters =====
+[PASS] WebChat CLI session logs guest SSO args
 
 ===== Router Static Assets =====
 [PASS] Router serves configured static asset
@@ -187,8 +191,8 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 35574 listening
-[PASS] Agent host port 26223 listening
+[PASS] Router port 31050 listening
+[PASS] Agent host port 30116 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME

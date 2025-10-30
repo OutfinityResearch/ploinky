@@ -33,24 +33,3 @@ fast_check_webchat_token_rotation() {
     return 1
   fi
 }
-
-check_webchat_command_output() {
-  load_state
-  require_var "TEST_AGENT_NAME"
-  require_var "TEST_AGENT_START_LOG"
-
-  local log_path="$TEST_AGENT_START_LOG"
-
-  if [[ ! -f "$log_path" ]]; then
-    echo "Start log '$log_path' for '$TEST_AGENT_NAME' not found." >&2
-    return 1
-  fi
-
-  if ! grep -q "Hello" "$log_path"; then
-    echo "Webchat setup output missing expected 'Hello'." >&2
-    echo "--- ${TEST_AGENT_NAME} start log tail ---" >&2
-    tail -n 40 "$log_path" >&2 || true
-    echo "----------------------------------------" >&2
-    return 1
-  fi
-}

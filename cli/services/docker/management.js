@@ -578,47 +578,12 @@ function collectLiveAgentContainers() {
     return results;
 }
 
-function applyAgentStartupConfig(agentName, manifest, agentPath, containerName) {
-    try {
-        if (!manifest || typeof manifest !== 'object') return;
-        const webchatSetupCmd = (typeof manifest.webchat === 'string' && manifest.webchat.trim()) ? manifest.webchat.trim() : '';
-        if (webchatSetupCmd) {
-            console.log('Executing webchat config...');
-            console.log(`[webchat] configuring for '${agentName}'...`);
-            const out = execSync(`sh -lc "${webchatSetupCmd.replace(/"/g, '\\"')}"`, { stdio: ['ignore', 'pipe', 'inherit'] }).toString();
-            try { if (out && out.trim()) process.stdout.write(out); } catch (_) { }
-            try {
-                const agents = loadAgentsMap();
-                const repoName = path.basename(path.dirname(agentPath));
-                const key = containerName || getAgentContainerName(agentName, repoName);
-                const image = manifest.container || manifest.image || 'node:18-alpine';
-                const projPath = getConfiguredProjectPath(agentName, repoName);
-                const record = agents[key] || (agents[key] = {
-                    agentName,
-                    repoName,
-                    containerImage: image,
-                    createdAt: new Date().toISOString(),
-                    projectPath: projPath,
-                    type: 'agent',
-                    config: { binds: [], env: [], ports: [] }
-                });
-                record.webchatSetupOutput = (out || '').split(/\n/).slice(-5).join('\n');
-                record.webchatSetupAt = new Date().toISOString();
-                saveAgentsMap(agents);
-            } catch (_) { }
-        }
-    } catch (e) {
-        console.log(`[setup] ${agentName}: ${e?.message || e}`);
-    }
-}
 
 function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     const repoName = path.basename(path.dirname(agentPath));
     const containerName = getAgentContainerName(agentName, repoName);
     const image = manifest.container || manifest.image || 'node:18-alpine';
-    const webchatSetupCmd = (manifest && typeof manifest.webchat === 'string' && manifest.webchat.trim()) ? manifest.webchat.trim() : '';
 
-    let createdNew = false;
     if (containerExists(containerName)) {
         const desired = computeEnvHash(manifest);
         const current = getContainerLabel(containerName, 'ploinky.envhash');
@@ -628,7 +593,6 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     }
     if (containerExists(containerName)) {
         if (!isContainerRunning(containerName)) {
-            applyAgentStartupConfig(agentName, manifest, agentPath, containerName);
             try { execSync(`${containerRuntime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
         }
         try {
@@ -642,8 +606,6 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         } catch (_) { }
     }
 
-    applyAgentStartupConfig(agentName, manifest, agentPath, containerName);
-
     const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
     let additionalPorts = [];
     let allPortMappings = [...portMappings];
@@ -655,7 +617,6 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
     }
 
     startAgentContainer(agentName, manifest, agentPath, { publish: additionalPorts });
-    createdNew = true;
 
     const agents = loadAgentsMap();
     const declaredEnvNames3 = [...getManifestEnvNames(manifest), ...getExposedNames(manifest)];
@@ -704,7 +665,6 @@ function cleanupSessionSet() {
 
 export {
     addSessionContainer,
-    applyAgentStartupConfig,
     cleanupSessionSet,
     destroyAllPloinky,
     destroyWorkspaceContainers,

@@ -6,7 +6,6 @@
   const statusDot = document.getElementById('statusDot');
   const componentsList = document.getElementById('componentsList');
   const linksList = document.getElementById('linksList');
-  const setupList = document.getElementById('setupList');
 
   const agentName = body.dataset.agent || 'Status';
   titleBar.textContent = agentName === 'Status' ? 'Public Ploinky Status' : `${agentName} Status`;
@@ -42,7 +41,6 @@
       statusDot.style.background = '#00a884';
       renderComponents(data.servers || {}, data.static || {}, data.agents || []);
       renderLinks(data.servers || {}, data.static || {});
-      renderSetupFromAgents(data.agents || []);
     } catch (err) {
       statusLabel.textContent = 'error';
       statusDot.style.background = '#f15c6d';
@@ -50,23 +48,7 @@
     }
   }
 
-  function renderSetup(entries) {
-    if (!setupList) return;
-    if (!entries || !entries.length) { setupList.innerHTML = '<div class="ps-item">No recent webchat setup output</div>'; return; }
-    const items = entries.map(h => {
-      const safeTail = (h.tail || '').replace(/[&<>]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[s]));
-      return `<div class="ps-item"><div class="ps-item-title">${h.agent}</div><pre class="ps-pre">${safeTail}</pre></div>`;
-    });
-    setupList.innerHTML = items.join('');
-  }
 
-  function renderSetupFromAgents(agents) {
-    if (!setupList) return;
-    const entries = (agents || [])
-      .map(a => ({ agent: a.agentName || a.container, tail: a.webchatSetupOutput || '' }))
-      .filter(e => e.tail && e.tail.trim().length);
-    renderSetup(entries);
-  }
 
   function renderComponents(servers, staticInfo, agents) {
     if (!componentsList) return;

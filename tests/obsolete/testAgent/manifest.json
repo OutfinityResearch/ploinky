@@ -1,6 +1,5 @@
 {
   "container": "node:20-bullseye",
   "cli": "/bin/sh",
-  "about": "Test agent for webchat setup",
-  "webchat": "echo hello world"
+  "about": "Test agent for webchat setup"
 }

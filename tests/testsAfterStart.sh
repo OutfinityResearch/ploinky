@@ -15,7 +15,7 @@ source "$TESTS_DIR/test-functions/demo_agent_dir_perm.sh"
 source "$TESTS_DIR/test-functions/global_agent_verification.sh"
 source "$TESTS_DIR/test-functions/devel_agent_verification.sh"
 source "$TESTS_DIR/test-functions/watchdog_restart_services.sh"
-source "$TESTS_DIR/test-functions/webchat_commands.sh"
+source "$TESTS_DIR/test-functions/webchat_rotate_token.sh"
 source "$TESTS_DIR/test-functions/test_sso_params.sh"
 
 load_state
@@ -89,7 +89,6 @@ test_check "Agent sees exposed ${FAST_VAR_TEST_NAME} via shell" fast_cli_verify_
 
 stage_header "WebChat Command"
 test_check "webchat --rotate regenerates token" fast_check_webchat_token_rotation
-test_check "webchat manifest command echoes Hello" check_webchat_command_output
 
 stage_header "WebChat SSO Parameters"
 test_action "Configure WebChat CLI for test agent" configure_webchat_cli_for_test_agent

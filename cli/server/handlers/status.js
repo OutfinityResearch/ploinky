@@ -67,9 +67,7 @@ function collectWorkspaceAgents() {
                 container,
                 agentName: rec?.agentName || container,
                 repoName: rec?.repoName || '',
-                image: rec?.containerImage || '',
-                webchatSetupOutput: rec?.webchatSetupOutput || '',
-                webchatSetupAt: rec?.webchatSetupAt || null
+                image: rec?.containerImage || ''
             }));
     } catch (_) {
         return [];
