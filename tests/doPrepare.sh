@@ -60,6 +60,7 @@ cp "$script_template" "${agent_root}/testSSOParams.sh"
 chmod +x "${agent_root}/testSSOParams.sh"
 
 cp "${TESTS_DIR}/testAgent/server.js" "${agent_root}/server.js"
+cp "${TESTS_DIR}/testAgent/mock_shell.sh" "${agent_root}/mock_shell.sh"
 
 # Provide a predictable static asset for router tests (served via /${TEST_AGENT_NAME}/...).
 printf 'fast-static-ok' >"${agent_root}/fast-static.txt"

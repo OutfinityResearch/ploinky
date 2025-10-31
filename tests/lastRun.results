@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 26939 listening
-[PASS] Agent host port 24242 listening
-[PASS] Agent port 24242 bound to localhost
+[PASS] Router port 29145 listening
+[PASS] Agent host port 21964 listening
+[PASS] Agent port 21964 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -25,7 +25,7 @@
 ===== Ploinky only var test =====
 [PASS] Host-only env var not visible inside container
 
-===== Router Secrets =====
+===== Router var change =====
 [PASS] Router reflects updated testVar without restart
 
 ===== Workspace status command =====
@@ -92,20 +92,23 @@
 [PASS] Devel agent cwd is the repo source and has RW permissions
 [PASS] Manifest dependency devel agent uses repo root
 
+===== WebTTY Command =====
+[PASS] webtty command records mock shell configuration
+
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 26939 closed
-[PASS] Agent port 24242 closed
+[PASS] Router port 29145 closed
+[PASS] Agent port 21964 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 26939 listening
-[PASS] Agent host port 24242 listening
-[PASS] Agent port 24242 bound to localhost
+[PASS] Router port 29145 listening
+[PASS] Agent host port 21964 listening
+[PASS] Agent port 21964 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -119,7 +122,7 @@
 ===== Ploinky only var test =====
 [PASS] Host-only env var not visible inside container
 
-===== Router Secrets =====
+===== Router var change =====
 [PASS] Router reflects updated testVar without restart
 
 ===== Workspace status command =====
@@ -185,6 +188,9 @@
 ===== Devel Agent Verification =====
 [PASS] Devel agent cwd is the repo source and has RW permissions
 [PASS] Manifest dependency devel agent uses repo root
+
+===== WebTTY Command =====
+[PASS] webtty command records mock shell configuration
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
@@ -197,8 +203,8 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 26939 listening
-[PASS] Agent host port 24242 listening
+[PASS] Router port 29145 listening
+[PASS] Agent host port 21964 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME

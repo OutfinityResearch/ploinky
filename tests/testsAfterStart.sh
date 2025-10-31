@@ -18,6 +18,7 @@ source "$TESTS_DIR/test-functions/devel_agent_verification.sh"
 source "$TESTS_DIR/test-functions/watchdog_restart_services.sh"
 source "$TESTS_DIR/test-functions/webchat_rotate_token.sh"
 source "$TESTS_DIR/test-functions/test_sso_params.sh"
+source "$TESTS_DIR/test-functions/webtty_command.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -123,5 +124,9 @@ test_check "Manifest dependency global agent uses workspace root" fast_assert_gl
 stage_header "Devel Agent Verification"
 test_check "Devel agent cwd is the repo source and has RW permissions" fast_assert_devel_agent_workdir "TEST_DEVEL_AGENT_NAME"
 test_check "Manifest dependency devel agent uses repo root" fast_assert_devel_agent_workdir "TEST_AGENT_DEP_DEVEL_NAME"
+
+stage_header "WebTTY Command"
+test_action "Configure WebTTY shell to mock script" configure_mock_webtty_shell
+test_check "webtty command records mock shell configuration" test_webtty_shell
 
 finalize_checks
