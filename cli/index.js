@@ -7,39 +7,13 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initEnvironment, setDebugMode } from './services/config.js';
 import { handleCommand, getAgentNames, getRepoNames, cleanupSessionContainers as cleanupCliSessions } from './commands/cli.js';
+import { getCommandRegistry } from './services/commandRegistry.js';
 import { showHelp } from './services/help.js';
 import { debugLog } from './services/utils.js';
 import * as inputState from './services/inputState.js';
 import { bootstrap } from './services/ploinkyboot.js';
 
-const COMMANDS = {
-    'add': ['repo'],
-    'refresh': ['agent'],
-    'enable': ['repo', 'agent'],
-    'disable': ['repo', 'agent'],
-    'shell': [],
-    'cli': [],
-    'run': ['task'],
-    'start': [],
-    'restart': [],
-    'clean': [],
-    'status': [],
-    'shutdown': [],
-    'stop': [],
-    'destroy': [],
-    'list': ['agents', 'repos', 'routes'],
-    'webconsole': [],
-    'webtty': [],
-    'webmeet': [],
-    'admin-mode': [],
-    'client': ['methods', 'status', 'list', 'task', 'task-status'],
-    'logs': ['tail', 'last'],
-    'expose': [],
-    'var': [],
-    'vars': [],
-    'echo': [],
-    'help': []
-};
+const COMMANDS = getCommandRegistry();
 
 function completer(line) {
     const words = line.split(/\s+/).filter(Boolean);
@@ -147,8 +121,7 @@ function completer(line) {
             completions = cloudSubSubcommands[cloudSubcommand] || [];
         } else if (context === 'args') {
             const subcommand = words[1];
-            if ((command === 'run' && ['task'].includes(subcommand)) ||
-                (command === 'shell') ||
+            if ((command === 'shell') ||
                 (command === 'cli') ||
                 (command === 'update' && subcommand === 'agent') ||
                 (command === 'refresh' && subcommand === 'agent') ||

@@ -5,6 +5,10 @@ import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { PLOINKY_DIR } from '../services/config.js';
 import { debugLog, findAgent } from '../services/utils.js';
+import { isKnownCommand } from '../services/commandRegistry.js';
+import { loadValidLlmApiKeys, collectAvailableLlmKeys } from '../services/llmProviderUtils.js';
+import { defaultLLMInvokerStrategy } from 'ploinkyAgentLib/utils/LLMClient.mjs';
+import 'ploinkyAgentLib/LLMAgents';
 import { showHelp } from '../services/help.js';
 import * as reposSvc from '../services/repos.js';
 import * as envSvc from '../services/secretVars.js';
@@ -30,6 +34,157 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
+const WORKSPACE_ENV_FILENAME = '.env';
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const LLM_SYSTEM_CONTEXT_PATH = path.join(PROJECT_ROOT, 'docs', 'ploinky-overview.md');
+
+let cachedLlmSystemContext = null;
+
+function loadLlmSystemContext() {
+    if (cachedLlmSystemContext !== null) {
+        return cachedLlmSystemContext;
+    }
+
+    try {
+        const content = fs.readFileSync(LLM_SYSTEM_CONTEXT_PATH, 'utf8');
+        cachedLlmSystemContext = content.trim();
+    } catch (error) {
+        cachedLlmSystemContext = '';
+        debugLog('loadLlmSystemContext failed:', error?.message || error);
+    }
+
+    return cachedLlmSystemContext;
+}
+
+function formatValidApiKeyList(validKeys) {
+    if (!Array.isArray(validKeys) || !validKeys.length) return '[]';
+    return `[${validKeys.join(', ')}]`;
+}
+
+function composeUserCommand(command, options = []) {
+    const parts = [command, ...options].filter(Boolean);
+    return parts.join(' ').trim();
+}
+
+function buildLlmPrompt(rawInput) {
+    const sections = [];
+    const systemContext = loadLlmSystemContext();
+    if (systemContext) {
+        sections.push('System context for Ploinky CLI and runtime:\n' + systemContext);
+    }
+
+    sections.push(
+        'You are a command guide for the Ploinky CLI.',
+        'Given the user input, propose the best next step the user should execute inside the CLI. '
+            + 'If more than one action is required, return a numbered list with each step on its own line.',
+        'Each step should reference a concrete Ploinky command (for example "add repo demo" or "enable agent basic/chatbot").',
+        'If the input is unclear, respond with a short tip suggesting they run "help".',
+        `User input: "${rawInput}"`
+    );
+
+    return sections.join('\n\n');
+}
+
+function extractLlmErrorDetails(error) {
+    const attempts = Array.isArray(error?.attempts) ? error.attempts : [];
+    const firstAttempt = attempts.length ? attempts[0] : null;
+    const candidate = firstAttempt?.error || error;
+    let code = null;
+
+    if (candidate?.response?.status && Number.isInteger(candidate.response.status)) {
+        code = Number(candidate.response.status);
+    } else if (typeof candidate?.status === 'number') {
+        code = Number(candidate.status);
+    }
+
+    let primaryMessage = '';
+    if (typeof candidate?.message === 'string' && candidate.message.trim()) {
+        primaryMessage = candidate.message;
+    } else if (typeof candidate === 'string' && candidate.trim()) {
+        primaryMessage = candidate;
+    } else if (typeof error?.message === 'string' && error.message.trim()) {
+        primaryMessage = error.message;
+    }
+
+    if (!code) {
+        const codeMatch = primaryMessage.match(/\b(\d{3})\b/);
+        if (codeMatch) {
+            code = Number(codeMatch[1]);
+        }
+    }
+
+    let message = primaryMessage || 'All model invocations failed.';
+    if (message.includes('\n')) {
+        message = message.split(/\r?\n/)[0].trim();
+    }
+    const MAX_LEN = 200;
+    if (message.length > MAX_LEN) {
+        message = `${message.slice(0, MAX_LEN)}...`;
+    }
+
+    return {
+        code,
+        message,
+    };
+}
+
+async function suggestCommandWithLLM(commandLabel, options = []) {
+    const rawInput = composeUserCommand(commandLabel, options) || commandLabel || '';
+    if (!rawInput.trim()) {
+        return { status: 'empty' };
+    }
+
+    const prompt = buildLlmPrompt(rawInput);
+    try {
+        const response = await defaultLLMInvokerStrategy({
+            prompt,
+            mode: 'fast',
+            params: { temperature: 0.1 },
+        });
+        if (typeof response === 'string' && response.trim()) {
+            return { status: 'ok', suggestion: response.trim() };
+        }
+        return { status: 'empty' };
+    } catch (error) {
+        debugLog('LLM suggestion failed:', error?.message || error);
+        const details = extractLlmErrorDetails(error);
+        return { status: 'error', error: details };
+    }
+}
+
+async function handleInvalidPloinkyCommand(command, options = []) {
+    const commandLabel = command || '';
+    const validKeyNames = loadValidLlmApiKeys();
+    const envPath = path.resolve(process.cwd(), WORKSPACE_ENV_FILENAME);
+    const availableKeys = collectAvailableLlmKeys(envPath);
+    const validKeysList = formatValidApiKeyList(validKeyNames);
+
+    if (!availableKeys.length) {
+        console.log(`Command '${commandLabel}' is invalid, type help to see options or configure .env file in current directory with one of these api keys : ${validKeysList}`);
+        return;
+    }
+
+    console.log('Asking the LLM for guidance...');
+
+    const llmResult = await suggestCommandWithLLM(commandLabel, options);
+    if (llmResult?.status === 'ok' && llmResult.suggestion) {
+        console.log('[LLM] Suggested next steps:');
+        console.log(llmResult.suggestion);
+        return;
+    }
+
+    if (llmResult?.status === 'error' && llmResult.error) {
+        if (llmResult.error.code === 401) {
+            console.log('LLM call failed: API key invalid.');
+        } else {
+            console.log(`LLM call failed: ${llmResult.error.message}`);
+        }
+        console.log('Run `help` to see all available Ploinky commands and their usage.');
+        return;
+    }
+
+    console.log(`Command '${commandLabel}' is invalid, type help to see options or configure .env file in current directory with one of these api keys : ${validKeysList}`);
+}
 
 // --- Start of Original Functions ---
 
@@ -152,13 +307,6 @@ async function enableAgent(agentName, mode, repoNameParam) {
     if (!agentName) throw new Error('Usage: enable agent <name|repo/name> [global|devel [repoName]]');
     const { shortAgentName, repoName } = agentsSvc.enableAgent(agentName, mode, repoNameParam);
     console.log(`✓ Agent '${shortAgentName}' from repo '${repoName}' enabled. Use 'start' to start all configured agents.`);
-}
-
-function executeBashCommand(command, args) {
-    const fullCommand = [command, ...args].join(' ');
-    try {
-        execSync(fullCommand, { stdio: 'inherit' });
-    } catch (error) { }
 }
 
 function killRouterIfRunning() {
@@ -705,9 +853,6 @@ async function handleCommand(args) {
             }
             break;
         }
-        case 'admin-mode':
-            console.log('admin-mode is handled via the router dashboard at /dashboard.');
-            break;
         case 'list':
             if (options[0] === 'agents') listAgents();
             else if (options[0] === 'repos') listRepos();
@@ -847,8 +992,14 @@ async function handleCommand(args) {
             await new ClientCommands().handleClientCommand(options);
             break;
         }
-        default:
-            executeBashCommand(command, options);
+        default: {
+            if (!isKnownCommand(command)) {
+                await handleInvalidPloinkyCommand(command, options);
+            } else {
+                console.log(`Command '${command}' is currently not supported by this build. Type help to see available options.`);
+            }
+            break;
+        }
     }
 }
 

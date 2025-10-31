@@ -126,12 +126,12 @@ Imagine you have two agents: a `database-agent` and a `reporting-agent` that que
 
 **Workflow:**
 
-1.  **Start Admin Mode:**
-    The `admin-mode` command launches the Ploinky dashboard, along with other web services.
+1.  **Open the Dashboard:**
+    Use the `dashboard` command to provision access tokens and print the router URL.
 
     ```bash
     # Inside p-cli
-    admin-mode
+    dashboard
     ```
 
 2.  **Access the Dashboard:**
