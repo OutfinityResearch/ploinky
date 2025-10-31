@@ -16,13 +16,15 @@ function getAgentCmd(manifest) {
 }
 
 function getCliCmd(manifest) {
-  return (
+  const explicitCli =
     (manifest.cli && String(manifest.cli)) ||
-    (manifest.commands && manifest.commands.cli) ||
-    (manifest.run && String(manifest.run)) ||
-    (manifest.commands && manifest.commands.run) ||
-    ''
-  );
+    (manifest.commands && manifest.commands.cli);
+
+  if (explicitCli) {
+    return explicitCli;
+  }
+
+  return '/Agent/default_cli.sh';
 }
 
 function shellQuote(str) {

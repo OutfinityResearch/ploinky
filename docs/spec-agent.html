@@ -110,7 +110,7 @@
                             <tr>
                                 <td><code>cli</code></td>
                                 <td>No</td>
-                                <td>Interactive command for <code>ploinky cli</code> (runs inside the agent container)</td>
+                                <td>Interactive command for <code>ploinky cli</code> (runs inside the agent container). When omitted, Ploinky now falls back to <code>/Agent/default_cli.sh</code>, a safe helper that exposes basic inspection commands such as <code>whoami</code>, <code>pwd</code>, <code>ls</code>, <code>env</code>, <code>date</code>, and <code>uname</code>.</td>
                             </tr>
                             <tr>
                                 <td><code>agent</code></td>
@@ -212,6 +212,17 @@ start</code></pre>
                         <p>Interactive command for direct user interaction:</p>
                         <pre><code># Usage
 cli MyAgent</code></pre>
+                        <p>You can define the CLI in two equivalent ways:</p>
+                        <pre><code>{
+  "cli": "python -i"
+}
+
+{
+  "commands": {
+    "cli": "python -i"
+  }
+}</code></pre>
+                        <p>The <code>commands</code> block lets you group related entries (for example <code>commands.cli</code> alongside <code>commands.run</code>). If neither <code>cli</code> nor <code>commands.cli</code> is present, Ploinky falls back to <code>/Agent/default_cli.sh</code>.</p>
 
                         <h3>Agent Command</h3>
                         <p>Long-running service for API endpoints:</p>
@@ -380,6 +391,8 @@ client task MyAgent</code></pre>
   "cli": "/bin/sh",
   "about": "Alpine Linux shell with curl and jq"
 }</code></pre>
+
+                        <p><strong>Tip:</strong> If you omit the <code>cli</code> field entirely, Ploinky will attach the bundled <code>/Agent/default_cli.sh</code> script so you still have access to safe inspection commands via <code>ploinky cli &lt;agent&gt; &lt;command&gt;</code>. Launching <code>ploinky cli &lt;agent&gt;</code> with no arguments drops you into an interactive prompt; type <code>help</code> to see the allowed commands and <code>exit</code> when you are finished.</p>
 
                         <h3>Node.js Development Agent</h3>
                         <pre><code>{
