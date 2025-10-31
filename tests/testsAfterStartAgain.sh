@@ -14,6 +14,7 @@ require_var "TEST_PERSIST_FILE"
 # Reset counter for additional persistence checks.
 FAST_CHECK_ERRORS=0
 
+stage_header "Tests after Start Again"
 test_check "Persistence marker survived restart" assert_file_content_equals "$TEST_PERSIST_MARKER" "first-run"
 test_check "Agent data file still present after restart" assert_file_exists "$TEST_PERSIST_FILE"
 test_check "Agent data file retains initialization signature" assert_file_contains "$TEST_PERSIST_FILE" "initialized"

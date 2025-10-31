@@ -20,6 +20,7 @@ source "$TESTS_DIR/test-functions/webchat_rotate_token.sh"
 source "$TESTS_DIR/test-functions/test_sso_params.sh"
 source "$TESTS_DIR/test-functions/webtty_command.sh"
 source "$TESTS_DIR/test-functions/default_cli_tests.sh"
+source "$TESTS_DIR/test-functions/logs_commands.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -133,5 +134,9 @@ test_check "webtty command records mock shell configuration" test_webtty_shell
 stage_header "Default CLI Fallback"
 #test_action "Capture default CLI help output" run_default_cli_help
 #test_check "Default CLI help banner is shown" default_cli_help_has_banner
+
+stage_header "Logs Commands"
+test_check "logs tail router streams entries" test_logs_tail_router
+test_check "logs last prints five lines" test_logs_last_five
 
 finalize_checks

@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29145 listening
-[PASS] Agent host port 21964 listening
-[PASS] Agent port 21964 bound to localhost
+[PASS] Router port 24028 listening
+[PASS] Agent host port 20252 listening
+[PASS] Agent port 20252 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -95,20 +95,26 @@
 ===== WebTTY Command =====
 [PASS] webtty command records mock shell configuration
 
+===== Default CLI Fallback =====
+
+===== Logs Commands =====
+[PASS] logs tail router streams entries
+[PASS] logs last prints five lines
+
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 29145 closed
-[PASS] Agent port 21964 closed
+[PASS] Router port 24028 closed
+[PASS] Agent port 20252 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29145 listening
-[PASS] Agent host port 21964 listening
-[PASS] Agent port 21964 bound to localhost
+[PASS] Router port 24028 listening
+[PASS] Agent host port 20252 listening
+[PASS] Agent port 20252 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -191,6 +197,12 @@
 
 ===== WebTTY Command =====
 [PASS] webtty command records mock shell configuration
+
+===== Default CLI Fallback =====
+
+===== Logs Commands =====
+[PASS] logs tail router streams entries
+[PASS] logs last prints five lines
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
 [PASS] Agent data file retains initialization signature
@@ -203,8 +215,8 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29145 listening
-[PASS] Agent host port 21964 listening
+[PASS] Router port 24028 listening
+[PASS] Agent host port 20252 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
