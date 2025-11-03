@@ -21,7 +21,8 @@ import {
     saveAgentsMap,
     syncAgentMcpConfig,
     REPOS_DIR,
-    flagsToArgs
+    flagsToArgs,
+    waitForContainerRunning
 } from './common.js';
 
 import { loadAgents } from '../workspace.js';
@@ -314,6 +315,47 @@ function runInstallHook(agentName, manifest, agentPath, cwd) {
     }
 }
 
+function normalizeLifecycleCommands(entry) {
+    if (Array.isArray(entry)) {
+        return entry
+            .filter((cmd) => typeof cmd === 'string')
+            .map((cmd) => cmd.trim())
+            .filter(Boolean);
+    }
+    if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        return trimmed ? [trimmed] : [];
+    }
+    return [];
+}
+
+function runPostinstallHook(agentName, containerName, manifest, cwd) {
+    const commands = normalizeLifecycleCommands(manifest?.postinstall);
+    if (!commands.length) return;
+
+    if (!waitForContainerRunning(containerName, 40, 250)) {
+        throw new Error(`[postinstall] ${agentName}: container not running; cannot execute postinstall commands.`);
+    }
+
+    for (const cmd of commands) {
+        console.log(`[postinstall] ${agentName}: cd '${cwd}' && ${cmd}`);
+        const res = spawnSync(containerRuntime, ['exec', containerName, 'sh', '-lc', `cd '${cwd}' && ${cmd}`], { stdio: 'inherit' });
+        if (res.status !== 0) {
+            throw new Error(`[postinstall] ${agentName}: command exited with ${res.status}`);
+        }
+    }
+
+    console.log(`[postinstall] ${agentName}: restarting container ${containerName}`);
+    const restartRes = spawnSync(containerRuntime, ['restart', containerName], { stdio: 'inherit' });
+    if (restartRes.status !== 0) {
+        throw new Error(`[postinstall] ${agentName}: restart failed with code ${restartRes.status}`);
+    }
+
+    if (!waitForContainerRunning(containerName, 40, 250)) {
+        throw new Error(`[postinstall] ${agentName}: container did not reach running state after restart.`);
+    }
+}
+
 function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const repoName = path.basename(path.dirname(agentPath));
     const containerName = getAgentContainerName(agentName, repoName);
@@ -409,6 +451,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         }
     };
     saveAgentsMap(agents);
+    runPostinstallHook(agentName, containerName, manifest, cwd);
     syncAgentMcpConfig(containerName, path.resolve(agentPath));
     return containerName;
 }

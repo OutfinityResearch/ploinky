@@ -11,6 +11,7 @@ source "$TESTS_DIR/test-functions/router_static_assets.sh"
 source "$TESTS_DIR/test-functions/router_var_check.sh"
 source "$TESTS_DIR/test-functions/check_preinstall_run.sh"
 source "$TESTS_DIR/test-functions/install_command_verification.sh"
+source "$TESTS_DIR/test-functions/postinstall_test.sh"
 source "$TESTS_DIR/test-functions/agent_blob_upload_and_download.sh"
 source "$TESTS_DIR/test-functions/demo_agent_dir_perm.sh"
 source "$TESTS_DIR/test-functions/global_agent_verification.sh"
@@ -113,6 +114,9 @@ test_check "Variable MY_TEST_VAR from manifest is present after start" assert_co
 stage_header "Install Command Verification"
 test_check "Install command creates marker file (verified via shell)" fast_check_install_marker_via_shell
 
+stage_header "Postinstall Verification"
+test_check "Postinstall command creates marker file" check_postinstall_marker
+
 stage_header "Agent Blob Upload and Download"
 test_check "Router upload stores blob in agent workspace" fast_check_agent_blob_upload
 test_check "Router download returns uploaded blob" fast_check_agent_blob_download
@@ -132,7 +136,7 @@ stage_header "WebTTY Command"
 test_action "Configure WebTTY shell to mock script" configure_mock_webtty_shell
 test_check "webtty command records mock shell configuration" test_webtty_shell
 
-stage_header "Default CLI Fallback"
+#stage_header "Default CLI Fallback"
 #test_action "Capture default CLI help output" run_default_cli_help
 #test_check "Default CLI help banner is shown" default_cli_help_has_banner
 

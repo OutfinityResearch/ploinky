@@ -62,7 +62,9 @@
   "container": "node:18-alpine",      // Docker/Podman image
   
   // Lifecycle commands
-  "install": "npm install",           // Run once when agent is first created
+  "preinstall": "scripts/bootstrap.sh", // Host command before the agent is registered
+  "install": "npm install",           // Run inside the container before first start
+  "postinstall": "npm run seed",      // Run after the container starts, then restarts it
   "update": "npm update",             // Run when agent needs updating
   
   // Execution modes
@@ -98,9 +100,19 @@
                                 <td>Base container image from Docker Hub or other registry</td>
                             </tr>
                             <tr>
+                                <td><code>preinstall</code></td>
+                                <td>No</td>
+                                <td>Host-side command executed before the agent is registered. Accepts either a string or an array of commands.</td>
+                            </tr>
+                            <tr>
                                 <td><code>install</code></td>
                                 <td>No</td>
-                                <td>One-time setup command for dependencies</td>
+                                <td>One-time setup command that runs inside a disposable container before the main agent container starts.</td>
+                            </tr>
+                            <tr>
+                                <td><code>postinstall</code></td>
+                                <td>No</td>
+                                <td>Command (string or array) executed inside the running container immediately after startup; the container restarts once the hook completes.</td>
                             </tr>
                             <tr>
                                 <td><code>update</code></td>
@@ -171,12 +183,25 @@ new agent myrepo MyAgent node:20
 └── (agent files)</code></pre>
 
                         <h3>2. Installation</h3>
-                        <p>When an agent is first enabled, Ploinky runs the <code>install</code> command:</p>
+                        <p>When an agent is first enabled, Ploinky evaluates lifecycle hooks in this order:</p>
+                        <ul style="margin-left: 2rem; margin-top: 1rem;">
+                            <li><code>preinstall</code> runs on the host before the agent is added to the workspace.</li>
+                            <li><code>install</code> runs inside a disposable container with the agent mounts to prepare dependencies.</li>
+                            <li><code>postinstall</code> runs inside the newly started agent container and triggers a restart when it finishes.</li>
+                        </ul>
                         <pre><code># manifest.json
-"install": "npm install express body-parser"
+"preinstall": [
+  "npm run prepare-assets"
+],
+"install": "npm install express body-parser",
+"postinstall": "npm run seed"
 
-# Executed in container:
-docker run -v $PWD:$PWD node:18-alpine sh -c "npm install express body-parser"</code></pre>
+# install executes in a disposable container
+docker run -v $PWD:$PWD node:18-alpine sh -c "npm install express body-parser"
+
+# postinstall executes inside the running agent container, then restarts it
+docker exec ploinky_myrepo_MyAgent sh -lc "cd '$PWD' && npm run seed"
+docker restart ploinky_myrepo_MyAgent</code></pre>
 
                         <h3>3. Enablement</h3>
                         <pre><code># Register agent in workspace

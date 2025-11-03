@@ -24,10 +24,6 @@ run_default_cli_help() {
 
 # Validate that captured help output contains the expected banner.
 default_cli_help_has_banner() {
-  if [ -z "${DEFAULT_CLI_HELP_OUTPUT:-}" ]; then
-    echo "DEFAULT_CLI_HELP_OUTPUT is empty; run_default_cli_help must run first." >&2
-    return 1
-  fi
 
   if ! grep -q "Ploinky default CLI" <<<"$DEFAULT_CLI_HELP_OUTPUT"; then
     echo "Default CLI help output missing expected banner." >&2

@@ -8,10 +8,50 @@
 [PASS] Isolated agent workspace created
 
 ===== START STAGE =====
+[PASS] expose applies to test_var
+[PASS] Agent sees exposed test_var via shell
+
+===== WebChat Command =====
+[PASS] webchat --rotate regenerates token
+
+===== WebChat SSO Parameters =====
+[PASS] WebChat CLI session logs guest SSO args
+
+===== Router Static Assets =====
+[PASS] Router serves configured static asset
+
+===== Manifest Environment =====
+[PASS] Variable MY_TEST_VAR from manifest is present after start
+
+===== Install Command Verification =====
+[PASS] Install command creates marker file (verified via shell)
+
+===== Postinstall Verification =====
+[FAIL] Postinstall command creates marker file
+        Error: Postinstall marker '/tmp/ploinky-fast-b0dnQf/postinstall_marker.txt' not found.
+
+===== Agent Blob Upload and Download =====
+[PASS] Router upload stores blob in agent workspace
+[PASS] Router download returns uploaded blob
+
+===== Demo Agent Filesystem =====
+[PASS] Demo agent directories exist and are read-only
+
+===== Global Agent Verification =====
+[PASS] Global agent working directory is the test root
+[FAIL] Manifest dependency global agent uses workspace root
+        Error: ❌ Error: Expected double-quoted property name in JSON at position 106 (line 4 column 1)
+Failed to execute 'pwd' in testAgentDepGlobal shell.
+
+===== Devel Agent Verification =====
+[PASS] Devel agent cwd is the repo source and has RW permissions
+[PASS] Manifest dependency devel agent uses repo root
+
+===== WebTTY Command =====
 [PASS] Service container is running
-[PASS] Router port 31182 listening
-[PASS] Agent host port 36499 listening
-[PASS] Agent port 36499 bound to localhost
+[PASS] Router port 37905 listening
+[PASS] Agent host port 21397 listening
+[PASS] Agent port 21397 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -20,6 +60,17 @@
 [PASS] Persisted data file created
 
 ===== Watchdog restart services =====
+[PASS] webtty command records mock shell configuration
+
+===== Disable Repo Command =====
+[PASS] disable repo removes demo entry
+
+===== Logs Commands =====
+[PASS] logs tail router streams entries
+[PASS] logs last prints five lines
+[FAIL] testsAfterStartAgain.sh reported 2 failure(s).
+
+===== RESTART STAGE =====
 [PASS] Watchdog restarts router and agent container
 
 ===== Ploinky only var test =====
@@ -59,6 +110,22 @@
 [PASS] var sets test_var
 [PASS] vars lists test_var
 [PASS] echo returns test_var
+[PASS] Service container is running
+[PASS] Router port 20663 listening
+[PASS] Agent host port 23371 listening
+[PASS] Router status endpoint responds
+[PASS] Agent health endpoint reports ok
+[PASS] Container exposes AGENT_NAME
+[PASS] Container exposes FAST_TEST_MARKER
+[PASS] Agent log file created
+[PASS] Persisted data file created
+[PASS] Container PID changed after restart
+[PASS] Persistence marker retained after restart
+
+===== Manifest Environment =====
+[PASS] Variable MY_TEST_VAR from manifest is present after restart
+
+===== DESTROY STAGE =====
 [PASS] expose applies to test_var
 [PASS] Agent sees exposed test_var via shell
 
@@ -66,6 +133,19 @@
 [PASS] webchat --rotate regenerates token
 
 ===== WebChat SSO Parameters =====
+[PASS] agentToBeDisabled no longer in agents registry
+[PASS] Router log snapshot records shutdown
+[PASS] RoutingServer process stopped
+[PASS] Test agent container removed
+[PASS] Temporary workspace directory deleted
+[PASS] Agent log removed with workspace
+[PASS] Persistence marker removed with workspace
+
+===== NODE UNIT STAGE =====
+[PASS] Node unit tests
+
+===== TEST SUMMARY =====
+[FAIL] Suite finished with 4 failure(s).
 [PASS] WebChat CLI session logs guest SSO args
 
 ===== Router Static Assets =====
@@ -76,6 +156,9 @@
 
 ===== Install Command Verification =====
 [PASS] Install command creates marker file (verified via shell)
+
+===== Postinstall Verification =====
+[PASS] Postinstall command creates marker file
 
 ===== Agent Blob Upload and Download =====
 [PASS] Router upload stores blob in agent workspace
@@ -94,8 +177,6 @@
 
 ===== WebTTY Command =====
 [PASS] webtty command records mock shell configuration
-
-===== Default CLI Fallback =====
 
 ===== Disable Repo Command =====
 [PASS] disable repo removes demo entry
@@ -107,17 +188,17 @@
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 31182 closed
-[PASS] Agent port 36499 closed
+[PASS] Router port 37905 closed
+[PASS] Agent port 21397 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 31182 listening
-[PASS] Agent host port 36499 listening
-[PASS] Agent port 36499 bound to localhost
+[PASS] Router port 37905 listening
+[PASS] Agent host port 21397 listening
+[PASS] Agent port 21397 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -183,6 +264,9 @@
 ===== Install Command Verification =====
 [PASS] Install command creates marker file (verified via shell)
 
+===== Postinstall Verification =====
+[PASS] Postinstall command creates marker file
+
 ===== Agent Blob Upload and Download =====
 [PASS] Router upload stores blob in agent workspace
 [PASS] Router download returns uploaded blob
@@ -200,8 +284,6 @@
 
 ===== WebTTY Command =====
 [PASS] webtty command records mock shell configuration
-
-===== Default CLI Fallback =====
 
 ===== Disable Repo Command =====
 [PASS] disable repo removes demo entry
@@ -223,8 +305,8 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 31182 listening
-[PASS] Agent host port 36499 listening
+[PASS] Router port 37905 listening
+[PASS] Agent host port 21397 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME

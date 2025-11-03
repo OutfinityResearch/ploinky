@@ -83,7 +83,8 @@ mkdir -p "$dep_agent_root"
 
 cat >"${dep_agent_root}/manifest.json" <<'EOF'
 {
-  "container": "node:20-bullseye"
+  "container": "node:20-bullseye",
+  "postinstall": "echo 'postinstall_ok' > ./postinstall_marker.txt"
 }
 EOF
 
