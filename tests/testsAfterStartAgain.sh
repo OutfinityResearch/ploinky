@@ -3,16 +3,23 @@
 TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$TESTS_DIR/lib.sh"
 source "$TESTS_DIR/test-functions/dynamic_configuration_tests.sh"
+source "$TESTS_DIR/test-functions/health_probes_negative.sh"
+
+load_state
+require_var "TEST_HEALTH_AGENT_CONT_NAME"
+require_var "TEST_HEALTH_AGENT_NAME"
+
+#stage_header "Health Probes Failure Verification"
+#test_check "Health probes retry and fail as expected" health_probes_wait_for_failure_logs
 
 # Reuse the primary start verification suite.
 bash "$TESTS_DIR/testsAfterStart.sh"
+rerun_exit=$?
+FAST_CHECK_ERRORS=$(($FAST_CHECK_ERRORS + rerun_exit))
 
 load_state
 require_var "TEST_PERSIST_MARKER"
 require_var "TEST_PERSIST_FILE"
-
-# Reset counter for additional persistence checks.
-FAST_CHECK_ERRORS=0
 
 stage_header "Tests after Start Again"
 test_check "Persistence marker survived restart" assert_file_content_equals "$TEST_PERSIST_MARKER" "first-run"

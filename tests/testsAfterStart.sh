@@ -11,6 +11,7 @@ source "$TESTS_DIR/test-functions/router_static_assets.sh"
 source "$TESTS_DIR/test-functions/router_var_check.sh"
 source "$TESTS_DIR/test-functions/check_preinstall_run.sh"
 source "$TESTS_DIR/test-functions/install_command_verification.sh"
+source "$TESTS_DIR/test-functions/health_probes_negative.sh"
 source "$TESTS_DIR/test-functions/postinstall_test.sh"
 source "$TESTS_DIR/test-functions/agent_blob_upload_and_download.sh"
 source "$TESTS_DIR/test-functions/demo_agent_dir_perm.sh"
@@ -36,6 +37,7 @@ require_var "TEST_PERSIST_FILE"
 require_var "TEST_AGENT_CONTAINER_PORT"
 require_var "TEST_AGENT_DEP_GLOBAL_NAME"
 require_var "TEST_AGENT_DEP_DEVEL_NAME"
+require_var "TEST_HEALTH_AGENT_CONT_NAME"
 
 cd "$TEST_RUN_DIR"
 
@@ -49,6 +51,10 @@ test_check "Container exposes AGENT_NAME" assert_container_env "$TEST_AGENT_CONT
 test_check "Container exposes FAST_TEST_MARKER" assert_container_env "$TEST_AGENT_CONT_NAME" "FAST_TEST_MARKER" "fast-suite"
 test_check "Agent log file created" assert_file_contains "$TEST_AGENT_LOG" "listening"
 test_check "Persisted data file created" assert_file_exists "$TEST_PERSIST_FILE"
+
+stage_header "Health Probes Agent"
+test_check "Health probes agent container is running" assert_container_running "$TEST_HEALTH_AGENT_CONT_NAME"
+test_action "Flip health probes to failing scripts" health_probes_force_failure
 
 stage_header "Watchdog restart services"
 test_check "Watchdog restarts router and agent container" watchdog_restart_services

@@ -12,6 +12,8 @@ TEST_AGENT_QUALIFIED="${TEST_REPO_NAME}/${TEST_AGENT_NAME}"
 write_state_var "TEST_REPO_NAME" "$TEST_REPO_NAME"
 write_state_var "TEST_AGENT_NAME" "$TEST_AGENT_NAME"
 write_state_var "TEST_AGENT_QUALIFIED" "$TEST_AGENT_QUALIFIED"
+HEALTH_AGENT_NAME="healthProbes"
+write_state_var "TEST_HEALTH_AGENT_NAME" "$HEALTH_AGENT_NAME"
 TEST_AGENT_TO_DISABLE_NAME="agentToBeDisabled"
 TEST_AGENT_TO_DISABLE_QUALIFIED="${TEST_REPO_NAME}/${TEST_AGENT_TO_DISABLE_NAME}"
 write_state_var "TEST_AGENT_TO_DISABLE_NAME" "$TEST_AGENT_TO_DISABLE_NAME"
@@ -77,6 +79,29 @@ cat >"${disable_agent_root}/manifest.json" <<'EOF'
   "agent": "node -e \"setInterval(()=>{}, 1_000_000)\""
 }
 EOF
+# Agent used to verify health probe behaviour
+health_agent_root="${repo_root}/${HEALTH_AGENT_NAME}"
+mkdir -p "$health_agent_root"
+write_state_var "TEST_HEALTH_AGENT_REPO_PATH" "$health_agent_root"
+
+cat >"${health_agent_root}/manifest.json" <<'EOF'
+{
+  "container": "node:20-bullseye",
+  "agent": "node -e \"setInterval(()=>{}, 1_000_000)\""
+}
+EOF
+
+cat >"${health_agent_root}/liveness_probe.sh" <<'EOF'
+#!/bin/sh
+echo live
+EOF
+
+cat >"${health_agent_root}/readiness_probe.sh" <<'EOF'
+#!/bin/sh
+echo ready
+EOF
+
+chmod +x "${health_agent_root}/liveness_probe.sh" "${health_agent_root}/readiness_probe.sh"
 # Dependency agent that will be enabled in global mode via manifest
 dep_agent_root="${repo_root}/${TEST_AGENT_DEP_GLOBAL_NAME}"
 mkdir -p "$dep_agent_root"
@@ -110,6 +135,9 @@ ploinky enable agent "$TEST_AGENT_QUALIFIED"
 
 test_info "Enabling agent ${TEST_AGENT_TO_DISABLE_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_TO_DISABLE_QUALIFIED"
+
+test_info "Enabling agent ${TEST_REPO_NAME}/${HEALTH_AGENT_NAME}."
+ploinky enable agent "${TEST_REPO_NAME}/${HEALTH_AGENT_NAME}"
 
 # Create a global agent for testing global mode
 test_info "Creating global-agent."
@@ -163,6 +191,10 @@ test_info "Service container will be named: $agent_container_name"
 disable_agent_container_name=$(compute_container_name "$TEST_AGENT_TO_DISABLE_NAME" "$TEST_REPO_NAME")
 write_state_var "TEST_AGENT_TO_DISABLE_CONT_NAME" "$disable_agent_container_name"
 test_info "Disable-target container will be named: $disable_agent_container_name"
+
+health_agent_container_name=$(compute_container_name "$HEALTH_AGENT_NAME" "$TEST_REPO_NAME")
+write_state_var "TEST_HEALTH_AGENT_CONT_NAME" "$health_agent_container_name"
+test_info "Health probe container will be named: $health_agent_container_name"
 
 workspace_project="$TEST_RUN_DIR/$TEST_AGENT_NAME"
 write_state_var "TEST_AGENT_WORKSPACE" "$workspace_project"

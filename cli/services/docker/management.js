@@ -25,6 +25,8 @@ import {
     waitForContainerRunning
 } from './common.js';
 
+import { runHealthProbes } from './healthProbes.js';
+
 import { loadAgents } from '../workspace.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -451,7 +453,13 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         }
     };
     saveAgentsMap(agents);
-    runPostinstallHook(agentName, containerName, manifest, cwd);
+    try {
+        runPostinstallHook(agentName, containerName, manifest, cwd);
+        runHealthProbes(agentName, containerName);
+    } catch (error) {
+        try { stopAndRemove(containerName); } catch (_) { }
+        throw error;
+    }
     syncAgentMcpConfig(containerName, path.resolve(agentPath));
     return containerName;
 }

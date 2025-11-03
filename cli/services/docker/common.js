@@ -286,7 +286,8 @@ export {
     saveAgentsMap,
     syncAgentMcpConfig,
     waitForContainerRunning,
-    flagsToArgs
+    flagsToArgs,
+    sleepMs
 };
 
 function getRuntime() {
