@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { execSync } from 'child_process';
+import os from 'os';
+import { execSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { PLOINKY_DIR } from '../services/config.js';
 import { debugLog, findAgent } from '../services/utils.js';
@@ -74,10 +75,10 @@ function buildLlmPrompt(rawInput) {
     }
 
     sections.push(
-        'You are a command guide for the Ploinky CLI.',
-        'Given the user input, propose the best next step the user should execute inside the CLI. '
+        'You are a command guide for an operating system that has Ploinky CLI installed.',
+        'Given the user input, propose the best next step the user should execute inside the CLI or system. '
             + 'If more than one action is required, return a numbered list with each step on its own line.',
-        'Each step should reference a concrete Ploinky command (for example "add repo demo" or "enable agent basic/chatbot").',
+        'Each step should reference a concrete Ploinky command (for example "add repo demo" or "enable agent basic/chatbot"). or system command (Ex: ls, cd .. ,nano file.txt)',
         'If the input is unclear, respond with a short tip suggesting they run "help".',
         `User input: "${rawInput}"`
     );
@@ -152,7 +153,68 @@ async function suggestCommandWithLLM(commandLabel, options = []) {
     }
 }
 
-async function handleInvalidPloinkyCommand(command, options = []) {
+function commandExistsSync(cmd) {
+    if (!cmd) return false;
+    const checker = process.platform === 'win32' ? 'where' : 'which';
+    try {
+        execSync(`${checker} ${cmd}`, { stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function resolveCdTarget(target) {
+    const homeDir = os.homedir() || process.cwd();
+    if (!target || target === '~') {
+        return homeDir;
+    }
+    if (target.startsWith('~/')) {
+        return path.join(homeDir, target.slice(2));
+    }
+    return path.isAbsolute(target) ? target : path.resolve(process.cwd(), target);
+}
+
+async function handleSystemCommand(command, options = []) {
+    if (!command) return false;
+
+    if (command === 'cd') {
+        const destination = resolveCdTarget(options[0]);
+        try {
+            process.chdir(destination);
+        } catch (error) {
+            console.error(`cd: ${error?.message || error}`);
+        }
+        return true;
+    }
+
+    if (!commandExistsSync(command)) {
+        return false;
+    }
+
+    return await new Promise((resolve) => {
+        const child = spawn(command, options, { stdio: 'inherit' });
+        let settled = false;
+
+        child.on('error', (error) => {
+            settled = true;
+            if (error?.code === 'ENOENT') {
+                resolve(false);
+            } else {
+                console.error(error?.message || error);
+                resolve(true);
+            }
+        });
+
+        child.on('exit', () => {
+            if (!settled) {
+                resolve(true);
+            }
+        });
+    });
+}
+
+async function handleInvalidCommand(command, options = []) {
     const commandLabel = command || '';
     const validKeyNames = loadValidLlmApiKeys();
     const envPath = path.resolve(process.cwd(), WORKSPACE_ENV_FILENAME);
@@ -160,7 +222,7 @@ async function handleInvalidPloinkyCommand(command, options = []) {
     const validKeysList = formatValidApiKeyList(validKeyNames);
 
     if (!availableKeys.length) {
-        console.log(`Command '${commandLabel}' is invalid, type help to see options or configure .env file in current directory with one of these api keys : ${validKeysList}`);
+        console.log(`Command '${commandLabel}' is not recognized as a Ploinky command or system executable. Type help to see options or configure .env file in current directory with one of these api keys : ${validKeysList}`);
         return;
     }
 
@@ -183,7 +245,7 @@ async function handleInvalidPloinkyCommand(command, options = []) {
         return;
     }
 
-    console.log(`Command '${commandLabel}' is invalid, type help to see options or configure .env file in current directory with one of these api keys : ${validKeysList}`);
+    console.log(`Command '${commandLabel}' is not recognized as a Ploinky command or system executable. Type help to see options or configure .env file in current directory with one of these api keys : ${validKeysList}`);
 }
 
 // --- Start of Original Functions ---
@@ -817,9 +879,6 @@ async function handleCommand(args) {
             else ensureComponentToken('webtty');
             break;
         }
-        case 'voicechat':
-            console.log('voicechat: feature removed; use /webmeet instead.');
-            break;
         case 'dashboard': {
             const rotate = (options || []).includes('--rotate');
             if (rotate) await refreshComponentToken('dashboard');
@@ -994,7 +1053,10 @@ async function handleCommand(args) {
         }
         default: {
             if (!isKnownCommand(command)) {
-                await handleInvalidPloinkyCommand(command, options);
+                const handled = await handleSystemCommand(command, options);
+                if (!handled) {
+                    await handleInvalidCommand(command, options);
+                }
             } else {
                 console.log(`Command '${command}' is currently not supported by this build. Type help to see available options.`);
             }

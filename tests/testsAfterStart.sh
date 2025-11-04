@@ -24,6 +24,7 @@ source "$TESTS_DIR/test-functions/webtty_command.sh"
 source "$TESTS_DIR/test-functions/default_cli_tests.sh"
 source "$TESTS_DIR/test-functions/logs_commands.sh"
 source "$TESTS_DIR/test-functions/disable_repo_test.sh"
+source "$TESTS_DIR/test-functions/llm_cli_suggestions.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -152,5 +153,8 @@ test_check "disable repo removes demo entry" test_disable_repo_demo_updates_enab
 stage_header "Logs Commands"
 test_check "logs tail router streams entries" test_logs_tail_router
 test_check "logs last prints five lines" test_logs_last_five
+
+stage_header "LLM CLI Suggestions"
+test_check "Invalid CLI input yields LLM suggestion and system command output" test_llm_cli_suggestions
 
 finalize_checks

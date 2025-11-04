@@ -1,12 +1,5 @@
 
 ===== PREPARE STAGE =====
-[PASS] Manifest dependency global agent uses workspace root
-
-===== Devel Agent Verification =====
-[PASS] Devel agent cwd is the repo source and has RW permissions
-[PASS] Manifest dependency devel agent uses repo root
-
-===== WebTTY Command =====
 [PASS] Temporary workspace directory exists
 [PASS] Repository directory created
 [PASS] Agent manifest present
@@ -15,32 +8,10 @@
 [PASS] Isolated agent workspace created
 
 ===== START STAGE =====
-[PASS] webtty command records mock shell configuration
-
-===== Disable Repo Command =====
-[PASS] disable repo removes demo entry
-
-===== Logs Commands =====
-[PASS] logs tail router streams entries
-[PASS] logs last prints five lines
-
-===== Tests after Start Again =====
-[PASS] Persistence marker survived restart
-[PASS] Agent data file still present after restart
-[PASS] Agent data file retains initialization signature
-[PASS] Dynamic APP_NAME update without restart
-[PASS] Dynamic WEBTTY_SHELL update without restart
-[PASS] Dynamic SSO_CLIENT_SECRET update without restart
-
-===== Manifest Environment =====
-[PASS] Variable MY_TEST_VAR from manifest is present after start again
-[FAIL] testsAfterStartAgain.sh reported 1 failure(s).
-
-===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 21716 listening
-[PASS] Agent host port 32558 listening
-[PASS] Agent port 32558 bound to localhost
+[PASS] Router port 20249 listening
+[PASS] Agent host port 24530 listening
+[PASS] Agent port 24530 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -52,41 +23,12 @@
 [PASS] Health probes agent container is running
 
 ===== Watchdog restart services =====
-[PASS] Service container is running
-[PASS] Router port 21502 listening
-[PASS] Agent host port 23122 listening
-[PASS] Router status endpoint responds
-[PASS] Agent health endpoint reports ok
-[PASS] Container exposes AGENT_NAME
-[PASS] Container exposes FAST_TEST_MARKER
-[PASS] Agent log file created
-[PASS] Persisted data file created
-[PASS] Container PID changed after restart
-[PASS] Persistence marker retained after restart
-
-===== Manifest Environment =====
-[PASS] Variable MY_TEST_VAR from manifest is present after restart
-
-===== DESTROY STAGE =====
 [PASS] Watchdog restarts router and agent container
 
 ===== Ploinky only var test =====
 [PASS] Host-only env var not visible inside container
 
 ===== Router var change =====
-[PASS] agentToBeDisabled no longer in agents registry
-[PASS] Router log snapshot records shutdown
-[PASS] RoutingServer process stopped
-[PASS] Test agent container removed
-[PASS] Temporary workspace directory deleted
-[PASS] Agent log removed with workspace
-[PASS] Persistence marker removed with workspace
-
-===== NODE UNIT STAGE =====
-[PASS] Node unit tests
-
-===== TEST SUMMARY =====
-[FAIL] Suite finished with 1 failure(s).
 [PASS] Router reflects updated testVar without restart
 
 ===== Workspace status command =====
@@ -166,65 +108,23 @@
 [PASS] logs tail router streams entries
 [PASS] logs last prints five lines
 
+===== LLM CLI Suggestions =====
+[PASS] Invalid CLI input yields LLM suggestion and system command output
+
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 21716 closed
-[PASS] Agent port 32558 closed
+[PASS] Router port 20249 closed
+[PASS] Agent port 24530 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
-
-===== Health Probes Failure Verification =====
-[FAIL] Health probes retry and fail as expected
-        Error: restart: start is not configured. Run: start <staticAgent> <port>
-Health probe container 'ploinky_testRepo_healthProbes_ploinky-fast-UOJd8l_85e3dda3' is still running.
-  repo: 'webmeet'
-}
-[Watchdog:INFO] container_watch_added {
-  container: 'ploinky_fileExplorer_explorer_ploinky-fast-UOJd8l_85e3dda3',
-  agent: 'explorer',
-  repo: 'fileExplorer'
-}
-[ConfigCache] TTL disabled: instant config updates
-[RoutingServer] Ploinky server running on http://127.0.0.1:21716
-  Dashboard: /dashboard
-  WebTTY:    /webtty
-  WebChat:   /webchat
-  WebMeet:   /webmeet
-  Status:    /status
-  Health:    /health
-[Watchdog:INFO] container_monitor_started { intervalMs: 5000 }
-
-========================================
-Watchdog Started
-========================================
-Server script: /home/mircea/Desktop/ploinky/cli/server/RoutingServer.js
-Port: 21716
-Health checks: Enabled
-Max restarts: 5 in 60s
-Logs: /tmp/ploinky-fast-UOJd8l/logs/watchdog.log
-========================================
-
-[SHUTDOWN] Signal: SIGTERM (exit code: 0)
-[SHUTDOWN] Initiating graceful shutdown (Signal: SIGTERM)...
-[SHUTDOWN] Server closed successfully
-[Watchdog:WARN] process_exited {
-  exitCode: 0,
-  signal: null,
-  uptime: 1782,
-  uptimeSeconds: 1,
-  wasExpected: false
-}
-[Watchdog:INFO] clean_exit { message: 'Process exited cleanly, no restart needed' }
-[Watchdog:INFO] restart_skipped { exitCode: 0, signal: null }
-[Watchdog:INFO] watchdog_exiting { exitCode: 0 }
 [PASS] Service container is running
-[PASS] Router port 21716 listening
-[PASS] Agent host port 32558 listening
-[PASS] Agent port 32558 bound to localhost
+[PASS] Router port 20249 listening
+[PASS] Agent host port 24530 listening
+[PASS] Agent port 24530 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -321,6 +221,9 @@ Logs: /tmp/ploinky-fast-UOJd8l/logs/watchdog.log
 [PASS] logs tail router streams entries
 [PASS] logs last prints five lines
 
+===== LLM CLI Suggestions =====
+[PASS] Invalid CLI input yields LLM suggestion and system command output
+
 ===== Tests after Start Again =====
 [PASS] Persistence marker survived restart
 [PASS] Agent data file still present after restart
@@ -331,12 +234,11 @@ Logs: /tmp/ploinky-fast-UOJd8l/logs/watchdog.log
 
 ===== Manifest Environment =====
 [PASS] Variable MY_TEST_VAR from manifest is present after start again
-[FAIL] testsAfterStartAgain.sh reported 1 failure(s).
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 21716 listening
-[PASS] Agent host port 32558 listening
+[PASS] Router port 20249 listening
+[PASS] Agent host port 24530 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -362,4 +264,4 @@ Logs: /tmp/ploinky-fast-UOJd8l/logs/watchdog.log
 [PASS] Node unit tests
 
 ===== TEST SUMMARY =====
-[FAIL] Suite finished with 1 failure(s).
+[PASS] All tests passed!
