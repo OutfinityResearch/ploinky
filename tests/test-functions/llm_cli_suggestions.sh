@@ -18,8 +18,8 @@ test_llm_cli_suggestions() {
     return 1
   fi
 
-  if ! output=$(ploinky how do i start an agent 2>&1); then
-    echo "'ploinky how do i start an agent' failed." >&2
+  if ! output=$(timeout 10s ploinky how do i start an agent 2>&1); then
+    echo "'ploinky how do i start an agent' failed or timed out." >&2
     return 1
   fi
 
