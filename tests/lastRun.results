@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22720 listening
-[PASS] Agent host port 30975 listening
-[PASS] Agent port 30975 bound to localhost
+[PASS] Router port 27099 listening
+[PASS] Agent host port 27689 listening
+[PASS] Agent port 27689 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -121,17 +121,23 @@ Run `help` to see all available Ploinky commands and their usage.
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 22720 closed
-[PASS] Agent port 30975 closed
+[PASS] Router port 27099 closed
+[PASS] Agent port 27689 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
+
+===== Health Probes Failure Verification =====
+[PASS] Health probes retry and fail as expected
+[PASS] Health probe scripts restored to success
+
+===== Tests after start =====
 [PASS] Service container is running
-[PASS] Router port 22720 listening
-[PASS] Agent host port 30975 listening
-[PASS] Agent port 30975 bound to localhost
+[PASS] Router port 27099 listening
+[PASS] Agent host port 27689 listening
+[PASS] Agent port 27689 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -240,8 +246,8 @@ Run `help` to see all available Ploinky commands and their usage.
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 22720 listening
-[PASS] Agent host port 30975 listening
+[PASS] Router port 27099 listening
+[PASS] Agent host port 27689 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME

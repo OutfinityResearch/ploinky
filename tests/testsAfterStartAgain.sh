@@ -8,10 +8,14 @@ source "$TESTS_DIR/test-functions/health_probes_negative.sh"
 load_state
 require_var "TEST_HEALTH_AGENT_CONT_NAME"
 require_var "TEST_HEALTH_AGENT_NAME"
+cd "$TEST_RUN_DIR"
 
-#stage_header "Health Probes Failure Verification"
-#test_check "Health probes retry and fail as expected" health_probes_wait_for_failure_logs
+stage_header "Health Probes Failure Verification"
+test_check "Health probes retry and fail as expected" health_probes_wait_for_failure_logs
+test_info "Switching probes back to success"
+test_check "Health probe scripts restored to success" health_probes_force_success
 
+stage_header "Tests after start"
 # Reuse the primary start verification suite.
 bash "$TESTS_DIR/testsAfterStart.sh"
 rerun_exit=$?

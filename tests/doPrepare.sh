@@ -89,8 +89,20 @@ cat >"${health_agent_root}/manifest.json" <<'EOF'
   "container": "node:20-bullseye",
   "agent": "node -e \"setInterval(()=>{}, 1_000_000)\"",
   "health": {
-    "liveness": { "script": "liveness_probe.sh" },
-    "readiness": { "script": "readiness_probe.sh" }
+    "liveness": {
+      "script": "liveness_probe.sh",
+      "interval": 0.2,
+      "timeout": 1,
+      "failureThreshold": 1,
+      "successThreshold": 1
+    },
+    "readiness": {
+      "script": "readiness_probe.sh",
+      "interval": 0.2,
+      "timeout": 1,
+      "failureThreshold": 1,
+      "successThreshold": 1
+    }
   }
 }
 EOF
