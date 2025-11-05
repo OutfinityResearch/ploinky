@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 26392 listening
-[PASS] Agent host port 32523 listening
-[PASS] Agent port 32523 bound to localhost
+[PASS] Router port 22720 listening
+[PASS] Agent host port 30975 listening
+[PASS] Agent port 30975 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -109,22 +109,29 @@
 [PASS] logs last prints five lines
 
 ===== LLM CLI Suggestions =====
-[PASS] Invalid CLI input yields LLM suggestion and system command output
+[FAIL] Invalid CLI input yields LLM suggestion and system command output
+        Error: LLM suggestion output is empty.
+/home/mircea/Desktop/ploinky/tests/test-functions/llm_cli_suggestions.sh: line 32: printf: --: invalid option
+printf: usage: printf [-v var] format [arguments]
+Asking the LLM for guidance...
+LLM call failed: API key invalid.
+Run `help` to see all available Ploinky commands and their usage.
+[FAIL] testsAfterStart.sh reported 1 failure(s).
 
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 26392 closed
-[PASS] Agent port 32523 closed
+[PASS] Router port 22720 closed
+[PASS] Agent port 30975 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
 [PASS] Service container is running
-[PASS] Router port 26392 listening
-[PASS] Agent host port 32523 listening
-[PASS] Agent port 32523 bound to localhost
+[PASS] Router port 22720 listening
+[PASS] Agent host port 30975 listening
+[PASS] Agent port 30975 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -222,23 +229,19 @@
 [PASS] logs last prints five lines
 
 ===== LLM CLI Suggestions =====
-[PASS] Invalid CLI input yields LLM suggestion and system command output
-
-===== Tests after Start Again =====
-[PASS] Persistence marker survived restart
-[PASS] Agent data file still present after restart
-[PASS] Agent data file retains initialization signature
-[PASS] Dynamic APP_NAME update without restart
-[PASS] Dynamic WEBTTY_SHELL update without restart
-[PASS] Dynamic SSO_CLIENT_SECRET update without restart
-
-===== Manifest Environment =====
-[PASS] Variable MY_TEST_VAR from manifest is present after start again
+[FAIL] Invalid CLI input yields LLM suggestion and system command output
+        Error: LLM suggestion output is empty.
+/home/mircea/Desktop/ploinky/tests/test-functions/llm_cli_suggestions.sh: line 32: printf: --: invalid option
+printf: usage: printf [-v var] format [arguments]
+Asking the LLM for guidance...
+LLM call failed: API key invalid.
+Run `help` to see all available Ploinky commands and their usage.
+[FAIL] testsAfterStartAgain.sh reported 1 failure(s).
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 26392 listening
-[PASS] Agent host port 32523 listening
+[PASS] Router port 22720 listening
+[PASS] Agent host port 30975 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -264,4 +267,4 @@
 [PASS] Node unit tests
 
 ===== TEST SUMMARY =====
-[PASS] All tests passed!
+[FAIL] Suite finished with 2 failure(s).

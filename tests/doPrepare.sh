@@ -87,7 +87,11 @@ write_state_var "TEST_HEALTH_AGENT_REPO_PATH" "$health_agent_root"
 cat >"${health_agent_root}/manifest.json" <<'EOF'
 {
   "container": "node:20-bullseye",
-  "agent": "node -e \"setInterval(()=>{}, 1_000_000)\""
+  "agent": "node -e \"setInterval(()=>{}, 1_000_000)\"",
+  "health": {
+    "liveness": { "script": "liveness_probe.sh" },
+    "readiness": { "script": "readiness_probe.sh" }
+  }
 }
 EOF
 

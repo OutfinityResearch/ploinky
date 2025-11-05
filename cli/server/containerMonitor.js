@@ -1,10 +1,16 @@
 import fs from 'fs';
 import path from 'path';
+import { Worker } from 'worker_threads';
+import { fileURLToPath } from 'url';
 
 import * as workspaceSvc from '../services/workspace.js';
 import { REPOS_DIR } from '../services/config.js';
 import { ensureAgentService } from '../services/docker/index.js';
 import { isContainerRunning } from '../services/docker/common.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROBE_WORKER_URL = new URL('./probeWorker.js', import.meta.url);
 
 function noopLog() {}
 
@@ -49,8 +55,130 @@ function createContainerTarget(info, monitor) {
         lastStartTime: null,
         lastSeenRunningAt: null,
         circuitBreakerTripped: false,
-        lastError: null
+        lastError: null,
+        probeState: 'pending',
+        probeWorker: null
     };
+}
+
+function stopProbeWorker(target) {
+    if (!target) return;
+    if (target.probeWorker) {
+        const worker = target.probeWorker;
+        try {
+            worker.postMessage({ type: 'terminate' });
+        } catch (_) {}
+        try {
+            const termination = worker.terminate();
+            if (termination && typeof termination.catch === 'function') {
+                termination.catch(() => {});
+            }
+        } catch (_) {}
+    }
+    target.probeWorker = null;
+    if (target.probeState !== 'success') {
+        target.probeState = 'pending';
+    }
+}
+
+function handleProbeFailure(monitor, target, message) {
+    if (!monitor || !target) return;
+    target.probeState = 'failed';
+    target.lastError = message;
+    target.probeFailures = (target.probeFailures || 0) + 1;
+    logEvent(monitor, 'error', 'container_probe_failed', {
+        container: target.containerName,
+        agent: target.agentName,
+        repo: target.repoName,
+        error: message,
+        failures: target.probeFailures
+    });
+}
+
+function startProbeWorker(monitor, target) {
+    if (!monitor || !target) return;
+    if (target.circuitBreakerTripped) return;
+    if (target.probeWorker || target.probeState === 'success') return;
+
+    let manifest;
+    try {
+        const manifestContent = fs.readFileSync(target.manifestPath, 'utf8');
+        manifest = JSON.parse(manifestContent || '{}');
+    } catch (error) {
+        handleProbeFailure(monitor, target, error?.message || error);
+        return;
+    }
+
+    if (!manifest || typeof manifest !== 'object' || !manifest.health) {
+        target.probeState = 'success';
+        return;
+    }
+
+    try {
+        target.probeWorker = new Worker(PROBE_WORKER_URL, {
+            workerData: {
+                agentName: target.agentName,
+                containerName: target.containerName,
+                manifest: { health: manifest.health }
+            },
+            stdout: true,
+            stderr: true
+        });
+    } catch (error) {
+        handleProbeFailure(monitor, target, error?.message || error);
+        return;
+    }
+
+    target.probeState = 'running';
+    logEvent(monitor, 'info', 'container_probe_started', {
+        container: target.containerName,
+        agent: target.agentName,
+        repo: target.repoName
+    });
+
+    const worker = target.probeWorker;
+
+    worker.on('message', (msg) => {
+        if (!msg || typeof msg !== 'object') return;
+        if (msg.type === 'log' && msg.message) {
+            const level = msg.level || 'info';
+            if (level === 'warn') {
+                console.warn(msg.message);
+            } else if (level === 'error') {
+                console.error(msg.message);
+            } else {
+                console.log(msg.message);
+            }
+            return;
+        }
+        if (msg.status === 'success') {
+            target.probeState = 'success';
+            logEvent(monitor, 'info', 'container_probe_succeeded', {
+                container: target.containerName,
+                agent: target.agentName,
+                repo: target.repoName
+            });
+            stopProbeWorker(target);
+        } else if (msg.status === 'error') {
+            stopProbeWorker(target);
+            const message = msg.error || 'Probe worker reported failure.';
+            handleProbeFailure(monitor, target, message);
+        }
+    });
+
+    worker.on('error', (error) => {
+        stopProbeWorker(target);
+        handleProbeFailure(monitor, target, error?.message || error);
+    });
+
+    worker.on('exit', (code) => {
+        if (target.probeWorker === worker) {
+            target.probeWorker = null;
+        }
+        if (code !== 0 && target.probeState === 'running') {
+            handleProbeFailure(monitor, target, `Probe worker exited with code ${code}`);
+        }
+    });
 }
 
 function syncManagedContainers(monitor) {
@@ -114,6 +242,7 @@ function syncManagedContainers(monitor) {
             if (target?.pendingRestartTimer) {
                 clearTimeout(target.pendingRestartTimer);
             }
+            stopProbeWorker(target);
             monitorRef.targets.delete(containerName);
             logEvent(monitorRef, 'info', 'container_watch_removed', { container: containerName });
         }
@@ -215,6 +344,9 @@ function performContainerRestart(monitor, target, reason) {
             monitor.targets.set(target.containerName, target);
         }
 
+        stopProbeWorker(target);
+        target.probeState = 'pending';
+
         const now = Date.now();
         target.lastStartTime = now;
         target.lastSeenRunningAt = now;
@@ -281,9 +413,15 @@ function monitorTick(monitor) {
                     repo: target.repoName
                 });
             }
+            startProbeWorker(monitor, target);
             continue;
         }
 
+        if (target.probeState === 'running') {
+            continue;
+        }
+
+        stopProbeWorker(target);
         scheduleContainerRestart(monitor, target, 'not_running');
     }
 }
@@ -329,6 +467,7 @@ export function stopContainerMonitor(monitor) {
             target.pendingRestartTimer = null;
         }
         target.isRestarting = false;
+        stopProbeWorker(target);
     }
     logEvent(monitor, 'info', 'container_monitor_stopped', {
         tracked: monitor.targets.size

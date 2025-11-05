@@ -557,6 +557,27 @@ app.get('/mcp/status', (req, res) => {
     
     res.status(isHealthy ? 200 : 503).json(health);
 });</code></pre>
+                        <h4>Manifest-driven probes</h4>
+                        <p>Ploinky now reads an optional <code>health</code> object from each agent manifest so containers can define their own liveness/readiness probes without a cluster:</p>
+<pre><code>{
+  "container": "node:20",
+  "agent": "node server.js",
+  "health": {
+    "liveness": {
+      "script": "liveness_probe.sh",
+      "interval": 2,
+      "timeout": 5,
+      "failureThreshold": 5,
+      "successThreshold": 1
+    },
+    "readiness": {
+      "script": "readiness_probe.sh",
+      "timeout": 5,
+      "failureThreshold": 5
+    }
+  }
+}</code></pre>
+                        <p>Scripts must live in the agent root (mounted as <code>/code</code>) and simply return exit code 0 for success. <code>interval</code> controls how often the probe runs (seconds), <code>timeout</code> caps each execution, and the success/failure thresholds set how many consecutive results are required before the CLI reports a pass or restart-worthy failure. Missing probes are treated as healthy by default; repeated liveness failures trigger automatic container restarts that follow a CrashLoopBackOff curve (base 10s delay, doubling up to five minutes, reset after 10 minutes of stable uptime or any manual stop/restart/refresh), while readiness failures currently emit a warning (<code>Container failed to become ready</code>) without killing the process.</p>
                     </div>
 
                     <div class="doc-section">

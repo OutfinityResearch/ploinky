@@ -25,7 +25,7 @@ import {
     waitForContainerRunning
 } from './common.js';
 
-import { runHealthProbes } from './healthProbes.js';
+import { clearLivenessState } from './healthProbes.js';
 
 import { loadAgents } from '../workspace.js';
 
@@ -181,7 +181,10 @@ function stopConfiguredAgents({ fast = false } = {}) {
     }
 
     const stopped = allCandidates.filter((name) => !isContainerRunning(name));
-    stopped.forEach((name) => console.log(`[stop] Stopped ${name}`));
+    stopped.forEach((name) => {
+        console.log(`[stop] Stopped ${name}`);
+        clearLivenessState(name);
+    });
     return stopped;
 }
 
@@ -363,6 +366,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const containerName = getAgentContainerName(agentName, repoName);
     try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
     try { execSync(`${containerRuntime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+    clearLivenessState(containerName);
 
     const runtime = containerRuntime;
     const image = manifest.container || manifest.image || 'node:18-alpine';
@@ -455,7 +459,6 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     saveAgentsMap(agents);
     try {
         runPostinstallHook(agentName, containerName, manifest, cwd);
-        runHealthProbes(agentName, containerName);
     } catch (error) {
         try { stopAndRemove(containerName); } catch (_) { }
         throw error;
@@ -516,6 +519,7 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
             execSync(`${containerRuntime} rm -f ${chunk.join(' ')}`, { stdio: 'ignore' });
             chunk.forEach((name) => {
                 console.log(`${prefix} ✓ removed ${name}`);
+                clearLivenessState(name);
                 removed.push(name);
             });
         } catch (e) {
@@ -525,6 +529,7 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
                     console.log(`${prefix} Removing container: ${name}`);
                     execSync(`${containerRuntime} rm -f ${name}`, { stdio: 'ignore' });
                     console.log(`${prefix} ✓ removed ${name}`);
+                    clearLivenessState(name);
                     removed.push(name);
                 } catch (err) {
                     console.log(`${prefix} rm failed for ${name}: ${err?.message || err}`);

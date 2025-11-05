@@ -126,6 +126,14 @@ Ploinky is a lightweight multi-agent runtime that turns ordinary console program
 3. Stop containers without removing them via `stop`; use `shutdown` to stop and remove only the registered agent containers in `.ploinky/agents`.
 4. Use `destroy` or `clean` to remove every workspace container tracked by Ploinky (after killing the router); prefer `destroy` when you want a full reset.
 5. For one-off reinstall of an agent’s dependencies, rely on `refresh agent <name>` (see Story 6).
+6. Agents can now define `health` probes inside their manifest so the CLI can automatically re-check liveness/readiness:
+   ```json
+   "health": {
+       "liveness": { "script": "liveness_probe.sh", "interval": 2, "timeout": 5, "failureThreshold": 5, "successThreshold": 1 },
+       "readiness": { "script": "readiness_probe.sh" }
+   }
+   ```
+   Scripts live in the agent root (mounted at `/code`), run via `docker exec`, and rely on exit codes for pass/fail. Missing probes default to “healthy”; repeated liveness failures trigger container restarts with a CrashLoopBackOff (base delay 10s, exponential up to 5 minutes, reset after 10 minutes of stable uptime or any manual stop/restart/refresh), while readiness failures only emit `Container failed to become ready` warnings for now.
 
 ### Story 15 – Inspect Router and WebTTY Logs
 **User story:** As a troubleshooter, I want tail access to router-side logs so that I can diagnose routing or UI issues.

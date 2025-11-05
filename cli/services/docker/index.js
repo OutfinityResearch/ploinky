@@ -31,3 +31,5 @@ export {
     parseManifestPorts,
     waitForContainerRunning
 } from './common.js';
+
+export { clearLivenessState } from './healthProbes.js';

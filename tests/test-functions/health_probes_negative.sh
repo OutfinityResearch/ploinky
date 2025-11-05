@@ -8,14 +8,16 @@ health_probes_force_failure() {
     return 1
   fi
 
-  cat >"${probe_dir}/liveness_probe.sh" <<'EOF'
+cat >"${probe_dir}/liveness_probe.sh" <<'EOF'
 #!/bin/sh
 echo not live
+exit 1
 EOF
 
-  cat >"${probe_dir}/readiness_probe.sh" <<'EOF'
+cat >"${probe_dir}/readiness_probe.sh" <<'EOF'
 #!/bin/sh
 echo not ready
+exit 1
 EOF
 
   chmod +x "${probe_dir}/liveness_probe.sh" "${probe_dir}/readiness_probe.sh"
