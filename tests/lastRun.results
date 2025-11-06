@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29210 listening
-[PASS] Agent host port 31189 listening
-[PASS] Agent port 31189 bound to localhost
+[PASS] Router port 28230 listening
+[PASS] Agent host port 25035 listening
+[PASS] Agent port 25035 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -85,6 +85,7 @@
 
 ===== Manifest Environment =====
 [PASS] Variable MY_TEST_VAR from manifest is present after start
+[PASS] Custom volume mount exposes marker
 
 ===== Install Command Verification =====
 [PASS] Install command creates marker file (verified via shell)
@@ -130,8 +131,8 @@ Run `help` to see all available Ploinky commands and their usage.
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 29210 closed
-[PASS] Agent port 31189 closed
+[PASS] Router port 28230 closed
+[PASS] Agent port 25035 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
@@ -147,9 +148,9 @@ Run `help` to see all available Ploinky commands and their usage.
 
 ===== Tests after start =====
 [PASS] Service container is running
-[PASS] Router port 29210 listening
-[PASS] Agent host port 31189 listening
-[PASS] Agent port 31189 bound to localhost
+[PASS] Router port 28230 listening
+[PASS] Agent host port 25035 listening
+[PASS] Agent port 25035 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -223,6 +224,7 @@ Run `help` to see all available Ploinky commands and their usage.
 
 ===== Manifest Environment =====
 [PASS] Variable MY_TEST_VAR from manifest is present after start
+[PASS] Custom volume mount exposes marker
 
 ===== Install Command Verification =====
 [PASS] Install command creates marker file (verified via shell)
@@ -267,8 +269,8 @@ Run `help` to see all available Ploinky commands and their usage.
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29210 listening
-[PASS] Agent host port 31189 listening
+[PASS] Router port 28230 listening
+[PASS] Agent host port 25035 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME

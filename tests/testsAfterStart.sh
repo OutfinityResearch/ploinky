@@ -27,6 +27,7 @@ source "$TESTS_DIR/test-functions/disable_repo_test.sh"
 source "$TESTS_DIR/test-functions/llm_cli_suggestions.sh"
 source "$TESTS_DIR/test-functions/enable_alias_tests.sh"
 source "$TESTS_DIR/test-functions/webmeet_tests.sh"
+source "$TESTS_DIR/test-functions/volume_mount_tests.sh"
 source "$TESTS_DIR/test-functions/dashboard_tests.sh"
 
 load_state
@@ -131,6 +132,7 @@ test_check "Router serves configured static asset" fast_assert_router_static_ass
 
 stage_header "Manifest Environment"
 test_check "Variable MY_TEST_VAR from manifest is present after start" assert_container_env "$TEST_AGENT_CONT_NAME" "MY_TEST_VAR" "hello-manifest"
+test_check "Custom volume mount exposes marker" fast_assert_volume_mount
 
 stage_header "Install Command Verification"
 test_check "Install command creates marker file (verified via shell)" fast_check_install_marker_via_shell

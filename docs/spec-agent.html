@@ -149,6 +149,11 @@
                                 <td>No</td>
                                 <td>Repositories to auto-add when this agent is enabled</td>
                             </tr>
+                            <tr>
+                                <td><code>volumes</code></td>
+                                <td>No</td>
+                                <td>Map of additional host paths to mount inside the container. Keys are host paths (absolute or relative to the workspace root), values are container destinations. Ploinky creates missing host directories and adds <code>-v hostPath:containerPath</code> when launching the container.</td>
+                            </tr>
                         </table>
 
                         <h4 style="margin-top: 2rem;">The <code>env</code> Property</h4>
