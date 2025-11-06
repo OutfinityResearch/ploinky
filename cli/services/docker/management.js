@@ -363,7 +363,7 @@ function runPostinstallHook(agentName, containerName, manifest, cwd) {
 
 function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const repoName = path.basename(path.dirname(agentPath));
-    const containerName = getAgentContainerName(agentName, repoName);
+    const containerName = options.containerName || getAgentContainerName(agentName, repoName);
     try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
     try { execSync(`${containerRuntime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
     clearLivenessState(containerName);
@@ -371,7 +371,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const runtime = containerRuntime;
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
-    const cwd = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)));
+    const cwd = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), options.alias);
     const agentLibPath = path.resolve(__dirname, '../../../Agent');
     const envHash = computeEnvHash(manifest);
     const projectRoot = process.env.PLOINKY_ROOT;
@@ -390,7 +390,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     }
 
     if (manifest.volumes && typeof manifest.volumes === 'object') {
-        const workspaceRoot = getConfiguredProjectPath('.', '');
+        const workspaceRoot = getConfiguredProjectPath('.', '', undefined);
         for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
             const resolvedHostPath = path.isAbsolute(hostPath)
                 ? hostPath
@@ -456,6 +456,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             ports: portMappings
         }
     };
+    if (existingRecord.alias) {
+        agents[containerName].alias = existingRecord.alias;
+    }
     saveAgentsMap(agents);
     try {
         runPostinstallHook(agentName, containerName, manifest, cwd);
@@ -635,9 +638,25 @@ function collectLiveAgentContainers() {
 }
 
 
-function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
+function ensureAgentService(agentName, manifest, agentPath, options = {}) {
+    let preferredHostPort;
+    let containerOverride;
+    let aliasOverride;
+    if (typeof options === 'number') {
+        preferredHostPort = options;
+    } else if (options && typeof options === 'object') {
+        preferredHostPort = options.preferredHostPort;
+        containerOverride = options.containerName;
+        aliasOverride = options.alias;
+    }
+
     const repoName = path.basename(path.dirname(agentPath));
-    const containerName = getAgentContainerName(agentName, repoName);
+    const containerName = containerOverride || getAgentContainerName(agentName, repoName);
+    const snapshot = loadAgentsMap();
+    const existingRecord = snapshot[containerName] || {};
+    if (!aliasOverride && existingRecord.alias) {
+        aliasOverride = existingRecord.alias;
+    }
     const image = manifest.container || manifest.image || 'node:18-alpine';
 
     if (containerExists(containerName)) {
@@ -672,12 +691,14 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
         allPortMappings = [{ containerPort: 7000, hostPort }];
     }
 
-    startAgentContainer(agentName, manifest, agentPath, { publish: additionalPorts });
+    startAgentContainer(agentName, manifest, agentPath, { publish: additionalPorts, containerName, alias: aliasOverride });
 
     const agents = loadAgentsMap();
     const declaredEnvNames3 = [...getManifestEnvNames(manifest), ...getExposedNames(manifest)];
-    const projPath = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)));
-    const existingRecord = agents[containerName] || {};
+    let projPath = existingRecord.projectPath;
+    if (!projPath) {
+        projPath = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), aliasOverride);
+    }
     agents[containerName] = {
         agentName,
         repoName,
@@ -697,6 +718,9 @@ function ensureAgentService(agentName, manifest, agentPath, preferredHostPort) {
             ports: allPortMappings
         }
     };
+    if (aliasOverride) {
+        agents[containerName].alias = aliasOverride;
+    }
     saveAgentsMap(agents);
 
     syncAgentMcpConfig(containerName, agentPath);

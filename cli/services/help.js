@@ -207,14 +207,15 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     examples: [ 'enable repo cloud', 'enable repo basic' ]
                 },
                 'agent': {
-                    syntax: 'enable agent <name|repo/name> [global|devel [repoName]]',
-                    description: 'Register agent in .ploinky/agents (for start/stop/shutdown). Modes: isolated (omitted) creates a subfolder <agentName>; global uses current project; devel uses a repo under .ploinky/repos.',
+                    syntax: 'enable agent <name|repo/name> [global|devel [repoName]] [as <alias>]',
+                    description: 'Register agent in .ploinky/agents (for start/stop/shutdown). Modes: isolated (omitted) creates a subfolder <agentName>; global uses current project; devel uses a repo under .ploinky/repos. Use "as <alias>" to create an additional instance with its own container name.',
                     examples: [
                         'enable agent demo',
                         'enable agent demo global',
                         'enable agent demo devel simulator',
+                        'enable agent demo as demo2'
                     ],
-                    notes: 'Note: enable agent is optional. You can `enable repo` then `start <agent>`; it will use isolated mode (creates <agentName> subfolder).'
+                    notes: 'Note: enable agent is optional. You can `enable repo` then `start <agent>`; it will use isolated mode (creates <agentName> subfolder). Aliases must be unique; commands like refresh/disable should target the alias when multiple containers exist.'
                 }
             }
         },

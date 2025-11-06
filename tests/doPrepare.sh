@@ -24,6 +24,10 @@ TEST_AGENT_DEP_GLOBAL_NAME="testAgentDepGlobal"
 write_state_var "TEST_AGENT_DEP_GLOBAL_NAME" "$TEST_AGENT_DEP_GLOBAL_NAME"
 TEST_AGENT_DEP_DEVEL_NAME="testAgentDepDevel"
 write_state_var "TEST_AGENT_DEP_DEVEL_NAME" "$TEST_AGENT_DEP_DEVEL_NAME"
+ENABLE_ALIAS_AGENT_NAME="enableAliasAgent"
+ENABLE_ALIAS_AGENT_ALIAS="aliasAgent"
+write_state_var "TEST_ENABLE_ALIAS_AGENT_NAME" "$ENABLE_ALIAS_AGENT_NAME"
+write_state_var "TEST_ENABLE_ALIAS_AGENT_ALIAS" "$ENABLE_ALIAS_AGENT_ALIAS"
 
 if [[ -z "${TEST_RUN_DIR:-}" ]]; then
   TEST_RUN_DIR=$(mktemp -d -t ploinky-fast-XXXXXX)
@@ -140,6 +144,16 @@ cat >"${dep_devel_root}/manifest.json" <<'EOF'
 }
 EOF
 
+# Agent used to verify manifest-enable alias support
+enable_alias_agent_root="${repo_root}/${ENABLE_ALIAS_AGENT_NAME}"
+mkdir -p "$enable_alias_agent_root"
+
+cat >"${enable_alias_agent_root}/manifest.json" <<'EOF'
+{
+  "container": "node:20-bullseye"
+}
+EOF
+
 test_info "Enabling repository ${TEST_REPO_NAME}."
 ploinky enable repo "$TEST_REPO_NAME"
 
@@ -154,6 +168,11 @@ ploinky enable agent "$TEST_AGENT_TO_DISABLE_QUALIFIED"
 
 test_info "Enabling agent ${TEST_REPO_NAME}/${HEALTH_AGENT_NAME}."
 ploinky enable agent "${TEST_REPO_NAME}/${HEALTH_AGENT_NAME}"
+
+test_info "Enabling alias test agent ${ENABLE_ALIAS_AGENT_NAME} as ${ENABLE_ALIAS_AGENT_ALIAS}."
+ploinky enable agent "${ENABLE_ALIAS_AGENT_NAME}" as "$ENABLE_ALIAS_AGENT_ALIAS"
+alias_agent_container=$(compute_container_name "$ENABLE_ALIAS_AGENT_ALIAS" "$TEST_REPO_NAME")
+write_state_var "TEST_ENABLE_ALIAS_AGENT_CONTAINER" "$alias_agent_container"
 
 # Create a global agent for testing global mode
 test_info "Creating global-agent."
@@ -177,6 +196,20 @@ EOF
 
 test_info "Enabling agent ${GLOBAL_AGENT_NAME} in global mode."
 ploinky enable agent "$GLOBAL_AGENT_NAME" global
+
+# Agent whose alias will be enabled via manifest directives
+GLOBAL_ALIAS_AGENT_NAME="globalAgentForAlias"
+GLOBAL_ALIAS_AGENT_ALIAS="globalAgentAlias"
+write_state_var "TEST_GLOBAL_ALIAS_AGENT_NAME" "$GLOBAL_ALIAS_AGENT_NAME"
+write_state_var "TEST_GLOBAL_AGENT_ALIAS" "$GLOBAL_ALIAS_AGENT_ALIAS"
+global_alias_agent_root="${repo_root}/${GLOBAL_ALIAS_AGENT_NAME}"
+mkdir -p "$global_alias_agent_root"
+
+cat >"${global_alias_agent_root}/manifest.json" <<'EOF'
+{
+  "container": "node:20-bullseye"
+}
+EOF
 
 # Create a devel agent for testing devel mode
 test_info "Creating devel-agent."

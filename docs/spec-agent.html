@@ -142,7 +142,7 @@
                             <tr>
                                 <td><code>enable</code></td>
                                 <td>No</td>
-                                <td>Agents to auto-enable when this agent is enabled. Can also specify <code>global</code> or <code>devel</code> scope. See details in the Advanced Features section.</td>
+                                <td>Agents to auto-enable when this agent is enabled. Supports <code>global</code>/<code>devel</code> scopes and optional <code>as &lt;alias&gt;</code> to register duplicate instances under unique container names. See details in the Advanced Features section.</td>
                             </tr>
                             <tr>
                                 <td><code>repos</code></td>
@@ -587,12 +587,14 @@ app.get('/mcp/status', (req, res) => {
                         <p>Agents can automatically configure their environment by specifying repositories to add and other agents to enable.</p>
 
                         <h4>The <code>enable</code> property</h4>
-                        <p>The <code>enable</code> property is an array of strings that specifies which other agents should be automatically enabled when this agent is enabled. It supports different scopes for finding the agent:</p>
+                        <p>The <code>enable</code> property is an array of strings that specifies which other agents should be automatically enabled when this agent is enabled. It supports different scopes for finding the agent and optional aliases to keep containers distinct:</p>
                         <ul>
                             <li><code>"agentName"</code>: Enables an agent from the same repository. This is the default behavior.</li>
                             <li><code>"agentName global"</code>: Enables an agent from the global repository.</li>
                             <li><code>"agentName devel repoName"</code>: Enables an agent from the specified repository (<code>repoName</code>) in development mode.</li>
+                            <li><code>"agentName ... as alias"</code>: Adds an alias so the resulting container is recorded under <code>alias</code> (required when the same agent is enabled more than once).</li>
                         </ul>
+                        <p>Aliases behave exactly like CLI-provided aliases: they must be unique per workspace, become the canonical container names for future commands (<code>refresh agent</code>, <code>disable agent</code>, etc.), and trigger an <code>alias already exists</code> error if reused.</p>
 
                         <pre><code># manifest.json
 {
@@ -601,7 +603,8 @@ app.get('/mcp/status', (req, res) => {
   "enable": [
     "database",           // Enable 'database' from the current repo
     "cache global",       // Enable 'cache' from the global repo
-    "logger devel utils"  // Enable 'logger' from the 'utils' repo in devel mode
+    "logger devel utils", // Enable 'logger' from the 'utils' repo in devel mode
+    "explorer as explorer2" // Enable an 'explorer' instance with alias explorer2
   ],
   "repos": {
     "utils": "https://github.com/org/utils.git"
@@ -612,7 +615,8 @@ app.get('/mcp/status', (req, res) => {
 1. Adds the 'utils' repository.
 2. Enables the 'database' agent from the current agent's repository.
 3. Enables the 'cache' agent from the global repository.
-4. Enables the 'logger' agent from the 'utils' repository in development mode.</code></pre>
+4. Enables the 'logger' agent from the 'utils' repository in development mode.
+5. Enables another 'explorer' container registered under the alias <code>explorer2</code> (use the alias for future CLI operations).</code></pre>
 
                         <h3>Custom Supervisor</h3>
                         <p>Override the default supervisor with custom logic:</p>

@@ -85,6 +85,10 @@ function resolveAgentRoute(rawName, routes) {
         if (name && routes[name]) {
             return { agentName: name, route: routes[name] };
         }
+        const match = Object.entries(routes || {}).find(([, route]) => route && route.agent === name);
+        if (match) {
+            return { agentName: match[0], route: match[1] };
+        }
     }
     return { agentName: rawName, route: null };
 }

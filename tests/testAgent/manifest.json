@@ -5,7 +5,8 @@
   "cli": "/code/testSSOParams.sh",
   "enable": [
     "testAgentDepGlobal global",
-    "testAgentDepDevel devel testRepo"
+    "testAgentDepDevel devel testRepo",
+    "globalAgentForAlias global as globalAgentAlias"
   ],
   "env": {
     "FAST_TEST_MARKER": "fast-suite",

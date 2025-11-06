@@ -15,6 +15,26 @@ import { REPOS_DIR } from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const RESERVED_AGENT_KEYS = new Set(['_config']);
+const ALIAS_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+
+function normalizeAlias(aliasInput) {
+    if (aliasInput === undefined || aliasInput === null) {
+        return '';
+    }
+    if (typeof aliasInput === 'string' && !aliasInput.trim()) {
+        return '';
+    }
+    const alias = String(aliasInput).trim();
+    if (!alias) return '';
+    if (!ALIAS_PATTERN.test(alias)) {
+        throw new Error("Alias must start with a letter or number and may contain only letters, numbers, '.', '_' or '-'.");
+    }
+    if (RESERVED_AGENT_KEYS.has(alias)) {
+        throw new Error(`Alias '${alias}' is reserved. Choose a different alias.`);
+    }
+    return alias;
+}
 
 function normalizeEnableArgs(agentName, mode, repoNameParam) {
     if (typeof agentName !== 'string') {
@@ -80,12 +100,24 @@ function normalizeEnableArgs(agentName, mode, repoNameParam) {
     };
 }
 
-export function enableAgent(agentName, mode, repoNameParam) {
+export function enableAgent(agentName, mode, repoNameParam, aliasParam) {
     const normalized = normalizeEnableArgs(agentName, mode, repoNameParam);
     const { manifestPath, repo: repoName, shortAgentName } = findAgent(normalized.agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     const agentPath = path.dirname(manifestPath);
-    const containerName = getAgentContainerName(shortAgentName, repoName);
+    const alias = normalizeAlias(aliasParam);
+    const map = loadAgents();
+    if (alias) {
+        const aliasExists = Object.entries(map || {}).some(([key, value]) => {
+            if (key === alias) return true;
+            return value && value.type === 'agent' && value.alias === alias;
+        });
+        if (aliasExists) {
+            throw new Error('alias already exists');
+        }
+    }
+    const containerBaseName = alias || shortAgentName;
+    const containerName = getAgentContainerName(containerBaseName, repoName);
 
     const preinstallEntry = manifest?.preinstall;
     const preinstallCommands = Array.isArray(preinstallEntry)
@@ -109,9 +141,8 @@ export function enableAgent(agentName, mode, repoNameParam) {
 
     if (!normalizedMode || normalizedMode === 'default') {
         try {
-            const current = loadAgents();
-            const existing = Object.values(current || {}).find(
-                r => r && r.type === 'agent' && r.agentName === shortAgentName && r.repoName === repoName
+            const existing = Object.values(map || {}).find(
+                r => r && r.type === 'agent' && r.agentName === shortAgentName && r.repoName === repoName && !r.alias
             );
             if (existing && (!existing.runMode || existing.runMode === 'isolated') && existing.projectPath) {
                 projectPath = existing.projectPath;
@@ -166,16 +197,25 @@ export function enableAgent(agentName, mode, repoNameParam) {
             ports
         }
     };
-    const map = loadAgents();
+    if (alias) {
+        record.alias = alias;
+    }
+
     for (const key of Object.keys(map)) {
+        if (RESERVED_AGENT_KEYS.has(key)) continue;
+        if (!map[key] || typeof map[key] !== 'object') continue;
+        if (alias && key === containerName) continue;
         const r = map[key];
-        if (r && r.agentName === shortAgentName && key !== containerName) {
-            try { delete map[key]; } catch (_) {}
-        }
+        if (!r || r.type !== 'agent') continue;
+        const sameAgent = r.agentName === shortAgentName && r.repoName === repoName;
+        if (!sameAgent) continue;
+        if (alias || r.alias) continue;
+        if (key === containerName) continue;
+        try { delete map[key]; } catch (_) {}
     }
     map[containerName] = record;
     saveAgents(map);
-    return { containerName, repoName, shortAgentName };
+    return { containerName, repoName, shortAgentName, alias: alias || undefined };
 }
 
 export function disableAgent(agentRef) {
@@ -198,6 +238,7 @@ export function disableAgent(agentRef) {
 
     const map = loadAgents();
     const config = (map && typeof map._config === 'object') ? map._config : null;
+    const directRecord = (map && map[input] && map[input].type === 'agent') ? map[input] : null;
 
     const clearStaticConfig = ({ repoName, shortName, containerName, rawInput }) => {
         if (!config || !config.static) return false;
@@ -232,15 +273,33 @@ export function disableAgent(agentRef) {
         .filter(([key, value]) => key !== '_config' && value && typeof value === 'object')
         .filter(([, value]) => value.type === 'agent');
 
-    const matches = entries.filter(([, value]) => {
-        const repoName = String(value.repoName || '').trim();
-        const agentName = String(value.agentName || '').trim();
-        if (!agentName) return false;
-        if (hasNamespace) {
-            return agentName === targetAgent && repoName === targetRepo;
-        }
-        return agentName === targetAgent;
-    });
+    const aliasEntry = (!directRecord)
+        ? entries.find(([, value]) => {
+            if (!value || !value.alias) return false;
+            if (value.alias === input) return true;
+            if (hasNamespace) {
+                return value.alias === targetAgent;
+            }
+            return false;
+        })
+        : null;
+
+    let matches;
+    if (directRecord) {
+        matches = [[input, directRecord]];
+    } else if (aliasEntry) {
+        matches = [[aliasEntry[0], aliasEntry[1]]];
+    } else {
+        matches = entries.filter(([, value]) => {
+            const repoName = String(value.repoName || '').trim();
+            const agentName = String(value.agentName || '').trim();
+            if (!agentName) return false;
+            if (hasNamespace) {
+                return agentName === targetAgent && repoName === targetRepo;
+            }
+            return agentName === targetAgent;
+        });
+    }
 
     if (!matches.length) {
         const staticCleared = clearStaticConfig({ repoName: targetRepo, shortName: targetAgent, rawInput: input, containerName: null });
@@ -257,7 +316,7 @@ export function disableAgent(agentRef) {
         };
     }
 
-    if (!hasNamespace && matches.length > 1) {
+    if (!hasNamespace && !directRecord && matches.length > 1) {
         return {
             status: 'ambiguous',
             requested: input,
@@ -319,4 +378,62 @@ export function disableAgent(agentRef) {
         shortAgentName: record.agentName,
         repoName: record.repoName
     };
+}
+
+export function resolveEnabledAgentRecord(agentRef) {
+    const input = typeof agentRef === 'string' ? agentRef.trim() : '';
+    if (!input) return null;
+
+    const map = loadAgents();
+    if (!map || typeof map !== 'object') return null;
+
+    const direct = map[input];
+    if (direct && direct.type === 'agent') {
+        return { containerName: input, record: direct };
+    }
+
+    const hasNamespace = /[:/]/.test(input);
+    let repoFilter = null;
+    let agentFilter = input;
+    if (hasNamespace) {
+        const parts = input.split(/[:/]/).filter(Boolean);
+        if (parts.length === 2) {
+            [repoFilter, agentFilter] = parts;
+        }
+    }
+
+    let aliasEntry = Object.entries(map || {})
+        .filter(([key]) => !RESERVED_AGENT_KEYS.has(key))
+        .find(([, value]) => value && value.type === 'agent' && value.alias === input);
+    if (!aliasEntry && hasNamespace) {
+        aliasEntry = Object.entries(map || {})
+            .filter(([key]) => !RESERVED_AGENT_KEYS.has(key))
+            .find(([, value]) => value && value.type === 'agent' && value.alias === agentFilter);
+    }
+    if (aliasEntry) {
+        return { containerName: aliasEntry[0], record: aliasEntry[1] };
+    }
+
+    const matches = Object.entries(map)
+        .filter(([key, value]) => !RESERVED_AGENT_KEYS.has(key) && value && typeof value === 'object')
+        .filter(([, value]) => value.type === 'agent')
+        .filter(([, value]) => {
+            if (!value.agentName) return false;
+            if (repoFilter && value.repoName !== repoFilter) return false;
+            return value.agentName === agentFilter;
+        });
+
+    if (!matches.length) {
+        return null;
+    }
+
+    if (matches.length > 1) {
+        const aliasList = matches.map(([containerName, value]) => value.alias || containerName);
+        const err = new Error(`Multiple containers found for agent '${agentRef}'. Use alias: ${aliasList.join(', ')}`);
+        err.code = 'AGENT_ALIAS_AMBIGUOUS';
+        throw err;
+    }
+
+    const [containerName, record] = matches[0];
+    return { containerName, record };
 }

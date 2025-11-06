@@ -79,10 +79,11 @@ function disableRepo(repoName) {
     console.log(`✓ Repo '${repoName}' disabled.`);
 }
 
-async function enableAgent(agentName, mode, repoNameParam) {
-    if (!agentName) throw new Error('Usage: enable agent <name|repo/name> [global|devel [repoName]]');
-    const { shortAgentName, repoName } = agentsSvc.enableAgent(agentName, mode, repoNameParam);
-    console.log(`✓ Agent '${shortAgentName}' from repo '${repoName}' enabled. Use 'start' to start all configured agents.`);
+async function enableAgent(agentName, mode, repoNameParam, alias) {
+    if (!agentName) throw new Error('Usage: enable agent <name|repo/name> [global|devel [repoName]] [as <alias>]');
+    const { shortAgentName, repoName, alias: resolvedAlias } = agentsSvc.enableAgent(agentName, mode, repoNameParam, alias);
+    const aliasNote = resolvedAlias ? ` as '${resolvedAlias}'` : '';
+    console.log(`✓ Agent '${shortAgentName}' from repo '${repoName}' enabled${aliasNote}. Use 'start' to start all configured agents.`);
 }
 
 function findAgentManifest(agentName) {

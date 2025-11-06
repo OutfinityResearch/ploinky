@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 27099 listening
-[PASS] Agent host port 27689 listening
-[PASS] Agent port 27689 bound to localhost
+[PASS] Router port 35613 listening
+[PASS] Agent host port 29064 listening
+[PASS] Agent port 29064 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -21,6 +21,9 @@
 
 ===== Health Probes Agent =====
 [PASS] Health probes agent container is running
+
+===== Alias-enabled Agent through manifest =====
+[PASS] Global alias agent uses workspace root
 
 ===== Watchdog restart services =====
 [PASS] Watchdog restarts router and agent container
@@ -121,13 +124,16 @@ Run `help` to see all available Ploinky commands and their usage.
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 27099 closed
-[PASS] Agent port 27689 closed
+[PASS] Router port 35613 closed
+[PASS] Agent port 29064 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
 
 ===== START AGAIN STAGE =====
+
+===== Devel Alias Agent Verification =====
+[PASS] Alias devel agent uses repo workspace
 
 ===== Health Probes Failure Verification =====
 [PASS] Health probes retry and fail as expected
@@ -135,9 +141,9 @@ Run `help` to see all available Ploinky commands and their usage.
 
 ===== Tests after start =====
 [PASS] Service container is running
-[PASS] Router port 27099 listening
-[PASS] Agent host port 27689 listening
-[PASS] Agent port 27689 bound to localhost
+[PASS] Router port 35613 listening
+[PASS] Agent host port 29064 listening
+[PASS] Agent port 29064 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -147,6 +153,9 @@ Run `help` to see all available Ploinky commands and their usage.
 
 ===== Health Probes Agent =====
 [PASS] Health probes agent container is running
+
+===== Alias-enabled Agent through manifest =====
+[PASS] Global alias agent uses workspace root
 
 ===== Watchdog restart services =====
 [PASS] Watchdog restarts router and agent container
@@ -246,8 +255,8 @@ Run `help` to see all available Ploinky commands and their usage.
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 27099 listening
-[PASS] Agent host port 27689 listening
+[PASS] Router port 35613 listening
+[PASS] Agent host port 29064 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME

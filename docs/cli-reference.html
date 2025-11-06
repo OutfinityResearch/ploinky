@@ -115,8 +115,8 @@ update repo basic</code></pre>
                         <h2>Agent Operations</h2>
 
                         <h3>enable agent</h3>
-                        <p>Register an agent in workspace registry for management. Supports run location modes.</p>
-                        <pre><code>enable agent &lt;name|repo/name&gt; [global|devel [repoName]]</code></pre>
+                        <p>Register an agent in workspace registry for management. Supports run location modes and optional aliases for multiple instances.</p>
+                        <pre><code>enable agent &lt;name|repo/name&gt; [global|devel [repoName]] [as &lt;alias&gt;]</code></pre>
                         <table class="command-table">
                             <tr>
                                 <th>Mode</th>
@@ -138,9 +138,10 @@ update repo basic</code></pre>
                         <pre><code># Examples
 enable agent demo                    # isolated (creates ./demo)
 enable agent demo global             # run in current directory
-enable agent demo devel simulator    # run inside .ploinky/repos/simulator</code></pre>
+enable agent demo devel simulator    # run inside .ploinky/repos/simulator
+enable agent demo as demo2           # second container with alias "demo2"</code></pre>
                         <div class="alert alert-info">
-                            <strong>Note:</strong> Using <code>enable agent</code> is optional. You can <code>enable repo</code> then <code>start &lt;agent&gt;</code> directly; the agent will use the isolated mode and a subfolder <code>&lt;agentName&gt;</code> will be created.
+                            <strong>Note:</strong> Using <code>enable agent</code> is optional. You can <code>enable repo</code> then <code>start &lt;agent&gt;</code> directly; the agent will use the isolated mode and a subfolder <code>&lt;agentName&gt;</code> will be created. When supplying an alias, it becomes the container name for refresh/disable/start operations and must be unique; reusing an alias returns <code>alias already exists</code>.
                         </div>
 
                         

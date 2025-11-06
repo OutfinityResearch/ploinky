@@ -336,7 +336,7 @@ function performContainerRestart(monitor, target, reason) {
 
     try {
         const agentDir = path.dirname(target.manifestPath);
-        const result = ensureAgentService(target.agentName, manifest, agentDir);
+        const result = ensureAgentService(target.agentName, manifest, agentDir, { containerName: target.containerName });
         if (result?.containerName && result.containerName !== target.containerName) {
             const oldName = target.containerName;
             monitor.targets.delete(oldName);

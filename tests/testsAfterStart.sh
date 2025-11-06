@@ -25,6 +25,7 @@ source "$TESTS_DIR/test-functions/default_cli_tests.sh"
 source "$TESTS_DIR/test-functions/logs_commands.sh"
 source "$TESTS_DIR/test-functions/disable_repo_test.sh"
 source "$TESTS_DIR/test-functions/llm_cli_suggestions.sh"
+source "$TESTS_DIR/test-functions/enable_alias_tests.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -39,6 +40,8 @@ require_var "TEST_AGENT_CONTAINER_PORT"
 require_var "TEST_AGENT_DEP_GLOBAL_NAME"
 require_var "TEST_AGENT_DEP_DEVEL_NAME"
 require_var "TEST_HEALTH_AGENT_CONT_NAME"
+require_var "TEST_ENABLE_ALIAS_AGENT_CONTAINER"
+require_var "TEST_GLOBAL_AGENT_ALIAS"
 
 cd "$TEST_RUN_DIR"
 
@@ -56,6 +59,9 @@ test_check "Persisted data file created" assert_file_exists "$TEST_PERSIST_FILE"
 stage_header "Health Probes Agent"
 test_check "Health probes agent container is running" assert_container_running "$TEST_HEALTH_AGENT_CONT_NAME"
 test_action "Flip health probes to failing scripts" health_probes_force_failure
+
+stage_header "Alias-enabled Agent through manifest"
+test_check "Global alias agent uses workspace root" fast_assert_global_agent_workdir "TEST_GLOBAL_AGENT_ALIAS"
 
 stage_header "Watchdog restart services"
 test_check "Watchdog restarts router and agent container" watchdog_restart_services

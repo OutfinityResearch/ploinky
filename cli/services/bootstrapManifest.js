@@ -4,6 +4,31 @@ import * as repos from './repos.js';
 import { enableAgent } from './agents.js';
 import { findAgent } from './utils.js';
 
+function parseEnableDirective(entry) {
+    if (entry === null || entry === undefined) return null;
+    const raw = typeof entry === 'string' ? entry : String(entry || '').trim();
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    if (!tokens.length) return null;
+
+    const aliasIndex = tokens.findIndex(token => token.toLowerCase() === 'as');
+    let alias;
+    if (aliasIndex !== -1) {
+        if (aliasIndex + 1 >= tokens.length) {
+            throw new Error(`manifest enable entry '${entry}' is missing alias name after "as"`);
+        }
+        alias = tokens[aliasIndex + 1];
+        tokens.splice(aliasIndex);
+    }
+
+    const spec = tokens.join(' ').trim();
+    if (!spec) {
+        throw new Error(`manifest enable entry '${entry}' is missing agent reference`);
+    }
+    return { spec, alias };
+}
+
 export async function applyManifestDirectives(agentNameOrPath) {
     let manifest;
     let baseDir;
@@ -30,12 +55,14 @@ export async function applyManifestDirectives(agentNameOrPath) {
 
     const en = manifest.enable;
     if (Array.isArray(en)) {
-        for (const a of en) {
+        for (const rawEntry of en) {
             try {
-                enableAgent(a);
+                const parsed = parseEnableDirective(rawEntry);
+                if (!parsed) continue;
+                enableAgent(parsed.spec, undefined, undefined, parsed.alias);
             } catch (err) {
                 const message = err && err.message ? err.message : String(err);
-                console.error(`[manifest enable] Failed to enable agent '${a}': ${message}`);
+                console.error(`[manifest enable] Failed to enable agent '${rawEntry}': ${message}`);
             }
         }
     }

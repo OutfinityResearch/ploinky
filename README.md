@@ -52,7 +52,7 @@ You can use Ploinky in two ways:
 
 ## Core commands (in p-cli)
 
-- `enable agent <name>`: register an agent in `.ploinky/agents` (creates a minimal manifest if missing).
+- `enable agent <name> [as <alias>]`: register an agent in `.ploinky/agents` (creates a minimal manifest if missing). Use `as <alias>` to spin up additional instances with unique container names.
 - `start <staticAgent> <port>`: first run requires a static agent and port; subsequent runs can just use `start`.
   - Ensures all enabled agents are running and launches the Router on `<port>`.
   - Serves static files from the repository of `<staticAgent>`; non `/mcps/...` paths are static.

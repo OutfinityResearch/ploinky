@@ -62,7 +62,10 @@ function getAgentHostPort(agentName) {
     const shortName = extractShortAgentName(agentName);
     const routing = readRouting();
     const routes = routing.routes || {};
-    const route = routes[shortName] || routes[agentName];
+    let route = routes[shortName] || routes[agentName];
+    if (!route) {
+        route = Object.values(routes || {}).find(entry => entry && entry.agent === shortName) || null;
+    }
     if (!route) return null;
     if (Array.isArray(route.ports) && route.ports.length) {
         const preferred = route.ports.find(p => p && (p.primary || p.name === 'http')) || route.ports[0];

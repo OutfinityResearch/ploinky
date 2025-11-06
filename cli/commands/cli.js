@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { debugLog } from '../services/utils.js';
+import { debugLog, findAgent } from '../services/utils.js';
 import { isKnownCommand } from '../services/commandRegistry.js';
 import 'ploinkyAgentLib/LLMAgents';
 import { showHelp } from '../services/help.js';
@@ -39,6 +39,43 @@ import { handleSsoCommand } from './ssoCommands.js';
 import ClientCommands from './client.js';
 
 
+function parseEnableAgentArgs(rawOptions = []) {
+    const tokens = rawOptions
+        .filter(arg => arg !== undefined && arg !== null)
+        .map(arg => (typeof arg === 'string' ? arg.trim() : arg))
+        .filter(arg => !(typeof arg === 'string' && arg.length === 0));
+
+    if (!tokens.length) {
+        return { agentName: undefined, mode: undefined, repoName: undefined, alias: undefined };
+    }
+
+    let alias;
+    let aliasIndex = -1;
+    for (let i = 0; i < tokens.length; i += 1) {
+        const token = tokens[i];
+        if (typeof token === 'string' && token.toLowerCase() === 'as') {
+            aliasIndex = i;
+            break;
+        }
+    }
+
+    if (aliasIndex !== -1) {
+        alias = tokens.slice(aliasIndex + 1).join(' ').trim();
+        tokens.splice(aliasIndex);
+        if (!alias) {
+            throw new Error("Usage: enable agent <name|repo/name> [global|devel [repoName]] [as <alias>]");
+        }
+    }
+
+    return {
+        agentName: tokens[0],
+        mode: tokens[1],
+        repoName: tokens[2],
+        alias,
+    };
+}
+
+
 
 
 async function handleCommand(args) {
@@ -76,7 +113,10 @@ async function handleCommand(args) {
             break;
         case 'enable':
             if (options[0] === 'repo') enableRepo(options[1]);
-            else if (options[0] === 'agent') await enableAgent(options[1], options[2], options[3]);
+            else if (options[0] === 'agent') {
+                const parsed = parseEnableAgentArgs(options.slice(1));
+                await enableAgent(parsed.agentName, parsed.mode, parsed.repoName, parsed.alias);
+            }
             else showHelp();
             break;
         case 'expose':
@@ -269,16 +309,26 @@ async function handleCommand(args) {
             if (target) {
                 const agentName = target;
                 const { getAgentContainerName, getRuntime, isContainerRunning } = dockerSvc;
+                let registryRecord = null;
+                try {
+                    registryRecord = agentsSvc.resolveEnabledAgentRecord(agentName);
+                } catch (err) {
+                    console.error(err?.message || err);
+                    return;
+                }
                 let resolved;
                 try {
-                    resolved = findAgent(agentName);
+                    const lookup = registryRecord
+                        ? `${registryRecord.record.repoName}/${registryRecord.record.agentName}`
+                        : agentName;
+                    resolved = findAgent(lookup);
                 } catch (err) {
                     console.error(err?.message || `Agent '${agentName}' not found.`);
                     return;
                 }
 
                 const runtime = getRuntime();
-                const containerName = getAgentContainerName(resolved.shortAgentName, resolved.repo);
+                const containerName = registryRecord?.containerName || getAgentContainerName(resolved.shortAgentName, resolved.repo);
 
                 if (!isContainerRunning(containerName)) {
                     console.error(`Agent '${agentName}' is not running.`);

@@ -11,9 +11,15 @@ import { debugLog } from '../utils.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function getConfiguredProjectPath(agentName, repoName) {
+function getConfiguredProjectPath(agentName, repoName, alias) {
     try {
         const map = loadAgentsMap();
+        if (alias) {
+            const aliasRec = Object.values(map || {}).find(r => r && r.type === 'agent' && r.alias === alias);
+            if (aliasRec && aliasRec.projectPath && typeof aliasRec.projectPath === 'string') {
+                return aliasRec.projectPath;
+            }
+        }
         const rec = Object.values(map || {}).find(r => r && r.type === 'agent' && r.agentName === agentName && r.repoName === repoName);
         if (rec && rec.projectPath && typeof rec.projectPath === 'string') {
             return rec.projectPath;
