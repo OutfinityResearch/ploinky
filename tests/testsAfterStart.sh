@@ -26,6 +26,7 @@ source "$TESTS_DIR/test-functions/logs_commands.sh"
 source "$TESTS_DIR/test-functions/disable_repo_test.sh"
 source "$TESTS_DIR/test-functions/llm_cli_suggestions.sh"
 source "$TESTS_DIR/test-functions/enable_alias_tests.sh"
+source "$TESTS_DIR/test-functions/dashboard_tests.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -81,6 +82,9 @@ test_check "Status lists demo repo" fast_assert_status_contains "  - demo"
 test_check "Status lists testRepo repo" fast_assert_status_contains "  - testRepo"
 test_check "Status lists active containers for demo" fast_assert_status_contains "agent: demo"
 test_check "Status lists active containers for testAgent" fast_assert_status_contains "agent: testAgent"
+
+stage_header "Dashboard UI"
+test_check "Dashboard surfaces workspace status" assert_dashboard_status
 
 stage_header "Demo agent dependency tests"
 SIMULATOR_CONTAINER=$(compute_container_name "simulator" "demo")

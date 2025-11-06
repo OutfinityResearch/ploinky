@@ -21,6 +21,7 @@ export FAST_RESULTS_FILE
 
 # Global error counter
 TOTAL_ERRORS=0
+ABORTED=0
 
 # Cleanup trap to remove the temporary state file on exit
 cleanup() {
@@ -29,6 +30,36 @@ cleanup() {
   # The results file is an intended artifact and is not removed.
 }
 trap cleanup EXIT
+
+abort_suite() {
+  if [[ $ABORTED -eq 1 ]]; then
+    exit 130
+  fi
+  ABORTED=1
+  trap - INT TERM
+  set +e
+  echo "\n[INFO] Interrupt received. Cleaning up workspace..." >&2
+  load_state 2>/dev/null || true
+  if [[ -z "${TEST_RUN_DIR:-}" && -f "$FAST_STATE_FILE" ]]; then
+    TEST_RUN_DIR=$(awk -F'=' '/^TEST_RUN_DIR=/{print substr($0, index($0,$2))}' "$FAST_STATE_FILE" | tail -n1 | xargs printf '%s')
+  fi
+  if command -v ploinky >/dev/null 2>&1; then
+    ploinky destroy >/dev/null 2>&1
+  fi
+  if [[ -n "${TEST_RUN_DIR:-}" && -d "$TEST_RUN_DIR" ]]; then
+    rm -rf "$TEST_RUN_DIR"
+  fi
+  cd "$TESTS_DIR"
+  exit 130
+}
+trap abort_suite INT TERM
+
+handle_interrupt_exit() {
+  local code="$1"
+  if [[ $code -eq 130 || $code -eq 143 ]]; then
+    abort_suite
+  fi
+}
 
 # Source the library of helper functions
 source "$TESTS_DIR/lib.sh"
@@ -46,7 +77,10 @@ run_stage() {
   stage_header "$label"
 
   if [[ -n "$action" ]]; then
-    if ! run_with_timeout 60 "Executing action script: ${action}" bash "$TESTS_DIR/$action"; then
+    run_with_timeout 60 "Executing action script: ${action}" bash "$TESTS_DIR/$action"
+    local action_exit=$?
+    handle_interrupt_exit "$action_exit"
+    if [[ $action_exit -ne 0 ]]; then
       return 1
     fi
   fi
@@ -55,11 +89,12 @@ run_stage() {
     set +e
     
     FAST_CHECK_ERRORS=0
-    run_with_timeout 60 "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
+    run_with_timeout 90 "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
     local exit_code=$?
+    handle_interrupt_exit "$exit_code"
 
     if [[ $exit_code -eq 124 ]]; then
-        log_result "[FAIL] ${verify} timed out after 60 seconds."
+        log_result "[FAIL] ${verify} timed out after 90 seconds."
         TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
     elif [[ $exit_code -ne 0 ]]; then
         log_result "[FAIL] ${verify} reported ${exit_code} failure(s)."
@@ -109,17 +144,21 @@ fi
 load_state
 
 stage_header "START STAGE"
-if ! run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"; then
+run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"
+start_action_exit=$?
+handle_interrupt_exit "$start_action_exit"
+if [[ $start_action_exit -ne 0 ]]; then
   fail_message "START STAGE aborted. Proceeding to cleanup."
   log_result "[FATAL] START STAGE aborted."
   TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
 else
   set +e
   FAST_CHECK_ERRORS=0
-  run_with_timeout 60 "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
+  run_with_timeout 90 "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
   exit_code=$?
+  handle_interrupt_exit "$exit_code"
   if [[ $exit_code -eq 124 ]]; then
-      log_result "[FAIL] testsAfterStart.sh timed out after 60 seconds."
+      log_result "[FAIL] testsAfterStart.sh timed out after 90 seconds."
       TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
   elif [[ $exit_code -ne 0 ]]; then
       log_result "[FAIL] testsAfterStart.sh reported ${exit_code} failure(s)."
