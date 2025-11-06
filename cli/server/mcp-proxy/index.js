@@ -151,6 +151,20 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
 function handleAgentMcpRequest(req, res, route, agentName) {
     const method = (req.method || 'GET').toUpperCase();
 
+    // Check agent authorization if agent authentication was used
+    if (req.agent) {
+        const allowedTargets = req.agent.allowedTargets || [];
+        const isAllowed = allowedTargets.includes('*') || allowedTargets.includes(agentName);
+        if (!isAllowed) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: 'forbidden',
+                detail: `Agent '${req.agent.name}' is not authorized to access agent '${agentName}'`
+            }));
+            return;
+        }
+    }
+
     if (method === 'GET') {
         res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'POST, DELETE' });
         res.end(JSON.stringify({ error: 'event_stream_not_supported' }));

@@ -2,7 +2,7 @@ import { execSync, spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { getExposedNames, getManifestEnvNames, buildEnvFlags, formatEnvFlag } from '../secretVars.js';
+import { getExposedNames, getManifestEnvNames, buildEnvFlags, formatEnvFlag, resolveVarValue } from '../secretVars.js';
 import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
@@ -411,6 +411,35 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     }
     const envStrings = [...buildEnvFlags(manifest), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
     envStrings.push(formatEnvFlag('AGENT_NAME', agentName));
+    
+    // Add router port from routing.json
+    let routerPort = '8080';
+    try {
+        const routingFile = path.resolve('.ploinky/routing.json');
+        if (fs.existsSync(routingFile)) {
+            const routing = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {};
+            if (routing.port) {
+                routerPort = String(routing.port);
+            }
+        }
+    } catch (_) {
+        // Use default port if routing.json doesn't exist or is invalid
+    }
+    envStrings.push(formatEnvFlag('PLOINKY_ROUTER_PORT', routerPort));
+    
+    // Add agent OAuth credentials if available
+    const agentClientIdVar = `PLOINKY_AGENT_${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_ID`;
+    const agentClientSecretVar = `PLOINKY_AGENT_${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_SECRET`;
+    const agentClientId = resolveVarValue(agentClientIdVar) || resolveVarValue('PLOINKY_AGENT_CLIENT_ID');
+    const agentClientSecret = resolveVarValue(agentClientSecretVar) || resolveVarValue('PLOINKY_AGENT_CLIENT_SECRET');
+    
+    if (agentClientId) {
+        envStrings.push(formatEnvFlag('PLOINKY_AGENT_CLIENT_ID', agentClientId));
+    }
+    if (agentClientSecret) {
+        envStrings.push(formatEnvFlag('PLOINKY_AGENT_CLIENT_SECRET', agentClientSecret));
+    }
+    
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
     args.push('-e', 'NODE_PATH=/node_modules');

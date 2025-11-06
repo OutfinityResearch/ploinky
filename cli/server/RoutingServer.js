@@ -13,7 +13,7 @@ import { handleBlobs } from './handlers/blobs.js';
 import * as staticSrv from './static/index.js';
 
 // Authentication and routing
-import { ensureAuthenticated, handleAuthRoutes } from './authHandlers.js';
+import { ensureAuthenticated, ensureAgentAuthenticated, handleAuthRoutes } from './authHandlers.js';
 import { loadApiRoutes, handleRouterMcp } from './routerHandlers.js';
 
 // Logging
@@ -137,9 +137,29 @@ async function processRequest(req, res) {
         if (handled) return;
     }
 
-    // Ensure authenticated for protected routes
-    const authResult = await ensureAuthenticated(req, res, parsedUrl);
-    if (!authResult.ok) return;
+    // For /mcps/ routes, check agent auth first, then fall back to user auth
+    if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/')) {
+        const hasAuthHeader = req.headers?.authorization && typeof req.headers.authorization === 'string';
+        if (hasAuthHeader && req.headers.authorization.startsWith('Bearer ')) {
+            // Try agent authentication first
+            const agentAuthResult = await ensureAgentAuthenticated(req, res, parsedUrl);
+            if (agentAuthResult.ok) {
+                // Agent authenticated, continue with routing
+            } else {
+                // Agent auth failed, fall back to user auth
+                const authResult = await ensureAuthenticated(req, res, parsedUrl);
+                if (!authResult.ok) return;
+            }
+        } else {
+            // No bearer token, use user auth
+            const authResult = await ensureAuthenticated(req, res, parsedUrl);
+            if (!authResult.ok) return;
+        }
+    } else {
+        // Ensure authenticated for other protected routes
+        const authResult = await ensureAuthenticated(req, res, parsedUrl);
+        if (!authResult.ok) return;
+    }
 
     // Route to appropriate handler
     if (pathname.startsWith('/webtty')) {

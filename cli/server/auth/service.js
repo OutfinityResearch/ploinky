@@ -3,7 +3,7 @@ import { createPkcePair } from './pkce.js';
 import { decodeJwt, verifySignature, validateClaims } from './jwt.js';
 import { createJwksCache } from './jwksCache.js';
 import { createSessionStore } from './sessionStore.js';
-import { createMetadataCache, buildAuthUrl, exchangeCodeForTokens, refreshTokens, buildLogoutUrl } from './keycloakClient.js';
+import { createMetadataCache, buildAuthUrl, exchangeCodeForTokens, exchangeClientCredentials, refreshTokens, buildLogoutUrl } from './keycloakClient.js';
 import { randomId } from './utils.js';
 
 function createAuthService(options = {}) {
@@ -260,6 +260,60 @@ function createAuthService(options = {}) {
         return Math.floor(sessionStore.sessionTtlMs / 1000);
     }
 
+    async function authenticateAgent(clientId, clientSecret) {
+        const cfg = assertConfigured();
+        const metadata = await ensureMetadata();
+        
+        // Exchange client credentials for token
+        const tokens = await exchangeClientCredentials(metadata, cfg, {
+            clientId,
+            clientSecret,
+            scope: cfg.scope
+        });
+        
+        if (!tokens || !tokens.access_token) {
+            throw new Error('Token response missing access_token');
+        }
+        
+        // Decode and validate token
+        const decoded = decodeJwt(tokens.access_token);
+        const jwk = await jwksCache.getKey(metadata.jwks_uri, decoded.header.kid);
+        if (!jwk) {
+            throw new Error('Unable to resolve signing key');
+        }
+        
+        const signatureValid = verifySignature(decoded, jwk);
+        if (!signatureValid) {
+            throw new Error('Invalid token signature');
+        }
+        
+        // Validate claims
+        validateClaims(decoded.payload, {
+            issuer: metadata.issuer
+        });
+        
+        // Extract agent information from token claims
+        const agentName = decoded.payload.agent_name || clientId.replace(/^agent-/, '');
+        const allowedTargets = decoded.payload.allowed_targets || [];
+        
+        const now = Date.now();
+        const expiresAt = decoded.payload.exp ? decoded.payload.exp * 1000 : (now + 3600000);
+        
+        return {
+            agent: {
+                name: agentName,
+                clientId,
+                allowedTargets: Array.isArray(allowedTargets) ? allowedTargets : []
+            },
+            tokens: {
+                accessToken: tokens.access_token,
+                tokenType: tokens.token_type || 'Bearer',
+                expiresIn: tokens.expires_in
+            },
+            expiresAt
+        };
+    }
+
     return {
         isConfigured,
         reloadConfig,
@@ -269,7 +323,8 @@ function createAuthService(options = {}) {
         refreshSession,
         logout,
         revokeSession,
-        getSessionCookieMaxAge
+        getSessionCookieMaxAge,
+        authenticateAgent
     };
 }
 

@@ -103,8 +103,26 @@ function readEnvValue(name) {
     return '';
 }
 
-function resolveEnvRoleValues() {
-    const valueFromCandidates = (candidates = []) => {
+function resolveEnvRoleValues(overrides = {}) {
+    const normalizedOverrides = {};
+    if (overrides && typeof overrides === 'object') {
+        for (const [key, value] of Object.entries(overrides)) {
+            if (value === undefined || value === null) continue;
+            if (Array.isArray(value) || (value && typeof value === 'object' && key === 'roles')) {
+                normalizedOverrides[key] = value;
+                continue;
+            }
+            const str = String(value).trim();
+            if (str) normalizedOverrides[key] = str;
+        }
+    }
+
+    const valueFromCandidates = (candidates = [], overrideKeys = []) => {
+        for (const key of overrideKeys) {
+            if (key && normalizedOverrides[key]) {
+                return normalizedOverrides[key];
+            }
+        }
         for (const name of candidates) {
             if (!name) continue;
             const val = readEnvValue(name);
@@ -112,24 +130,80 @@ function resolveEnvRoleValues() {
         }
         return '';
     };
+
+    const baseUrl = valueFromCandidates(
+        SSO_ENV_ROLE_CANDIDATES.baseUrl,
+        ['baseUrl', 'externalBaseUrl']
+    );
+    const realm = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.realm, ['realm']) || 'ploinky';
+    const clientId = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.clientId, ['clientId']) || 'ploinky-router';
+    const clientSecret = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.clientSecret, ['clientSecret']);
+    const scope = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.scope, ['scope']) || 'openid profile email';
+    const redirectUri = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.redirectUri, ['redirectUri']);
+    const logoutRedirectUri = valueFromCandidates(
+        SSO_ENV_ROLE_CANDIDATES.logoutRedirectUri,
+        ['logoutRedirectUri']
+    );
+    const adminUser = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminUser, ['adminUser']);
+    const adminPassword = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminPassword, ['adminPassword']);
+    const hostname = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.hostname, ['hostname']);
+    const hostnameStrict = valueFromCandidates(
+        SSO_ENV_ROLE_CANDIDATES.hostnameStrict,
+        ['hostnameStrict']
+    );
+    const httpEnabled = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.httpEnabled, ['httpEnabled']);
+    const proxy = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.proxy, ['proxy']);
+    const dbEngine = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbEngine, ['dbEngine']);
+    const dbUrl = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbUrl, ['dbUrl']);
+    const dbUsername = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbUsername, ['dbUsername']);
+    const dbPassword = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbPassword, ['dbPassword']);
+
+    const provider = normalizedOverrides.provider || readEnvValue('SSO_PROVIDER');
+    const externalBaseUrl = normalizedOverrides.externalBaseUrl || readEnvValue('SSO_EXTERNAL_BASE_URL');
+    const roles = Array.isArray(normalizedOverrides.roles) ? normalizedOverrides.roles : [];
+
+    const missing = [];
+    const pushMissing = (key, candidates, value, required = false) => {
+        const resolved = value === undefined || value === null ? '' : String(value).trim();
+        if (resolved) return;
+        const candidateList = Array.isArray(candidates)
+            ? Array.from(new Set(candidates.filter(Boolean)))
+            : [];
+        missing.push({ key, required, candidates: candidateList });
+    };
+
+    pushMissing('baseUrl', SSO_ENV_ROLE_CANDIDATES.baseUrl, baseUrl, true);
+    pushMissing('realm', SSO_ENV_ROLE_CANDIDATES.realm, realm, true);
+    pushMissing('clientId', SSO_ENV_ROLE_CANDIDATES.clientId, clientId, true);
+    pushMissing('clientSecret', SSO_ENV_ROLE_CANDIDATES.clientSecret, clientSecret, true);
+    pushMissing('redirectUri', SSO_ENV_ROLE_CANDIDATES.redirectUri, redirectUri, true);
+
+    pushMissing('logoutRedirectUri', SSO_ENV_ROLE_CANDIDATES.logoutRedirectUri, logoutRedirectUri);
+    pushMissing('adminUser', SSO_ENV_ROLE_CANDIDATES.adminUser, adminUser);
+    pushMissing('adminPassword', SSO_ENV_ROLE_CANDIDATES.adminPassword, adminPassword);
+
     return {
-        baseUrl: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.baseUrl),
-        realm: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.realm),
-        clientId: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.clientId),
-        clientSecret: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.clientSecret),
-        scope: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.scope),
-        redirectUri: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.redirectUri),
-        logoutRedirectUri: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.logoutRedirectUri),
-        adminUser: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminUser),
-        adminPassword: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminPassword),
-        hostname: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.hostname),
-        hostnameStrict: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.hostnameStrict),
-        httpEnabled: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.httpEnabled),
-        proxy: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.proxy),
-        dbEngine: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbEngine),
-        dbUrl: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbUrl),
-        dbUsername: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbUsername),
-        dbPassword: valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbPassword)
+        baseUrl,
+        realm,
+        clientId,
+        clientSecret,
+        scope,
+        redirectUri,
+        logoutRedirectUri,
+        adminUser,
+        adminPassword,
+        hostname,
+        hostnameStrict,
+        httpEnabled,
+        proxy,
+        dbEngine,
+        dbUrl,
+        dbUsername,
+        dbPassword,
+        provider,
+        externalBaseUrl,
+        roles,
+        missing
     };
 }
 

@@ -2,9 +2,15 @@ import { appendLog } from './utils/logger.js';
 import { parseCookies, buildCookie, readJsonBody, appendSetCookie } from './handlers/common.js';
 import { resolveVarValue } from '../services/secretVars.js';
 import { createAuthService } from './auth/service.js';
+import { decodeJwt, verifySignature, validateClaims } from './auth/jwt.js';
+import { createJwksCache } from './auth/jwksCache.js';
+import { loadAuthConfig } from './auth/config.js';
+import { createMetadataCache } from './auth/keycloakClient.js';
 
 const AUTH_COOKIE_NAME = 'ploinky_sso';
 const authService = createAuthService();
+const jwksCache = createJwksCache();
+const agentMetadataCache = createMetadataCache();
 
 export function sendJson(res, statusCode, body) {
     const payload = JSON.stringify(body || {});
@@ -70,6 +76,69 @@ export function buildIdentityHeaders(req) {
         headers['Authorization'] = `Bearer ${req.session.tokens.accessToken}`;
     }
     return headers;
+}
+
+export async function ensureAgentAuthenticated(req, res, parsedUrl) {
+    if (!authService.isConfigured()) {
+        return { ok: false, error: 'sso_not_configured' };
+    }
+    
+    const authHeader = req.headers?.authorization;
+    if (!authHeader || typeof authHeader !== 'string') {
+        return { ok: false, error: 'missing_authorization_header' };
+    }
+    
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (!bearerMatch) {
+        return { ok: false, error: 'invalid_authorization_header' };
+    }
+    
+    const token = bearerMatch[1];
+    
+    try {
+        // Decode token
+        const decoded = decodeJwt(token);
+        
+        // Get Keycloak config and metadata
+        const config = loadAuthConfig();
+        if (!config) {
+            return { ok: false, error: 'sso_not_configured' };
+        }
+        
+        // Get metadata for JWKS URI
+        const metadata = await agentMetadataCache.get(config);
+        
+        // Verify signature
+        const jwk = await jwksCache.getKey(metadata.jwks_uri, decoded.header.kid);
+        if (!jwk) {
+            return { ok: false, error: 'unable_to_resolve_signing_key' };
+        }
+        
+        const signatureValid = verifySignature(decoded, jwk);
+        if (!signatureValid) {
+            return { ok: false, error: 'invalid_token_signature' };
+        }
+        
+        // Validate claims
+        validateClaims(decoded.payload, {
+            issuer: metadata.issuer
+        });
+        
+        // Extract agent information
+        const agentName = decoded.payload.agent_name || 'unknown';
+        const allowedTargets = decoded.payload.allowed_targets || [];
+        
+        req.agent = {
+            name: agentName,
+            clientId: decoded.payload.client_id || decoded.payload.aud,
+            allowedTargets: Array.isArray(allowedTargets) ? allowedTargets : []
+        };
+        
+        return { ok: true, agent: req.agent };
+    } catch (err) {
+        appendLog('auth_agent_token_validation_error', { error: err?.message || String(err) });
+        return { ok: false, error: 'token_validation_failed', detail: err?.message || String(err) };
+    }
 }
 
 export async function ensureAuthenticated(req, res, parsedUrl) {
@@ -223,6 +292,38 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             });
             res.end(JSON.stringify({ ok: true, token: tokenInfo, user: session.user }));
             return true;
+        }
+        if (pathname === '/auth/agent-token') {
+            if (method !== 'POST') {
+                res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'POST' });
+                res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
+                return true;
+            }
+            try {
+                const body = await readJsonBody(req);
+                const clientId = body?.client_id || body?.clientId;
+                const clientSecret = body?.client_secret || body?.clientSecret;
+                
+                if (!clientId || !clientSecret) {
+                    sendJson(res, 400, { ok: false, error: 'missing_parameters', detail: 'client_id and client_secret required' });
+                    return true;
+                }
+                
+                const result = await authService.authenticateAgent(clientId, clientSecret);
+                appendLog('auth_agent_token_success', { agent: result.agent.name });
+                
+                sendJson(res, 200, {
+                    ok: true,
+                    access_token: result.tokens.accessToken,
+                    expires_in: result.tokens.expiresIn,
+                    token_type: result.tokens.tokenType
+                });
+                return true;
+            } catch (err) {
+                appendLog('auth_agent_token_error', { error: err?.message || String(err) });
+                sendJson(res, 401, { ok: false, error: 'invalid_credentials', detail: err?.message || String(err) });
+                return true;
+            }
         }
     } catch (err) {
         appendLog('auth_error', { error: err?.message || String(err) });

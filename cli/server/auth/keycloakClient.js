@@ -109,10 +109,25 @@ function buildLogoutUrl(metadata, config, { idTokenHint, postLogoutRedirectUri }
     return url.toString();
 }
 
+async function exchangeClientCredentials(metadata, config, { clientId, clientSecret, scope }) {
+    const body = toFormBody({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+        scope: scope || config.scope || 'openid'
+    });
+    return fetchJson(metadata.token_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body
+    });
+}
+
 export {
     createMetadataCache,
     buildAuthUrl,
     exchangeCodeForTokens,
+    exchangeClientCredentials,
     refreshTokens,
     buildLogoutUrl
 };
