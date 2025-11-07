@@ -185,17 +185,25 @@ global_agent_host_port=$(allocate_port)
 write_state_var "TEST_GLOBAL_AGENT_HOST_PORT" "$global_agent_host_port"
 test_info "Assigned host port ${global_agent_host_port} for ${GLOBAL_AGENT_NAME}."
 
+global_agent_internal_port=8888
+write_state_var "TEST_GLOBAL_AGENT_CONTAINER_PORT" "$global_agent_internal_port"
+
 cat >"${global_agent_root}/manifest.json" <<EOF
 {
-  "container": "node:20-bullseye",
+  "container": "node:18-alpine",
   "ports": [
-    "${global_agent_host_port}:7000"
-  ]
+    "127.0.0.1:${global_agent_host_port}:${global_agent_internal_port}"
+  ],
+  "env": {
+    "PORT": "${global_agent_internal_port}"
+  }
 }
 EOF
 
 test_info "Enabling agent ${GLOBAL_AGENT_NAME} in global mode."
 ploinky enable agent "$GLOBAL_AGENT_NAME" global
+global_agent_container=$(compute_container_name "$GLOBAL_AGENT_NAME" "$TEST_REPO_NAME")
+write_state_var "TEST_GLOBAL_AGENT_CONT_NAME" "$global_agent_container"
 
 # Agent whose alias will be enabled via manifest directives
 GLOBAL_ALIAS_AGENT_NAME="globalAgentForAlias"

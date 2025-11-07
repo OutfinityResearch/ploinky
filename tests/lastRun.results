@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 28230 listening
-[PASS] Agent host port 25035 listening
-[PASS] Agent port 25035 bound to localhost
+[PASS] Router port 29818 listening
+[PASS] Agent host port 32287 listening
+[PASS] Agent port 32287 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -103,6 +103,7 @@
 ===== Global Agent Verification =====
 [PASS] Global agent working directory is the test root
 [PASS] Manifest dependency global agent uses workspace root
+[PASS] Manifest defined ports map correctly
 
 ===== Devel Agent Verification =====
 [PASS] Devel agent cwd is the repo source and has RW permissions
@@ -119,20 +120,13 @@
 [PASS] logs last prints five lines
 
 ===== LLM CLI Suggestions =====
-[FAIL] Invalid CLI input yields LLM suggestion and system command output
-        Error: LLM suggestion output is empty.
-/home/mircea/Desktop/ploinky/tests/test-functions/llm_cli_suggestions.sh: line 32: printf: --: invalid option
-printf: usage: printf [-v var] format [arguments]
-Asking the LLM for guidance...
-LLM call failed: API key invalid.
-Run `help` to see all available Ploinky commands and their usage.
-[FAIL] testsAfterStart.sh reported 1 failure(s).
+[FAIL] testsAfterStart.sh timed out after 90 seconds.
 
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 28230 closed
-[PASS] Agent port 25035 closed
+[PASS] Router port 29818 closed
+[PASS] Agent port 32287 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
@@ -148,9 +142,9 @@ Run `help` to see all available Ploinky commands and their usage.
 
 ===== Tests after start =====
 [PASS] Service container is running
-[PASS] Router port 28230 listening
-[PASS] Agent host port 25035 listening
-[PASS] Agent port 25035 bound to localhost
+[PASS] Router port 29818 listening
+[PASS] Agent host port 32287 listening
+[PASS] Agent port 32287 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -242,35 +236,19 @@ Run `help` to see all available Ploinky commands and their usage.
 ===== Global Agent Verification =====
 [PASS] Global agent working directory is the test root
 [PASS] Manifest dependency global agent uses workspace root
+[PASS] Manifest defined ports map correctly
 
 ===== Devel Agent Verification =====
 [PASS] Devel agent cwd is the repo source and has RW permissions
 [PASS] Manifest dependency devel agent uses repo root
 
 ===== WebTTY Command =====
-[PASS] webtty command records mock shell configuration
-
-===== Disable Repo Command =====
-[PASS] disable repo removes demo entry
-
-===== Logs Commands =====
-[PASS] logs tail router streams entries
-[PASS] logs last prints five lines
-
-===== LLM CLI Suggestions =====
-[FAIL] Invalid CLI input yields LLM suggestion and system command output
-        Error: LLM suggestion output is empty.
-/home/mircea/Desktop/ploinky/tests/test-functions/llm_cli_suggestions.sh: line 32: printf: --: invalid option
-printf: usage: printf [-v var] format [arguments]
-Asking the LLM for guidance...
-LLM call failed: API key invalid.
-Run `help` to see all available Ploinky commands and their usage.
-[FAIL] testsAfterStartAgain.sh reported 1 failure(s).
+[FAIL] testsAfterStartAgain.sh timed out after 90 seconds.
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 28230 listening
-[PASS] Agent host port 25035 listening
+[PASS] Router port 29818 listening
+[PASS] Agent host port 32287 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME

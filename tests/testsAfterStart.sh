@@ -29,6 +29,7 @@ source "$TESTS_DIR/test-functions/enable_alias_tests.sh"
 source "$TESTS_DIR/test-functions/webmeet_tests.sh"
 source "$TESTS_DIR/test-functions/volume_mount_tests.sh"
 source "$TESTS_DIR/test-functions/dashboard_tests.sh"
+source "$TESTS_DIR/test-functions/manifest_ports_test.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -45,6 +46,10 @@ require_var "TEST_AGENT_DEP_DEVEL_NAME"
 require_var "TEST_HEALTH_AGENT_CONT_NAME"
 require_var "TEST_ENABLE_ALIAS_AGENT_CONTAINER"
 require_var "TEST_GLOBAL_AGENT_ALIAS"
+require_var "TEST_GLOBAL_AGENT_NAME"
+require_var "TEST_GLOBAL_AGENT_HOST_PORT"
+require_var "TEST_GLOBAL_AGENT_CONTAINER_PORT"
+require_var "TEST_GLOBAL_AGENT_CONT_NAME"
 
 cd "$TEST_RUN_DIR"
 
@@ -150,6 +155,7 @@ test_check "Demo agent directories exist and are read-only" fast_check_demo_agen
 stage_header "Global Agent Verification"
 test_check "Global agent working directory is the test root" fast_assert_global_agent_workdir "TEST_GLOBAL_AGENT_NAME"
 test_check "Manifest dependency global agent uses workspace root" fast_assert_global_agent_workdir "TEST_AGENT_DEP_GLOBAL_NAME"
+test_check "Manifest defined ports map correctly" fast_assert_manifest_ports
 
 stage_header "Devel Agent Verification"
 test_check "Devel agent cwd is the repo source and has RW permissions" fast_assert_devel_agent_workdir "TEST_DEVEL_AGENT_NAME"
