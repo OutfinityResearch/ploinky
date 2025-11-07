@@ -148,6 +148,8 @@ test_check "Postinstall command creates marker file" check_postinstall_marker
 stage_header "Agent Blob Upload and Download"
 test_check "Router upload stores blob in agent workspace" fast_check_agent_blob_upload
 test_check "Router download returns uploaded blob" fast_check_agent_blob_download
+test_check "Router shared upload stores blob in shared folder" fast_check_shared_blob_upload
+test_check "Router shared download returns uploaded blob" fast_check_shared_blob_download
 
 stage_header "Demo Agent Filesystem"
 test_check "Demo agent directories exist and are read-only" fast_check_demo_agent_readonly_dirs

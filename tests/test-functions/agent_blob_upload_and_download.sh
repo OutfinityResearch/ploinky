@@ -133,3 +133,110 @@ fast_check_agent_blob_download() {
   write_state_var "FAST_AGENT_BLOB_PATH" ""
   write_state_var "FAST_AGENT_BLOB_META" ""
 }
+
+fast_check_shared_blob_upload() {
+  require_var "TEST_RUN_DIR"
+  require_var "TEST_ROUTER_PORT"
+
+  local shared_dir="$TEST_RUN_DIR/shared"
+  local upload_file
+  if ! upload_file=$(mktemp -p "$TEST_RUN_DIR" fast-shared-upload.XXXXXX.bin); then
+    echo "Failed to allocate temporary upload file for shared blobs." >&2
+    return 1
+  fi
+
+  if ! dd if=/dev/urandom of="$upload_file" bs=512K count=1 2>/dev/null; then
+    echo "Failed to prepare shared upload payload." >&2
+    rm -f "$upload_file"
+    return 1
+  fi
+
+  local response
+  if ! response=$(curl -fsS -X POST --data-binary @"$upload_file" \
+      -H 'Content-Type: application/octet-stream' \
+      -H 'X-Mime-Type: application/octet-stream' \
+      "http://127.0.0.1:${TEST_ROUTER_PORT}/blobs"); then
+    echo "curl upload request to shared endpoint failed." >&2
+    rm -f "$upload_file"
+    return 1
+  fi
+
+  local blob_id
+  blob_id=$(echo "$response" | jq -r '.id // empty')
+  if [[ -z "$blob_id" ]]; then
+    echo "Shared upload response missing blob id. Response: $response" >&2
+    rm -f "$upload_file"
+    return 1
+  fi
+
+  local blob_download_url
+  blob_download_url=$(echo "$response" | jq -r '.downloadUrl // empty')
+  if [[ -z "$blob_download_url" || "$blob_download_url" != "http://127.0.0.1:${TEST_ROUTER_PORT}/blobs/"* ]]; then
+    echo "Shared upload downloadUrl unexpected. url='$blob_download_url' response='$response'" >&2
+    rm -f "$upload_file"
+    return 1
+  fi
+
+  local shared_path="$shared_dir/$blob_id"
+  if [[ ! -f "$shared_path" ]]; then
+    echo "Shared upload file missing at $shared_path" >&2
+    rm -f "$upload_file"
+    return 1
+  fi
+
+  if ! cmp -s "$upload_file" "$shared_path"; then
+    echo "Shared blob contents do not match uploaded payload." >&2
+    rm -f "$upload_file"
+    return 1
+  fi
+
+  local local_path
+  local_path=$(echo "$response" | jq -r '.localPath // empty')
+  if [[ -z "$local_path" || "$local_path" != "/shared/${blob_id}" ]]; then
+    echo "Shared upload localPath incorrect. localPath='$local_path' response='$response'" >&2
+    rm -f "$upload_file"
+    return 1
+  fi
+
+  write_state_var "FAST_SHARED_UPLOAD_FILE" "$upload_file"
+  write_state_var "FAST_SHARED_BLOB_ID" "$blob_id"
+  write_state_var "FAST_SHARED_BLOB_URL" "$blob_download_url"
+  write_state_var "FAST_SHARED_BLOB_PATH" "$shared_path"
+}
+
+fast_check_shared_blob_download() {
+  require_var "TEST_ROUTER_PORT"
+  require_var "TEST_RUN_DIR"
+
+  load_state
+  if [[ -z "${FAST_SHARED_UPLOAD_FILE:-}" || -z "${FAST_SHARED_BLOB_URL:-}" ]]; then
+    echo "Shared blob upload state missing. Did the shared upload test run?" >&2
+    return 1
+  fi
+
+  local download_file
+  if ! download_file=$(mktemp -p "$TEST_RUN_DIR" fast-shared-download.XXXXXX.bin); then
+    echo "Failed to allocate temporary download file for shared blob." >&2
+    return 1
+  fi
+
+  if ! curl -fsS -o "$download_file" "${FAST_SHARED_BLOB_URL}"; then
+    echo "curl download for shared blob failed." >&2
+    rm -f "$download_file"
+    return 1
+  fi
+
+  if ! cmp -s "$FAST_SHARED_UPLOAD_FILE" "$download_file"; then
+    echo "Shared blob download does not match uploaded payload." >&2
+    rm -f "$download_file"
+    return 1
+  fi
+
+  rm -f "$download_file"
+  rm -f "$FAST_SHARED_UPLOAD_FILE"
+  rm -f "$FAST_SHARED_BLOB_PATH"
+  write_state_var "FAST_SHARED_UPLOAD_FILE" ""
+  write_state_var "FAST_SHARED_BLOB_ID" ""
+  write_state_var "FAST_SHARED_BLOB_URL" ""
+  write_state_var "FAST_SHARED_BLOB_PATH" ""
+}

@@ -342,8 +342,7 @@ export function createNetwork({
         }
         trackUploadStart();
 
-        const agentSegment = encodeURIComponent(agentName);
-        const uploadUrl = `/blobs/${agentSegment}`;
+        const uploadUrl = '/blobs';
 
         const mime = file.type || 'application/octet-stream';
         const headers = {

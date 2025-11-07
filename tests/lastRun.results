@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29818 listening
-[PASS] Agent host port 32287 listening
-[PASS] Agent port 32287 bound to localhost
+[PASS] Router port 21582 listening
+[PASS] Agent host port 33035 listening
+[PASS] Agent port 33035 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -96,14 +96,22 @@
 ===== Agent Blob Upload and Download =====
 [PASS] Router upload stores blob in agent workspace
 [PASS] Router download returns uploaded blob
+[PASS] Router shared upload stores blob in shared folder
+[PASS] Router shared download returns uploaded blob
 
 ===== Demo Agent Filesystem =====
 [PASS] Demo agent directories exist and are read-only
 
 ===== Global Agent Verification =====
-[PASS] Global agent working directory is the test root
+[FAIL] Global agent working directory is the test root
+        Error: Error: unable to determine if "/home/mircea/.local/share/containers/storage/overlay-containers/ed2d95ce2fbd367efe06f8c636447389d039f6d672b6ed004f9c2fc37104854a/userdata/shm" is mounted: lstat /home/mircea/.local/share/containers/storage/overlay-containers/ed2d95ce2fbd367efe06f8c636447389d039f6d672b6ed004f9c2fc37104854a: no such file or directory
+❌ Error: podman run failed with code 127
+Failed to execute 'pwd' in global-agent shell.
 [PASS] Manifest dependency global agent uses workspace root
-[PASS] Manifest defined ports map correctly
+[FAIL] Manifest defined ports map correctly
+        Error: Error: name "ploinky_testRepo_global-agent_ploinky-fast-G6xzbC_8ba5345f" is in use: container already exists
+❌ Error: podman run failed with code 125
+Failed to inspect listening ports inside global-agent.
 
 ===== Devel Agent Verification =====
 [PASS] Devel agent cwd is the repo source and has RW permissions
@@ -120,13 +128,14 @@
 [PASS] logs last prints five lines
 
 ===== LLM CLI Suggestions =====
-[FAIL] testsAfterStart.sh timed out after 90 seconds.
+[PASS] Invalid CLI input yields LLM suggestion and system command output
+[FAIL] testsAfterStart.sh reported 2 failure(s).
 
 ===== STOP STAGE =====
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 29818 closed
-[PASS] Agent port 32287 closed
+[PASS] Router port 21582 closed
+[PASS] Agent port 33035 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
@@ -142,9 +151,9 @@
 
 ===== Tests after start =====
 [PASS] Service container is running
-[PASS] Router port 29818 listening
-[PASS] Agent host port 32287 listening
-[PASS] Agent port 32287 bound to localhost
+[PASS] Router port 21582 listening
+[PASS] Agent host port 33035 listening
+[PASS] Agent port 33035 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -229,6 +238,8 @@
 ===== Agent Blob Upload and Download =====
 [PASS] Router upload stores blob in agent workspace
 [PASS] Router download returns uploaded blob
+[PASS] Router shared upload stores blob in shared folder
+[PASS] Router shared download returns uploaded blob
 
 ===== Demo Agent Filesystem =====
 [PASS] Demo agent directories exist and are read-only
@@ -247,8 +258,8 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 29818 listening
-[PASS] Agent host port 32287 listening
+[PASS] Router port 21582 listening
+[PASS] Agent host port 33035 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -274,4 +285,4 @@
 [PASS] Node unit tests
 
 ===== TEST SUMMARY =====
-[FAIL] Suite finished with 2 failure(s).
+[FAIL] Suite finished with 3 failure(s).

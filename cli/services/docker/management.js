@@ -32,6 +32,12 @@ import { loadAgents } from '../workspace.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function ensureSharedHostDir() {
+    const dir = path.resolve(process.cwd(), 'shared');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+    return dir;
+}
+
 function parseAgentInfoFromMounts(mounts = []) {
     let repoName = '-';
     let agentName = '-';
@@ -194,6 +200,8 @@ async function ensureAgentCore(manifest, agentPath) {
     const portFilePath = path.join(PLOINKY_DIR, 'running_agents', `${containerName}.port`);
     const lockDir = path.join(PLOINKY_DIR, 'locks');
     const lockFile = path.join(lockDir, `container_${containerName}.lock`);
+    const sharedDir = ensureSharedHostDir();
+    let agents = loadAgentsMap();
 
     fs.mkdirSync(lockDir, { recursive: true });
     let retries = 50;
@@ -226,7 +234,6 @@ async function ensureAgentCore(manifest, agentPath) {
             if (!hostPort) throw new Error(`Could not determine host port for running container ${containerName}`);
             fs.mkdirSync(path.dirname(portFilePath), { recursive: true });
             fs.writeFileSync(portFilePath, hostPort);
-            const agents = loadAgentsMap();
             if (!agents[containerName]) {
                 agents[containerName] = {
                     agentName: manifest.name,
@@ -235,7 +242,7 @@ async function ensureAgentCore(manifest, agentPath) {
                     createdAt: new Date().toISOString(),
                     projectPath: process.cwd(),
                     type: 'agentCore',
-                    config: { binds: [{ source: agentPath, target: '/agent' }], env: [{ name: 'PORT', value: '8080' }], ports: [{ containerPort: 8080, hostPort }] }
+                    config: { binds: [{ source: agentPath, target: '/agent' }, { source: sharedDir, target: '/shared' }], env: [{ name: 'PORT', value: '8080' }], ports: [{ containerPort: 8080, hostPort }] }
                 };
                 saveAgentsMap(agents);
             }
@@ -245,12 +252,9 @@ async function ensureAgentCore(manifest, agentPath) {
         const image = manifest.container || manifest.image || 'node:18-alpine';
         const agentCorePath = path.resolve(__dirname, '../../../agentCore');
         const args = ['run', '-d', '-p', '8080', '--name', containerName,
-            '-v', `${agentPath}:/agent:z`, '-v', `${agentCorePath}:/agentCore:z`];
+            '-v', `${agentPath}:/agent:z`, '-v', `${agentCorePath}:/agentCore:z`, '-v', `${sharedDir}:/shared:z`];
         if (containerRuntime === 'podman') {
             args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
-        }
-        if (manifest.runTask) {
-            args.push('-e', `RUN_TASK=${manifest.runTask}`, '-e', 'CODE_DIR=/agent');
         }
         args.push('-e', 'PORT=8080', image, 'node', '/agentCore/server.js');
         execSync(`${containerRuntime} ${args.join(' ')}`, { stdio: 'inherit' });
@@ -260,7 +264,7 @@ async function ensureAgentCore(manifest, agentPath) {
         if (!hostPort) throw new Error(`Could not determine host port for new container ${containerName}`);
         fs.mkdirSync(path.dirname(portFilePath), { recursive: true });
         fs.writeFileSync(portFilePath, hostPort);
-        const agents = loadAgentsMap();
+        agents = loadAgentsMap();
         agents[containerName] = {
             agentName: manifest.name,
             repoName: path.basename(path.dirname(agentPath)),
@@ -271,10 +275,10 @@ async function ensureAgentCore(manifest, agentPath) {
             config: {
                 binds: [
                     { source: agentPath, target: '/agent' },
-                    { source: path.resolve(__dirname, '../../../agentCore'), target: '/agentCore' }
+                    { source: path.resolve(__dirname, '../../../agentCore'), target: '/agentCore' },
+                    { source: sharedDir, target: '/shared' }
                 ],
                 env: [
-                    ...(manifest.runTask ? [{ name: 'RUN_TASK', value: String(manifest.runTask) }, { name: 'CODE_DIR', value: '/agent' }] : []),
                     { name: 'PORT', value: '8080' }
                 ],
                 ports: [{ containerPort: 8080, hostPort }]
@@ -296,13 +300,15 @@ function runInstallHook(agentName, manifest, agentPath, cwd) {
     const agentLibPath = path.resolve(__dirname, '../../../Agent');
     const projectRoot = process.env.PLOINKY_ROOT;
     const nodeModulesPath = projectRoot ? path.join(projectRoot, 'node_modules') : null;
+    const sharedDir = ensureSharedHostDir();
     const volZ = runtime === 'podman' ? ':z' : '';
     const roZ = runtime === 'podman' ? ':ro,z' : ':ro';
 
     const args = ['run', '--rm', '-w', cwd,
         '-v', `${cwd}:${cwd}${volZ}`,
         '-v', `${agentLibPath}:/Agent${roZ}`,
-        '-v', `${path.resolve(agentPath)}:/code${roZ}`
+        '-v', `${path.resolve(agentPath)}:/code${roZ}`,
+        '-v', `${sharedDir}:/shared${volZ}`
     ];
     if (runtime === 'podman') {
         args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
@@ -376,6 +382,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const envHash = computeEnvHash(manifest);
     const projectRoot = process.env.PLOINKY_ROOT;
     const nodeModulesPath = path.join(projectRoot, 'node_modules');
+    const sharedDir = ensureSharedHostDir();
 
     runInstallHook(agentName, manifest, agentPath, cwd);
 
@@ -383,7 +390,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`,
         '-v', `${agentLibPath}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
         '-v', `${path.resolve(agentPath)}:/code${runtime === 'podman' ? ':ro,z' : ':ro'}`,
-        '-v', `${nodeModulesPath}:/node_modules${runtime === 'podman' ? ':ro,z' : ':ro'}`
+        '-v', `${nodeModulesPath}:/node_modules${runtime === 'podman' ? ':ro,z' : ':ro'}`,
+        '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`
     ];
     if (runtime === 'podman') {
         args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
@@ -479,7 +487,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             binds: [
                 { source: cwd, target: cwd },
                 { source: agentLibPath, target: '/Agent', ro: true },
-                { source: agentPath, target: '/code', ro: true }
+                { source: agentPath, target: '/code', ro: true },
+                { source: sharedDir, target: '/shared' }
             ],
             env: Array.from(new Set(declaredEnvNames2)).map((name) => ({ name })),
             ports: portMappings

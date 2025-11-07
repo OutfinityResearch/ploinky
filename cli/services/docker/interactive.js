@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { execSync, spawnSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,10 +25,18 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function ensureSharedHostDir() {
+    const dir = path.resolve(process.cwd(), 'shared');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+    return dir;
+}
+
 function runCommandInContainer(agentName, repoName, manifest, command, interactive = false) {
     const containerName = getAgentContainerName(agentName, repoName);
     let agents = loadAgentsMap();
     const projectDir = getConfiguredProjectPath(agentName, repoName);
+
+    const sharedDir = ensureSharedHostDir();
 
     let firstRun = false;
     debugLog(`Checking if container '${containerName}' exists...`);
@@ -35,9 +44,16 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
         const envVarParts = [...getSecretsForAgent(manifest), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
         const envVars = envVarParts.join(' ');
-        const mountOption = containerRuntime === 'podman'
-            ? `--mount type=bind,source="${projectDir}",destination="${projectDir}",relabel=shared`
-            : `-v "${projectDir}:${projectDir}"`;
+        const mountOptions = containerRuntime === 'podman'
+            ? [
+                `--mount type=bind,source="${projectDir}",destination="${projectDir}",relabel=shared`,
+                `--mount type=bind,source="${sharedDir}",destination="/shared",relabel=shared`
+            ]
+            : [
+                `-v "${projectDir}:${projectDir}"`,
+                `-v "${sharedDir}:/shared"`
+            ];
+        const mountOption = mountOptions.join(' ');
 
         const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
         const portOptions = manifestPorts.map(p => `-p ${p}`).join(' ');
@@ -88,7 +104,10 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             projectPath: projectDir,
             type: 'interactive',
             config: {
-                binds: [{ source: projectDir, target: projectDir }],
+                binds: [
+                    { source: projectDir, target: projectDir },
+                    { source: sharedDir, target: '/shared' }
+                ],
                 env: Array.from(new Set(declaredEnvNames)).map(name => ({ name })),
                 ports: portMappings
             }
@@ -192,6 +211,8 @@ function ensureAgentContainer(agentName, repoName, manifest) {
     const agentLibPath = path.resolve(__dirname, '../../../Agent');
     const agentPath = path.join(REPOS_DIR, repoName, agentName);
     const absAgentPath = path.resolve(agentPath);
+    const sharedDir = ensureSharedHostDir();
+    let agents = loadAgentsMap();
 
     if (containerExists(containerName)) {
         const desired = computeEnvHash(manifest);
@@ -215,6 +236,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
               -v "${projectDir}:${projectDir}${volZ}" \
               -v "${agentLibPath}:/Agent${roOpt}" \
               -v "${absAgentPath}:/code${roOpt}" \
+              -v "${sharedDir}:/shared${volZ}" \
               ${portOptions} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
             debugLog(`Executing create command: ${createCommand}`);
             execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -228,6 +250,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
                   -v "${projectDir}:${projectDir}${volZ}" \
                   -v "${agentLibPath}:/Agent${roOpt}" \
                   -v "${absAgentPath}:/code${roOpt}" \
+                  -v "${sharedDir}:/shared${volZ}" \
                   ${portOptions} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
                 debugLog(`Executing retry command: ${retryCommand}`);
                 execSync(retryCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
@@ -238,7 +261,6 @@ function ensureAgentContainer(agentName, repoName, manifest) {
                 throw error;
             }
         }
-        const agents = loadAgentsMap();
         const declaredEnvNamesX = [...getManifestEnvNames(manifest), ...getExposedNames(manifest)];
         agents[containerName] = {
             agentName,
@@ -251,7 +273,8 @@ function ensureAgentContainer(agentName, repoName, manifest) {
                 binds: [
                     { source: projectDir, target: projectDir },
                     { source: agentLibPath, target: '/Agent', ro: true },
-                    { source: absAgentPath, target: '/code', ro: true }
+                    { source: absAgentPath, target: '/code', ro: true },
+                    { source: sharedDir, target: '/shared' }
                 ],
                 env: Array.from(new Set(declaredEnvNamesX)).map(name => ({ name })),
                 ports: portMappings

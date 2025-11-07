@@ -4,6 +4,12 @@ import crypto from 'crypto';
 
 import { loadAgents } from '../../services/workspace.js';
 
+function ensureSharedHostDir() {
+    const dir = path.resolve(process.cwd(), 'shared');
+    try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
+    return dir;
+}
+
 function newId() { return crypto.randomBytes(24).toString('hex'); }
 
 function sanitizeId(id) {
@@ -81,9 +87,41 @@ function resolveAgentRecord(agentSegment) {
             canonicalName: record.agentName,
             repoName: record.repoName || null,
             projectPath,
-            blobsDir
+            blobsDir,
+            isShared: false
         }
     };
+}
+
+function resolveSharedRecord() {
+    const sharedDir = ensureSharedHostDir();
+    return {
+        ok: true,
+        agent: {
+            requestSegment: '',
+            canonicalName: 'shared',
+            repoName: null,
+            projectPath: sharedDir,
+            blobsDir: sharedDir,
+            isShared: true
+        }
+    };
+}
+
+function getRouteUrl(agent, id) {
+    if (!agent) return `/blobs/${id}`;
+    if (agent.isShared) {
+        return `/blobs/${id}`;
+    }
+    const segment = encodeURIComponent(normalizeAgentSegment(agent.requestSegment || agent.canonicalName));
+    return `/blobs/${segment}/${id}`;
+}
+
+function getLocalPath(agent, id) {
+    if (agent?.isShared) {
+        return `/shared/${id}`;
+    }
+    return `blobs/${id}`;
 }
 
 function ensureAgentBlobsDir(agent) {
@@ -172,9 +210,8 @@ function handlePost(req, res, agent) {
         req.pipe(out);
         out.on('finish', () => {
             const displayName = originalName || null;
-            const agentSegment = encodeURIComponent(normalizeAgentSegment(agent.requestSegment || agent.canonicalName));
-            const routeUrl = `/blobs/${agentSegment}/${id}`;
-            const localUrl = `blobs/${id}`;
+            const routeUrl = getRouteUrl(agent, id);
+            const localPath = getLocalPath(agent, id);
             const protoHeader = readHeader(req, 'x-forwarded-proto');
             const forwardedHost = readHeader(req, 'x-forwarded-host');
             const hostHeader = readHeader(req, 'host');
@@ -191,14 +228,14 @@ function handlePost(req, res, agent) {
                 agent: agent.canonicalName,
                 repo: agent.repoName,
                 filename: displayName,
-                localPath: localUrl,
+                localPath,
                 downloadUrl: absoluteUrl
             };
             writeMeta(agent, id, meta);
             res.writeHead(201, { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' });
             res.end(JSON.stringify({
                 id,
-                localPath: localUrl,
+                localPath,
                 size,
                 mime,
                 agent: agent.canonicalName,
@@ -282,6 +319,11 @@ function handleBlobs(req, res) {
         res.writeHead(404); return res.end('Not Found');
     }
 
+    if (req.method === 'POST' && segments.length === 1) {
+        const resolved = resolveSharedRecord();
+        return handlePost(req, res, resolved.agent);
+    }
+
     if (req.method === 'POST' && segments.length === 2) {
         const agentSegment = segments[1];
         const resolved = resolveAgentRecord(agentSegment);
@@ -291,6 +333,16 @@ function handleBlobs(req, res) {
             return;
         }
         return handlePost(req, res, resolved.agent);
+    }
+
+    if ((req.method === 'GET' || req.method === 'HEAD') && segments.length === 2) {
+        const idSegment = segments[1];
+        const safeId = sanitizeId(idSegment);
+        if (!safeId) {
+            res.writeHead(400); return res.end('Bad id');
+        }
+        const resolved = resolveSharedRecord();
+        return handleGetHead(req, res, resolved.agent, safeId, req.method === 'HEAD');
     }
 
     if ((req.method === 'GET' || req.method === 'HEAD') && segments.length === 3) {
