@@ -297,6 +297,13 @@ function runInstallHook(agentName, manifest, agentPath, cwd) {
 
     const runtime = containerRuntime;
     const image = manifest.container || manifest.image || 'node:18-alpine';
+    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
+    const containerPortCandidates = portMappings
+        .map((mapping) => mapping?.containerPort)
+        .filter((port) => typeof port === 'number' && port > 0);
+    if (!containerPortCandidates.length) {
+        containerPortCandidates.push(7000);
+    }
     const agentLibPath = path.resolve(__dirname, '../../../Agent');
     const projectRoot = process.env.PLOINKY_ROOT;
     const nodeModulesPath = projectRoot ? path.join(projectRoot, 'node_modules') : null;
@@ -508,6 +515,39 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     return containerName;
 }
 
+function resolveHostPort(containerName, existingRecord, containerPortCandidates) {
+    const fromRecord = resolveHostPortFromRecord(existingRecord, containerPortCandidates);
+    if (fromRecord) return fromRecord;
+    return resolveHostPortFromRuntime(containerName, containerPortCandidates);
+}
+
+function resolveHostPortFromRecord(record, containerPortCandidates) {
+    const ports = record?.config?.ports;
+    if (!Array.isArray(ports) || !ports.length) return 0;
+    for (const containerPort of containerPortCandidates) {
+        const match = ports.find((p) => p && p.containerPort === containerPort);
+        if (match?.hostPort) {
+            return match.hostPort;
+        }
+    }
+    return ports[0]?.hostPort || 0;
+}
+
+function resolveHostPortFromRuntime(containerName, containerPortCandidates) {
+    for (const containerPort of containerPortCandidates) {
+        try {
+            const portMap = execSync(`${containerRuntime} port ${containerName} ${containerPort}/tcp`, { stdio: 'pipe' }).toString().trim();
+            const hostPort = parseHostPort(portMap);
+            if (hostPort) {
+                return hostPort;
+            }
+        } catch (_) {
+            // ignore and try next
+        }
+    }
+    return 0;
+}
+
 function stopAndRemoveMany(names, { fast = false } = {}) {
     if (!Array.isArray(names) || !names.length) return [];
 
@@ -696,6 +736,13 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         aliasOverride = existingRecord.alias;
     }
     const image = manifest.container || manifest.image || 'node:18-alpine';
+    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
+    const containerPortCandidates = portMappings
+        .map((mapping) => mapping?.containerPort)
+        .filter((port) => typeof port === 'number' && port > 0);
+    if (!containerPortCandidates.length) {
+        containerPortCandidates.push(7000);
+    }
 
     if (containerExists(containerName)) {
         const desired = computeEnvHash(manifest);
@@ -708,18 +755,11 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         if (!isContainerRunning(containerName)) {
             try { execSync(`${containerRuntime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
         }
-        try {
-            const portMap = execSync(`${containerRuntime} port ${containerName} 7000/tcp`, { stdio: 'pipe' }).toString().trim();
-            const hostPort = parseHostPort(portMap);
-            if (hostPort) {
-                syncAgentMcpConfig(containerName, agentPath);
-                return { containerName, hostPort };
-            }
-            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
-        } catch (_) { }
+        const hostPort = resolveHostPort(containerName, existingRecord, containerPortCandidates);
+        syncAgentMcpConfig(containerName, agentPath);
+        return { containerName, hostPort };
     }
 
-    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
     let additionalPorts = [];
     let allPortMappings = [...portMappings];
 
