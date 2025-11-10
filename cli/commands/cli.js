@@ -1,7 +1,7 @@
 import { execSync } from 'child_process';
 import { debugLog, findAgent } from '../services/utils.js';
 import { isKnownCommand } from '../services/commandRegistry.js';
-import 'ploinkyAgentLib/LLMAgents';
+import 'achillesAgentLib/LLMAgents';
 import { showHelp } from '../services/help.js';
 import * as envSvc from '../services/secretVars.js';
 import * as agentsSvc from '../services/agents.js';

@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let cachedValidApiKeys = null;
-const LLM_CONFIG_RELATIVE_PATH = ['node_modules', 'ploinkyAgentLib', 'LLMConfig.json'];
+const LLM_CONFIG_RELATIVE_PATH = ['node_modules', 'achillesAgentLib', 'LLMConfig.json'];
 
 function resolveLlmConfigPath() {
     const candidates = [

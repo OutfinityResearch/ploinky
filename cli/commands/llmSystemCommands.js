@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import { execSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
-import { defaultLLMInvokerStrategy } from 'ploinkyAgentLib/utils/LLMClient.mjs';
+import { defaultLLMInvokerStrategy } from 'achillesAgentLib/utils/LLMClient.mjs';
 import { debugLog } from '../services/utils.js';
 import { loadValidLlmApiKeys, collectAvailableLlmKeys } from '../services/llmProviderUtils.js';
 

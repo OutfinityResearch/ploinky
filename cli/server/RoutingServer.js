@@ -138,7 +138,7 @@ async function processRequest(req, res) {
     }
 
     // For /mcps/ routes, check agent auth first, then fall back to user auth
-    if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/')) {
+    if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/') || pathname === '/mcp') {
         const hasAuthHeader = req.headers?.authorization && typeof req.headers.authorization === 'string';
         if (hasAuthHeader && req.headers.authorization.startsWith('Bearer ')) {
             // Try agent authentication first
