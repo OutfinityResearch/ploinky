@@ -488,7 +488,8 @@ function handleWebChat(req, res, appConfig, appState) {
                     id: req.user.id,
                     username: req.user.username,
                     email: req.user.email,
-                    roles: req.user.roles || []
+                    roles: req.user.roles || [],
+                    sessionId: req.sessionId || null
                 } : null;
 
                 // Debug: Log SSO user info

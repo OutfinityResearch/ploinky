@@ -33,6 +33,9 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
         const rolesStr = ssoUser.roles.join(',');
         ssoCliArgs.push(`--sso-roles=${rolesStr}`);
       }
+      if (ssoUser.sessionId) {
+        ssoCliArgs.push(`--sso-session-id=${shellEscape(ssoUser.sessionId)}`);
+      }
     }
     if (!ssoCliArgs.length) {
       ssoCliArgs.push('--sso-user=guest', '--sso-user-id=guest', '--sso-roles=guest');
@@ -132,6 +135,9 @@ function createLocalTTYFactory({ ptyLib, workdir, command }) {
       if (Array.isArray(ssoUser.roles) && ssoUser.roles.length) {
         const rolesStr = ssoUser.roles.join(',');
         ssoCliArgs.push(`--sso-roles=${rolesStr}`);
+      }
+      if (ssoUser.sessionId) {
+        ssoCliArgs.push(`--sso-session-id=${shellEscape(ssoUser.sessionId)}`);
       }
     }
     if (!ssoCliArgs.length) {
