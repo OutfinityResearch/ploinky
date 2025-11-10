@@ -18,7 +18,7 @@ source "$TESTS_DIR/test-functions/demo_agent_dir_perm.sh"
 source "$TESTS_DIR/test-functions/global_agent_verification.sh"
 source "$TESTS_DIR/test-functions/devel_agent_verification.sh"
 source "$TESTS_DIR/test-functions/watchdog_restart_services.sh"
-source "$TESTS_DIR/test-functions/webchat_rotate_token.sh"
+source "$TESTS_DIR/test-functions/webchat_tests.sh"
 source "$TESTS_DIR/test-functions/test_sso_params.sh"
 source "$TESTS_DIR/test-functions/webtty_command.sh"
 source "$TESTS_DIR/test-functions/default_cli_tests.sh"
@@ -45,6 +45,7 @@ require_var "TEST_AGENT_DEP_GLOBAL_NAME"
 require_var "TEST_AGENT_DEP_DEVEL_NAME"
 require_var "TEST_HEALTH_AGENT_CONT_NAME"
 require_var "TEST_ENABLE_ALIAS_AGENT_CONTAINER"
+require_var "TEST_ENABLE_ALIAS_AGENT_ALIAS"
 require_var "TEST_GLOBAL_AGENT_ALIAS"
 require_var "TEST_GLOBAL_AGENT_NAME"
 require_var "TEST_GLOBAL_AGENT_HOST_PORT"
@@ -125,6 +126,7 @@ test_check "Agent sees exposed ${FAST_VAR_TEST_NAME} via shell" fast_cli_verify_
 
 stage_header "WebChat Command"
 test_check "webchat --rotate regenerates token" fast_check_webchat_token_rotation
+test_check "WebChat agent override responds via curl" fast_check_webchat_alias_override
 
 stage_header "WebChat SSO Parameters"
 test_action "Configure WebChat CLI for test agent" configure_webchat_cli_for_test_agent

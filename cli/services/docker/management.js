@@ -298,12 +298,6 @@ function runInstallHook(agentName, manifest, agentPath, cwd) {
     const runtime = containerRuntime;
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
-    const containerPortCandidates = portMappings
-        .map((mapping) => mapping?.containerPort)
-        .filter((port) => typeof port === 'number' && port > 0);
-    if (!containerPortCandidates.length) {
-        containerPortCandidates.push(7000);
-    }
     const agentLibPath = path.resolve(__dirname, '../../../Agent');
     const projectRoot = process.env.PLOINKY_ROOT;
     const nodeModulesPath = projectRoot ? path.join(projectRoot, 'node_modules') : null;

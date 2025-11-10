@@ -2,7 +2,7 @@ import { resolveVarValue } from '../../services/secretVars.js';
 import { configCache } from '../utils/configCache.js';
 import { logBootEvent } from '../utils/logger.js';
 import { getAppName } from '../authHandlers.js';
-import { resolveWebchatCommands } from '../webchat/commandResolver.js';
+import { resolveWebchatCommands, resolveWebchatCommandsForAgent } from '../webchat/commandResolver.js';
 
 /**
  * Load PTY library (optional dependency)
@@ -130,55 +130,67 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
         createLocalTTYFactory: createWebChatLocalFactory
     } = webchatTTYModule;
 
-    return () => configCache.getOrCreate(
-        'webchat',
-        () => ({
-            container: process.env.WEBCHAT_CONTAINER || 'ploinky_chat',
-            hostCommand: resolvedWebchatCommands.host,
-            containerCommand: resolvedWebchatCommands.container,
-            source: resolvedWebchatCommands.source,
-            agentName: resolvedWebchatCommands.agentName || ''
-        }),
-        (config) => {
-            if (!pty) {
-                logBootEvent('webchat_factory_disabled', { reason: 'pty_unavailable' });
-                return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '' };
-            }
-            if (createWebChatLocalFactory) {
-                const command = config.hostCommand;
-                const factory = buildLocalFactory(createWebChatLocalFactory, pty, { command });
-                if (factory) {
-                    logBootEvent('webchat_local_process_factory_ready', {
-                        command: command || null,
-                        source: config.source
-                    });
-                }
-                return {
-                    factory,
-                    label: command ? command : 'local shell',
-                    runtime: 'local',
-                    agentName: config.agentName || ''
-                };
-            }
-            if (createWebChatTTYFactory) {
-                const entry = config.containerCommand;
-                const factory = createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName: config.container, entry });
-                logBootEvent('webchat_container_factory_ready', {
-                    containerName: config.container,
-                    command: entry || null,
-                    source: config.source
-                });
-                return {
-                    factory,
-                    label: config.container,
-                    runtime: 'docker',
-                    agentName: config.agentName || ''
-                };
-            }
-            logBootEvent('webchat_factory_disabled', { reason: 'no_factory_available' });
+    const buildCacheKey = (commands) => commands?.cacheKey || (commands?.agentName ? `webchat:${commands.agentName}` : 'webchat');
+    const buildConfig = (commands) => ({
+        hostCommand: commands?.host || '',
+        containerCommand: commands?.container || '',
+        source: commands?.source || 'unset',
+        agentName: commands?.agentName || ''
+    });
+
+    const buildFactoryResult = (config) => {
+        if (!pty) {
+            logBootEvent('webchat_factory_disabled', { reason: 'pty_unavailable' });
             return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '' };
         }
-    );
+        if (createWebChatLocalFactory) {
+            const command = config.hostCommand;
+            const factory = buildLocalFactory(createWebChatLocalFactory, pty, { command });
+            if (factory) {
+                logBootEvent('webchat_local_process_factory_ready', {
+                    command: command || null,
+                    source: config.source
+                });
+            }
+            return {
+                factory,
+                label: command ? command : 'local shell',
+                runtime: 'local',
+                agentName: config.agentName || ''
+            };
+        }
+        if (createWebChatTTYFactory) {
+            const entry = config.containerCommand;
+            const containerLabel = config.agentName || 'webchat_agent';
+            const factory = createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName: containerLabel, entry });
+            logBootEvent('webchat_container_factory_ready', {
+                containerName: containerLabel,
+                command: entry || null,
+                source: config.source
+            });
+            return {
+                factory,
+                label: containerLabel,
+                runtime: 'docker',
+                agentName: config.agentName || ''
+            };
+        }
+        logBootEvent('webchat_factory_disabled', { reason: 'no_factory_available' });
+        return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '' };
+    };
+
+    return (commandsOverride = null) => {
+        const commands = commandsOverride || resolvedWebchatCommands;
+        if (!commands) {
+            return { factory: null, label: '-', runtime: 'disabled', agentName: '' };
+        }
+        const cacheKey = buildCacheKey(commands);
+        return configCache.getOrCreate(
+            cacheKey,
+            () => buildConfig(commands),
+            buildFactoryResult
+        );
+    };
 }
 
 /**
@@ -212,6 +224,23 @@ async function initializeTTYFactories() {
  * Create service configuration object
  */
 function createServiceConfig(getWebttyFactory, getWebchatFactory) {
+    const appName = getAppName();
+
+    const wrapWebchatFactory = (factoryResult) => {
+        const base = {
+            ttyFactory: factoryResult.factory,
+            agentName: factoryResult.agentName || appName || 'ChatAgent',
+            containerName: factoryResult.label,
+            runtime: factoryResult.runtime
+        };
+        base.getFactoryForCommands = (commands) => {
+            if (!commands) return null;
+            const nextFactory = getWebchatFactory(commands);
+            return wrapWebchatFactory(nextFactory);
+        };
+        return base;
+    };
+
     return {
         get webtty() {
             const factory = getWebttyFactory();
@@ -223,15 +252,7 @@ function createServiceConfig(getWebttyFactory, getWebchatFactory) {
             };
         },
         get webchat() {
-            const factory = getWebchatFactory();
-            const appName = getAppName(); // Always get fresh APP_NAME
-            const resolvedAgentName = factory?.agentName;
-            return {
-                ttyFactory: factory.factory,
-                agentName: resolvedAgentName || appName || 'ChatAgent',
-                containerName: factory.label,
-                runtime: factory.runtime
-            };
+            return wrapWebchatFactory(getWebchatFactory());
         },
         dashboard: {
             agentName: 'Dashboard',

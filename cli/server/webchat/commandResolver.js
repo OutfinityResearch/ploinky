@@ -32,15 +32,27 @@ function extractManifestCli(manifest) {
 
 function resolveStaticAgentDetails(routingFilePath) {
     const cfg = readRoutingConfig(routingFilePath);
-    if (!cfg || !cfg.static) return { agentName: '', hostPath: '' };
+    if (!cfg || !cfg.static) {
+        return { agentName: '', hostPath: '', containerName: '', alias: '' };
+    }
     const agentName = trimCommand(cfg.static.agent);
     const hostPath = trimCommand(cfg.static.hostPath);
-    return { agentName, hostPath };
+    const containerName = trimCommand(cfg.static.container);
+    const alias = trimCommand(cfg.static.alias);
+    return { agentName, hostPath, containerName, alias };
+}
+
+function resolveCliTarget(record = {}, fallbackName = '') {
+    const alias = trimCommand(record.alias);
+    if (alias) return alias;
+    const container = trimCommand(record.container);
+    if (container) return container;
+    return trimCommand(fallbackName);
 }
 
 function resolveWebchatCommands(options = {}) {
     const routingFilePath = options.routingFilePath || path.resolve('.ploinky/routing.json');
-    const { agentName: staticAgentName, hostPath } = resolveStaticAgentDetails(routingFilePath);
+    const { agentName: staticAgentName, hostPath, containerName, alias } = resolveStaticAgentDetails(routingFilePath);
 
     if (!staticAgentName || !hostPath) {
         return { host: '', container: '', source: 'unset', agentName: '' };
@@ -64,16 +76,60 @@ function resolveWebchatCommands(options = {}) {
         return { host: '', container: '', source: 'unset', agentName: staticAgentName };
     }
 
+    const cliTarget = resolveCliTarget({ alias, container: containerName }, staticAgentName);
+    const hostCommand = cliTarget ? `ploinky cli ${cliTarget}` : '';
     return {
-        host: `ploinky cli ${staticAgentName}`,
+        host: hostCommand,
         container: manifestCli,
         source: 'manifest',
-        agentName: staticAgentName
+        agentName: staticAgentName,
+        cliTarget,
+        cacheKey: 'webchat'
+    };
+}
+
+function resolveWebchatCommandsForAgent(agentRef, options = {}) {
+    const routingFilePath = options.routingFilePath || path.resolve('.ploinky/routing.json');
+    const routing = readRoutingConfig(routingFilePath);
+    if (!routing) return null;
+    const routes = routing.routes || {};
+    let record = routes[agentRef];
+    if (!record) {
+        const staticAgent = trimCommand(routing.static?.agent);
+        if (staticAgent && staticAgent === agentRef) {
+            record = routing.static;
+        }
+    }
+
+    if (!record || !record.hostPath) {
+        return null;
+    }
+
+    const manifestPath = path.join(record.hostPath, 'manifest.json');
+    let manifestCli = '';
+    try {
+        if (fs.existsSync(manifestPath)) {
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            manifestCli = extractManifestCli(manifest);
+        }
+    } catch (_) {
+        manifestCli = '';
+    }
+    const cliTarget = resolveCliTarget(record, agentRef);
+    const hostCommand = cliTarget ? `ploinky cli ${cliTarget}` : '';
+    return {
+        host: hostCommand,
+        container: manifestCli,
+        source: 'manifest',
+        agentName: agentRef,
+        cliTarget,
+        cacheKey: `webchat:${agentRef}`
     };
 }
 
 export {
     resolveWebchatCommands,
+    resolveWebchatCommandsForAgent,
     extractManifestCli,
     trimCommand
 };

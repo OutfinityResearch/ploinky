@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
-
+import {resolveWebchatCommandsForAgent} from '../webchat/commandResolver.js';
 import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie, parseMultipartFormData } from './common.js';
 import * as staticSrv from '../static/index.js';
 import { createServerTtsStrategy } from './ttsStrategies/index.js';
@@ -278,6 +278,32 @@ async function handleRealtimeToken(req, res) {
 function handleWebChat(req, res, appConfig, appState) {
     const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
+    const agentOverrideRaw = parsedUrl.searchParams.get('agent') || '';
+    const agentOverride = agentOverrideRaw.trim();
+    let effectiveConfig = appConfig;
+    let agentQuery = '';
+
+    if (agentOverride) {
+        const overrideCommands = resolveWebchatCommandsForAgent(agentOverride);
+        if (!overrideCommands) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Agent not found or not enabled.');
+            return;
+        }
+        if (typeof appConfig.getFactoryForCommands !== 'function') {
+            res.writeHead(503, { 'Content-Type': 'text/plain' });
+            res.end('Dynamic agent selection unavailable.');
+            return;
+        }
+        const overrideConfig = appConfig.getFactoryForCommands(overrideCommands);
+        if (!overrideConfig || !overrideConfig.ttyFactory) {
+            res.writeHead(503, { 'Content-Type': 'text/plain' });
+            res.end('Unable to start agent session.');
+            return;
+        }
+        effectiveConfig = overrideConfig;
+        agentQuery = `agent=${encodeURIComponent(overrideCommands.agentName || agentOverride)}`;
+    }
 
     if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
     if (pathname === '/whoami') {
@@ -314,14 +340,14 @@ function handleWebChat(req, res, appConfig, appState) {
         }
         const html = renderTemplate(['login.html', 'index.html'], {
             '__ASSET_BASE__': `/${appName}/assets`,
-            '__AGENT_NAME__': appConfig.displayName || appConfig.agentName || '',
-            '__DISPLAY_NAME__': appConfig.displayName || appConfig.agentName || 'WebChat',
-            '__CONTAINER_NAME__': appConfig.containerName || '-',
-            '__RUNTIME__': appConfig.runtime || 'local',
+            '__AGENT_NAME__': effectiveConfig.displayName || effectiveConfig.agentName || '',
+            '__DISPLAY_NAME__': effectiveConfig.displayName || effectiveConfig.agentName || 'WebChat',
+            '__RUNTIME__': effectiveConfig.runtime || 'local',
             '__REQUIRES_AUTH__': 'true',
             '__BASE_PATH__': `/${appName}`,
             '__TTS_PROVIDER__': DEFAULT_TTS_PROVIDER,
-            '__STT_PROVIDER__': DEFAULT_STT_PROVIDER
+            '__STT_PROVIDER__': DEFAULT_STT_PROVIDER,
+            '__AGENT_QUERY__': agentQuery
         });
         if (html) {
             res.writeHead(200, {
@@ -350,14 +376,14 @@ function handleWebChat(req, res, appConfig, appState) {
     if (pathname === '/' || pathname === '/index.html') {
         const html = renderTemplate(['chat.html', 'index.html'], {
             '__ASSET_BASE__': `/${appName}/assets`,
-            '__AGENT_NAME__': appConfig.agentName || '',
-            '__DISPLAY_NAME__': appConfig.displayName || appConfig.agentName || 'WebChat',
-            '__CONTAINER_NAME__': appConfig.containerName || '-',
-            '__RUNTIME__': appConfig.runtime || 'local',
+            '__AGENT_NAME__': effectiveConfig.agentName || '',
+            '__DISPLAY_NAME__': effectiveConfig.displayName || effectiveConfig.agentName || 'WebChat',
+            '__RUNTIME__': effectiveConfig.runtime || 'local',
             '__REQUIRES_AUTH__': 'true',
             '__BASE_PATH__': `/${appName}`,
             '__TTS_PROVIDER__': DEFAULT_TTS_PROVIDER,
-            '__STT_PROVIDER__': DEFAULT_STT_PROVIDER
+            '__STT_PROVIDER__': DEFAULT_STT_PROVIDER,
+            '__AGENT_QUERY__': agentQuery
         });
         if (html) {
             res.writeHead(200, {
@@ -420,7 +446,7 @@ function handleWebChat(req, res, appConfig, appState) {
             return;
         }
 
-        if (!tab && !appConfig.ttyFactory) {
+        if (!tab && !effectiveConfig.ttyFactory) {
             res.writeHead(503, { 'Content-Type': 'text/plain' });
             res.end('TTY support unavailable. Install node-pty to enable chat sessions.');
             return;
@@ -474,7 +500,7 @@ function handleWebChat(req, res, appConfig, appState) {
                     }));
                 }
 
-                const tty = appConfig.ttyFactory.create(ssoUser);
+                const tty = effectiveConfig.ttyFactory.create(ssoUser);
                 tab = {
                     tty,
                     sseRes: res,

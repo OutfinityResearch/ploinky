@@ -6,10 +6,17 @@
   const form = document.getElementById('tokenForm');
   const input = document.getElementById('tokenInput');
   const basePath = String(body.dataset.base || '').replace(/\/$/, '');
-  const homeHref = basePath ? `${basePath}/` : '/webchat';
+  const agentQuery = (body.dataset.agentQuery || '').trim();
+  const appendAgentQuery = (url) => {
+    if (!agentQuery) return url;
+    return url + (url.includes('?') ? '&' : '?') + agentQuery;
+  };
+  const baseHome = basePath ? `${basePath}/` : '/webchat';
+  const homeHref = appendAgentQuery(baseHome);
   const toEndpoint = (path) => {
     const suffix = String(path || '').replace(/^\/+/, '');
-    return (basePath ? basePath : '') + '/' + suffix;
+    const base = (basePath ? basePath : '') + '/' + suffix;
+    return appendAgentQuery(base);
   };
 
   const appTitle = (body.dataset.agent || '').trim();

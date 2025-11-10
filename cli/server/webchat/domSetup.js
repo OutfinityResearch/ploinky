@@ -79,6 +79,7 @@ export function initDom() {
     const agentName = (body.dataset.agent || '').trim();
     const displayName = (body.dataset.title || '').trim();
     const basePath = (body.dataset.base || '').replace(/\/$/, '') || '';
+    const agentQuery = (body.dataset.agentQuery || '').trim();
     const ttsProvider = (body.dataset.ttsProvider || '').trim().toLowerCase();
     const sttProvider = (body.dataset.sttProvider || '').trim().toLowerCase();
 
@@ -170,7 +171,11 @@ export function initDom() {
 
     const toEndpoint = (path) => {
         const suffix = String(path || '').replace(/^\/+/, '');
-        return basePath ? `${basePath}/${suffix}` : `/${suffix}`;
+        let url = basePath ? `${basePath}/${suffix}` : `/${suffix}`;
+        if (agentQuery) {
+            url += (url.includes('?') ? '&' : '?') + agentQuery;
+        }
+        return url;
     };
 
     return {
