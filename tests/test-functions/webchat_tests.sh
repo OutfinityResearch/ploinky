@@ -72,5 +72,15 @@ fast_check_webchat_alias_override() {
     return 1
   fi
 
+  local expected_attr="data-agent=\"${alias_name}\""
+  if ! grep -Fq "$expected_attr" "$tmp_file"; then
+    echo "WebChat HTML missing ${expected_attr} marker for agent '${alias_name}'." >&2
+    echo "--- response body ---" >&2
+    cat "$tmp_file" >&2 || true
+    echo "---------------------" >&2
+    rm -f "$tmp_file"
+    return 1
+  fi
+
   rm -f "$tmp_file"
 }
