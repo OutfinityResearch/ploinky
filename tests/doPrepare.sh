@@ -48,6 +48,13 @@ router_port=$(allocate_port)
 write_state_var "TEST_ROUTER_PORT" "$router_port"
 test_info "Allocated router port: $router_port"
 
+mkdir -p "$TEST_RUN_DIR/.ploinky"
+cat >"$TEST_RUN_DIR/.ploinky/routing.json" <<EOF
+{
+  "port": ${router_port}
+}
+EOF
+
 repo_root=".ploinky/repos/${TEST_REPO_NAME}"
 agent_root="${repo_root}/${TEST_AGENT_NAME}"
 mkdir -p "$agent_root"

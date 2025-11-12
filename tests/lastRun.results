@@ -9,9 +9,9 @@
 
 ===== START STAGE =====
 [PASS] Service container is running
-[PASS] Router port 21582 listening
-[PASS] Agent host port 33035 listening
-[PASS] Agent port 33035 bound to localhost
+[PASS] Router port 23391 listening
+[PASS] Agent host port 22550 listening
+[PASS] Agent port 22550 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -61,11 +61,36 @@
 
 ===== MCP tests =====
 [PASS] Status check: client status simulator
-[PASS] Tool check: client list tools
-[PASS] Tool run check: client tool run_simulation -iterations 10
+[FAIL] Tool check: client list tools
+        Error: run_simulation not found in client list tools
+[FAIL] Tool run check: client tool run_simulation -iterations 10
+        Error: Tool 'run_simulation' not found on any active agent.
+run_simulation did not return ok:true. Output: 
 
 ===== RoutingServer aggregation test =====
-[PASS] Aggregation check: router server mcp aggregation
+[FAIL] Aggregation check: router server mcp aggregation
+        Error: [94m[INFO][0m --- ploinky client list tools output (after demo) ---
+[94m[INFO][0m - [explorer] read_file - Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.
+- [explorer] read_text_file - Read the complete contents of a file from the file system as text. Handles encodings and optional head/tail.
+- [explorer] read_media_file - Read an image or audio file and return base64 data with MIME type.
+- [explorer] read_multiple_files - Read the contents of multiple files simultaneously.
+- [explorer] write_file - Create or overwrite a file with new content.
+- [explorer] edit_file - Apply textual edits to a file and return a diff.
+- [explorer] create_directory - Ensure a directory exists by creating it recursively.
+- [explorer] delete_file - Delete a file.
+- [explorer] delete_directory - Delete a directory.
+- [explorer] list_directory - List files and directories within a path.
+- [explorer] list_directory_with_sizes - List directory contents with sizes and summary.
+- [explorer] list_directory_detailed - List directory contents with metadata as JSON.
+- [explorer] directory_tree - Return a JSON tree of files and directories.
+- [explorer] move_file - Move or rename files or directories.
+- [explorer] copy_file - Copy files or directories. Supports recursive copies.
+- [explorer] search_files - Recursive search for files and directories matching a pattern.
+- [explorer] get_file_info - Retrieve metadata about a file or directory.
+- [explorer] collect_ide_plugins - Aggregate IDE plugin configurations grouped by location based on config.json files.
+- [explorer] list_allowed_directories - Return the directories that the server is permitted to access.
+[94m[INFO][0m -------------------------------------------------
+run_simulation not found after starting demo
 
 ===== CLI Variable Commands =====
 [PASS] var sets test_var
@@ -76,148 +101,7 @@
 
 ===== WebChat Command =====
 [PASS] webchat --rotate regenerates token
-
-===== WebChat SSO Parameters =====
-[PASS] WebChat CLI session logs guest SSO args
-
-===== Router Static Assets =====
-[PASS] Router serves configured static asset
-
-===== Manifest Environment =====
-[PASS] Variable MY_TEST_VAR from manifest is present after start
-[PASS] Custom volume mount exposes marker
-
-===== Install Command Verification =====
-[PASS] Install command creates marker file (verified via shell)
-
-===== Postinstall Verification =====
-[PASS] Postinstall command creates marker file
-
-===== Agent Blob Upload and Download =====
-[PASS] Router upload stores blob in agent workspace
-[PASS] Router download returns uploaded blob
-[PASS] Router shared upload stores blob in shared folder
-[PASS] Router shared download returns uploaded blob
-
-===== Demo Agent Filesystem =====
-[PASS] Demo agent directories exist and are read-only
-
-===== Global Agent Verification =====
-[FAIL] Global agent working directory is the test root
-        Error: Error: unable to determine if "/home/mircea/.local/share/containers/storage/overlay-containers/ed2d95ce2fbd367efe06f8c636447389d039f6d672b6ed004f9c2fc37104854a/userdata/shm" is mounted: lstat /home/mircea/.local/share/containers/storage/overlay-containers/ed2d95ce2fbd367efe06f8c636447389d039f6d672b6ed004f9c2fc37104854a: no such file or directory
-❌ Error: podman run failed with code 127
-Failed to execute 'pwd' in global-agent shell.
-[PASS] Manifest dependency global agent uses workspace root
-[FAIL] Manifest defined ports map correctly
-        Error: Error: name "ploinky_testRepo_global-agent_ploinky-fast-G6xzbC_8ba5345f" is in use: container already exists
-❌ Error: podman run failed with code 125
-Failed to inspect listening ports inside global-agent.
-
-===== Devel Agent Verification =====
-[PASS] Devel agent cwd is the repo source and has RW permissions
-[PASS] Manifest dependency devel agent uses repo root
-
-===== WebTTY Command =====
-[PASS] webtty command records mock shell configuration
-
-===== Disable Repo Command =====
-[PASS] disable repo removes demo entry
-
-===== Logs Commands =====
-[PASS] logs tail router streams entries
-[PASS] logs last prints five lines
-
-===== LLM CLI Suggestions =====
-[PASS] Invalid CLI input yields LLM suggestion and system command output
-[FAIL] testsAfterStart.sh reported 2 failure(s).
-
-===== STOP STAGE =====
-[PASS] Container exists after stop
-[PASS] Container is no longer running
-[PASS] Router port 21582 closed
-[PASS] Agent port 33035 closed
-[PASS] Manual persistence marker retained
-[PASS] Agent data file retained
-[PASS] Router log records shutdown
-
-===== START AGAIN STAGE =====
-
-===== Devel Alias Agent Verification =====
-[PASS] Alias devel agent uses repo workspace
-
-===== Health Probes Failure Verification =====
-[PASS] Health probes retry and fail as expected
-[PASS] Health probe scripts restored to success
-
-===== Tests after start =====
-[PASS] Service container is running
-[PASS] Router port 21582 listening
-[PASS] Agent host port 33035 listening
-[PASS] Agent port 33035 bound to localhost
-[PASS] Router status endpoint responds
-[PASS] Agent health endpoint reports ok
-[PASS] Container exposes AGENT_NAME
-[PASS] Container exposes FAST_TEST_MARKER
-[PASS] Agent log file created
-[PASS] Persisted data file created
-
-===== Health Probes Agent =====
-[PASS] Health probes agent container is running
-
-===== Alias-enabled Agent through manifest =====
-[PASS] Global alias agent uses workspace root
-
-===== Watchdog restart services =====
-[PASS] Watchdog restarts router and agent container
-
-===== Ploinky only var test =====
-[PASS] Host-only env var not visible inside container
-
-===== Router var change =====
-[PASS] Router reflects updated testVar without restart
-
-===== Workspace status command =====
-[PASS] Status reports SSO disabled
-[PASS] Status reports router listening
-[PASS] Status lists repos section
-[PASS] Status lists demo repo
-[PASS] Status lists testRepo repo
-[PASS] Status lists active containers for demo
-[PASS] Status lists active containers for testAgent
-
-===== Dashboard UI =====
-[PASS] Dashboard surfaces workspace status
-
-===== WebMeet API =====
-[PASS] WebMeet whoami endpoint authenticates
-
-===== Demo agent dependency tests =====
-[PASS] Simulator container is running
-[PASS] Moderator container is running
-[PASS] Moderator server responds to GET
-[PASS] Verify repo 'webmeet' is cloned
-[PASS] Verify repo 'vibe1' is cloned
-
-===== Check preinstall runs =====
-[PASS] Explorer preinstall command executed
-
-===== MCP tests =====
-[PASS] Status check: client status simulator
-[PASS] Tool check: client list tools
-[PASS] Tool run check: client tool run_simulation -iterations 10
-
-===== RoutingServer aggregation test =====
-[PASS] Aggregation check: router server mcp aggregation
-
-===== CLI Variable Commands =====
-[PASS] var sets test_var
-[PASS] vars lists test_var
-[PASS] echo returns test_var
-[PASS] expose applies to test_var
-[PASS] Agent sees exposed test_var via shell
-
-===== WebChat Command =====
-[PASS] webchat --rotate regenerates token
+[PASS] WebChat agent override responds via curl
 
 ===== WebChat SSO Parameters =====
 [PASS] WebChat CLI session logs guest SSO args
@@ -254,12 +138,185 @@ Failed to inspect listening ports inside global-agent.
 [PASS] Manifest dependency devel agent uses repo root
 
 ===== WebTTY Command =====
-[FAIL] testsAfterStartAgain.sh timed out after 90 seconds.
+[PASS] webtty command records mock shell configuration
+
+===== Disable Repo Command =====
+[PASS] disable repo removes demo entry
+
+===== Logs Commands =====
+[PASS] logs tail router streams entries
+[PASS] logs last prints five lines
+
+===== LLM CLI Suggestions =====
+[PASS] Invalid CLI input yields LLM suggestion and system command output
+[FAIL] testsAfterStart.sh reported 3 failure(s).
+
+===== STOP STAGE =====
+[PASS] Container exists after stop
+[PASS] Container is no longer running
+[PASS] Router port 23391 closed
+[PASS] Agent port 22550 closed
+[PASS] Manual persistence marker retained
+[PASS] Agent data file retained
+[PASS] Router log records shutdown
+
+===== START AGAIN STAGE =====
+
+===== Devel Alias Agent Verification =====
+[PASS] Alias devel agent uses repo workspace
+
+===== Health Probes Failure Verification =====
+[PASS] Health probes retry and fail as expected
+[PASS] Health probe scripts restored to success
+
+===== Tests after start =====
+[PASS] Service container is running
+[PASS] Router port 23391 listening
+[PASS] Agent host port 22550 listening
+[PASS] Agent port 22550 bound to localhost
+[PASS] Router status endpoint responds
+[PASS] Agent health endpoint reports ok
+[PASS] Container exposes AGENT_NAME
+[PASS] Container exposes FAST_TEST_MARKER
+[PASS] Agent log file created
+[PASS] Persisted data file created
+
+===== Health Probes Agent =====
+[PASS] Health probes agent container is running
+
+===== Alias-enabled Agent through manifest =====
+[PASS] Global alias agent uses workspace root
+
+===== Watchdog restart services =====
+[PASS] Watchdog restarts router and agent container
+
+===== Ploinky only var test =====
+[PASS] Host-only env var not visible inside container
+
+===== Router var change =====
+[PASS] Router reflects updated testVar without restart
+
+===== Workspace status command =====
+[PASS] Status reports SSO disabled
+[PASS] Status reports router listening
+[PASS] Status lists repos section
+[PASS] Status lists demo repo
+[PASS] Status lists testRepo repo
+[PASS] Status lists active containers for demo
+[PASS] Status lists active containers for testAgent
+
+===== Dashboard UI =====
+[PASS] Dashboard surfaces workspace status
+
+===== WebMeet API =====
+[PASS] WebMeet whoami endpoint authenticates
+
+===== Demo agent dependency tests =====
+[PASS] Simulator container is running
+[PASS] Moderator container is running
+[PASS] Moderator server responds to GET
+[PASS] Verify repo 'webmeet' is cloned
+[PASS] Verify repo 'vibe1' is cloned
+
+===== Check preinstall runs =====
+[PASS] Explorer preinstall command executed
+
+===== MCP tests =====
+[PASS] Status check: client status simulator
+[FAIL] Tool check: client list tools
+        Error: run_simulation not found in client list tools
+[FAIL] Tool run check: client tool run_simulation -iterations 10
+        Error: Tool 'run_simulation' not found on any active agent.
+run_simulation did not return ok:true. Output: 
+
+===== RoutingServer aggregation test =====
+[FAIL] Aggregation check: router server mcp aggregation
+        Error: [94m[INFO][0m --- ploinky client list tools output (after demo) ---
+[94m[INFO][0m - [explorer] read_file - Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.
+- [explorer] read_text_file - Read the complete contents of a file from the file system as text. Handles encodings and optional head/tail.
+- [explorer] read_media_file - Read an image or audio file and return base64 data with MIME type.
+- [explorer] read_multiple_files - Read the contents of multiple files simultaneously.
+- [explorer] write_file - Create or overwrite a file with new content.
+- [explorer] edit_file - Apply textual edits to a file and return a diff.
+- [explorer] create_directory - Ensure a directory exists by creating it recursively.
+- [explorer] delete_file - Delete a file.
+- [explorer] delete_directory - Delete a directory.
+- [explorer] list_directory - List files and directories within a path.
+- [explorer] list_directory_with_sizes - List directory contents with sizes and summary.
+- [explorer] list_directory_detailed - List directory contents with metadata as JSON.
+- [explorer] directory_tree - Return a JSON tree of files and directories.
+- [explorer] move_file - Move or rename files or directories.
+- [explorer] copy_file - Copy files or directories. Supports recursive copies.
+- [explorer] search_files - Recursive search for files and directories matching a pattern.
+- [explorer] get_file_info - Retrieve metadata about a file or directory.
+- [explorer] collect_ide_plugins - Aggregate IDE plugin configurations grouped by location based on config.json files.
+- [explorer] list_allowed_directories - Return the directories that the server is permitted to access.
+[94m[INFO][0m -------------------------------------------------
+run_simulation not found after starting demo
+
+===== CLI Variable Commands =====
+[PASS] var sets test_var
+[PASS] vars lists test_var
+[PASS] echo returns test_var
+[PASS] expose applies to test_var
+[PASS] Agent sees exposed test_var via shell
+
+===== WebChat Command =====
+[PASS] webchat --rotate regenerates token
+[PASS] WebChat agent override responds via curl
+
+===== WebChat SSO Parameters =====
+[PASS] WebChat CLI session logs guest SSO args
+
+===== Router Static Assets =====
+[PASS] Router serves configured static asset
+
+===== Manifest Environment =====
+[PASS] Variable MY_TEST_VAR from manifest is present after start
+[PASS] Custom volume mount exposes marker
+
+===== Install Command Verification =====
+[PASS] Install command creates marker file (verified via shell)
+
+===== Postinstall Verification =====
+[PASS] Postinstall command creates marker file
+
+===== Agent Blob Upload and Download =====
+[PASS] Router upload stores blob in agent workspace
+[PASS] Router download returns uploaded blob
+[PASS] Router shared upload stores blob in shared folder
+[PASS] Router shared download returns uploaded blob
+
+===== Demo Agent Filesystem =====
+[PASS] Demo agent directories exist and are read-only
+
+===== Global Agent Verification =====
+[PASS] Global agent working directory is the test root
+[PASS] Manifest dependency global agent uses workspace root
+[PASS] Manifest defined ports map correctly
+
+===== Devel Agent Verification =====
+[PASS] Devel agent cwd is the repo source and has RW permissions
+[PASS] Manifest dependency devel agent uses repo root
+
+===== WebTTY Command =====
+[PASS] webtty command records mock shell configuration
+
+===== Disable Repo Command =====
+[PASS] disable repo removes demo entry
+
+===== Logs Commands =====
+[PASS] logs tail router streams entries
+[PASS] logs last prints five lines
+
+===== LLM CLI Suggestions =====
+[PASS] Invalid CLI input yields LLM suggestion and system command output
+[FAIL] testsAfterStartAgain.sh reported 3 failure(s).
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 21582 listening
-[PASS] Agent host port 33035 listening
+[PASS] Router port 23391 listening
+[PASS] Agent host port 22550 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -285,4 +342,4 @@ Failed to inspect listening ports inside global-agent.
 [PASS] Node unit tests
 
 ===== TEST SUMMARY =====
-[FAIL] Suite finished with 3 failure(s).
+[FAIL] Suite finished with 6 failure(s).
