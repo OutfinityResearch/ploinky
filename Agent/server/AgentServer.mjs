@@ -60,7 +60,7 @@ function loadConfig() {
 function buildCommandSpec(entry, defaultCwd) {
     const commandValue = typeof entry?.command === 'string' ? entry.command.trim() : null;
     if (!commandValue) return null;
-    const command = path.isAbsolute(commandValue) ? commandValue : path.resolve(defaultCwd, commandValue)
+    const command = path.isAbsolute(commandValue) ? commandValue : path.resolve(defaultCwd, commandValue);
     const cwd = entry?.cwd ? path.resolve(defaultCwd, entry.cwd) : defaultCwd;
     const env = entry?.env && typeof entry.env === 'object' ? entry.env : {};
     const timeoutMs = Number.isFinite(entry?.timeoutMs) ? entry.timeoutMs : undefined;
@@ -192,10 +192,7 @@ function createFieldSchema(fieldSpec) {
 function executeShell(spec, payload) {
     return new Promise((resolve, reject) => {
         const { command, cwd, env, timeoutMs } = spec;
-        const cmd = Array.isArray(command) ? command[0] : command;
-        const args = Array.isArray(command) ? command.slice(1) : ['-lc', command];
-        const executable = Array.isArray(command) ? cmd : '/bin/sh';
-        const child = spawn(executable, args, {
+        const child = spawn(command, [], {
             cwd,
             env: { ...process.env, ...env },
             stdio: ['pipe', 'pipe', 'pipe'],
