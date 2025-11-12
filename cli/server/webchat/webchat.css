@@ -580,6 +580,21 @@ body {
 .wa-message-text table.wa-md-table tbody tr:nth-child(odd) td { background: var(--wa-table-row-odd-bg); }
 .wa-message-text table.wa-md-table tbody tr:nth-child(even) td { background: var(--wa-table-row-even-bg); }
 
+/* Table-specific message bubble styling */
+.wa-message-bubble.wa-message-table {
+  max-width: 90%;
+  overflow-x: auto;
+}
+.wa-message-bubble.wa-message-table .wa-message-text {
+  padding: 4px;
+}
+.wa-message-bubble.wa-message-table .wa-message-text > *:first-child {
+  margin-top: 0;
+}
+.wa-message-bubble.wa-message-table .wa-message-text > *:last-child {
+  margin-bottom: 0;
+}
+
 .wa-message-attachment .wa-message-bubble {
   display: flex;
   flex-direction: column;
