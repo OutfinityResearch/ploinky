@@ -148,6 +148,45 @@
     return `<div class="wa-md-table-wrap"><table class="wa-md-table"><thead><tr>${headHtml}</tr></thead>${tableBody}</table></div>`;
   }
 
+  function extractTableFromMixedBlock(block) {
+    const lines = block.split('\n');
+    if (lines.length < 2) return null;
+
+    for (let i = 0; i < lines.length - 1; i++) {
+      const currentLine = lines[i];
+      const nextLine = lines[i + 1];
+
+      // Check if current and next line could be table header and separator
+      if (!currentLine.includes('|') || !nextLine.includes('|')) continue;
+
+      const headerCells = splitTableRow(currentLine);
+      const separatorCells = splitTableRow(nextLine);
+
+      if (!headerCells.length || headerCells.length !== separatorCells.length) continue;
+      if (!separatorCells.every((cell) => TABLE_SEPARATOR_RE.test(cell.replace(/\s+/g, '')))) continue;
+
+      // Found a table start at line i
+      const tableStart = i;
+      let tableEnd = i + 1; // At least header + separator
+
+      // Find where the table ends
+      for (let j = i + 2; j < lines.length; j++) {
+        const line = lines[j];
+        if (!line.includes('|')) break;
+        tableEnd = j;
+      }
+
+      // Extract the parts
+      const beforeTable = lines.slice(0, tableStart).join('\n').trim();
+      const tableLines = lines.slice(tableStart, tableEnd + 1).join('\n');
+      const afterTable = lines.slice(tableEnd + 1).join('\n').trim();
+
+      return { beforeTable, tableLines, afterTable };
+    }
+
+    return null;
+  }
+
   function processInlineFactory(state) {
     return function processInline(text) {
       if (!text) return '';
@@ -280,6 +319,24 @@
         if (codeStore[trimmed]) return codeStore[trimmed];
         const tableHtml = tryRenderTable(trimmed, state, processInline);
         if (tableHtml) return tableHtml;
+
+        // If a table appears inside a larger block with text before/after it,
+        // extract the table and render each part separately
+        const mixedTable = extractTableFromMixedBlock(trimmed);
+        if (mixedTable) {
+          const parts = [];
+          if (mixedTable.beforeTable) {
+            parts.push(renderMarkdown(mixedTable.beforeTable));
+          }
+          const tableRendered = tryRenderTable(mixedTable.tableLines, state, processInline);
+          if (tableRendered) {
+            parts.push(tableRendered);
+          }
+          if (mixedTable.afterTable) {
+            parts.push(renderMarkdown(mixedTable.afterTable));
+          }
+          if (parts.length) return parts.join('');
+        }
 
         // If an HR (---, ***, ___) appears inside a larger block because
         // the text wasn't split with two blank lines, split the block

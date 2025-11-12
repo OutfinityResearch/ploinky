@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Markdown Table Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .test-case {
+            margin: 30px 0;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .input {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            margin-bottom: 15px;
+        }
+        .output {
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            border-radius: 4px;
+            background: white;
+        }
+        .wa-md-table-wrap {
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .wa-md-table {
+            border-collapse: collapse;
+            width: 100%;
+            border: 1px solid #ddd;
+        }
+        .wa-md-table th,
+        .wa-md-table td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        .wa-md-table th {
+            background-color: #f5f5f5;
+            font-weight: 600;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status.pass {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.fail {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Markdown Table Rendering Test</h1>
+
+    <div class="test-case">
+        <h3>Test 1: Text before table (single blank line) <span class="status" id="status1">Testing...</span></h3>
+        <div class="input">Here is some text.
+
+| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+| Cell 3   | Cell 4   |</div>
+        <div class="output" id="output1"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 2: Text after table (single blank line) <span class="status" id="status2">Testing...</span></h3>
+        <div class="input">| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+| Cell 3   | Cell 4   |
+
+Here is some text after.</div>
+        <div class="output" id="output2"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 3: Text before and after table <span class="status" id="status3">Testing...</span></h3>
+        <div class="input">Text before the table.
+
+| Name | Age | City |
+|------|-----|------|
+| Alice | 25 | NYC |
+| Bob | 30 | LA |
+
+Text after the table.</div>
+        <div class="output" id="output3"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 4: Traditional format (2+ blank lines) <span class="status" id="status4">Testing...</span></h3>
+        <div class="input">Some text here.
+
+
+| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+
+
+More text here.</div>
+        <div class="output" id="output4"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 5: Table with alignment <span class="status" id="status5">Testing...</span></h3>
+        <div class="input">| Left | Center | Right |
+|:-----|:------:|------:|
+| L1   | C1     | R1    |
+| L2   | C2     | R2    |</div>
+        <div class="output" id="output5"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 6: Multiple tables separated by text <span class="status" id="status6">Testing...</span></h3>
+        <div class="input">First table:
+
+| A | B |
+|---|---|
+| 1 | 2 |
+
+Some text between tables.
+
+| C | D |
+|---|---|
+| 3 | 4 |</div>
+        <div class="output" id="output6"></div>
+    </div>
+
+    <script src="./cli/server/webchat/markdown.js"></script>
+    <script>
+        function checkTable(html) {
+            return html.includes('<table') && html.includes('wa-md-table');
+        }
+
+        function runTest(testNum, markdown) {
+            const output = document.getElementById(`output${testNum}`);
+            const status = document.getElementById(`status${testNum}`);
+
+            try {
+                const html = window.webchatMarkdown.render(markdown);
+                output.innerHTML = html;
+
+                const hasTable = checkTable(html);
+                if (hasTable) {
+                    status.textContent = 'PASS';
+                    status.className = 'status pass';
+                } else {
+                    status.textContent = 'FAIL (No table rendered)';
+                    status.className = 'status fail';
+                }
+            } catch (error) {
+                status.textContent = 'ERROR: ' + error.message;
+                status.className = 'status fail';
+                output.textContent = 'Error rendering: ' + error.message;
+            }
+        }
+
+        // Run tests
+        runTest(1, `Here is some text.
+
+| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+| Cell 3   | Cell 4   |`);
+
+        runTest(2, `| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+| Cell 3   | Cell 4   |
+
+Here is some text after.`);
+
+        runTest(3, `Text before the table.
+
+| Name | Age | City |
+|------|-----|------|
+| Alice | 25 | NYC |
+| Bob | 30 | LA |
+
+Text after the table.`);
+
+        runTest(4, `Some text here.
+
+
+| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+
+
+More text here.`);
+
+        runTest(5, `| Left | Center | Right |
+|:-----|:------:|------:|
+| L1   | C1     | R1    |
+| L2   | C2     | R2    |`);
+
+        runTest(6, `First table:
+
+| A | B |
+|---|---|
+| 1 | 2 |
+
+Some text between tables.
+
+| C | D |
+|---|---|
+| 3 | 4 |`);
+
+        // Log results
+        setTimeout(() => {
+            const statuses = document.querySelectorAll('.status');
+            const results = Array.from(statuses).map(s => s.textContent);
+            console.log('Test Results:', results);
+            const allPass = results.every(r => r === 'PASS');
+            console.log(allPass ? '✓ All tests passed!' : '✗ Some tests failed');
+        }, 100);
+    </script>
+</body>
+</html>
