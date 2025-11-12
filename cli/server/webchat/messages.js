@@ -22,6 +22,8 @@ export function createMessages({
     let viewMoreLineLimit = Math.max(1, initialViewMoreLineLimit || 1);
     let serverSpeechHandler = typeof onServerOutput === 'function' ? onServerOutput : null;
     let speechDebounceTimer = null;
+    let tableBuffer = null; // Buffer for accumulating table content
+    let preTableText = null; // Text that comes before a table
 
     function appendMessageEl(node) {
         if (!node || !chatList) {
@@ -376,6 +378,132 @@ export function createMessages({
         };
     }
 
+    function splitMarkdownSections(text) {
+        const lines = text.split('\n');
+        const sections = [];
+        let currentSection = [];
+        let inTable = false;
+        let inCodeBlock = false;
+
+        // Helper to check if a line is part of a markdown table
+        function isTableLine(line) {
+            const trimmed = line.trim();
+            // Must start and end with pipe, and have at least one more pipe inside
+            return trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.indexOf('|', 1) > 0;
+        }
+
+        // Helper to check if line is a table separator
+        function isTableSeparator(line) {
+            return /^\|[\s\-:|]+\|$/.test(line.trim());
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmedLine = line.trim();
+
+            // Check for code blocks
+            if (trimmedLine.startsWith('```')) {
+                if (inTable && currentSection.length > 0) {
+                    // Save table before code block
+                    sections.push({ type: 'table', content: currentSection.join('\n') });
+                    currentSection = [];
+                    inTable = false;
+                }
+                inCodeBlock = !inCodeBlock;
+                currentSection.push(line);
+                continue;
+            }
+
+            // Skip table detection if we're in a code block
+            if (inCodeBlock) {
+                currentSection.push(line);
+                continue;
+            }
+
+            const isCurrentLineTable = isTableLine(line);
+
+            if (isCurrentLineTable && !inTable) {
+                // Starting a new table
+                // Save any previous non-table content
+                if (currentSection.length > 0) {
+                    const content = currentSection.join('\n').trim();
+                    if (content) {
+                        sections.push({ type: 'text', content: currentSection.join('\n') });
+                    }
+                    currentSection = [];
+                }
+                inTable = true;
+                currentSection.push(line);
+            } else if (isCurrentLineTable && inTable) {
+                // Continuing the table
+                currentSection.push(line);
+            } else if (!isCurrentLineTable && inTable) {
+                // Table has ended
+                // But first check if it's just an empty line and table continues
+                if (trimmedLine === '' && i + 1 < lines.length) {
+                    const nextLine = lines[i + 1];
+                    if (isTableLine(nextLine)) {
+                        // Table continues after empty line, include the empty line
+                        currentSection.push(line);
+                        continue;
+                    }
+                }
+
+                // Table definitely ends here
+                if (currentSection.length > 0) {
+                    sections.push({ type: 'table', content: currentSection.join('\n') });
+                    currentSection = [];
+                }
+                inTable = false;
+
+                // Start new text section with current line
+                currentSection.push(line);
+            } else {
+                // Regular text line, not in a table
+                currentSection.push(line);
+            }
+        }
+
+        // Save any remaining section
+        if (currentSection.length > 0) {
+            const content = currentSection.join('\n');
+            // Only add if there's actual content (not just whitespace)
+            if (content.trim() || inTable) {
+                sections.push({
+                    type: inTable ? 'table' : 'text',
+                    content: content
+                });
+            }
+        }
+
+        // If no sections were created, return the original text as a single section
+        if (sections.length === 0) {
+            sections.push({ type: 'text', content: text });
+        }
+
+        return sections;
+    }
+
+    function createSingleBubble(content, isTable = false) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'wa-message in';
+        const bubble = document.createElement('div');
+        bubble.className = 'wa-message-bubble';
+        if (isTable) {
+            bubble.classList.add('wa-message-table');
+        }
+        bubble.innerHTML = '<div class="wa-message-text"></div><span class="wa-message-time"></span>';
+        wrapper.appendChild(bubble);
+
+        updateBubbleContent(bubble, content);
+        const timeNode = bubble.querySelector('.wa-message-time');
+        if (timeNode) {
+            timeNode.textContent = formatTime();
+        }
+
+        return { wrapper, bubble };
+    }
+
     function addServerMsg(text) {
         let normalized = typeof text === 'string' ? text : '';
 
@@ -404,40 +532,193 @@ export function createMessages({
         }
 
         if (!normalized.trim()) {
+            // Check if we have buffered table content to flush
+            if (tableBuffer && tableBuffer.trim()) {
+                flushTableBuffer();
+            }
             lastServerMsg.bubble = null;
             lastServerMsg.fullText = '';
             userInputSent = false;
             return;
         }
 
+        // Helper to check if text appears to be table-related
+        function hasTableContent(text) {
+            const lines = text.split('\n');
+            return lines.some(line => {
+                const trimmed = line.trim();
+                return trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.indexOf('|', 1) > 0;
+            });
+        }
+
+        // Helper to check if text ends with incomplete table (still building)
+        function endsWithIncompleteTable(text) {
+            const lines = text.split('\n').filter(l => l.trim());
+            if (lines.length === 0) return false;
+
+            const lastLine = lines[lines.length - 1].trim();
+            // If last line is a table line, table might still be building
+            return lastLine.startsWith('|') && lastLine.endsWith('|');
+        }
+
+        // Helper to flush table buffer and create bubble
+        function flushTableBuffer() {
+            if (!tableBuffer) return;
+
+            // Create bubble for pre-table text if any
+            if (preTableText && preTableText.trim()) {
+                const { wrapper, bubble } = createSingleBubble(preTableText.trim(), false);
+                appendMessageEl(wrapper);
+            }
+
+            // Create table bubble
+            if (tableBuffer.trim()) {
+                const { wrapper, bubble } = createSingleBubble(tableBuffer.trim(), true);
+                appendMessageEl(wrapper);
+            }
+
+            // Reset buffers
+            tableBuffer = null;
+            preTableText = null;
+            lastServerMsg.bubble = null;
+            lastServerMsg.fullText = '';
+        }
+
         const previousFullText = typeof lastServerMsg.fullText === 'string' ? lastServerMsg.fullText : '';
-        const appendToExisting = !userInputSent && lastServerMsg.bubble;
+        const appendToExisting = !userInputSent && lastServerMsg.bubble && !tableBuffer;
 
-        if (appendToExisting) {
-            const combined = previousFullText ? `${previousFullText}\n${normalized}` : normalized;
-            lastServerMsg.fullText = combined;
-            updateBubbleContent(lastServerMsg.bubble, combined);
-            scheduleSpeech(combined);
-        } else {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'wa-message in';
-            const bubble = document.createElement('div');
-            bubble.className = 'wa-message-bubble';
-            bubble.innerHTML = '<div class="wa-message-text"></div><span class="wa-message-time"></span>';
-            wrapper.appendChild(bubble);
+        // Combine with previous text if appending
+        let fullContent = normalized;
+        if (appendToExisting && previousFullText) {
+            fullContent = `${previousFullText}\n${normalized}`;
+        }
 
-            lastServerMsg.bubble = bubble;
-            lastServerMsg.fullText = normalized;
+        // Check if this content has table markers
+        const hasTable = hasTableContent(fullContent);
+        const mightBeIncomplete = endsWithIncompleteTable(fullContent);
+
+        if (hasTable && mightBeIncomplete) {
+            // Table is likely still being built - buffer it
+            if (!tableBuffer) {
+                // Starting a new table buffer
+                const lines = fullContent.split('\n');
+                let beforeTable = [];
+                let inTable = false;
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!inTable && trimmed.startsWith('|') && trimmed.endsWith('|') && trimmed.indexOf('|', 1) > 0) {
+                        // Found start of table
+                        inTable = true;
+                        if (beforeTable.length > 0) {
+                            preTableText = beforeTable.join('\n');
+                        }
+                        tableBuffer = line;
+                    } else if (inTable) {
+                        tableBuffer += '\n' + line;
+                    } else {
+                        beforeTable.push(line);
+                    }
+                }
+
+                // Remove previous bubble if we were appending
+                if (appendToExisting && lastServerMsg.bubble && lastServerMsg.bubble.parentElement) {
+                    lastServerMsg.bubble.parentElement.remove();
+                }
+            } else {
+                // Continue adding to table buffer
+                tableBuffer += '\n' + normalized;
+            }
+
+            // Don't create bubble yet, wait for more content
+            lastServerMsg.bubble = null;
+            lastServerMsg.fullText = '';
+
+        } else if (tableBuffer) {
+            // We have a buffered table and new content that's not table-related
+            // The table is complete, flush it
+            tableBuffer += '\n' + normalized;
+
+            // Split the complete content
+            const sections = splitMarkdownSections(tableBuffer);
+
+            // Create bubble for pre-table text if any
+            if (preTableText && preTableText.trim()) {
+                const { wrapper, bubble } = createSingleBubble(preTableText.trim(), false);
+                appendMessageEl(wrapper);
+            }
+
+            // Create bubbles for each section
+            sections.forEach((section, index) => {
+                const content = section.content.trim();
+                if (!content) return;
+
+                const { wrapper, bubble } = createSingleBubble(content, section.type === 'table');
+
+                // Track last non-table bubble for appending
+                if (index === sections.length - 1 && section.type !== 'table') {
+                    lastServerMsg.bubble = bubble;
+                    lastServerMsg.fullText = content;
+                } else if (index === sections.length - 1) {
+                    lastServerMsg.bubble = null;
+                    lastServerMsg.fullText = '';
+                }
+
+                appendMessageEl(wrapper);
+            });
+
+            // Reset buffers
+            tableBuffer = null;
+            preTableText = null;
             userInputSent = false;
 
-            updateBubbleContent(bubble, normalized);
-            const timeNode = bubble.querySelector('.wa-message-time');
-            if (timeNode) {
-                timeNode.textContent = formatTime();
+        } else {
+            // No table buffering needed - process normally
+            const sections = splitMarkdownSections(fullContent);
+            const hasMultipleSections = sections.length > 1;
+            const hasTableSection = sections.some(s => s.type === 'table');
+
+            if (hasMultipleSections || hasTableSection) {
+                // Remove previous bubble if we were appending
+                if (appendToExisting && lastServerMsg.bubble && lastServerMsg.bubble.parentElement) {
+                    lastServerMsg.bubble.parentElement.remove();
+                }
+
+                // Create separate bubbles for each section
+                sections.forEach((section, index) => {
+                    const content = section.content.trim();
+                    if (!content) return;
+
+                    const { wrapper, bubble } = createSingleBubble(content, section.type === 'table');
+
+                    // Track last non-table bubble
+                    if (index === sections.length - 1 && section.type !== 'table') {
+                        lastServerMsg.bubble = bubble;
+                        lastServerMsg.fullText = content;
+                    } else if (index === sections.length - 1) {
+                        lastServerMsg.bubble = null;
+                        lastServerMsg.fullText = '';
+                    }
+
+                    appendMessageEl(wrapper);
+                });
+
+                userInputSent = false;
+            } else if (appendToExisting) {
+                // Simple append to existing bubble
+                lastServerMsg.fullText = fullContent;
+                updateBubbleContent(lastServerMsg.bubble, fullContent);
+            } else {
+                // New message
+                const { wrapper, bubble } = createSingleBubble(fullContent, false);
+                lastServerMsg.bubble = bubble;
+                lastServerMsg.fullText = fullContent;
+                userInputSent = false;
+                appendMessageEl(wrapper);
             }
-            appendMessageEl(wrapper);
-            scheduleSpeech(normalized);
         }
+
+        scheduleSpeech(normalized);
 
         if (chatList) {
             chatList.scrollTop = chatList.scrollHeight;
