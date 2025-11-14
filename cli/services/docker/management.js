@@ -33,15 +33,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DEFAULT_AGENT_ENTRY = 'sh /Agent/server/AgentServer.sh';
-const SHELL_CANDIDATES = [
-    '/bin/bash',
-    '/bin/sh',
-    '/usr/bin/bash',
-    '/usr/bin/sh',
-    '/bin/ash',
-    '/bin/dash',
-    '/busybox/sh'
-];
 
 function readManifestStartCommand(manifest) {
     if (!manifest) return '';
@@ -66,32 +57,90 @@ function splitCommandArgs(command) {
     return flagsToArgs([trimmed]);
 }
 
-function findShellInContainer(containerName) {
-    for (const shellPath of SHELL_CANDIDATES) {
-        const res = spawnSync(containerRuntime, ['exec', containerName, 'stat', shellPath], { stdio: 'ignore' });
+function launchAgentSidecar({ containerName, agentCommand, agentName }) {
+    const command = (agentCommand || '').trim();
+    if (!command) return;
+    const startArgs = splitCommandArgs(command);
+    if (!startArgs.length) return;
+    if (!waitForContainerRunning(containerName, 40, 250)) {
+        throw new Error(`[start] ${agentName || containerName}: container not running; cannot launch agent command.`);
+    }
+    const execArgs = ['exec', '-d', containerName, ...startArgs];
+    const execRes = spawnSync(containerRuntime, execArgs, { stdio: 'inherit' });
+    if (execRes.status !== 0) {
+        throw new Error(`[start] ${agentName || containerName}: failed to launch start command (exit ${execRes.status}).`);
+    }
+    console.log(`[start] ${agentName || containerName}: start command launched directly.`);
+}
+
+const SHELL_PROBE_PATHS = ['/bin/bash', '/bin/sh', '/bin/ash', '/bin/dash', '/bin/zsh', '/bin/fish', '/bin/ksh'];
+const SHELL_FALLBACK_DIRECT = Symbol('no-shell');
+const shellDetectionCache = new Map();
+
+function normalizeMountPath(raw) {
+    const lines = String(raw || '').trim().split(/\r?\n/).filter(Boolean);
+    if (!lines.length) return '';
+    const last = lines[lines.length - 1];
+    const colonIdx = last.indexOf(':');
+    if (colonIdx > 0 && !last.startsWith('/')) {
+        return last.slice(colonIdx + 1).trim();
+    }
+    return last.trim();
+}
+
+function findShellInMount(mountPath) {
+    for (const shellPath of SHELL_PROBE_PATHS) {
+        const relPath = shellPath.replace(/^\/+/, '');
+        const candidate = path.join(mountPath, relPath);
+        try {
+            const stats = fs.statSync(candidate);
+            if (stats.isFile() && (stats.mode & 0o111)) {
+                return shellPath;
+            }
+        } catch (_) {}
+    }
+    return '';
+}
+
+function detectShellViaImageMount(image) {
+    if (containerRuntime !== 'podman') return '';
+    let mountPoint = '';
+    try {
+        const mountRes = spawnSync(containerRuntime, ['image', 'mount', image], { stdio: ['ignore', 'pipe', 'pipe'] });
+        if (mountRes.status !== 0) return '';
+        mountPoint = normalizeMountPath(mountRes.stdout || mountRes.stderr);
+        if (!mountPoint) return '';
+        const shellPath = findShellInMount(mountPoint);
+        return shellPath;
+    } finally {
+        if (mountPoint) {
+            try { spawnSync(containerRuntime, ['image', 'unmount', mountPoint], { stdio: 'ignore' }); } catch (_) {}
+        }
+    }
+}
+
+function detectShellViaContainerRun(image) {
+    for (const shellPath of SHELL_PROBE_PATHS) {
+        const res = spawnSync(containerRuntime, ['run', '--rm', image, 'test', '-x', shellPath], { stdio: 'ignore' });
         if (res.status === 0) {
             return shellPath;
         }
     }
-    return null;
+    return '';
 }
 
-function launchAgentSidecar({ containerName, agentCommand, agentName }) {
-    const command = (agentCommand || '').trim();
-    if (!command) return;
-    if (!waitForContainerRunning(containerName, 40, 250)) {
-        throw new Error(`[start] ${agentName || containerName}: container not running; cannot launch agent command.`);
+function detectShellForImage(agentName, image) {
+    if (!agentName || !image) {
+        throw new Error('[start] Missing agent or image for shell detection.');
     }
-    const shellPath = findShellInContainer(containerName);
-    if (!shellPath) {
-        throw new Error(`[start] ${agentName || containerName}: no compatible shell found (looked for ${SHELL_CANDIDATES.join(', ')}).`);
+    if (shellDetectionCache.has(image)) {
+        return shellDetectionCache.get(image);
     }
-    const execArgs = ['exec', '-d', containerName, shellPath, '-c', command];
-    const execRes = spawnSync(containerRuntime, execArgs, { stdio: 'inherit' });
-    if (execRes.status !== 0) {
-        throw new Error(`[start] ${agentName || containerName}: failed to launch agent command via ${shellPath} (exit ${execRes.status}).`);
-    }
-    console.log(`[start] ${agentName || containerName}: agent command launched via ${shellPath}.`);
+    const fromMount = detectShellViaImageMount(image);
+    const shellPath = fromMount || detectShellViaContainerRun(image);
+    const finalShell = shellPath || SHELL_FALLBACK_DIRECT;
+    shellDetectionCache.set(image, finalShell);
+    return finalShell;
 }
 
 function ensureSharedHostDir() {
@@ -446,7 +495,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const agentLibPath = path.resolve(__dirname, '../../../Agent');
     const envHash = computeEnvHash(manifest);
     const projectRoot = process.env.PLOINKY_ROOT;
-    const nodeModulesPath = path.join(projectRoot, 'node_modules');
+    const nodeModulesPath = projectRoot ? path.join(projectRoot, 'node_modules') : null;
     const sharedDir = ensureSharedHostDir();
 
     runInstallHook(agentName, manifest, agentPath, cwd);
@@ -455,7 +504,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`,
         '-v', `${agentLibPath}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
         '-v', `${path.resolve(agentPath)}:/code${runtime === 'podman' ? ':ro,z' : ':ro'}`,
-        '-v', `${nodeModulesPath}:/node_modules${runtime === 'podman' ? ':ro,z' : ':ro'}`,
+        ...(nodeModulesPath ? ['-v', `${nodeModulesPath}:/node_modules${runtime === 'podman' ? ':ro,z' : ':ro'}`] : []),
         '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`
     ];
     if (runtime === 'podman') {
@@ -527,17 +576,14 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         args.push(...startArgs);
         entrySummary = startArgs.join(' ');
     } else if (explicitAgentCmd) {
-        const needsShell = /[;&|$`\n(){}]/.test(explicitAgentCmd);
-        if (needsShell) {
-            args.push('/bin/sh', '-lc', explicitAgentCmd);
-            entrySummary = explicitAgentCmd;
-        } else {
-            const cmdParts = explicitAgentCmd.split(/\s+/).filter(Boolean);
-            args.push(...cmdParts);
-            entrySummary = cmdParts.join(' ');
+        const shellPath = detectShellForImage(agentName, image);
+        if (shellPath === SHELL_FALLBACK_DIRECT) {
+            throw new Error(`[start] ${agentName}: no supported shell found to execute agent command.`);
         }
+        args.push(shellPath, '-lc', explicitAgentCmd);
+        entrySummary = `${shellPath} -lc ${explicitAgentCmd}`;
     } else {
-        args.push('/bin/sh', '-lc', DEFAULT_AGENT_ENTRY);
+        args.push('sh', '/Agent/server/AgentServer.sh');
     }
 
     console.log(`[start] ${agentName}: ${runtime} run (cwd='${cwd}') -> ${entrySummary}`);
