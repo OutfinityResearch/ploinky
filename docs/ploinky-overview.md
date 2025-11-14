@@ -601,7 +601,8 @@ logs/                 # Application logs
   "install": "npm install",          // Installation command
   "update": "npm update",            // Update command
   "cli": "node repl.js",            // CLI command for 'ploinky cli'
-  "agent": "node server.js",        // Service command
+  "start": "supervisord -n",        // Container entrypoint (optional)
+  "agent": "node server.js",        // Service command (sidecar when start exists)
   "about": "Description",           // Agent description
   "env": ["API_KEY", "DB_URL"],    // Required environment variables
   "enable": ["other-agent"],       // Auto-enable other agents
@@ -1233,6 +1234,7 @@ Every agent is defined by a`manifest.json`file that specifies its container, dep
   
   // Execution modes
   "cli": "node repl.js",            // Interactive CLI command (cli)
+  "start": "supervisord -n",          // Container entrypoint (optional)
   "agent": "node server.js",          // Long-running service (start)
   
   // Metadata
@@ -1255,6 +1257,7 @@ Every agent is defined by a`manifest.json`file that specifies its container, dep
 
 ### Field Descriptions
 FieldRequiredDescription`container`YesBase container image from Docker Hub or other registry`preinstall`NoHost-side command executed before the agent is registered. Accepts either a string or an array of commands.`install`NoOne-time setup command that runs inside a disposable container before the main agent container starts.`postinstall`NoCommand (string or array) executed inside the running container immediately after startup; the container restarts once the hook completes.`update`NoCommand to update agent dependencies`cli`NoInteractive command for`ploinky cli`(runs inside the agent container). When omitted, Ploinky now falls back to`/Agent/default_cli.sh`, a safe helper that exposes basic inspection commands such as`whoami`,`pwd`,`ls`,`env`,`date`, and`uname`.`agent`NoService command for`ploinky start``about`NoHuman-readable description`env`NoDefines environment variables. Can be an array of required variable names or an object to specify default values. See details below.`enable`NoAgents to auto-enable when this agent is enabled. Supports`global`/`devel`scopes and optional`as <alias>`to register duplicate instances under unique container names. See details in the Advanced Features section.`repos`NoRepositories to auto-add when this agent is enabled
+`start`NoOverrides the container entrypoint. When defined, the CLI uses this command to keep the container alive and then launches the`agent`command in parallel via the first available shell inside the container. If omitted, the`agent`command (or the default `/Agent/server/AgentServer.sh`) remains the main process. Behind the scenes, the CLI probes common shells (e.g., `/bin/bash`, `/bin/sh`, `/bin/dash`) with `stat` inside the container and executes the agent command with the first match.
 
 #### The`env`Property
 

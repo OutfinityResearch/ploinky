@@ -32,6 +32,68 @@ import { loadAgents } from '../workspace.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const DEFAULT_AGENT_ENTRY = 'sh /Agent/server/AgentServer.sh';
+const SHELL_CANDIDATES = [
+    '/bin/bash',
+    '/bin/sh',
+    '/usr/bin/bash',
+    '/usr/bin/sh',
+    '/bin/ash',
+    '/bin/dash',
+    '/busybox/sh'
+];
+
+function readManifestStartCommand(manifest) {
+    if (!manifest) return '';
+    const value = manifest.start;
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    return trimmed;
+}
+
+function readManifestAgentCommand(manifest) {
+    if (!manifest) return { raw: '', resolved: DEFAULT_AGENT_ENTRY };
+    const rawValue = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
+    return {
+        raw: rawValue,
+        resolved: rawValue || DEFAULT_AGENT_ENTRY
+    };
+}
+
+function splitCommandArgs(command) {
+    const trimmed = typeof command === 'string' ? command.trim() : '';
+    if (!trimmed) return [];
+    return flagsToArgs([trimmed]);
+}
+
+function findShellInContainer(containerName) {
+    for (const shellPath of SHELL_CANDIDATES) {
+        const res = spawnSync(containerRuntime, ['exec', containerName, 'stat', shellPath], { stdio: 'ignore' });
+        if (res.status === 0) {
+            return shellPath;
+        }
+    }
+    return null;
+}
+
+function launchAgentSidecar({ containerName, agentCommand, agentName }) {
+    const command = (agentCommand || '').trim();
+    if (!command) return;
+    if (!waitForContainerRunning(containerName, 40, 250)) {
+        throw new Error(`[start] ${agentName || containerName}: container not running; cannot launch agent command.`);
+    }
+    const shellPath = findShellInContainer(containerName);
+    if (!shellPath) {
+        throw new Error(`[start] ${agentName || containerName}: no compatible shell found (looked for ${SHELL_CANDIDATES.join(', ')}).`);
+    }
+    const execArgs = ['exec', '-d', containerName, shellPath, '-c', command];
+    const execRes = spawnSync(containerRuntime, execArgs, { stdio: 'inherit' });
+    if (execRes.status !== 0) {
+        throw new Error(`[start] ${agentName || containerName}: failed to launch agent command via ${shellPath} (exit ${execRes.status}).`);
+    }
+    console.log(`[start] ${agentName || containerName}: agent command launched via ${shellPath}.`);
+}
+
 function ensureSharedHostDir() {
     const dir = path.resolve(process.cwd(), 'shared');
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
@@ -377,7 +439,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     const runtime = containerRuntime;
     const image = manifest.container || manifest.image || 'node:18-alpine';
-    const agentCmd = ((manifest.agent && String(manifest.agent)) || (manifest.commands && manifest.commands.run) || '').trim();
+    const { raw: explicitAgentCmd, resolved: resolvedAgentCmd } = readManifestAgentCommand(manifest);
+    const startCmd = readManifestStartCommand(manifest);
+    const useStartEntry = Boolean(startCmd);
     const cwd = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), options.alias);
     const agentLibPath = path.resolve(__dirname, '../../../Agent');
     const envHash = computeEnvHash(manifest);
@@ -454,19 +518,26 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     args.push('-e', 'NODE_PATH=/node_modules');
 
     args.push(image);
-    let entrySummary = 'sh /Agent/server/AgentServer.sh';
-    if (agentCmd) {
-        const needsShell = /[;&|$`\n(){}]/.test(agentCmd);
+    let entrySummary = DEFAULT_AGENT_ENTRY;
+    if (useStartEntry) {
+        const startArgs = splitCommandArgs(startCmd);
+        if (!startArgs.length) {
+            throw new Error(`[start] ${agentName}: manifest.start is defined but empty.`);
+        }
+        args.push(...startArgs);
+        entrySummary = startArgs.join(' ');
+    } else if (explicitAgentCmd) {
+        const needsShell = /[;&|$`\n(){}]/.test(explicitAgentCmd);
         if (needsShell) {
-            args.push('/bin/sh', '-lc', agentCmd);
-            entrySummary = agentCmd;
+            args.push('/bin/sh', '-lc', explicitAgentCmd);
+            entrySummary = explicitAgentCmd;
         } else {
-            const cmdParts = agentCmd.split(/\s+/).filter(Boolean);
+            const cmdParts = explicitAgentCmd.split(/\s+/).filter(Boolean);
             args.push(...cmdParts);
             entrySummary = cmdParts.join(' ');
         }
     } else {
-        args.push('/bin/sh', '-lc', 'sh /Agent/server/AgentServer.sh');
+        args.push('/bin/sh', '-lc', DEFAULT_AGENT_ENTRY);
     }
 
     console.log(`[start] ${agentName}: ${runtime} run (cwd='${cwd}') -> ${entrySummary}`);
@@ -504,6 +575,14 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     } catch (error) {
         try { stopAndRemove(containerName); } catch (_) { }
         throw error;
+    }
+    if (useStartEntry) {
+        try {
+            launchAgentSidecar({ containerName, agentCommand: resolvedAgentCmd, agentName });
+        } catch (error) {
+            try { stopAndRemove(containerName); } catch (_) { }
+            throw error;
+        }
     }
     syncAgentMcpConfig(containerName, path.resolve(agentPath));
     return containerName;
@@ -738,6 +817,10 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         containerPortCandidates.push(7000);
     }
 
+    const { resolved: ensuredAgentCmd } = readManifestAgentCommand(manifest);
+    const startCmd = readManifestStartCommand(manifest);
+    const withParallelAgent = Boolean(startCmd);
+
     if (containerExists(containerName)) {
         const desired = computeEnvHash(manifest);
         const current = getContainerLabel(containerName, 'ploinky.envhash');
@@ -748,6 +831,14 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     if (containerExists(containerName)) {
         if (!isContainerRunning(containerName)) {
             try { execSync(`${containerRuntime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
+            if (withParallelAgent) {
+                try {
+                    launchAgentSidecar({ containerName, agentCommand: ensuredAgentCmd, agentName });
+                } catch (error) {
+                    try { stopAndRemove(containerName); } catch (_) { }
+                    throw error;
+                }
+            }
         }
         const hostPort = resolveHostPort(containerName, existingRecord, containerPortCandidates);
         syncAgentMcpConfig(containerName, agentPath);
