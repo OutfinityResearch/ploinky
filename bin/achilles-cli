@@ -1,6 +1,28 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-node "${REPO_ROOT}/node_modules/achillesAgentLib/cli/achilles-cli.js" "$@"
+# Support both legacy and scoped install paths.
+ACHILLES_CLI=""
+CANDIDATES=(
+    "${REPO_ROOT}/node_modules/AchillesAgentLib/bin/achilles-cli"
+    "${REPO_ROOT}/node_modules/achillesAgentLib/bin/achilles-cli"
+    "${REPO_ROOT}/node_modules/AchillesAgentLib/bin/achiles-cli"
+    "${REPO_ROOT}/node_modules/achillesAgentLib/bin/achiles-cli"
+)
+
+for candidate in "${CANDIDATES[@]}"; do
+    if [[ -f "${candidate}" ]]; then
+        ACHILLES_CLI="${candidate}"
+        break
+    fi
+done
+
+if [[ -z "${ACHILLES_CLI}" ]]; then
+    echo "Unable to locate Achilles CLI under node_modules." >&2
+    exit 1
+fi
+
+exec "${ACHILLES_CLI}" "$@"
