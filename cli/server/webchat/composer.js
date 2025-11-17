@@ -1,8 +1,29 @@
 const MAX_TEXTAREA_HEIGHT_PX = 72;
+const INITIAL_FOCUS_DELAY_MS = 120;
 
 export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
     let onSend = null;
     let onPurge = null;
+
+    function focusInput() {
+        if (!cmdInput) {
+            return;
+        }
+        if (document.activeElement === cmdInput) {
+            return;
+        }
+        try {
+            cmdInput.focus({ preventScroll: true });
+        } catch (_) {
+            cmdInput.focus();
+        }
+        const pos = cmdInput.value.length;
+        try {
+            cmdInput.setSelectionRange(pos, pos);
+        } catch (_) {
+            // Ignore selection issues
+        }
+    }
 
     function autoResize() {
         if (!cmdInput) {
@@ -95,6 +116,13 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
 
     if (cmdInput) {
         setTimeout(autoResize, 0);
+        const scheduleInitialFocus = () => {
+            setTimeout(() => {
+                focusInput();
+            }, INITIAL_FOCUS_DELAY_MS);
+        };
+        scheduleInitialFocus();
+        window.addEventListener('pageshow', scheduleInitialFocus);
         cmdInput.addEventListener('input', () => {
             autoResize();
             if (purgeTriggerRe.test(cmdInput.value)) {
@@ -121,6 +149,7 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
         setValue,
         getValue,
         autoResize,
+        focus: focusInput,
         setSendHandler: (handler) => {
             onSend = typeof handler === 'function' ? handler : null;
         },
