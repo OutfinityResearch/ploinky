@@ -2,15 +2,19 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { appendLog } from '../server/utils/logger.js';
-import * as dockerSvc from '../services/docker/index.js';
+import {
+    addSessionContainer,
+    cleanupSessionSet,
+    destroyWorkspaceContainers
+} from '../services/docker/index.js';
 import { debugLog } from '../services/utils.js';
 
 function registerSessionContainer(name) {
-    try { dockerSvc.addSessionContainer(name); } catch (_) { }
+    try { addSessionContainer(name); } catch (_) { }
 }
 
 function cleanupSessionContainers() {
-    try { dockerSvc.cleanupSessionSet(); } catch (_) { }
+    try { cleanupSessionSet(); } catch (_) { }
 }
 
 function killRouterIfRunning() {
@@ -93,7 +97,7 @@ function killRouterIfRunning() {
 
 async function destroyAll() {
     try {
-        const list = dockerSvc.destroyWorkspaceContainers({ fast: true });
+        const list = destroyWorkspaceContainers({ fast: true });
         if (list.length) {
             console.log('Removed containers:');
             list.forEach(n => console.log(` - ${n}`));

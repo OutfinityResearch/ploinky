@@ -10,17 +10,28 @@ export {
     cleanupSessionSet,
     destroyAllPloinky,
     destroyWorkspaceContainers,
-    ensureAgentCore,
-    ensureAgentService,
-    getAgentsRegistry,
+    forceStopContainers,
+    getContainerCandidates,
+    gracefulStopContainer,
     listAllContainerNames,
-    startAgentContainer,
-    startConfiguredAgents,
     stopAndRemove,
     stopAndRemoveMany,
     stopConfiguredAgents,
-    collectLiveAgentContainers
-} from './management.js';
+    waitForContainers
+} from './containerFleet.js';
+
+export {
+    ensureAgentService,
+    resolveHostPort,
+    resolveHostPortFromRecord,
+    resolveHostPortFromRuntime,
+    startAgentContainer
+} from './agentServiceManager.js';
+
+export {
+    collectLiveAgentContainers,
+    getAgentsRegistry
+} from './containerRegistry.js';
 
 export {
     containerExists,

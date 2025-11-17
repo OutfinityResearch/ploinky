@@ -1,11 +1,5 @@
 
 ===== PREPARE STAGE =====
-[PASS] Watchdog restarts router and agent container
-
-===== Ploinky only var test =====
-[PASS] Host-only env var not visible inside container
-
-===== Router var change =====
 [PASS] Temporary workspace directory exists
 [PASS] Repository directory created
 [PASS] Agent manifest present
@@ -14,109 +8,24 @@
 [PASS] Isolated agent workspace created
 
 ===== START STAGE =====
-[PASS] Router reflects updated testVar without restart
-
-===== Workspace status command =====
-[PASS] Status reports SSO disabled
-[PASS] Status reports router listening
-[PASS] Status lists repos section
-[PASS] Status lists demo repo
-[PASS] Status lists testRepo repo
-[PASS] Status lists active containers for demo
-[PASS] Status lists active containers for testAgent
-
-===== Dashboard UI =====
-[PASS] Dashboard surfaces workspace status
-
-===== WebMeet API =====
-[PASS] WebMeet whoami endpoint authenticates
-
-===== Demo agent dependency tests =====
-[PASS] Simulator container is running
-[PASS] Moderator container is running
-[PASS] Moderator server responds to GET
-[PASS] Verify repo 'webmeet' is cloned
-[PASS] Verify repo 'vibe1' is cloned
-
-===== Check preinstall runs =====
-[PASS] Explorer preinstall command executed
-
-===== MCP tests =====
-[PASS] Status check: client status simulator
-[PASS] Tool check: client list tools
-[PASS] Tool run check: client tool run_simulation -iterations 10
-
-===== RoutingServer aggregation test =====
-[PASS] Aggregation check: router server mcp aggregation
-
-===== CLI Variable Commands =====
-[PASS] var sets test_var
-[PASS] vars lists test_var
-[PASS] echo returns test_var
-[PASS] expose applies to test_var
-[PASS] Agent sees exposed test_var via shell
-
-===== WebChat Command =====
-[PASS] webchat --rotate regenerates token
-[PASS] WebChat agent override responds via curl
-
-===== WebChat SSO Parameters =====
 [PASS] Service container is running
-[PASS] Router port 33640 listening
-[PASS] Agent host port 28024 listening
-[PASS] Agent port 28024 bound to localhost
-[PASS] WebChat CLI session logs guest SSO args
-
-===== Router Static Assets =====
-[PASS] Router serves configured static asset
-
-===== Manifest Environment =====
-[PASS] Variable MY_TEST_VAR from manifest is present after start
-[PASS] Custom volume mount exposes marker
-
-===== Start Command Result =====
-[PASS] Start command creates start-result file
-[PASS] Start command writes expected content
-
-===== Install Command Verification =====
+[PASS] Router port 28161 listening
+[PASS] Agent host port 22013 listening
+[PASS] Agent port 22013 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
-[PASS] Install command creates marker file (verified via shell)
-
-===== Postinstall Verification =====
-[PASS] Postinstall command creates marker file
-
-===== Agent Blob Upload and Download =====
 [PASS] Container exposes AGENT_NAME
-[PASS] Router upload stores blob in agent workspace
-[PASS] Router download returns uploaded blob
 [PASS] Container exposes FAST_TEST_MARKER
 [PASS] Agent log file created
 [PASS] Persisted data file created
 
 ===== Health Probes Agent =====
-[PASS] Router shared upload stores blob in shared folder
 [PASS] Health probes agent container is running
 
 ===== Alias-enabled Agent through manifest =====
-[PASS] Router shared download returns uploaded blob
-
-===== Demo Agent Filesystem =====
 [PASS] Global alias agent uses workspace root
 
 ===== Watchdog restart services =====
-[PASS] Demo agent directories exist and are read-only
-
-===== Global Agent Verification =====
-[PASS] Global agent working directory is the test root
-[PASS] Manifest dependency global agent uses workspace root
-[PASS] Manifest defined ports map correctly
-
-===== Devel Agent Verification =====
-[PASS] Devel agent cwd is the repo source and has RW permissions
-[PASS] Manifest dependency devel agent uses repo root
-
-===== WebTTY Command =====
 [PASS] Watchdog restarts router and agent container
 
 ===== Ploinky only var test =====
@@ -162,16 +71,6 @@
 [PASS] var sets test_var
 [PASS] vars lists test_var
 [PASS] echo returns test_var
-[PASS] webtty command records mock shell configuration
-
-===== Disable Repo Command =====
-[PASS] disable repo removes demo entry
-
-===== Logs Commands =====
-[PASS] logs tail router streams entries
-[PASS] logs last prints five lines
-
-===== LLM CLI Suggestions =====
 [PASS] expose applies to test_var
 [PASS] Agent sees exposed test_var via shell
 
@@ -180,20 +79,6 @@
 [PASS] WebChat agent override responds via curl
 
 ===== WebChat SSO Parameters =====
-[PASS] Invalid CLI input yields LLM suggestion and system command output
-
-===== Tests after Start Again =====
-[PASS] Persistence marker survived restart
-[PASS] Agent data file still present after restart
-[PASS] Agent data file retains initialization signature
-[PASS] Dynamic APP_NAME update without restart
-[PASS] Dynamic WEBTTY_SHELL update without restart
-[PASS] Dynamic SSO_CLIENT_SECRET update without restart
-
-===== Manifest Environment =====
-[PASS] Variable MY_TEST_VAR from manifest is present after start again
-
-===== RESTART STAGE =====
 [PASS] WebChat CLI session logs guest SSO args
 
 ===== Router Static Assets =====
@@ -232,22 +117,6 @@
 [PASS] Manifest dependency devel agent uses repo root
 
 ===== WebTTY Command =====
-[PASS] Service container is running
-[PASS] Router port 30359 listening
-[PASS] Agent host port 38557 listening
-[PASS] Router status endpoint responds
-[PASS] Agent health endpoint reports ok
-[PASS] Container exposes AGENT_NAME
-[PASS] Container exposes FAST_TEST_MARKER
-[PASS] Agent log file created
-[PASS] Persisted data file created
-[PASS] Container PID changed after restart
-[PASS] Persistence marker retained after restart
-
-===== Manifest Environment =====
-[PASS] Variable MY_TEST_VAR from manifest is present after restart
-
-===== DESTROY STAGE =====
 [PASS] webtty command records mock shell configuration
 
 ===== Disable Repo Command =====
@@ -261,23 +130,10 @@
 [PASS] Invalid CLI input yields LLM suggestion and system command output
 
 ===== STOP STAGE =====
-[PASS] agentToBeDisabled no longer in agents registry
-[PASS] Router log snapshot records shutdown
-[PASS] RoutingServer process stopped
-[PASS] Test agent container removed
-[PASS] Temporary workspace directory deleted
-[PASS] Agent log removed with workspace
-[PASS] Persistence marker removed with workspace
-
-===== NODE UNIT STAGE =====
-[PASS] Node unit tests
-
-===== TEST SUMMARY =====
-[FAIL] Suite finished with 1 failure(s).
 [PASS] Container exists after stop
 [PASS] Container is no longer running
-[PASS] Router port 33640 closed
-[PASS] Agent port 28024 closed
+[PASS] Router port 28161 closed
+[PASS] Agent port 22013 closed
 [PASS] Manual persistence marker retained
 [PASS] Agent data file retained
 [PASS] Router log records shutdown
@@ -293,9 +149,9 @@
 
 ===== Tests after start =====
 [PASS] Service container is running
-[PASS] Router port 33640 listening
-[PASS] Agent host port 28024 listening
-[PASS] Agent port 28024 bound to localhost
+[PASS] Router port 28161 listening
+[PASS] Agent host port 22013 listening
+[PASS] Agent port 22013 bound to localhost
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
@@ -426,8 +282,8 @@
 
 ===== RESTART STAGE =====
 [PASS] Service container is running
-[PASS] Router port 33640 listening
-[PASS] Agent host port 28024 listening
+[PASS] Router port 28161 listening
+[PASS] Agent host port 22013 listening
 [PASS] Router status endpoint responds
 [PASS] Agent health endpoint reports ok
 [PASS] Container exposes AGENT_NAME
