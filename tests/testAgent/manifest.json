@@ -1,5 +1,6 @@
 {
   "container": "node:20-bullseye",
+  "start": "/code/start_script.sh",
   "install": "echo 'install_ok' > ./install_marker.txt",
   "agent": "node /code/server.js",
   "cli": "/code/testSSOParams.sh",

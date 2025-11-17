@@ -141,6 +141,11 @@ stage_header "Manifest Environment"
 test_check "Variable MY_TEST_VAR from manifest is present after start" assert_container_env "$TEST_AGENT_CONT_NAME" "MY_TEST_VAR" "hello-manifest"
 test_check "Custom volume mount exposes marker" fast_assert_volume_mount
 
+stage_header "Start Command Result"
+test_start_result_file="$TEST_RUN_DIR/$TEST_AGENT_NAME/start-result"
+test_check "Start command creates start-result file" assert_file_exists "$test_start_result_file"
+test_check "Start command writes expected content" assert_file_contains "$test_start_result_file" "started without shell"
+
 stage_header "Install Command Verification"
 test_check "Install command creates marker file (verified via shell)" fast_check_install_marker_via_shell
 
