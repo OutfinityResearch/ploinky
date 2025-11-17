@@ -1,6 +1,7 @@
 /* WhatsApp-inspired theme colors and variables */
-:root {
-  /* Dark theme (default) */
+:root,
+body[data-theme="dark"] {
+  /* Dark theme */
   --wa-bg-primary: #0b141a;
   --wa-bg-secondary: #111b21;
   --wa-bg-panel: #202c33;
@@ -69,6 +70,40 @@ body[data-theme="light"] {
   
   --wa-shadow-sm: 0 1px 2px rgba(0,0,0,.08);
   --wa-shadow-md: 0 1px 3px rgba(11,20,26,.08);
+}
+
+/* Explorer theme (AssistOS-inspired) */
+body[data-theme="explorer"] {
+  --wa-bg-primary: #f4f5f7;
+  --wa-bg-secondary: #ffffff;
+  --wa-bg-panel: #ffffff;
+  --wa-bg-hover: #eef2ff;
+  --wa-bg-input: #ffffff;
+  --wa-bg-message-in: #ffffff;
+  --wa-bg-message-out: #dbeafe;
+  --wa-bg-sidebar: #ffffff;
+  --wa-bg-search: #e5edff;
+  --wa-bg-chat: #f4f5f7;
+
+  --wa-text-primary: #1f2933;
+  --wa-text-secondary: #4b5563;
+  --wa-text-muted: #6b7280;
+  --wa-text-message-out: #1f2933;
+
+  --wa-border: #e5e7eb;
+  --wa-border-light: #f3f4f6;
+
+  --wa-accent: #2563eb;
+  --wa-accent-hover: #1d4ed8;
+  --wa-accent-faded: rgba(37, 99, 235, 0.18);
+  --wa-online: #22c55e;
+  --wa-typing: #0ea5e9;
+  --wa-table-header-bg: #e0e7ff;
+  --wa-table-row-odd-bg: #ffffff;
+  --wa-table-row-even-bg: #f2f6ff;
+
+  --wa-shadow-sm: 0 2px 4px rgba(15, 23, 42, 0.08);
+  --wa-shadow-md: 0 12px 24px rgba(15, 23, 42, 0.12);
 }
 
 /* Reset and base styles */

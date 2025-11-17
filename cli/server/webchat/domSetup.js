@@ -41,7 +41,7 @@ export function initDom() {
     const avatarInitial = document.getElementById('avatarInitial');
     const statusEl = document.getElementById('statusText');
     const statusDot = document.querySelector('.wa-status-dot');
-    const themeToggle = document.getElementById('themeToggle');
+    const themeSelect = document.getElementById('themeSelect');
     const banner = document.getElementById('connBanner');
     const bannerText = document.getElementById('bannerText');
     const chatList = document.getElementById('chatList');
@@ -113,30 +113,45 @@ export function initDom() {
         banner.classList.remove('show');
     }
 
-    function getTheme() {
+    const THEME_STORAGE_KEY = 'webchat_theme';
+    const SUPPORTED_THEMES = new Set(['light', 'dark', 'explorer']);
+    const FALLBACK_THEME = 'light';
+
+    function normalizeTheme(theme) {
+        return SUPPORTED_THEMES.has(theme) ? theme : FALLBACK_THEME;
+    }
+
+    function readThemePreference() {
         try {
-            return localStorage.getItem('webchat_theme') || 'light';
+            const stored = localStorage.getItem(THEME_STORAGE_KEY);
+            return normalizeTheme(stored);
         } catch (_) {
-            return 'light';
+            return FALLBACK_THEME;
         }
     }
 
-    function setTheme(theme) {
+    function applyThemePreference(theme) {
+        const nextTheme = normalizeTheme(theme);
+        document.body.setAttribute('data-theme', nextTheme);
         try {
-            document.body.setAttribute('data-theme', theme);
-            localStorage.setItem('webchat_theme', theme);
+            localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
         } catch (_) {
-            document.body.setAttribute('data-theme', theme);
+            // Ignore storage failures
+        }
+        if (themeSelect && themeSelect.value !== nextTheme) {
+            themeSelect.value = nextTheme;
         }
     }
 
-    if (themeToggle) {
-        themeToggle.onclick = () => {
-            const next = getTheme() === 'dark' ? 'light' : 'dark';
-            setTheme(next);
-        };
+    const initialTheme = readThemePreference();
+    applyThemePreference(initialTheme);
+
+    if (themeSelect) {
+        themeSelect.value = initialTheme;
+        themeSelect.addEventListener('change', (event) => {
+            applyThemePreference(event.target.value);
+        });
     }
-    setTheme(getTheme());
 
     let viewMoreLineLimit = readInitialViewMoreLimit();
     let viewMoreChangeHandler = null;
@@ -199,7 +214,7 @@ export function initDom() {
             avatarInitial,
             statusEl,
             statusDot,
-            themeToggle,
+            themeSelect,
             banner,
             bannerText,
             chatList,
