@@ -114,8 +114,8 @@ export function initDom() {
     }
 
     const THEME_STORAGE_KEY = 'webchat_theme';
-    const SUPPORTED_THEMES = new Set(['light', 'dark', 'explorer']);
-    const FALLBACK_THEME = 'light';
+    const SUPPORTED_THEMES = new Set(['light', 'dark', 'explorer', 'obsidian']);
+    const FALLBACK_THEME = 'explorer';
 
     function normalizeTheme(theme) {
         return SUPPORTED_THEMES.has(theme) ? theme : FALLBACK_THEME;
