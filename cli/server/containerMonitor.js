@@ -5,8 +5,7 @@ import { fileURLToPath } from 'url';
 
 import * as workspaceSvc from '../services/workspace.js';
 import { REPOS_DIR } from '../services/config.js';
-import { ensureAgentService } from '../services/docker/index.js';
-import { isContainerRunning } from '../services/docker/common.js';
+import { ensureAgentService, isContainerRunning } from '../services/docker/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

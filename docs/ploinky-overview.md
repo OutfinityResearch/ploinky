@@ -1926,7 +1926,7 @@ function setConfig(config) {
 ## Docker Service
 
 
-**Files:**`cli/services/docker/common.js`,`cli/services/docker/interactive.js`,`cli/services/docker/management.js`
+**Files:**`cli/services/docker/common.js`,`cli/services/docker/interactive.js`,`cli/services/docker/containerFleet.js`,`cli/services/docker/agentServiceManager.js`,`cli/services/docker/agentHooks.js`,`cli/services/docker/agentCommands.js`,`cli/services/docker/containerRegistry.js`
 
 Handles all container operations including lifecycle management, port mapping, and runtime detection.
 

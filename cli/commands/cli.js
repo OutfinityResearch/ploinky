@@ -9,7 +9,13 @@ import { listRepos, listAgents, listCurrentAgents, listRoutes, statusWorkspace }
 import { logsTail, showLast } from '../services/logUtils.js';
 import { startWorkspace, runCli, runShell, refreshAgent } from '../services/workspaceUtil.js';
 import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/utils/routerEnv.js';
-import * as dockerSvc from '../services/docker/index.js';
+import {
+    getAgentContainerName,
+    getRuntime,
+    isContainerRunning,
+    stopConfiguredAgents,
+    destroyWorkspaceContainers
+} from '../services/docker/index.js';
 import * as workspaceSvc from '../services/workspace.js';
 import { handleSystemCommand, handleInvalidCommand } from './llmSystemCommands.js';
 import {
@@ -308,7 +314,6 @@ async function handleCommand(args) {
 
             if (target) {
                 const agentName = target;
-                const { getAgentContainerName, getRuntime, isContainerRunning } = dockerSvc;
                 let registryRecord = null;
                 try {
                     registryRecord = agentsSvc.resolveEnabledAgentRecord(agentName);
@@ -356,7 +361,7 @@ async function handleCommand(args) {
                 console.log('[restart] Stopping Router and configured agents...');
                 killRouterIfRunning();
                 console.log('[restart] Stopping configured agent containers...');
-                const list = dockerSvc.stopConfiguredAgents();
+                const list = stopConfiguredAgents();
                 if (list.length) { console.log('[restart] Stopped containers:'); list.forEach(n => console.log(` - ${n}`)); }
                 else { console.log('[restart] No containers to stop.'); }
                 console.log('[restart] Starting workspace...');
@@ -372,7 +377,7 @@ async function handleCommand(args) {
             console.log('[shutdown] Stopping RoutingServer...');
             killRouterIfRunning();
             console.log('[shutdown] Removing workspace containers...');
-            const list = dockerSvc.destroyWorkspaceContainers();
+            const list = destroyWorkspaceContainers();
             if (list.length) {
                 console.log('[shutdown] Removed containers:');
                 list.forEach(n => console.log(` - ${n}`));
@@ -384,7 +389,7 @@ async function handleCommand(args) {
             console.log('[stop] Stopping RoutingServer...');
             killRouterIfRunning();
             console.log('[stop] Stopping configured agent containers...');
-            const list = dockerSvc.stopConfiguredAgents();
+            const list = stopConfiguredAgents();
             if (list.length) {
                 console.log('[stop] Stopped containers:');
                 list.forEach(n => console.log(` - ${n}`));
