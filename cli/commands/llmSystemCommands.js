@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { defaultLLMInvokerStrategy } from 'achillesAgentLib/utils/LLMClient.mjs';
 import { debugLog } from '../services/utils.js';
 import { loadValidLlmApiKeys, collectAvailableLlmKeys } from '../services/llmProviderUtils.js';
+import * as inputState from '../services/inputState.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,20 +47,71 @@ function buildLlmPrompt(rawInput) {
     const sections = [];
     const systemContext = loadLlmSystemContext();
     if (systemContext) {
-        sections.push('System context for Ploinky CLI and runtime:\n' + systemContext);
+        sections.push(`System context for Ploinky CLI and runtime:\n${systemContext}`);
     }
 
     sections.push(
-        'You are a command guide for the Ploinky CLI.',
-        'Given the user input, propose the best next step the user should execute inside the CLI. '
-            + 'If more than one action is required, return a numbered list with each step on its own line.',
-        'Each step should reference either a concrete Ploinky command (for example "add repo demo" or "enable agent basic/chatbot") '
-            + 'or, if the user clearly wants a shell/system action, the exact system command they should run (for example "ls" or "npm install").',
-        'If the input is unclear, respond with a short tip suggesting they run "help".',
-        `User input: "${rawInput}"`
-    );
+        `You are a helpful general-purpose assistant. You can answer any question, reason about arbitrary topics, and when appropriate provide Ploinky-specific guidance.
+In addition to your broad knowledge, you have detailed context about the Ploinky CLI (included above).
+Given the user input, describe the best command you find that would fulfill the user's needs. Decide if the user needs a system command(ls, pwd, etc.) or a ploinky command. Try to find the single best one-line command. If more than one command is needed, respond with a short list, one actionable command per line. Suggested commands MUST respect the following format:
+\`\`\`
+command
+\`\`\`
+User input: "${rawInput}"`);
 
     return sections.join('\n\n');
+}
+
+function extractSingleCommandFromSuggestion(suggestion) {
+    if (typeof suggestion !== 'string' || !suggestion.includes('```')) return '';
+    const matches = [...suggestion.matchAll(/```([\s\S]*?)```/g)];
+    if (matches.length !== 1) return '';
+    const blockContent = matches[0][1].trim();
+    if (!blockContent) return '';
+    if (blockContent.includes('\n')) return '';
+    return blockContent;
+}
+
+function discardLastHistoryEntry(rl, value) {
+    if (!rl || !Array.isArray(rl.history)) return;
+    const latest = rl.history[0];
+    if (latest === undefined) return;
+    if (latest === value || (!value && latest === '')) {
+        rl.history.shift();
+    }
+}
+
+async function promptToExecuteSuggestedCommand(commandText) {
+    const activeInterface = inputState.getInterface?.();
+    if (!activeInterface || !process.stdin.isTTY) {
+        console.log(`LLM suggested: ${commandText}`);
+        return false;
+    }
+
+    inputState.suspend?.();
+    let prompt = `LLM suggested: ${commandText}. Execute? (y/n) `;
+    try {
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const raw = await new Promise((resolve) => {
+                activeInterface.question(prompt, (answer) => resolve(answer));
+            });
+            discardLastHistoryEntry(activeInterface, raw);
+            const normalized = (raw || '').trim().toLowerCase();
+            if (!normalized) {
+                return false;
+            }
+            if (normalized === 'y' || normalized === 'yes') {
+                return true;
+            }
+            if (normalized === 'n' || normalized === 'no') {
+                return false;
+            }
+            prompt = 'Please respond with y or n: ';
+        }
+    } finally {
+        inputState.resume?.();
+    }
 }
 
 function extractLlmErrorDetails(error) {
@@ -190,7 +242,7 @@ export async function handleSystemCommand(command, options = []) {
     });
 }
 
-export async function handleInvalidCommand(command, options = []) {
+export async function handleInvalidCommand(command, options = [], executeSuggestion) {
     const commandLabel = command || '';
     const validKeyNames = loadValidLlmApiKeys();
     const envPath = path.resolve(process.cwd(), WORKSPACE_ENV_FILENAME);
@@ -206,8 +258,20 @@ export async function handleInvalidCommand(command, options = []) {
 
     const llmResult = await suggestCommandWithLLM(commandLabel, options);
     if (llmResult?.status === 'ok' && llmResult.suggestion) {
-        console.log('[LLM] Suggested next steps:');
-        console.log(llmResult.suggestion);
+        const singleCommand = extractSingleCommandFromSuggestion(llmResult.suggestion);
+        if (singleCommand && typeof executeSuggestion === 'function') {
+            const shouldExecute = await promptToExecuteSuggestedCommand(singleCommand);
+            if (shouldExecute) {
+                try {
+                    await executeSuggestion(singleCommand);
+                } catch (error) {
+                    console.error(`Failed to execute suggested command: ${error?.message || error}`);
+                }
+            }
+        } else {
+            console.log('[LLM] Suggested next steps:');
+            console.log(llmResult.suggestion);
+        }
         return;
     }
 

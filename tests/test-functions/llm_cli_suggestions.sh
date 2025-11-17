@@ -23,12 +23,8 @@ test_llm_cli_suggestions() {
     return 1
   fi
 
-  local suggestion
-  suggestion=$(printf '%s\n' "$output" | awk '/\[LLM\] Suggested next steps:/{flag=1;next} flag {print}')
-  suggestion=$(printf '%s' "$suggestion" | sed '/^[[:space:]]*$/d')
-
-  if [[ -z "$suggestion" ]]; then
-    echo "LLM suggestion output is empty." >&2
+  if ! grep -q "LLM suggested:" <<<"$output"; then
+    echo "Expected single-command prompt with 'LLM suggested:' marker." >&2
     printf '--- ploinky how do i start an agent output ---%s\n' "" >&2
     printf '%s\n' "$output" >&2
     return 1

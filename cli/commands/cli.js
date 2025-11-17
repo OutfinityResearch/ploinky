@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { debugLog, findAgent } from '../services/utils.js';
 import { isKnownCommand } from '../services/commandRegistry.js';
 import 'achillesAgentLib/LLMAgents';
@@ -435,7 +435,31 @@ async function handleCommand(args) {
             if (!isKnownCommand(command)) {
                 const handled = await handleSystemCommand(command, options);
                 if (!handled) {
-                    await handleInvalidCommand(command, options);
+                    await handleInvalidCommand(command, options, async (suggestedLine) => {
+                        const trimmedSuggestion = (suggestedLine || '').trim();
+                        if (!trimmedSuggestion) return;
+                        const shellMetaPattern = /[|&;<>(){}\[\]`$]/;
+                        if (shellMetaPattern.test(trimmedSuggestion)) {
+                            console.log(`[LLM] Executing shell command: ${trimmedSuggestion}`);
+                            await new Promise((resolve) => {
+                                const child = spawn(process.env.SHELL || 'bash', ['-lc', trimmedSuggestion], { stdio: 'inherit' });
+                                child.on('exit', (code) => {
+                                    if (code && code !== 0) {
+                                        console.error(`[LLM] Command exited with code ${code}`);
+                                    }
+                                    resolve();
+                                });
+                                child.on('error', (error) => {
+                                    console.error(`[LLM] Failed to run suggested command: ${error?.message || error}`);
+                                    resolve();
+                                });
+                            });
+                            return;
+                        }
+                        const argsToRun = trimmedSuggestion.split(/\s+/).filter(Boolean);
+                        if (!argsToRun.length) return;
+                        await handleCommand(argsToRun);
+                    });
                 }
             } else {
                 console.log(`Command '${command}' is currently not supported by this build. Type help to see available options.`);

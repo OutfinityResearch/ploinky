@@ -289,9 +289,11 @@ function startInteractiveMode() {
         historySize: 1000,
         completer: process.stdin.isTTY ? completer : undefined // Only use completer in TTY mode
     });
+    inputState.registerInterface?.(rl);
 
     const cleanupAndExit = () => {
         try { cleanupCliSessions(); } catch (_) {}
+        try { inputState.registerInterface?.(null); } catch (_) {}
         restoreTTY();
         try { rl.close(); } catch(_) {}
         process.exit(0);
@@ -308,10 +310,6 @@ function startInteractiveMode() {
     rl.on('line', async (line) => {
         // If input is suspended (e.g., password prompt), ignore this line
         if (inputState.isSuspended()) {
-            if (process.stdin.isTTY) {
-                rl.setPrompt(getColoredPrompt());
-                rl.prompt();
-            }
             return;
         }
         const trimmedLine = line.trim();
@@ -336,7 +334,7 @@ function startInteractiveMode() {
         if (process.stdin.isTTY) {
             rl.prompt();
         }
-    }).on('close', async () => { restoreTTY(); try { cleanupCliSessions(); } catch (_) {} if (process.stdin.isTTY) { console.log('Bye.'); } process.exit(0); });
+    }).on('close', async () => { restoreTTY(); try { cleanupCliSessions(); } catch (_) {} try { inputState.registerInterface?.(null); } catch (_) {} if (process.stdin.isTTY) { console.log('Bye.'); } process.exit(0); });
 
     // Ensure Ctrl-D (EOF) closes the CLI gracefully
     try {
