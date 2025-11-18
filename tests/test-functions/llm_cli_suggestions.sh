@@ -18,14 +18,14 @@ test_llm_cli_suggestions() {
     return 1
   fi
 
-  if ! output=$(timeout 10s ploinky how do i start an agent 2>&1); then
-    echo "'ploinky how do i start an agent' failed or timed out." >&2
+  if ! output=$(timeout 10s ploinky what is your purpose? 2>&1); then
+    echo "'what is your purpose?' failed or timed out." >&2
     return 1
   fi
 
   if ! grep -q "LLM suggested:" <<<"$output"; then
     echo "Expected single-command prompt with 'LLM suggested:' marker." >&2
-    printf '--- ploinky how do i start an agent output ---%s\n' "" >&2
+    printf '--- what is your purpose? ---%s\n' "" >&2
     printf '%s\n' "$output" >&2
     return 1
   fi

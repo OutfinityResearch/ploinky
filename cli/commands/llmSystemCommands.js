@@ -51,9 +51,9 @@ function buildLlmPrompt(rawInput) {
     }
 
     sections.push(
-        `You are a helpful general-purpose assistant. You can answer any question, reason about arbitrary topics, and when appropriate provide Ploinky-specific guidance.
+        `You are a helpful general-purpose assistant. You can do anything, and when appropriate provide Ploinky-specific guidance.
 In addition to your broad knowledge, you have detailed context about the Ploinky CLI (included above).
-Given the user input, describe the best command you find that would fulfill the user's needs. Decide if the user needs a system command(ls, pwd, etc.) or a ploinky command. Try to find the single best one-line command. If more than one command is needed, respond with a short list, one actionable command per line. Suggested commands MUST respect the following format:
+Given the user input, you have 2 choices of responding: describe the best command you find that would fulfill the user's needs or just answer normally. Decide if the user needs a system command(ls, pwd, etc.), a ploinky command or just a plain response(that does not require any command). Try to find the single best one-line command. If more than one command is needed, respond with a short list, one actionable command per line. Suggested commands MUST respect the following format:
 \`\`\`
 command
 \`\`\`
@@ -221,23 +221,38 @@ export async function handleSystemCommand(command, options = []) {
     }
 
     return await new Promise((resolve) => {
-        const child = spawn(command, options, { stdio: 'inherit' });
+        const restoreInput = inputState.prepareForExternalCommand?.() || (() => {});
         let settled = false;
+        const finalize = (result) => {
+            if (settled) return;
+            settled = true;
+            try {
+                restoreInput();
+            } catch (_) {
+                /* noop */
+            }
+            resolve(result);
+        };
+        let child;
+        try {
+            child = spawn(command, options, { stdio: 'inherit' });
+        } catch (error) {
+            console.error(error?.message || error);
+            finalize(true);
+            return;
+        }
 
         child.on('error', (error) => {
-            settled = true;
             if (error?.code === 'ENOENT') {
-                resolve(false);
+                finalize(false);
             } else {
                 console.error(error?.message || error);
-                resolve(true);
+                finalize(true);
             }
         });
 
         child.on('exit', () => {
-            if (!settled) {
-                resolve(true);
-            }
+            finalize(true);
         });
     });
 }
@@ -269,7 +284,7 @@ export async function handleInvalidCommand(command, options = [], executeSuggest
                 }
             }
         } else {
-            console.log('[LLM] Suggested next steps:');
+            console.log('LLM suggested:');
             console.log(llmResult.suggestion);
         }
         return;

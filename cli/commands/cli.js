@@ -18,6 +18,7 @@ import {
 } from '../services/docker/index.js';
 import * as workspaceSvc from '../services/workspace.js';
 import { handleSystemCommand, handleInvalidCommand } from './llmSystemCommands.js';
+import * as inputState from '../services/inputState.js';
 import {
     getRepoNames,
     getAgentNames,
@@ -442,16 +443,35 @@ async function handleCommand(args) {
                         if (shellMetaPattern.test(trimmedSuggestion)) {
                             console.log(`[LLM] Executing shell command: ${trimmedSuggestion}`);
                             await new Promise((resolve) => {
-                                const child = spawn(process.env.SHELL || 'bash', ['-lc', trimmedSuggestion], { stdio: 'inherit' });
+                                const restoreInput = inputState.prepareForExternalCommand?.() || (() => {});
+                                let finished = false;
+                                const finish = () => {
+                                    if (finished) return;
+                                    finished = true;
+                                    try {
+                                        restoreInput();
+                                    } catch (_) {
+                                        /* noop */
+                                    }
+                                    resolve();
+                                };
+                                let child;
+                                try {
+                                    child = spawn(process.env.SHELL || 'bash', ['-lc', trimmedSuggestion], { stdio: 'inherit' });
+                                } catch (error) {
+                                    console.error(`[LLM] Failed to start suggested command: ${error?.message || error}`);
+                                    finish();
+                                    return;
+                                }
                                 child.on('exit', (code) => {
                                     if (code && code !== 0) {
                                         console.error(`[LLM] Command exited with code ${code}`);
                                     }
-                                    resolve();
+                                    finish();
                                 });
                                 child.on('error', (error) => {
                                     console.error(`[LLM] Failed to run suggested command: ${error?.message || error}`);
-                                    resolve();
+                                    finish();
                                 });
                             });
                             return;
