@@ -174,6 +174,9 @@ stage_header "WebTTY Command"
 test_action "Configure WebTTY shell to mock script" configure_mock_webtty_shell
 test_check "webtty command records mock shell configuration" test_webtty_shell
 
+stage_header "MCP Async Tool via CLI"
+test_check "cli tool demo_async_task completes successfully" fast_mcp_demo_async_task
+
 #stage_header "Default CLI Fallback"
 #test_action "Capture default CLI help output" run_default_cli_help
 #test_check "Default CLI help banner is shown" default_cli_help_has_banner

@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { zod } from 'mcp-sdk';
+import { TaskQueue } from './TaskQueue.mjs';
 const { z } = zod;
+
+const MAX_CONCURRENT_TASKS = 10;
+const TASK_QUEUE_FILE = path.resolve(process.cwd(), 'tasksQueue');
 
 // AgentServer (MCP over HTTP): exposes tools/resources via Streamable HTTP transport on PORT (default 7000) at /mcp.
 
@@ -61,7 +65,7 @@ function buildCommandSpec(entry, defaultCwd) {
     const commandValue = typeof entry?.command === 'string' ? entry.command.trim() : null;
     if (!commandValue) return null;
     const command = path.isAbsolute(commandValue) ? commandValue : path.resolve(defaultCwd, commandValue);
-    const cwd = entry?.cwd ? path.resolve(defaultCwd, entry.cwd) : defaultCwd;
+    const cwd = defaultCwd;
     const env = entry?.env && typeof entry.env === 'object' ? entry.env : {};
     const timeoutMs = Number.isFinite(entry?.timeoutMs) ? entry.timeoutMs : undefined;
     return { command, cwd, env, timeoutMs };
@@ -189,7 +193,7 @@ function createFieldSchema(fieldSpec) {
     return schema;
 }
 
-function executeShell(spec, payload) {
+function executeShell(spec, payload, options = {}) {
     return new Promise((resolve, reject) => {
         const { command, cwd, env, timeoutMs } = spec;
         const child = spawn(command, [], {
@@ -198,6 +202,13 @@ function executeShell(spec, payload) {
             stdio: ['pipe', 'pipe', 'pipe'],
             timeout: timeoutMs
         });
+        if (typeof options.onSpawn === 'function') {
+            try {
+                options.onSpawn(child);
+            } catch (err) {
+                console.warn('[AgentServer/MCP] onSpawn hook failed:', err);
+            }
+        }
         const stdout = [];
         const stderr = [];
         child.stdout.on('data', chunk => stdout.push(chunk));
@@ -224,6 +235,12 @@ function executeShell(spec, payload) {
         }
     });
 }
+
+const taskQueue = new TaskQueue({
+    maxConcurrent: MAX_CONCURRENT_TASKS,
+    storagePath: TASK_QUEUE_FILE,
+    executor: executeShell
+});
 
 function extractTemplateParams(template) {
     const params = {};
@@ -255,6 +272,8 @@ async function registerFromConfig(server, config, helpers) {
                 description: tool.description
             };
 
+            const isAsync = tool.async === true;
+            const asyncTimeout = Number.isFinite(tool.timeout) ? tool.timeout : undefined;
             const invocation = async (...cbArgs) => {
                 let args = cbArgs[0] ?? {};
                 let context = cbArgs[1] ?? {};
@@ -266,6 +285,18 @@ async function registerFromConfig(server, config, helpers) {
                 console.log(`[AgentServer/MCP] Tool '${name}' context:`, context);
                 const payload = { tool: name, input: args, metadata: context };
                 console.log(`[AgentServer/MCP] Tool '${name}' payload:`, JSON.stringify(payload));
+                if (isAsync) {
+                    const { id: taskId, status } = taskQueue.enqueueTask({
+                        toolName: name,
+                        commandSpec,
+                        payload,
+                        timeoutMs: asyncTimeout
+                    });
+                    return {
+                        content: [{ type: 'text', text: `Task '${name}' queued with id ${taskId}` }],
+                        metadata: { task: { id: taskId, status } }
+                    };
+                }
                 const result = await executeShell(commandSpec, payload);
                 if (result.code !== 0) {
                     const message = result.stderr?.trim() || `command exited with code ${result.code}`;
@@ -398,6 +429,7 @@ async function createServerInstance() {
 
 async function main() {
     const { StreamableHTTPServerTransport, isInitializeRequest } = await loadSdkDeps();
+    taskQueue.initialize();
     const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 7000;
     const sessions = {};
 
@@ -412,6 +444,17 @@ async function main() {
             const u = new URL(url || '/', 'http://localhost');
             if (method === 'GET' && u.pathname === '/health') {
                 return sendJson(200, { ok: true, server: 'ploinky-agent-mcp' });
+            }
+            if (method === 'GET' && u.pathname === '/getTaskStatus') {
+                const taskId = u.searchParams.get('taskId');
+                if (!taskId) {
+                    return sendJson(400, { error: 'missing taskId' });
+                }
+                const task = taskQueue.getTask(taskId);
+                if (!task) {
+                    return sendJson(404, { error: 'task not found' });
+                }
+                return sendJson(200, { task });
             }
             if (method === 'POST' && u.pathname === '/mcp') {
                 const chunks = [];

@@ -26,3 +26,16 @@ fast_mcp_run_simulation() {
      return 1
    fi
 }
+
+fast_mcp_demo_async_task() {
+  local output
+  output=$(ploinky client tool demo_async_task 2>&1)
+  if ! echo "$output" | jq -e '.metadata.task.id' >/dev/null; then
+    echo "demo_async_task did not return task metadata. Output: $output" >&2
+    return 1
+  fi
+  if ! echo "$output" | jq -e '.content[0].text | contains("Task completed")' >/dev/null; then
+    echo "demo_async_task result is missing completion text. Output: $output" >&2
+    return 1
+  fi
+}

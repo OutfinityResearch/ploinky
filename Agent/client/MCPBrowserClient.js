@@ -3,6 +3,7 @@
 
 const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
 const JSONRPC_VERSION = '2.0';
+const TASK_POLL_INTERVAL_MS = 3000;
 
 function resolveBaseUrl(baseUrl) {
     try {
@@ -28,6 +29,7 @@ function createAgentClient(baseUrl) {
     let messageId = 0;
 
     const pending = new Map();
+    const taskPollers = new Map();
 
     let serverCapabilities = null;
     let serverInfo = null;
@@ -155,6 +157,126 @@ function createAgentClient(baseUrl) {
                 // Ignore trailing partial data
             }
         }
+    }
+
+    function resolveTaskStatusPath(pathname) {
+        if (typeof pathname !== 'string' || pathname.length === 0) {
+            return '/getTaskStatus';
+        }
+        let normalized = pathname;
+        if (normalized.endsWith('/')) {
+            normalized = normalized.slice(0, -1);
+        }
+        const match = normalized.match(/^(.*\/mcps\/[^/]+)\/mcp$/);
+        if (match && match[1]) {
+            return `${match[1]}/task`;
+        }
+        return '/getTaskStatus';
+    }
+
+    function buildTaskStatusUrl(taskId, pathOverride) {
+        const statusUrl = new URL(endpoint);
+        statusUrl.pathname = pathOverride || resolveTaskStatusPath(statusUrl.pathname || '');
+        statusUrl.search = '';
+        statusUrl.searchParams.set('taskId', taskId);
+        statusUrl.searchParams.set('_', Date.now().toString());
+        return statusUrl.toString();
+    }
+
+    async function fetchTaskStatus(taskId, poller) {
+        const response = await fetch(buildTaskStatusUrl(taskId, poller?.statusPath), {
+            method: 'GET',
+            headers: {
+                accept: 'application/json'
+            }
+        });
+        if (!response.ok) {
+            const error = new Error(`Failed to fetch task status: HTTP ${response.status}`);
+            error.statusCode = response.status;
+            throw error;
+        }
+        const payload = await response.json().catch(() => null);
+        return payload?.task ?? null;
+    }
+
+    function stopTaskPoller(taskId) {
+        const poller = taskPollers.get(taskId);
+        if (!poller) {
+            return;
+        }
+        if (poller.timer) {
+            clearTimeout(poller.timer);
+        }
+        taskPollers.delete(taskId);
+    }
+
+    function stopAllTaskPollers() {
+        for (const poller of taskPollers.values()) {
+            if (poller.timer) {
+                clearTimeout(poller.timer);
+            }
+        }
+        taskPollers.clear();
+    }
+
+    async function pollTaskStatus(taskId, callback) {
+        const poller = taskPollers.get(taskId);
+        if (!poller) {
+            return;
+        }
+        try {
+            const task = await fetchTaskStatus(taskId, poller);
+            poller.errorCount = 0;
+            if (task) {
+                const status = typeof task.status === 'string' ? task.status : null;
+                const isTerminal = status === 'completed' || status === 'failed';
+                if (poller.lastStatus !== status) {
+                    poller.lastStatus = status;
+                    callback(task);
+                }
+                if (isTerminal) {
+                    stopTaskPoller(taskId);
+                    return;
+                }
+            }
+        } catch (error) {
+            poller.errorCount = (poller.errorCount || 0) + 1;
+            poller.lastError = error;
+            if (poller.errorCount >= 10) {
+                stopTaskPoller(taskId);
+                console.warn('[MCPBrowserClient] Task status poll aborted after repeated failures', error);
+                callback({
+                    id: taskId,
+                    status: 'failed',
+                    error: error?.message || 'Polling failed'
+                });
+                return;
+            }
+            console.warn('[MCPBrowserClient] Task status poll failed', error);
+        }
+        if (taskPollers.has(taskId)) {
+            const timer = setTimeout(() => {
+                void pollTaskStatus(taskId, callback);
+            }, TASK_POLL_INTERVAL_MS);
+            const pollerRef = taskPollers.get(taskId);
+            if (pollerRef) {
+                pollerRef.timer = timer;
+            }
+        }
+    }
+
+    function startTaskPolling(taskId, callback, options = {}) {
+        if (!taskId || typeof callback !== 'function' || taskPollers.has(taskId)) {
+            return;
+        }
+        taskPollers.set(taskId, {
+            timer: null,
+            lastStatus: null,
+            errorCount: 0,
+            lastError: null,
+            statusPath: options.statusPath || null
+        });
+        void pollTaskStatus(taskId, callback);
     }
 
     function ensureStreamTask() {
@@ -306,7 +428,7 @@ function createAgentClient(baseUrl) {
         return result?.tools ?? [];
     }
 
-    async function callTool(name, args, meta) {
+    async function callTool(name, args, meta, onTaskComplete) {
         await connect();
         const params = {
             name,
@@ -315,7 +437,69 @@ function createAgentClient(baseUrl) {
         if (meta && typeof meta === 'object') {
             params._meta = meta;
         }
-        return await sendRequest('tools/call', params);
+        const result = await sendRequest('tools/call', params);
+        const taskId = result?.metadata?.task?.id;
+        if (!taskId) {
+            return result;
+        }
+
+        let completionResolve;
+        let completionReject;
+        let completionSettled = false;
+        const shouldAwaitCompletion = typeof onTaskComplete !== 'function';
+        const completionPromise = shouldAwaitCompletion
+            ? new Promise((resolve, reject) => {
+                completionResolve = resolve;
+                completionReject = reject;
+            })
+            : null;
+
+        const handleTaskUpdate = (task) => {
+            if (typeof onTaskComplete === 'function') {
+                try {
+                    onTaskComplete(task);
+                } catch (err) {
+                    console.warn('[MCPBrowserClient] onTaskComplete callback failed', err);
+                }
+            }
+            if (!completionPromise || completionSettled || !task) {
+                return;
+            }
+            const status = typeof task.status === 'string' ? task.status.toLowerCase() : '';
+            if (status === 'completed') {
+                completionSettled = true;
+                completionResolve(task);
+            } else if (status === 'failed') {
+                completionSettled = true;
+                completionReject(new Error(task.error || 'Task failed'));
+            }
+        };
+
+        let statusPath = null;
+        if (meta && typeof meta === 'object') {
+            const agentName = meta?.router && typeof meta.router === 'object'
+                ? meta.router.agent
+                : null;
+            if (typeof agentName === 'string' && agentName.length > 0) {
+                statusPath = `/mcps/${agentName}/task`;
+            }
+        }
+
+        startTaskPolling(taskId, handleTaskUpdate, { statusPath });
+
+        if (!completionPromise) {
+            return result;
+        }
+
+        const finalTask = await completionPromise;
+        const finalResult = finalTask?.result && typeof finalTask.result === 'object'
+            ? { ...finalTask.result }
+            : { result: finalTask?.result };
+        if (!finalResult.metadata || typeof finalResult.metadata !== 'object') {
+            finalResult.metadata = {};
+        }
+        finalResult.metadata.task = finalTask;
+        return finalResult;
     }
 
     async function listResources() {
@@ -363,6 +547,8 @@ function createAgentClient(baseUrl) {
             reject(new Error('MCP client closed'));
         }
         pending.clear();
+
+        stopAllTaskPollers();
 
         connected = false;
         sessionId = null;

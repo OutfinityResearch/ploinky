@@ -88,6 +88,34 @@ function serveMcpBrowserClient(req, res) {
     stream.pipe(res);
 }
 
+function proxyAgentTaskStatus(req, res, route, parsedUrl, agentName) {
+    const method = (req.method || 'GET').toUpperCase();
+    if (method !== 'GET') {
+        res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'GET' });
+        res.end(JSON.stringify({ error: 'method_not_allowed' }));
+        return;
+    }
+    const pathWithQuery = `/getTaskStatus${parsedUrl.search || ''}`;
+    const upstream = http.request({
+        hostname: '127.0.0.1',
+        port: route.hostPort,
+        path: pathWithQuery,
+        method: 'GET',
+        headers: { accept: 'application/json' }
+    }, upstreamRes => {
+        res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
+        upstreamRes.pipe(res, { end: true });
+    });
+    upstream.on('error', err => {
+        appendLog('agent_task_proxy_error', { agent: agentName, error: err?.message || String(err) });
+        if (!res.headersSent) {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+        }
+        res.end(JSON.stringify({ error: 'upstream error', detail: String(err) }));
+    });
+    upstream.end();
+}
+
 /**
  * Main request processor
  */
@@ -194,6 +222,10 @@ async function processRequest(req, res) {
         }
 
         const subPath = parts.slice(3).join('/');
+        if (subPath === 'task') {
+            proxyAgentTaskStatus(req, res, route, parsedUrl, agent);
+            return;
+        }
         if (subPath === 'mcp' || subPath.startsWith('mcp/')) {
             handleAgentMcpRequest(req, res, route, agent);
             return;
