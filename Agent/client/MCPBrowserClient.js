@@ -3,7 +3,7 @@
 
 const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
 const JSONRPC_VERSION = '2.0';
-const TASK_POLL_INTERVAL_MS = 3000;
+const TASK_POLL_INTERVAL_MS = 30000;
 
 function resolveBaseUrl(baseUrl) {
     try {
@@ -184,19 +184,35 @@ function createAgentClient(baseUrl) {
     }
 
     async function fetchTaskStatus(taskId, poller) {
-        const response = await fetch(buildTaskStatusUrl(taskId, poller?.statusPath), {
-            method: 'GET',
-            headers: {
-                accept: 'application/json'
+        try {
+            const response = await fetch(buildTaskStatusUrl(taskId, poller?.statusPath), {
+                method: 'GET',
+                headers: {
+                    accept: 'application/json'
+                }
+            });
+            if (!response.ok) {
+                const bodyText = await response.text().catch(() => '');
+                if (response.status === 404) {
+                    try {
+                        const parsed = bodyText ? JSON.parse(bodyText) : null;
+                        if (parsed?.error === 'task not found') {
+                            return { state: 'not_found' };
+                        }
+                    } catch {
+                        // not JSON; fall through to http_error branch
+                    }
+                }
+                const error = new Error(`Failed to fetch task status: HTTP ${response.status}`);
+                error.statusCode = response.status;
+                error.body = bodyText;
+                return { state: 'http_error', error };
             }
-        });
-        if (!response.ok) {
-            const error = new Error(`Failed to fetch task status: HTTP ${response.status}`);
-            error.statusCode = response.status;
-            throw error;
+            const payload = await response.json().catch(() => null);
+            return { state: 'ok', task: payload?.task ?? null };
+        } catch (error) {
+            return { state: 'network_error', error };
         }
-        const payload = await response.json().catch(() => null);
-        return payload?.task ?? null;
     }
 
     function stopTaskPoller(taskId) {
@@ -225,9 +241,24 @@ function createAgentClient(baseUrl) {
             return;
         }
         try {
-            const task = await fetchTaskStatus(taskId, poller);
-            poller.errorCount = 0;
-            if (task) {
+            const result = await fetchTaskStatus(taskId, poller);
+            if (result.state === 'not_found') {
+                stopTaskPoller(taskId);
+                callback({
+                    id: taskId,
+                    status: 'failed',
+                    error: 'task not found'
+                });
+                return;
+            }
+            if (result.state === 'network_error') {
+                poller.lastError = result.error || null;
+                console.warn('[MCPBrowserClient] Task status poll encountered a network error, will retry', result.error);
+            } else if (result.state === 'http_error') {
+                poller.lastError = result.error || null;
+                console.warn('[MCPBrowserClient] Task status poll failed', result.error);
+            } else if (result.task) {
+                const task = result.task;
                 const status = typeof task.status === 'string' ? task.status : null;
                 const isTerminal = status === 'completed' || status === 'failed';
                 if (poller.lastStatus !== status) {
@@ -240,18 +271,7 @@ function createAgentClient(baseUrl) {
                 }
             }
         } catch (error) {
-            poller.errorCount = (poller.errorCount || 0) + 1;
             poller.lastError = error;
-            if (poller.errorCount >= 10) {
-                stopTaskPoller(taskId);
-                console.warn('[MCPBrowserClient] Task status poll aborted after repeated failures', error);
-                callback({
-                    id: taskId,
-                    status: 'failed',
-                    error: error?.message || 'Polling failed'
-                });
-                return;
-            }
             console.warn('[MCPBrowserClient] Task status poll failed', error);
         }
         if (taskPollers.has(taskId)) {
@@ -272,7 +292,6 @@ function createAgentClient(baseUrl) {
         taskPollers.set(taskId, {
             timer: null,
             lastStatus: null,
-            errorCount: 0,
             lastError: null,
             statusPath: options.statusPath || null
         });

@@ -65,7 +65,7 @@ export class TaskQueue {
                         createdAt: entry.createdAt || new Date().toISOString(),
                         updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),
                         error: entry.error ?? null,
-                        result: entry.result ?? null
+                        result: null
                     };
                     this.tasks.set(task.id, task);
                 }
@@ -91,8 +91,7 @@ export class TaskQueue {
                 timeoutMs: task.timeoutMs,
                 createdAt: task.createdAt,
                 updatedAt: task.updatedAt,
-                error: task.error,
-                result: task.result
+                error: task.error
             }));
             fs.writeFileSync(this.storagePath, JSON.stringify(snapshot, null, 2));
         } catch (err) {
@@ -249,4 +248,3 @@ export class TaskQueue {
         };
     }
 }
-

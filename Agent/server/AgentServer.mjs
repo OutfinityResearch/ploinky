@@ -8,7 +8,7 @@ import { TaskQueue } from './TaskQueue.mjs';
 const { z } = zod;
 
 const MAX_CONCURRENT_TASKS = 10;
-const TASK_QUEUE_FILE = path.resolve(process.cwd(), 'tasksQueue');
+const TASK_QUEUE_FILE = path.resolve(process.cwd(), '.tasksQueue');
 
 // AgentServer (MCP over HTTP): exposes tools/resources via Streamable HTTP transport on PORT (default 7000) at /mcp.
 

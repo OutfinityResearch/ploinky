@@ -490,6 +490,24 @@ observability.js    // Monitoring views</code></pre>
   ]
 }</code></pre>
                         <p>AgentServer pipes a JSON payload to each command via stdin. Tool invocations receive <code>{ tool, input, metadata }</code>; resources receive <code>{ resource, uri, params }</code>. Command stdout is forwarded to the MCP response, while non-zero exit codes surface as MCP errors.</p>
+
+                        <h3>MCP Task Queue</h3>
+                        <p>Longer running MCP tools are orchestrated through <code>Agent/server/TaskQueue.mjs</code>. Every tool execution is wrapped in a task object that captures the command, input payload, timeout hints, timestamps, and eventual result/error.</p>
+                        <ul style="margin-left: 2rem;">
+                            <li><strong>Concurrency guard:</strong> AgentServer limits work in flight (default 10) and keeps the rest in a FIFO pending queue.</li>
+                            <li><strong>Durable state:</strong> Tasks are stored in <code>$PWD/.tasksQueue</code>. On restart, pending items resume and previously running entries are rewound to pending so they execute again.</li>
+                            <li><strong>Per-task payloads:</strong> The queue injects a unique <code>taskId</code> into the JSON delivered to each command so downstream scripts can correlate logs or offer a status channel.</li>
+                            <li><strong>Timeout + lifecycle:</strong> Tool definitions may specify <code>timeoutMs</code>. The queue arms a timer, kills the underlying process if it runs too long, and marks the task as failed with a timeout message.</li>
+                            <li><strong>Response capture:</strong> Successful executions persist their stdout (and stderr if present) as MCP content results. Failures store stderr/exit codes so RouterServer surfaces meaningful diagnostics back to the caller.</li>
+                        </ul>
+
+                        <h3>Task Status Polling</h3>
+                        <p>The Router/CLI side uses <code>Agent/client/MCPBrowserClient.js</code> to follow long-running jobs.</p>
+                        <ul style="margin-left: 2rem;">
+                            <li><strong>Polling endpoint:</strong> After a task is enqueued, the client hits <code>/mcps/&lt;agent&gt;/task?taskId=...</code> (falling back to <code>/getTaskStatus</code>) every 30 seconds and adds a timestamp query parameter to avoid caching.</li>
+                            <li><strong>Incremental updates:</strong> Each  status response (HTTP 200) updates the console only if the task status changed (pending → running → completed/failed). Terminal states stop the poller immediately.</li>
+                            <li><strong>Error handling:</strong> Non-200 responses are logged and the poller keeps retrying (except <code>404 task not found</code>, which stops polling and reports failure), so status checks continue even across transient outages.</li>
+                        </ul>
                     </div>
 
                     <div class="doc-section">
