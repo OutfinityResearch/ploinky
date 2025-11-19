@@ -12,6 +12,7 @@ import { showHelp } from './services/help.js';
 import { debugLog } from './services/utils.js';
 import * as inputState from './services/inputState.js';
 import { bootstrap } from './services/ploinkyboot.js';
+import { enableMultilineNavigation } from './services/multilineNavigation.js';
 
 const COMMANDS = getCommandRegistry();
 
@@ -290,6 +291,7 @@ function startInteractiveMode() {
         completer: process.stdin.isTTY ? completer : undefined // Only use completer in TTY mode
     });
     inputState.registerInterface?.(rl);
+    enableMultilineNavigation(rl);
 
     const cleanupAndExit = () => {
         try { cleanupCliSessions(); } catch (_) {}
