@@ -93,7 +93,27 @@ function collectAvailableLlmKeys(envPath) {
     });
 }
 
+function populateProcessEnvFromEnvFile(envPath) {
+    const validKeys = loadValidLlmApiKeys();
+    if (!validKeys.length || !envPath || !fs.existsSync(envPath)) {
+        console.log('[LLM] No valid key definitions or .env file missing, skipping env population.');
+        return;
+    }
+    const envVars = parseEnvFile(envPath);
+    const populatedKeys = [];
+    for (const keyName of validKeys) {
+        const fileValue = envVars[keyName];
+        if (typeof fileValue === 'string' && fileValue.trim().length > 0) {
+            if (!process.env[keyName] || !process.env[keyName].trim().length) {
+                process.env[keyName] = fileValue;
+                populatedKeys.push(keyName);
+            }
+        }
+    }
+}
+
 export {
     loadValidLlmApiKeys,
-    collectAvailableLlmKeys
+    collectAvailableLlmKeys,
+    populateProcessEnvFromEnvFile
 };

@@ -5,7 +5,7 @@ import { execSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { defaultLLMInvokerStrategy } from 'achillesAgentLib/utils/LLMClient.mjs';
 import { debugLog } from '../services/utils.js';
-import { loadValidLlmApiKeys, collectAvailableLlmKeys } from '../services/llmProviderUtils.js';
+import { loadValidLlmApiKeys, collectAvailableLlmKeys, populateProcessEnvFromEnvFile } from '../services/llmProviderUtils.js';
 import * as inputState from '../services/inputState.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -170,8 +170,9 @@ async function suggestCommandWithLLM(commandLabel, options = []) {
             mode: 'fast',
             params: { temperature: 0.1 },
         });
-        if (typeof response === 'string' && response.trim()) {
-            return { status: 'ok', suggestion: response.trim() };
+        const suggestionText = typeof response?.output === 'string' ? response.output : '';
+        if (suggestionText.trim()) {
+            return { status: 'ok', suggestion: suggestionText.trim() };
         }
         return { status: 'empty' };
     } catch (error) {
@@ -261,6 +262,7 @@ export async function handleInvalidCommand(command, options = [], executeSuggest
     const commandLabel = command || '';
     const validKeyNames = loadValidLlmApiKeys();
     const envPath = path.resolve(process.cwd(), WORKSPACE_ENV_FILENAME);
+    populateProcessEnvFromEnvFile(envPath);
     const availableKeys = collectAvailableLlmKeys(envPath);
     const validKeysList = formatValidApiKeyList(validKeyNames);
 
