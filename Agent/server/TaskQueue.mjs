@@ -28,13 +28,14 @@ export class TaskQueue {
             return aTime - bTime;
         });
         for (const task of restartable) {
-            if (task.status === 'pending') {
-                this.pending.push(task.id);
-            } else if (task.status === 'running') {
-                task.status = 'pending';
+            if (task.status === 'pending' || task.status === 'running') {
+                task.status = 'failed';
+                task.error = 'Task interrupted before completion (agent restart)';
                 task.updatedAt = new Date().toISOString();
-                this.pending.push(task.id);
+                task.result = null;
                 needsPersist = true;
+            } else if (task.status === 'completed' || task.status === 'failed') {
+                // leave as-is
             }
         }
         if (needsPersist) {
@@ -128,7 +129,13 @@ export class TaskQueue {
         this.pending.push(task.id);
         this.persistTasks();
         this.processQueue();
-        return { id: task.id, status: task.status };
+        return {
+            id: task.id,
+            toolName: task.toolName,
+            status: task.status,
+            createdAt: task.createdAt,
+            updatedAt: task.updatedAt
+        };
     }
 
     processQueue() {
@@ -206,7 +213,10 @@ export class TaskQueue {
                     content.push({ type: 'text', text: `stderr:\n${result.stderr}` });
                 }
                 task.status = 'completed';
-                task.result = { content };
+                task.result = {
+                    content,
+                    metadata: { agent: process.env.AGENT_NAME || task.toolName }
+                };
                 task.error = null;
             } else {
                 const message = timedOut
@@ -214,10 +224,7 @@ export class TaskQueue {
                     : (result.stderr?.trim() || `command exited with code ${result.code}`);
                 task.status = 'failed';
                 task.error = message;
-                task.result = {
-                    stdout: result.stdout,
-                    stderr: result.stderr
-                };
+                task.result = null;
             }
         } catch (err) {
             if (timer) {

@@ -447,78 +447,49 @@ function createAgentClient(baseUrl) {
         return result?.tools ?? [];
     }
 
-    async function callTool(name, args, meta, onTaskComplete) {
+    async function callTool(name, args) {
         await connect();
         const params = {
             name,
             arguments: args ?? {}
         };
-        if (meta && typeof meta === 'object') {
-            params._meta = meta;
-        }
         const result = await sendRequest('tools/call', params);
-        const taskId = result?.metadata?.task?.id;
+        const taskMetadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : null;
+        const taskId = typeof taskMetadata?.taskId === 'string' && taskMetadata.taskId.trim().length
+            ? taskMetadata.taskId.trim()
+            : null;
         if (!taskId) {
             return result;
         }
-
-        let completionResolve;
-        let completionReject;
-        let completionSettled = false;
-        const shouldAwaitCompletion = typeof onTaskComplete !== 'function';
-        const completionPromise = shouldAwaitCompletion
-            ? new Promise((resolve, reject) => {
-                completionResolve = resolve;
-                completionReject = reject;
-            })
+        const statusAgent = typeof taskMetadata?.agent === 'string' && taskMetadata.agent.trim().length
+            ? taskMetadata.agent.trim()
             : null;
 
-        const handleTaskUpdate = (task) => {
-            if (typeof onTaskComplete === 'function') {
-                try {
-                    onTaskComplete(task);
-                } catch (err) {
-                    console.warn('[MCPBrowserClient] onTaskComplete callback failed', err);
+        const finalTask = await new Promise((resolve, reject) => {
+            startTaskPolling(taskId, (task) => {
+                if (!task) {
+                    return;
                 }
-            }
-            if (!completionPromise || completionSettled || !task) {
-                return;
-            }
-            const status = typeof task.status === 'string' ? task.status.toLowerCase() : '';
-            if (status === 'completed') {
-                completionSettled = true;
-                completionResolve(task);
-            } else if (status === 'failed') {
-                completionSettled = true;
-                completionReject(new Error(task.error || 'Task failed'));
-            }
+                const status = typeof task.status === 'string' ? task.status.toLowerCase() : '';
+                if (status === 'completed') {
+                    resolve(task);
+                } else if (status === 'failed') {
+                    const error = new Error(task.error || 'Task failed');
+                    error.task = task;
+                    reject(error);
+                }
+            }, { statusPath: statusAgent ? `/mcps/${statusAgent}/task` : undefined });
+        });
+
+        const metadata = {
+            ...finalTask.result.metadata,
+            taskId: finalTask.id,
+            toolName: finalTask.toolName,
+            status: finalTask.status,
+            createdAt: finalTask.createdAt,
+            updatedAt: finalTask.updatedAt
         };
-
-        let statusPath = null;
-        if (meta && typeof meta === 'object') {
-            const agentName = meta?.router && typeof meta.router === 'object'
-                ? meta.router.agent
-                : null;
-            if (typeof agentName === 'string' && agentName.length > 0) {
-                statusPath = `/mcps/${agentName}/task`;
-            }
-        }
-
-        startTaskPolling(taskId, handleTaskUpdate, { statusPath });
-
-        if (!completionPromise) {
-            return result;
-        }
-
-        const finalTask = await completionPromise;
-        const finalResult = finalTask?.result && typeof finalTask.result === 'object'
-            ? { ...finalTask.result }
-            : { result: finalTask?.result };
-        if (!finalResult.metadata || typeof finalResult.metadata !== 'object') {
-            finalResult.metadata = {};
-        }
-        finalResult.metadata.task = finalTask;
-        return finalResult;
+        return { content: finalTask.result.content, metadata };
     }
 
     async function listResources() {

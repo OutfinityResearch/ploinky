@@ -106,5 +106,4 @@ test('TaskQueue captures task failures and surfaces stderr', async (t) => {
 
     const failed = queue.getTask(id);
     assert.equal(failed?.error, 'boom');
-    assert.equal(failed?.result?.stderr, 'boom');
 });

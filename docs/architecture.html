@@ -494,7 +494,7 @@ observability.js    // Monitoring views</code></pre>
                         <h3>MCP Task Queue</h3>
                         <p>Longer running MCP tools are orchestrated through <code>Agent/server/TaskQueue.mjs</code>. Every tool execution is wrapped in a task object that captures the command, input payload, timeout hints, timestamps, and eventual result/error.</p>
                         <ul style="margin-left: 2rem;">
-                            <li><strong>Concurrency guard:</strong> AgentServer limits work in flight (default 10) and keeps the rest in a FIFO pending queue.</li>
+                            <li><strong>Concurrency guard:</strong> AgentServer limits work in flight (default 10, overridable via <code>"maxParallelTasks"</code> in <code>mcp-config.json</code>) and keeps the rest in a FIFO pending queue.</li>
                             <li><strong>Durable state:</strong> Tasks are stored in <code>$PWD/.tasksQueue</code>. On restart, pending items resume and previously running entries are rewound to pending so they execute again.</li>
                             <li><strong>Per-task payloads:</strong> The queue injects a unique <code>taskId</code> into the JSON delivered to each command so downstream scripts can correlate logs or offer a status channel.</li>
                             <li><strong>Timeout + lifecycle:</strong> Tool definitions may specify <code>timeoutMs</code>. The queue arms a timer, kills the underlying process if it runs too long, and marks the task as failed with a timeout message.</li>

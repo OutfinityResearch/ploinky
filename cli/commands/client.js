@@ -206,8 +206,7 @@ class ClientCommands {
 
         try {
             await this.withRouterClient(async (client) => {
-                const meta = agent ? { router: { agent } } : undefined;
-                const result = await client.callTool(toolName, payloadObj, meta);
+                const result = await client.callTool(toolName, payloadObj);
                 console.log(JSON.stringify(result, null, 2));
             });
         } catch (err) {

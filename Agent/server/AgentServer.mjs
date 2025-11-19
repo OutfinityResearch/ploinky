@@ -7,7 +7,7 @@ import { zod } from 'mcp-sdk';
 import { TaskQueue } from './TaskQueue.mjs';
 const { z } = zod;
 
-const MAX_CONCURRENT_TASKS = 10;
+const DEFAULT_MAX_CONCURRENT_TASKS = 10;
 const TASK_QUEUE_FILE = path.resolve(process.cwd(), '.tasksQueue');
 
 // AgentServer (MCP over HTTP): exposes tools/resources via Streamable HTTP transport on PORT (default 7000) at /mcp.
@@ -59,6 +59,24 @@ function loadConfig() {
         }
     }
     return null;
+}
+
+let cachedConfigResult = null;
+function getConfigResult() {
+    if (!cachedConfigResult) {
+        cachedConfigResult = loadConfig();
+    }
+    return cachedConfigResult;
+}
+
+function resolveMaxConcurrent(config) {
+    if (config && config.maxParallelTasks) {
+        const candidate = Number(config.maxParallelTasks);
+        if (Number.isFinite(candidate) && candidate > 0) {
+            return Math.floor(candidate);
+        }
+    }
+    return DEFAULT_MAX_CONCURRENT_TASKS;
 }
 
 function buildCommandSpec(entry, defaultCwd) {
@@ -236,8 +254,10 @@ function executeShell(spec, payload, options = {}) {
     });
 }
 
+const initialConfigResult = getConfigResult();
+const initialConfig = initialConfigResult ? initialConfigResult.config : {};
 const taskQueue = new TaskQueue({
-    maxConcurrent: MAX_CONCURRENT_TASKS,
+    maxConcurrent: resolveMaxConcurrent(initialConfig),
     storagePath: TASK_QUEUE_FILE,
     executor: executeShell
 });
@@ -286,15 +306,22 @@ async function registerFromConfig(server, config, helpers) {
                 const payload = { tool: name, input: args, metadata: context };
                 console.log(`[AgentServer/MCP] Tool '${name}' payload:`, JSON.stringify(payload));
                 if (isAsync) {
-                    const { id: taskId, status } = taskQueue.enqueueTask({
+                    const enqueued = taskQueue.enqueueTask({
                         toolName: name,
                         commandSpec,
                         payload,
                         timeoutMs: asyncTimeout
                     });
                     return {
-                        content: [{ type: 'text', text: `Task '${name}' queued with id ${taskId}` }],
-                        metadata: { task: { id: taskId, status } }
+                        content: [{ type: 'text', text: `Task '${name}' queued with id ${enqueued.id}` }],
+                        metadata: {
+                            agent: process.env.AGENT_NAME || name,
+                            taskId: enqueued.id,
+                            toolName: enqueued.toolName,
+                            status: enqueued.status,
+                            createdAt: enqueued.createdAt,
+                            updatedAt: enqueued.updatedAt
+                        }
                     };
                 }
                 const result = await executeShell(commandSpec, payload);
@@ -310,7 +337,7 @@ async function registerFromConfig(server, config, helpers) {
                 if (result.stderr && result.stderr.trim()) {
                     content.push({ type: 'text', text: `stderr:\n${result.stderr}` });
                 }
-                return { content };
+                return { content, metadata: { agent: process.env.AGENT_NAME || name } };
             };
 
             const registeredTool = server.registerTool(name, definition, invocation);
@@ -402,7 +429,7 @@ async function createServerInstance() {
     const { McpServer, ResourceTemplate, McpError, ErrorCode } = await loadSdkDeps();
     const server = new McpServer({ name: 'ploinky-agent-mcp', version: '1.0.0' });
 
-    const configResult = loadConfig();
+    const configResult = getConfigResult();
     const config = configResult ? configResult.config : {};
 
     if (configResult) {
