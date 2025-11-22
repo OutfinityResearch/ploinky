@@ -65,7 +65,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', cwd,
         '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`,
         '-v', `${AGENT_LIB_PATH}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
-        '-v', `${path.resolve(agentPath)}:/code${runtime === 'podman' ? ':ro,z' : ':ro'}`,
+        '-v', `${path.resolve(agentPath)}:/code${resolveVarValue('PLOINKY_CODE_WRITABLE') === '1' ? (runtime === 'podman' ? ':z' : '') : (runtime === 'podman' ? ':ro,z' : ':ro')}`,
         ...(nodeModulesPath ? ['-v', `${nodeModulesPath}:/node_modules${runtime === 'podman' ? ':ro,z' : ':ro'}`] : []),
         '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`
     ];
@@ -165,13 +165,14 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             binds: [
                 { source: cwd, target: cwd },
                 { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
-                { source: agentPath, target: '/code', ro: true },
+                { source: agentPath, target: '/code', ro: process.env.PLOINKY_CODE_WRITABLE !== '1' },
                 { source: sharedDir, target: '/shared' }
             ],
             env: Array.from(new Set(declaredEnvNames2)).map((name) => ({ name })),
             ports: portMappings
         }
     };
+
     if (existingRecord.alias) {
         agents[containerName].alias = existingRecord.alias;
     }
@@ -313,7 +314,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
             binds: [
                 { source: projPath, target: projPath },
                 { source: AGENT_LIB_PATH, target: '/agent', ro: true },
-                { source: agentPath, target: '/code', ro: true }
+                { source: agentPath, target: '/code', ro: process.env.PLOINKY_CODE_WRITABLE !== '1' }
             ],
             env: Array.from(new Set(declaredEnvNames3)).map((name) => ({ name })),
             ports: allPortMappings
