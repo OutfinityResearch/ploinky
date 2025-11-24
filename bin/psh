@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# Alias for Ploinky Light mode
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+exec "$SCRIPT_DIR/ploinky" -l "$@"

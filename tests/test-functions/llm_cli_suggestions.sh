@@ -32,3 +32,24 @@ test_llm_cli_suggestions() {
 
   return 0
 }
+
+# Ensure Ploinky Light (psh) returns an LLM suggestion for freeform input.
+test_psh_llm_suggestions() {
+  load_state
+
+  local output
+
+  if ! output=$(timeout 10s psh "How are you?" 2>&1); then
+    echo "'psh \"How are you?\"' failed or timed out." >&2
+    return 1
+  fi
+
+  if ! grep -q "LLM suggested:" <<<"$output"; then
+    echo "Expected 'LLM suggested:' marker from psh output." >&2
+    printf '--- psh output ---%s\n' "" >&2
+    printf '%s\n' "$output" >&2
+    return 1
+  fi
+
+  return 0
+}

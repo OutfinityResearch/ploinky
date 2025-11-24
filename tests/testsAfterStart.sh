@@ -25,6 +25,7 @@ source "$TESTS_DIR/test-functions/default_cli_tests.sh"
 source "$TESTS_DIR/test-functions/logs_commands.sh"
 source "$TESTS_DIR/test-functions/disable_repo_test.sh"
 source "$TESTS_DIR/test-functions/llm_cli_suggestions.sh"
+source "$TESTS_DIR/test-functions/psh_llm_suggestions.sh"
 source "$TESTS_DIR/test-functions/enable_alias_tests.sh"
 source "$TESTS_DIR/test-functions/webmeet_tests.sh"
 source "$TESTS_DIR/test-functions/volume_mount_tests.sh"
@@ -190,5 +191,6 @@ test_check "logs last prints five lines" test_logs_last_five
 
 stage_header "LLM CLI Suggestions"
 test_check "Invalid CLI input yields LLM suggestion and system command output" test_llm_cli_suggestions
+test_check "psh surfaces LLM suggestion for freeform input" test_psh_llm_suggestions
 
 finalize_checks

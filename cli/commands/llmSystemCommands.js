@@ -5,7 +5,12 @@ import { execSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { defaultLLMInvokerStrategy } from 'achillesAgentLib/utils/LLMClient.mjs';
 import { debugLog } from '../services/utils.js';
-import { loadValidLlmApiKeys, collectAvailableLlmKeys, populateProcessEnvFromEnvFile } from '../services/llmProviderUtils.js';
+import {
+    loadValidLlmApiKeys,
+    collectAvailableLlmKeys,
+    populateProcessEnvFromEnvFile,
+    resolveEnvFilePath,
+} from '../services/llmProviderUtils.js';
 import * as inputState from '../services/inputState.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -261,7 +266,7 @@ export async function handleSystemCommand(command, options = []) {
 export async function handleInvalidCommand(command, options = [], executeSuggestion) {
     const commandLabel = command || '';
     const validKeyNames = loadValidLlmApiKeys();
-    const envPath = path.resolve(process.cwd(), WORKSPACE_ENV_FILENAME);
+    const envPath = resolveEnvFilePath(path.resolve(process.cwd(), WORKSPACE_ENV_FILENAME));
     populateProcessEnvFromEnvFile(envPath);
     const availableKeys = collectAvailableLlmKeys(envPath);
     const validKeysList = formatValidApiKeyList(validKeyNames);
@@ -304,3 +309,10 @@ export async function handleInvalidCommand(command, options = [], executeSuggest
 
     console.log(`Command '${commandLabel}' is not recognized as a Ploinky command or system executable. Type help to see options or configure .env file in current directory with one of these api keys : ${validKeysList}`);
 }
+
+export {
+    suggestCommandWithLLM,
+    extractSingleCommandFromSuggestion,
+    formatValidApiKeyList,
+    promptToExecuteSuggestedCommand,
+};

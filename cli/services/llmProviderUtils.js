@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 
 let cachedValidApiKeys = null;
 const LLM_CONFIG_RELATIVE_PATH = ['node_modules', 'achillesAgentLib', 'LLMConfig.json'];
+const DEFAULT_ENV_FILENAME = '.env';
 
 function resolveLlmConfigPath() {
     const candidates = [
@@ -27,6 +28,49 @@ function resolveLlmConfigPath() {
     }
 
     return candidates[0];
+}
+
+function findEnvFileUpwards(startDir = process.cwd(), filename = DEFAULT_ENV_FILENAME) {
+    let current = startDir ? path.resolve(startDir) : process.cwd();
+    const { root } = path.parse(current);
+
+    while (true) { // eslint-disable-line no-constant-condition
+        const candidate = path.join(current, filename);
+        try {
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        } catch (error) {
+            debugLog('findEnvFileUpwards: check failed', error?.message || error);
+        }
+        if (current === root) break;
+        current = path.dirname(current);
+    }
+    return null;
+}
+
+function resolveEnvFilePath(envPathOrDir) {
+    if (envPathOrDir) {
+        const resolved = path.resolve(envPathOrDir);
+        try {
+            if (fs.existsSync(resolved)) {
+                const stats = fs.statSync(resolved);
+                if (stats.isDirectory()) {
+                    const candidate = path.join(resolved, DEFAULT_ENV_FILENAME);
+                    if (fs.existsSync(candidate)) {
+                        return candidate;
+                    }
+                } else {
+                    return resolved;
+                }
+            }
+        } catch (error) {
+            debugLog('resolveEnvFilePath: failed', error?.message || error);
+        }
+        // If a path was provided but not found, walk up from its directory
+        return findEnvFileUpwards(path.dirname(resolved), DEFAULT_ENV_FILENAME);
+    }
+    return findEnvFileUpwards(process.cwd(), DEFAULT_ENV_FILENAME);
 }
 
 function loadValidLlmApiKeys() {
@@ -80,13 +124,14 @@ function parseEnvFile(envPath) {
 function collectAvailableLlmKeys(envPath) {
     const validKeys = loadValidLlmApiKeys();
     if (!validKeys.length) return [];
-    const envFileExists = Boolean(envPath && fs.existsSync(envPath));
-    const envVars = envFileExists ? parseEnvFile(envPath) : {};
+    const resolvedEnvPath = resolveEnvFilePath(envPath);
+    const envFileExists = Boolean(resolvedEnvPath && fs.existsSync(resolvedEnvPath));
+    const envVars = envFileExists ? parseEnvFile(resolvedEnvPath) : {};
 
     return validKeys.filter((keyName) => {
-        if (envFileExists) {
-            const fileValue = envVars[keyName];
-            return typeof fileValue === 'string' && fileValue.trim().length > 0;
+        const fileValue = envFileExists ? envVars[keyName] : undefined;
+        if (typeof fileValue === 'string' && fileValue.trim().length > 0) {
+            return true;
         }
         const envValue = process.env[keyName];
         return typeof envValue === 'string' && envValue.trim().length > 0;
@@ -95,11 +140,12 @@ function collectAvailableLlmKeys(envPath) {
 
 function populateProcessEnvFromEnvFile(envPath) {
     const validKeys = loadValidLlmApiKeys();
-    if (!validKeys.length || !envPath || !fs.existsSync(envPath)) {
+    const resolvedEnvPath = resolveEnvFilePath(envPath);
+    if (!validKeys.length || !resolvedEnvPath || !fs.existsSync(resolvedEnvPath)) {
         console.log('[LLM] No valid key definitions or .env file missing, skipping env population.');
         return;
     }
-    const envVars = parseEnvFile(envPath);
+    const envVars = parseEnvFile(resolvedEnvPath);
     const populatedKeys = [];
     for (const keyName of validKeys) {
         const fileValue = envVars[keyName];
@@ -115,5 +161,7 @@ function populateProcessEnvFromEnvFile(envPath) {
 export {
     loadValidLlmApiKeys,
     collectAvailableLlmKeys,
-    populateProcessEnvFromEnvFile
+    populateProcessEnvFromEnvFile,
+    findEnvFileUpwards,
+    resolveEnvFilePath
 };
