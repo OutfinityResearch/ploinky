@@ -232,6 +232,20 @@ $ npm install
                     <p>After adding the line, restart your shell or run <code>source ~/.bashrc</code> (or <code>source ~/.zshrc</code>). You can then use <code>p-cli</code> or <code>ploinky</code> from any directory. For example:</p>
                     <pre><code>ploinky list agents</code></pre>
                 </div>
+
+                <div class="doc-section">
+                    <h2>Ploinky Light (LLM-only)</h2>
+                    <p>Use Ploinky Light for quick LLM command recommendations without initializing the full workspace. No <code>.ploinky</code> folder is created, no repos are cloned, and Ploinky commands are rejected in this mode.</p>
+                    <pre><code>ploinky -l            # interactive light shell (also: ploinky light, psh)
+ploinky light        # same as -l
+psh                  # alias for Ploinky Light
+ploinky -l &lt;text&gt;         # single-shot suggestion and exit</code></pre>
+                    <ul style="line-height: 1.6;">
+                        <li>Single-command suggestions ask <code>Execute? (y/n)</code> before running.</li>
+                        <li>API keys are read from <code>.env</code> found upward from the current directory and from your environment variables.</li>
+                        <li>Startup logs show the <code>.env</code> path used and available LLM model names.</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </main>
