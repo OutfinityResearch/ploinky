@@ -9,6 +9,7 @@ import {
     extractSingleCommandFromSuggestion,
     formatValidApiKeyList,
     promptToExecuteSuggestedCommand,
+    handleSystemCommand,
 } from './commands/llmSystemCommands.js';
 import {
     loadValidLlmApiKeys,
@@ -162,6 +163,54 @@ function getColoredPrompt() {
     return `${ANSI_BOLD}${ANSI_MAGENTA}ploinky-shell${ANSI_RESET} ${ANSI_CYAN}${getRelativePath()}${ANSI_RESET}${ANSI_GREEN}>${ANSI_RESET} `;
 }
 
+function shellCompleter(line) {
+    const words = line.split(/\s+/).filter(Boolean);
+    const lineFragment = line.endsWith(' ') ? '' : (words[words.length - 1] || '');
+    let completions = [];
+
+    // Complete file/dir paths based on the last fragment
+    let pathToComplete = lineFragment;
+    let dirPath = '.';
+    let filePrefix = '';
+
+    if (pathToComplete.includes('/')) {
+        const lastSlash = pathToComplete.lastIndexOf('/');
+        dirPath = pathToComplete.substring(0, lastSlash) || '.';
+        filePrefix = pathToComplete.substring(lastSlash + 1);
+    } else {
+        filePrefix = pathToComplete;
+    }
+
+    if (dirPath.startsWith('~')) {
+        dirPath = dirPath.replace('~', process.env.HOME || process.env.USERPROFILE);
+    }
+
+    try {
+        if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+            const files = fs.readdirSync(dirPath);
+            completions = files
+                .filter((f) => f.startsWith(filePrefix))
+                .map((f) => {
+                    const fullPath = path.join(dirPath, f);
+                    const isDir = fs.statSync(fullPath).isDirectory();
+                    if (pathToComplete.includes('/')) {
+                        const prefix = pathToComplete.substring(0, pathToComplete.lastIndexOf('/') + 1);
+                        return prefix + f + (isDir ? '/' : '');
+                    }
+                    return f + (isDir ? '/' : '');
+                });
+        }
+    } catch (_) {
+        completions = [];
+    }
+
+    const hits = completions.filter((c) => c.startsWith(lineFragment));
+    if (hits.length === 1 && hits[0] === lineFragment && !lineFragment.endsWith('/')) {
+        return [[hits[0] + ' '], lineFragment];
+    }
+    return [hits, lineFragment];
+}
+
 function renderLlmSuggestion(llmResult) {
     if (!llmResult?.status) {
         console.log('No suggestion received from the LLM. Try rephrasing your request.');
@@ -272,6 +321,14 @@ async function handleUserInput(rawInput) {
         return false;
     }
 
+    // Attempt to run as a system command first (mirrors main CLI behavior)
+    const parts = normalized.split(/\s+/).filter(Boolean);
+    if (parts.length) {
+        const [cmd, ...options] = parts;
+        const handled = await handleSystemCommand(cmd, options);
+        if (handled) return true;
+    }
+
     const keyState = await ensureLlmKeyAvailability();
     if (!keyState.ok) {
         showMissingKeyMessage(keyState.validKeys);
@@ -304,6 +361,7 @@ function startInteractiveMode() {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
+        completer: process.stdin.isTTY ? shellCompleter : undefined,
         prompt: getColoredPrompt(),
     });
     inputState.registerInterface?.(rl);
