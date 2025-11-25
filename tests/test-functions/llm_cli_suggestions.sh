@@ -33,7 +33,7 @@ test_llm_cli_suggestions() {
   return 0
 }
 
-# Ensure Ploinky Light (psh) returns an LLM suggestion for freeform input.
+# Ensure Ploinky Shell (psh) returns an LLM suggestion for freeform input.
 test_psh_llm_suggestions() {
   load_state
 

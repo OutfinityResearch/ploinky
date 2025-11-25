@@ -27,19 +27,22 @@ CLI Reference - Ploinky🚀Ploinky
 
 Complete reference for all Ploinky CLI commands. Commands are organized by category for easy navigation.**Note on command prefixes:**The commands in this documentation are shown without the`ploinky`prefix, assuming they are run from within the project's interactive shell. For global usage from your system's terminal, prepend each command with`ploinky`(e.g.,`ploinky list agents`).
 
-### light (LLM-only)
+### shell (LLM-only)
 
 Launches a lightweight helper that only returns LLM command suggestions. It does not create `.ploinky`, clone repos, or run Ploinky commands.
 
 ````
-ploinky -l                # Interactive light shell (alias: ploinky light, psh)
+ploinky -l                # Interactive shell (alias: ploinky shell, ploinky sh, psh)
+ploinky shell             # Same as -l
+ploinky sh                # Alias for Ploinky Shell
+psh                       # Alias for Ploinky Shell
 ploinky -l <text>         # Single-shot suggestion, then exit
 `````
 Notes:
 - If the LLM suggests a single command, you'll be prompted `Execute? (y/n)` before running it.
 - Ploinky commands typed in this mode are rejected; use the full CLI instead.
 - API keys can come from `.env` discovered upward from the current directory or from your environment variables.
-- The light shell logs which `.env` path is used and shows the available LLM model names.
+- The shell logs which `.env` path is used and shows the available LLM model names.
 
 ## Repository Management
 

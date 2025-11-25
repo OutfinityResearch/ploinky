@@ -3,7 +3,6 @@ import path from 'path';
 import os from 'os';
 import { execSync, spawn } from 'child_process';
 import { fileURLToPath } from 'url';
-import { defaultLLMInvokerStrategy } from 'achillesAgentLib/utils/LLMClient.mjs';
 import { debugLog } from '../services/utils.js';
 import {
     loadValidLlmApiKeys,
@@ -21,6 +20,13 @@ const LLM_SYSTEM_CONTEXT_PATH = path.join(PROJECT_ROOT, 'docs', 'ploinky-overvie
 const WORKSPACE_ENV_FILENAME = '.env';
 
 let cachedLlmSystemContext = null;
+let cachedInvoker = null;
+async function getDefaultInvoker() {
+    if (cachedInvoker) return cachedInvoker;
+    const mod = await import('achillesAgentLib/utils/LLMClient.mjs');
+    cachedInvoker = mod.defaultLLMInvokerStrategy;
+    return cachedInvoker;
+}
 
 function loadLlmSystemContext() {
     if (cachedLlmSystemContext !== null) {
@@ -170,7 +176,8 @@ async function suggestCommandWithLLM(commandLabel, options = []) {
 
     const prompt = buildLlmPrompt(rawInput);
     try {
-        const response = await defaultLLMInvokerStrategy({
+        const invoker = await getDefaultInvoker();
+        const response = await invoker({
             prompt,
             mode: 'fast',
             params: { temperature: 0.1 },

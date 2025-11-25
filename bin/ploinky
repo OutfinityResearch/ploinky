@@ -4,10 +4,10 @@
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 export PLOINKY_ROOT=$(realpath "$SCRIPT_DIR/..")
 
-# Route light mode explicitly to the dedicated launcher
-if [[ "$1" == "-l" || "$1" == "-light" || "$1" == "--light" || "$1" == "light" ]]; then
+# Route shell (formerly light) mode explicitly to the dedicated launcher
+if [[ "$1" == "-shell" || "$1" == "sh" || "$1" == "--shell" ]]; then
     shift
-    exec "$SCRIPT_DIR/ploinky-light" "$@"
+    exec "$SCRIPT_DIR/ploinky-shell" "$@"
 fi
 
 # Construct the path to the Node.js script

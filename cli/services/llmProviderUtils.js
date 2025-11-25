@@ -139,23 +139,21 @@ function collectAvailableLlmKeys(envPath) {
 }
 
 function populateProcessEnvFromEnvFile(envPath) {
-    const validKeys = loadValidLlmApiKeys();
     const resolvedEnvPath = resolveEnvFilePath(envPath);
-    if (!validKeys.length || !resolvedEnvPath || !fs.existsSync(resolvedEnvPath)) {
+    if (!resolvedEnvPath || !fs.existsSync(resolvedEnvPath)) {
         console.log('[LLM] No valid key definitions or .env file missing, skipping env population.');
         return;
     }
     const envVars = parseEnvFile(resolvedEnvPath);
-    const populatedKeys = [];
-    for (const keyName of validKeys) {
-        const fileValue = envVars[keyName];
+    //console.log(`Found env vars: ${Object.keys(envVars).join(', ')}`)
+    Object.entries(envVars).forEach(([keyName, fileValue]) => {
         if (typeof fileValue === 'string' && fileValue.trim().length > 0) {
             if (!process.env[keyName] || !process.env[keyName].trim().length) {
+                //console.log(`Set var: ${keyName}=${fileValue}`)
                 process.env[keyName] = fileValue;
-                populatedKeys.push(keyName);
             }
         }
-    }
+    });
 }
 
 export {

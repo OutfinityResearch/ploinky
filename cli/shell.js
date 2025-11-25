@@ -25,75 +25,129 @@ const ANSI_BOLD = '\x1b[1m';
 const ANSI_MAGENTA = '\x1b[35m';
 const ANSI_CYAN = '\x1b[36m';
 const ANSI_GREEN = '\x1b[32m';
+const ANSI_YELLOW = '\x1b[33m';
+const ANSI_DIM = '\x1b[2m';
+const ANSI_BLUE = '\x1b[34m';
+const SHELL_TAG = `${ANSI_BOLD}${ANSI_MAGENTA}[Ploinky Shell]${ANSI_RESET}`;
 let envInfoLogged = false;
 let modelsInfoLogged = false;
+let cachedKeyState = null;
+
+function maskApiKey(value) {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return '';
+    if (trimmed.length <= 8) {
+        return `${trimmed.slice(0, 2)}****${trimmed.slice(-2)}`;
+    }
+    return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+}
 
 function printUsage() {
-    console.log('Ploinky Light only provides LLM-based command recommendations.');
+    console.log('Ploinky Shell only provides LLM-based command recommendations.');
     console.log('Usage:');
-    console.log('  ploinky -l                   # Interactive light mode');
+    console.log('  ploinky -l                   # Interactive shell mode');
     console.log('  ploinky -l <command or text> # Single recommendation and exit');
 }
 
 async function ensureLlmKeyAvailability() {
+    if (cachedKeyState) return cachedKeyState;
     const envPath = resolveEnvFilePath(process.cwd());
-    logEnvDetails(envPath);
     populateProcessEnvFromEnvFile(envPath);
-    await logAvailableModels();
     const availableKeys = collectAvailableLlmKeys(envPath);
     const validKeys = loadValidLlmApiKeys();
-
-    return {
+    cachedKeyState = {
         availableKeys,
         validKeys,
         ok: availableKeys.length > 0,
+        envPath,
     };
+    return cachedKeyState;
 }
 
 function showMissingKeyMessage(validKeys) {
     const validKeysList = formatValidApiKeyList(validKeys);
-    console.log(`[Ploinky Light] No LLM API key configured. Add one of ${validKeysList} to ${WORKSPACE_ENV_FILENAME} or export it as an environment variable before retrying.`);
+    console.log(`[Ploinky Shell] No LLM API key configured. Add one of ${validKeysList} to ${WORKSPACE_ENV_FILENAME} or export it as an environment variable before retrying.`);
 }
 
-async function logAvailableModels() {
+async function logAvailableModels(availableKeys = []) {
     if (modelsInfoLogged) return;
     modelsInfoLogged = true;
+    const usableKeys = new Set((availableKeys || []).map((k) => k && k.trim()).filter(Boolean));
     try {
         const { listModelsFromCache } = await import('achillesAgentLib/utils/LLMClient.mjs');
         const { fast = [], deep = [] } = listModelsFromCache() || {};
-        const names = [...new Set([
-            ...fast.map((entry) => entry?.name || entry),
-            ...deep.map((entry) => entry?.name || entry),
-        ].filter(Boolean))];
-        if (names.length) {
-            console.log(`[Ploinky Light] Available LLM models: ${names.join(', ')}`);
+        const filterByKeys = (list) => list
+            .filter((entry) => {
+                const record = entry || {};
+                const key = typeof record.apiKeyEnv === 'string' ? record.apiKeyEnv.trim() : '';
+                if (!key) return false;
+                if (!usableKeys.size) return false;
+                return usableKeys.has(key);
+            })
+            .map((entry) => ({ name: entry.name || entry, mode: entry.mode || 'fast' }));
+
+        const usableFast = filterByKeys(fast);
+        const usableDeep = filterByKeys(deep);
+        const combined = [...usableFast, ...usableDeep].filter((entry) => entry && entry.name);
+        const formatted = combined.map(({ name, mode }) => `${name} (${mode})`);
+
+        if (!usableKeys.size) {
+            console.log(`${SHELL_TAG} ${ANSI_YELLOW}No LLM API keys available; skipping model list.${ANSI_RESET}`);
+            return;
+        }
+
+        if (formatted.length) {
+            console.log(`${SHELL_TAG} ${ANSI_GREEN}Available LLM models (by key):${ANSI_RESET}`);
+            formatted.forEach((entry) => console.log(`  ${ANSI_CYAN}•${ANSI_RESET} ${entry}`));
         } else {
-            console.log('[Ploinky Light] No LLM models configured.');
+            console.log(`${SHELL_TAG} ${ANSI_YELLOW}No LLM models available for the detected API keys.${ANSI_RESET}`);
         }
     } catch (error) {
-        console.log(`[Ploinky Light] Failed to list LLM models: ${error?.message || error}`);
+        console.log(`${SHELL_TAG} ${ANSI_YELLOW}Failed to list LLM models: ${error?.message || error}${ANSI_RESET}`);
     }
 }
 
 function logEnvDetails(envPath) {
     if (envInfoLogged) return;
     envInfoLogged = true;
-    if (!envPath) {
-        console.log('[Ploinky Light] No .env path resolved.');
-        return;
-    }
-    if (fs.existsSync(envPath)) {
-        console.log(`[Ploinky Light] Loading .env from ${envPath}`);
-        try {
-            const contents = fs.readFileSync(envPath, 'utf8');
-            console.log('[Ploinky Light] .env contents:');
-            console.log(contents);
-        } catch (error) {
-            console.log(`[Ploinky Light] Failed to read .env at ${envPath}: ${error?.message || error}`);
-        }
+    const validKeys = new Set(loadValidLlmApiKeys());
+    console.log('');
+    if (envPath) {
+        const label = fs.existsSync(envPath) ? 'Resolved .env' : 'No .env found';
+        console.log(`${SHELL_TAG} ${ANSI_CYAN}${label}${ANSI_RESET}`);
+        console.log(`${ANSI_DIM}${envPath}${ANSI_RESET}`);
     } else {
-        console.log(`[Ploinky Light] No .env found at ${envPath}`);
+        console.log(`${SHELL_TAG} ${ANSI_CYAN}No .env path resolved.${ANSI_RESET}`);
     }
+
+    const envKeyLines = Array.from(validKeys).map((key) => {
+        const value = process.env[key];
+        if (typeof value !== 'string' || !value.trim()) return null;
+        return `${key}=${maskApiKey(value)}`;
+    }).filter(Boolean);
+    if (envKeyLines.length) {
+        console.log(`${SHELL_TAG} ${ANSI_YELLOW}LLM API keys in use:${ANSI_RESET}`);
+        envKeyLines.forEach((line) => console.log(`  ${ANSI_CYAN}•${ANSI_RESET} ${line}`));
+    } else {
+        console.log(`${SHELL_TAG} ${ANSI_YELLOW}No LLM API keys detected in environment.${ANSI_RESET}`);
+    }
+
+    const debugVars = [
+        'ACHILLES_DEBUG',
+        'ACHILLES_ENABLED_DEEP_MODELS',
+        'ACHILLES_ENABLED_FAST_MODELS',
+        'ACHILLES_DEFAULT_MODEL_TYPE'
+    ];
+    const activeDebugVars = debugVars
+        .map((key) => [key, process.env[key]])
+        .filter(([, value]) => typeof value === 'string' && value.trim().length);
+    if (activeDebugVars.length) {
+        console.log(`${SHELL_TAG} ${ANSI_BLUE}Debug/override flags:${ANSI_RESET}`);
+        activeDebugVars.forEach(([key, value]) => {
+            console.log(`  ${ANSI_CYAN}•${ANSI_RESET} ${key}=${value}`);
+        });
+    }
+    console.log('');
 }
 
 function getRelativePath() {
@@ -105,7 +159,7 @@ function getRelativePath() {
 }
 
 function getColoredPrompt() {
-    return `${ANSI_BOLD}${ANSI_MAGENTA}ploinky-light${ANSI_RESET} ${ANSI_CYAN}${getRelativePath()}${ANSI_RESET}${ANSI_GREEN}>${ANSI_RESET} `;
+    return `${ANSI_BOLD}${ANSI_MAGENTA}ploinky-shell${ANSI_RESET} ${ANSI_CYAN}${getRelativePath()}${ANSI_RESET}${ANSI_GREEN}>${ANSI_RESET} `;
 }
 
 function renderLlmSuggestion(llmResult) {
@@ -214,7 +268,7 @@ async function handleUserInput(rawInput) {
 
     const firstToken = normalized.split(/\s+/)[0];
     if (isKnownCommand(firstToken)) {
-        console.log(`[Ploinky Light] '${normalized}' is a Ploinky CLI command. Light mode cannot execute it; run 'ploinky ${normalized}' without -l to use the full CLI.`);
+        console.log(`[Ploinky Shell] '${normalized}' is a Ploinky CLI command. Shell mode cannot execute it; run 'ploinky ${normalized}' without -l to use the full CLI.`);
         return false;
     }
 
@@ -253,11 +307,18 @@ function startInteractiveMode() {
         prompt: getColoredPrompt(),
     });
     inputState.registerInterface?.(rl);
-    const envPath = resolveEnvFilePath(process.cwd());
-    logEnvDetails(envPath);
-    ensureLlmKeyAvailability().catch(() => {});
+    ensureLlmKeyAvailability()
+        .then((state) => {
+            const envPath = state?.envPath || resolveEnvFilePath(process.cwd());
+            logEnvDetails(envPath);
+            return logAvailableModels(state?.availableKeys || []);
+        })
+        .catch(() => {
+            const envPath = resolveEnvFilePath(process.cwd());
+            logEnvDetails(envPath);
+        });
 
-    console.log('Ploinky Light mode. Ploinky commands are disabled; only LLM recommendations are available.');
+    console.log('Ploinky Shell mode. Ploinky commands are disabled; only LLM recommendations are available.');
     console.log("Type 'exit' or 'quit' to leave.");
     rl.prompt();
 
@@ -285,9 +346,10 @@ function startInteractiveMode() {
 
 async function main() {
     const args = process.argv.slice(2);
-    const envPath = resolveEnvFilePath(process.cwd());
+    const state = await ensureLlmKeyAvailability();
+    const envPath = state?.envPath || resolveEnvFilePath(process.cwd());
     logEnvDetails(envPath);
-    await ensureLlmKeyAvailability();
+    await logAvailableModels(state?.availableKeys || []);
     if (args.includes('-h') || args.includes('--help')) {
         printUsage();
         return;
@@ -304,6 +366,6 @@ async function main() {
 }
 
 main().catch((error) => {
-    console.error(`ploinky-light failed: ${error?.message || error}`);
+    console.error(`ploinky-shell failed: ${error?.message || error}`);
     process.exit(1);
 });
