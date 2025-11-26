@@ -83,6 +83,11 @@ function buildCommandSpec(entry, defaultCwd) {
     const commandValue = typeof entry?.command === 'string' ? entry.command.trim() : null;
     if (!commandValue) return null;
     const command = path.isAbsolute(commandValue) ? commandValue : path.resolve(defaultCwd, commandValue);
+    if (entry.cwd === "workspace") {
+        defaultCwd = process.cwd();
+    } else {
+        defaultCwd = entry.cwd
+    }
     const cwd = defaultCwd;
     const env = entry?.env && typeof entry.env === 'object' ? entry.env : {};
     const timeoutMs = Number.isFinite(entry?.timeoutMs) ? entry.timeoutMs : undefined;
