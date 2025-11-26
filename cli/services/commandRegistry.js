@@ -16,6 +16,7 @@ const rawCommands = {
     webconsole: [],
     webtty: [],
     webmeet: [],
+    set: ['env'],
     client: ['methods', 'status', 'list', 'task', 'task-status'],
     logs: ['tail', 'last'],
     expose: [],
@@ -38,31 +39,12 @@ function getCommandRegistry() {
     return COMMANDS;
 }
 
-function getCommandNames() {
-    return Object.keys(COMMANDS);
-}
-
 function isKnownCommand(commandName) {
     if (!commandName) return false;
     return Object.prototype.hasOwnProperty.call(COMMANDS, commandName);
 }
 
-function listCommandPhrases() {
-    const phrases = [];
-    for (const [command, subcommands] of Object.entries(COMMANDS)) {
-        phrases.push(command);
-        if (Array.isArray(subcommands) && subcommands.length) {
-            for (const sub of subcommands) {
-                phrases.push(`${command} ${sub}`);
-            }
-        }
-    }
-    return phrases;
-}
-
 export {
     getCommandRegistry,
-    getCommandNames,
-    isKnownCommand,
-    listCommandPhrases
+    isKnownCommand
 };

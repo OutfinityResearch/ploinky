@@ -289,6 +289,15 @@ var WEBTTY_PORT 9000</code></pre>
 echo API_KEY      # Show raw value
 echo $PROD_KEY    # Show resolved alias</code></pre>
 
+                        <h3>set env</h3>
+                        <p>Interactively configure Achilles env flags used for LLM selection (works in both Ploinky CLI and Ploinky Shell).</p>
+                        <pre><code>set env</code></pre>
+                        <ul>
+                            <li>Arrows: navigate variables and options; Enter: edit/set; Esc/Backspace: exit.</li>
+                            <li>Variables: <code>ACHILLES_ENABLED_DEEP_MODELS</code>, <code>ACHILLES_ENABLED_FAST_MODELS</code>, <code>ACHILLES_DEFAULT_MODEL_TYPE</code>, <code>ACHILLES_DEBUG</code>.</li>
+                            <li>Model lists are filtered by available API keys and show provider names; values are applied to the current process env (not persisted to <code>.env</code>).</li>
+                        </ul>
+
                         <h3>expose</h3>
                         <p>Expose a workspace variable to an agent. If the value is omitted, the command defaults to using <code>$&lt;ENV_NAME&gt;</code>. When the agent argument is omitted, the static agent configured via <code>start</code> is used.</p>
                         <pre><code>expose &lt;ENV_NAME&gt; [<$VAR|value>] [agent]</code></pre>

@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execSync, spawn } from 'child_process';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { createRequire } from 'module';
 import { debugLog } from '../services/utils.js';
 import {
     loadValidLlmApiKeys,
@@ -14,6 +15,7 @@ import * as inputState from '../services/inputState.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const LLM_SYSTEM_CONTEXT_PATH = path.join(PROJECT_ROOT, 'docs', 'ploinky-overview.md');
@@ -21,11 +23,24 @@ const WORKSPACE_ENV_FILENAME = '.env';
 
 let cachedLlmSystemContext = null;
 let cachedInvoker = null;
+let invokerVersion = 0;
 async function getDefaultInvoker() {
     if (cachedInvoker) return cachedInvoker;
-    const mod = await import('achillesAgentLib/utils/LLMClient.mjs');
+    let llmPath;
+    try {
+        llmPath = require.resolve('achillesAgentLib/utils/LLMClient.mjs');
+    } catch (error) {
+        throw new Error(`Unable to resolve Achilles LLM client: ${error?.message || error}`);
+    }
+    const urlWithVersion = `${pathToFileURL(llmPath).href}?v=${invokerVersion}`;
+    const mod = await import(urlWithVersion);
     cachedInvoker = mod.defaultLLMInvokerStrategy;
     return cachedInvoker;
+}
+
+export function resetLlmInvokerCache() {
+    cachedInvoker = null;
+    invokerVersion += 1;
 }
 
 function loadLlmSystemContext() {

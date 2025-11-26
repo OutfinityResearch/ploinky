@@ -17,7 +17,7 @@ import {
     destroyWorkspaceContainers
 } from '../services/docker/index.js';
 import * as workspaceSvc from '../services/workspace.js';
-import { handleSystemCommand, handleInvalidCommand } from './llmSystemCommands.js';
+import { handleSystemCommand, handleInvalidCommand, resetLlmInvokerCache } from './llmSystemCommands.js';
 import * as inputState from '../services/inputState.js';
 import {
     getRepoNames,
@@ -35,6 +35,7 @@ import {
     handleEchoCommand,
     handleExposeCommand,
 } from './envVarCommands.js';
+import { runEnvConfigurator } from '../services/envConfigurator.js';
 import { configureWebttyShell } from './webttyCommands.js';
 import {
     cleanupSessionContainers,
@@ -430,6 +431,14 @@ async function handleCommand(args) {
             break;
         case 'client': {
             await new ClientCommands().handleClientCommand(options);
+            break;
+        }
+        case 'set': {
+            if (options[0] !== 'env') {
+                console.log("Usage: set env");
+                break;
+            }
+            await runEnvConfigurator({ onEnvChange: resetLlmInvokerCache });
             break;
         }
         default: {
