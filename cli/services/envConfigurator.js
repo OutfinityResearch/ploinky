@@ -165,7 +165,7 @@ function createMenuRenderer() {
         const output = `${lines.join('\n')}\n`;
         process.stdout.write(output);
         renderState.rendered = true;
-        renderState.lines = (output.match(/\n/g) || []).length;
+        renderState.lines = lines.length;
     };
 
     render.clear = clear;
@@ -198,23 +198,20 @@ export async function runEnvConfigurator({ onEnvChange } = {}) {
     const renderMenu = createMenuRenderer();
 
     const restoreInput = inputState.prepareForExternalCommand?.() || (() => {});
-    const menuRl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        terminal: true
-    });
-    readline.emitKeypressEvents(menuRl.input);
-    const wasRaw = Boolean(menuRl.input.isRaw);
-    try { menuRl.input.setRawMode(true); } catch (_) { /* noop */ }
-    try { menuRl.input.resume(); } catch (_) { /* noop */ }
+    const rlInput = process.stdin;
+
+    readline.emitKeypressEvents(rlInput);
+
+    const wasRaw = !!rlInput.isRaw;
+    try { rlInput.setRawMode(true); } catch (_) { /* noop */ }
+    try { rlInput.resume(); } catch (_) { /* noop */ }
 
     let keyHandler = null;
 
     const cleanup = () => {
         try { renderMenu.clear?.(); } catch (_) { /* noop */ }
-        try { menuRl.input.setRawMode(wasRaw); } catch (_) { /* noop */ }
-        try { if (keyHandler) menuRl.input.off('keypress', keyHandler); } catch (_) { /* noop */ }
-        try { menuRl.close(); } catch (_) { /* noop */ }
+        try { rlInput.setRawMode(wasRaw); } catch (_) { /* noop */ }
+        try { if (keyHandler) rlInput.off('keypress', keyHandler); } catch (_) { /* noop */ }
         restoreInput();
     };
 
@@ -267,7 +264,7 @@ export async function runEnvConfigurator({ onEnvChange } = {}) {
         };
 
         keyHandler = onKey;
-        menuRl.input.on('keypress', keyHandler);
+        rlInput.on('keypress', keyHandler);
         renderMenu(state);
     }).finally(() => {
         cleanup();
