@@ -202,7 +202,6 @@ export async function runSettingsMenu({ onEnvChange } = {}) {
 
     readline.emitKeypressEvents(rlInput);
 
-    const wasRaw = !!rlInput.isRaw;
     try { rlInput.setRawMode(true); } catch (_) { /* noop */ }
     try { rlInput.resume(); } catch (_) { /* noop */ }
 
@@ -210,7 +209,6 @@ export async function runSettingsMenu({ onEnvChange } = {}) {
 
     const cleanup = () => {
         try { renderMenu.clear?.(); } catch (_) { /* noop */ }
-        try { rlInput.setRawMode(wasRaw); } catch (_) { /* noop */ }
         try { if (keyHandler) rlInput.off('keypress', keyHandler); } catch (_) { /* noop */ }
         restoreInput();
     };

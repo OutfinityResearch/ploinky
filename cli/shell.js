@@ -3,6 +3,7 @@
 import readline from 'readline';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import {
     suggestCommandWithLLM,
@@ -33,6 +34,8 @@ const ANSI_DIM = '\x1b[2m';
 const ANSI_BLUE = '\x1b[34m';
 const SHELL_TAG = `${ANSI_BOLD}${ANSI_MAGENTA}[Ploinky Shell]${ANSI_RESET}`;
 const SETTINGS_COMMAND = '/settings';
+const SETTINGS_ALIAS = 'settings';
+const SHELL_COMMANDS = [SETTINGS_COMMAND, SETTINGS_ALIAS, '/help', 'help'];
 let envInfoLogged = false;
 let modelsInfoLogged = false;
 let cachedKeyState = null;
@@ -60,6 +63,13 @@ function printUsage() {
     console.log('  ploinky -l <command or text> # Single recommendation and exit');
 }
 
+function printShellHelp() {
+    console.log('Ploinky Shell commands:');
+    console.log('  /settings   Open the interactive settings menu for LLM config flags');
+    console.log('  /help, help Show this help');
+    console.log('All other input is sent to the LLM for command recommendations.');
+}
+
 async function ensureLlmKeyAvailability() {
     if (cachedKeyState) return cachedKeyState;
     const envPath = resolveEnvFilePath(process.cwd());
@@ -73,6 +83,56 @@ async function ensureLlmKeyAvailability() {
         envPath,
     };
     return cachedKeyState;
+}
+
+function resolveLlmConfigPath() {
+    const candidates = [
+        path.resolve(process.cwd(), 'node_modules', 'achillesAgentLib', 'LLMConfig.json'),
+        path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', 'achillesAgentLib', 'LLMConfig.json'),
+    ];
+    for (const candidate of candidates) {
+        try {
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        } catch (_) { /* ignore */ }
+    }
+    return candidates[0];
+}
+
+function loadUsableModels(availableKeys) {
+    const configPath = resolveLlmConfigPath();
+    let parsed = {};
+    try {
+        parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (_) {
+        return { fast: [], deep: [] };
+    }
+    const providers = parsed.providers || {};
+    const models = Array.isArray(parsed.models) ? parsed.models : [];
+    const keySet = new Set((availableKeys || []).map((k) => k && k.trim()).filter(Boolean));
+    const result = { fast: [], deep: [] };
+
+    for (const model of models) {
+        const name = typeof model?.name === 'string' ? model.name : null;
+        const mode = model?.mode === 'deep' ? 'deep' : 'fast';
+        const providerKey = model?.provider || model?.providerKey || null;
+        if (!name || !providerKey) continue;
+        const providerCfg = providers[providerKey];
+        const apiKeyEnv = providerCfg?.apiKeyEnv;
+        if (!apiKeyEnv || !keySet.has(apiKeyEnv)) continue;
+        result[mode].push({ name, provider: providerKey });
+    }
+
+    for (const key of Object.keys(result)) {
+        const seen = new Set();
+        result[key] = result[key].filter((entry) => {
+            if (seen.has(entry.name)) return false;
+            seen.add(entry.name);
+            return true;
+        });
+    }
+    return result;
 }
 
 async function handleSetEnv() {
@@ -96,24 +156,15 @@ async function logAvailableModels(availableKeys = []) {
     modelsInfoLogged = true;
     const usableKeys = new Set((availableKeys || []).map((k) => k && k.trim()).filter(Boolean));
     try {
-        const { listModelsFromCache } = await import('achillesAgentLib/utils/LLMClient.mjs');
-        const { fast = [], deep = [] } = listModelsFromCache() || {};
-        const filterByKeys = (list) => list
-            .filter((entry) => {
-                const record = entry || {};
-                const key = typeof record.apiKeyEnv === 'string' ? record.apiKeyEnv.trim() : '';
-                if (!key) return false;
-                if (!usableKeys.size) return false;
-                return usableKeys.has(key);
-            })
-            .map((entry) => ({
-                name: entry.name || entry,
-                mode: entry.mode || 'fast',
-                provider: entry.providerKey || 'unknown'
-            }));
+        const { fast = [], deep = [] } = loadUsableModels(Array.from(usableKeys));
+        const mapEntry = (entry, mode) => ({
+            name: entry?.name || entry,
+            mode: mode || entry?.mode || 'fast',
+            provider: entry?.provider || entry?.providerKey || 'unknown'
+        });
 
-        const usableFast = filterByKeys(fast);
-        const usableDeep = filterByKeys(deep);
+        const usableFast = (fast || []).map((entry) => mapEntry(entry, 'fast')).filter((e) => e.name);
+        const usableDeep = (deep || []).map((entry) => mapEntry(entry, 'deep')).filter((e) => e.name);
         const combined = [...usableFast, ...usableDeep].filter((entry) => entry && entry.name);
         const grouped = combined.reduce((acc, entry) => {
             const provider = entry.provider || 'unknown';
@@ -196,6 +247,21 @@ function getColoredPrompt() {
 function shellCompleter(line) {
     const words = line.split(/\s+/).filter(Boolean);
     const lineFragment = line.endsWith(' ') ? '' : (words[words.length - 1] || '');
+    const commands = Array.from(new Set(SHELL_COMMANDS));
+
+    // If we're typing the first token, suggest only shell commands (no file paths).
+    if (words.length <= 1 && !line.endsWith(' ')) {
+        const hits = commands.filter((cmd) => cmd.startsWith(lineFragment));
+        return [hits, lineFragment];
+    }
+
+    // If the first token is a known shell command, no further completion.
+    const firstToken = words[0];
+    if (commands.includes(firstToken)) {
+        return [[], lineFragment];
+    }
+
+    // Otherwise, fall back to file path completion for non-shell commands/text.
     let completions = [];
 
     // Complete file/dir paths based on the last fragment
@@ -218,7 +284,7 @@ function shellCompleter(line) {
     try {
         if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
             const files = fs.readdirSync(dirPath);
-            completions = files
+            const fileMatches = files
                 .filter((f) => f.startsWith(filePrefix))
                 .map((f) => {
                     const fullPath = path.join(dirPath, f);
@@ -229,9 +295,10 @@ function shellCompleter(line) {
                     }
                     return f + (isDir ? '/' : '');
                 });
+            completions = [...new Set([...completions, ...fileMatches])];
         }
     } catch (_) {
-        completions = [];
+        completions = [...new Set(completions)];
     }
 
     const hits = completions.filter((c) => c.startsWith(lineFragment));
@@ -345,7 +412,12 @@ async function handleUserInput(rawInput) {
         return false;
     }
 
-    if (normalized === SETTINGS_COMMAND) {
+    if (normalized === '/help' || normalized === 'help') {
+        printShellHelp();
+        return true;
+    }
+
+    if (normalized === SETTINGS_COMMAND || normalized === SETTINGS_ALIAS) {
         await handleSetEnv();
         return true;
     }
@@ -450,7 +522,7 @@ async function main() {
         return;
     }
 
-    if (args.join(' ').trim() === SETTINGS_COMMAND) {
+    if (args.join(' ').trim() === SETTINGS_COMMAND || args.join(' ').trim() === SETTINGS_ALIAS) {
         await handleSetEnv();
         process.exit(0);
     }

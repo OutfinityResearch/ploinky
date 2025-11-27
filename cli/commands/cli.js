@@ -437,6 +437,10 @@ async function handleCommand(args) {
             await runSettingsMenu({ onEnvChange: resetLlmInvokerCache });
             break;
         }
+        case 'settings': {
+            await runSettingsMenu({ onEnvChange: resetLlmInvokerCache });
+            break;
+        }
         case 'set': {
             console.log("Command renamed to '/settings'.");
             break;
