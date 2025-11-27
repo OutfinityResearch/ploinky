@@ -125,23 +125,51 @@ function applyValue(spec, optionValue) {
     process.env[spec.key] = optionValue;
 }
 
-function renderMenu(state) {
-    const { variables, selectedVar, selectingValue, selectedValueIndex, valueOptions } = state;
-    console.clear();
-    console.log('=== Ploinky Env Config ===');
-    console.log('Arrow Up/Down to navigate, Enter to edit, Esc/Backspace to exit.');
-    console.log('');
-    variables.forEach((entry, idx) => {
-        const pointer = idx === selectedVar ? '>' : ' ';
-        const current = entry.current;
-        console.log(`${pointer} ${entry.label}: ${current}`);
-        if (selectingValue && idx === selectedVar) {
-            valueOptions.forEach((opt, vIdx) => {
-                const vPointer = vIdx === selectedValueIndex ? '>' : ' ';
-                console.log(`   ${vPointer} ${opt}`);
-            });
+function createMenuRenderer() {
+    const renderState = { rendered: false, lines: 0 };
+    const clear = () => {
+        if (!renderState.rendered || renderState.lines <= 0) return;
+        readline.moveCursor(process.stdout, 0, -renderState.lines);
+        readline.cursorTo(process.stdout, 0);
+        readline.clearScreenDown(process.stdout);
+        renderState.rendered = false;
+        renderState.lines = 0;
+    };
+
+    const render = (state) => {
+        const { variables, selectedVar, selectingValue, selectedValueIndex, valueOptions } = state;
+        if (renderState.rendered && renderState.lines > 0) {
+            readline.moveCursor(process.stdout, 0, -renderState.lines);
+            readline.cursorTo(process.stdout, 0);
+            readline.clearScreenDown(process.stdout);
         }
-    });
+
+        const lines = [
+            '=== Ploinky Env Config ===',
+            'Arrow Up/Down to navigate, Enter to edit, Esc/Backspace to exit.',
+            '',
+        ];
+
+        variables.forEach((entry, idx) => {
+            const pointer = idx === selectedVar ? '>' : ' ';
+            const current = entry.current;
+            lines.push(`${pointer} ${entry.label}: ${current}`);
+            if (selectingValue && idx === selectedVar) {
+                valueOptions.forEach((opt, vIdx) => {
+                    const vPointer = vIdx === selectedValueIndex ? '>' : ' ';
+                    lines.push(`   ${vPointer} ${opt}`);
+                });
+            }
+        });
+
+        const output = `${lines.join('\n')}\n`;
+        process.stdout.write(output);
+        renderState.rendered = true;
+        renderState.lines = (output.match(/\n/g) || []).length;
+    };
+
+    render.clear = clear;
+    return render;
 }
 
 export async function runEnvConfigurator({ onEnvChange } = {}) {
@@ -167,6 +195,7 @@ export async function runEnvConfigurator({ onEnvChange } = {}) {
         selectedValueIndex: 0,
         valueOptions: buildValueOptions(variables[0], modelOptions),
     };
+    const renderMenu = createMenuRenderer();
 
     const restoreInput = inputState.prepareForExternalCommand?.() || (() => {});
     const menuRl = readline.createInterface({
@@ -182,6 +211,7 @@ export async function runEnvConfigurator({ onEnvChange } = {}) {
     let keyHandler = null;
 
     const cleanup = () => {
+        try { renderMenu.clear?.(); } catch (_) { /* noop */ }
         try { menuRl.input.setRawMode(wasRaw); } catch (_) { /* noop */ }
         try { if (keyHandler) menuRl.input.off('keypress', keyHandler); } catch (_) { /* noop */ }
         try { menuRl.close(); } catch (_) { /* noop */ }
