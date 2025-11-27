@@ -35,7 +35,7 @@ import {
     handleEchoCommand,
     handleExposeCommand,
 } from './envVarCommands.js';
-import { runEnvConfigurator } from '../services/envConfigurator.js';
+import { runSettingsMenu } from '../services/settingsMenu.js';
 import { configureWebttyShell } from './webttyCommands.js';
 import {
     cleanupSessionContainers,
@@ -433,12 +433,12 @@ async function handleCommand(args) {
             await new ClientCommands().handleClientCommand(options);
             break;
         }
+        case '/settings': {
+            await runSettingsMenu({ onEnvChange: resetLlmInvokerCache });
+            break;
+        }
         case 'set': {
-            if (options[0] !== 'env') {
-                console.log("Usage: set env");
-                break;
-            }
-            await runEnvConfigurator({ onEnvChange: resetLlmInvokerCache });
+            console.log("Command renamed to '/settings'.");
             break;
         }
         default: {

@@ -18,7 +18,7 @@ import {
     populateProcessEnvFromEnvFile,
     resolveEnvFilePath,
 } from './services/llmProviderUtils.js';
-import { runEnvConfigurator } from './services/envConfigurator.js';
+import { runSettingsMenu } from './services/settingsMenu.js';
 import * as inputState from './services/inputState.js';
 import { isKnownCommand } from './services/commandRegistry.js';
 
@@ -32,6 +32,7 @@ const ANSI_YELLOW = '\x1b[33m';
 const ANSI_DIM = '\x1b[2m';
 const ANSI_BLUE = '\x1b[34m';
 const SHELL_TAG = `${ANSI_BOLD}${ANSI_MAGENTA}[Ploinky Shell]${ANSI_RESET}`;
+const SETTINGS_COMMAND = '/settings';
 let envInfoLogged = false;
 let modelsInfoLogged = false;
 let cachedKeyState = null;
@@ -75,7 +76,7 @@ async function ensureLlmKeyAvailability() {
 }
 
 async function handleSetEnv() {
-    await runEnvConfigurator({
+    await runSettingsMenu({
         onEnvChange: () => {
             resetEnvCaches();
         }
@@ -344,7 +345,7 @@ async function handleUserInput(rawInput) {
         return false;
     }
 
-    if (normalized === 'set env') {
+    if (normalized === SETTINGS_COMMAND) {
         await handleSetEnv();
         return true;
     }
@@ -449,7 +450,7 @@ async function main() {
         return;
     }
 
-    if (args.join(' ').trim() === 'set env') {
+    if (args.join(' ').trim() === SETTINGS_COMMAND) {
         await handleSetEnv();
         process.exit(0);
     }

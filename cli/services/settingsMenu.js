@@ -172,7 +172,7 @@ function createMenuRenderer() {
     return render;
 }
 
-export async function runEnvConfigurator({ onEnvChange } = {}) {
+export async function runSettingsMenu({ onEnvChange } = {}) {
     if (!process.stdin.isTTY) {
         console.log('Interactive TTY is required for env configuration.');
         return;
