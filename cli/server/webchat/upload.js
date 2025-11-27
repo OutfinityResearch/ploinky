@@ -508,6 +508,18 @@ export function createUploader({
 
     const selections = [];
     let cameraOverlay;
+    const refocusComposer = () => {
+        if (!composer || typeof composer.focus !== 'function') {
+            return;
+        }
+        setTimeout(() => {
+            try {
+                composer.focus();
+            } catch (_) {
+                // Ignore focus issues
+            }
+        }, 0);
+    };
 
     function toggleMenu(e) {
         e.stopPropagation();
@@ -517,6 +529,7 @@ export function createUploader({
     function openFilePicker() {
         fileUploadInput.click();
         attachmentMenu.classList.remove('show');
+        refocusComposer();
     }
 
     function updatePreviewVisibility() {
@@ -527,6 +540,7 @@ export function createUploader({
             filePreviewContainer.innerHTML = '';
         }
         composer.autoResize();
+        refocusComposer();
     }
 
     function createSelectionPreview(selection) {
@@ -604,15 +618,20 @@ export function createUploader({
         if (selections.length === 0) {
             fileUploadInput.value = '';
         }
+        refocusComposer();
     }
 
     function handleFileSelection(event) {
-        const files = Array.from(event.target.files || []);
-        if (!files.length) {
-            return;
+        try {
+            const files = Array.from(event.target.files || []);
+            if (!files.length) {
+                return;
+            }
+            files.forEach(addSelection);
+            fileUploadInput.value = '';
+        } finally {
+            refocusComposer();
         }
-        files.forEach(addSelection);
-        fileUploadInput.value = '';
     }
     
     function getCameraOverlay() {
@@ -627,21 +646,25 @@ export function createUploader({
         event.stopPropagation();
         attachmentMenu.classList.remove('show');
 
-        const overlay = getCameraOverlay();
-        if (overlay) {
-            try {
-                const file = await overlay.open();
-                if (file instanceof File) {
-                    addSelection(file);
+        try {
+            const overlay = getCameraOverlay();
+            if (overlay) {
+                try {
+                    const file = await overlay.open();
+                    if (file instanceof File) {
+                        addSelection(file);
+                    }
+                    return;
+                } catch (error) {
+                    console.warn('Camera capture failed, falling back to file input', error);
                 }
-                return;
-            } catch (error) {
-                console.warn('Camera capture failed, falling back to file input', error);
             }
-        }
-        const fallbackFile = await openCameraInputFallback();
-        if (fallbackFile) {
-            addSelection(fallbackFile);
+            const fallbackFile = await openCameraInputFallback();
+            if (fallbackFile) {
+                addSelection(fallbackFile);
+            }
+        } finally {
+            refocusComposer();
         }
     }
 

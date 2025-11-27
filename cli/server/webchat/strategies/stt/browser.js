@@ -233,10 +233,25 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
 
     if (settingsBtn && settingsPanel) {
         let settingsOpen = false;
+        const focusComposer = () => {
+            if (!composer || typeof composer.focus !== 'function') {
+                return;
+            }
+            setTimeout(() => {
+                try {
+                    composer.focus();
+                } catch (_) {
+                    // Ignore focus issues
+                }
+            }, 0);
+        };
         const toggleSettings = () => {
             settingsOpen = !settingsOpen;
             settingsPanel.classList.toggle('show', settingsOpen);
             settingsBtn.classList.toggle('active', settingsOpen);
+            if (!settingsOpen) {
+                focusComposer();
+            }
         };
         settingsBtn.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -250,6 +265,7 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
                 settingsOpen = false;
                 settingsPanel.classList.remove('show');
                 settingsBtn.classList.remove('active');
+                focusComposer();
             }
         });
         document.addEventListener('keydown', (event) => {
@@ -260,6 +276,7 @@ export function initBrowserSpeechToText(elements = {}, options = {}) {
                 settingsOpen = false;
                 settingsPanel.classList.remove('show');
                 settingsBtn.classList.remove('active');
+                focusComposer();
             }
         });
     }

@@ -183,9 +183,13 @@ export function createMessages({
                 </span>
             </div>`;
         const textDiv = wrapper.querySelector('.wa-message-text');
+        const bubble = wrapper.querySelector('.wa-message-bubble');
         if (textDiv) {
             textDiv.innerHTML = renderMarkdown(text);
             sidePanel.bindLinkDelegation(textDiv);
+        }
+        if (bubble) {
+            bubble.dataset.fullText = text;
         }
         appendMessageEl(wrapper);
         if (chatList) {
@@ -224,6 +228,7 @@ export function createMessages({
 
         const bubble = document.createElement('div');
         bubble.className = 'wa-message-bubble';
+        bubble.dataset.fullText = caption || displayName || '';
 
         const content = document.createElement('div');
         content.className = 'wa-attachment-message';

@@ -5,6 +5,15 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
     let onSend = null;
     let onPurge = null;
 
+    function focusAfterAction() {
+        if (!cmdInput) {
+            return;
+        }
+        setTimeout(() => {
+            focusInput();
+        }, 0);
+    }
+
     function focusInput() {
         if (!cmdInput) {
             return;
@@ -44,6 +53,7 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
         }
         cmdInput.value = '';
         autoResize();
+        focusAfterAction();
     }
 
     function purge(options = {}) {
@@ -70,6 +80,7 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
             clear();
             return true;
         }
+        focusAfterAction();
         return false;
     }
 
