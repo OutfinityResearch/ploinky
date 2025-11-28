@@ -48,7 +48,13 @@ function loadModelOptions(availableKeys) {
         const providerCfg = providers[providerKey];
         const apiKeyEnv = providerCfg?.apiKeyEnv;
         if (!apiKeyEnv || !keySet.has(apiKeyEnv)) continue;
-        result[mode].push({ name, provider: providerKey });
+        result[mode].push({
+            name,
+            provider: providerKey,
+            inputPrice: model?.inputPrice,
+            outputPrice: model?.outputPrice,
+            context: model?.context
+        });
     }
 
     // dedupe by name
@@ -85,9 +91,24 @@ function buildValueOptions(spec, models) {
     }
     if (spec.type === 'model') {
         const list = spec.mode === 'deep' ? models.deep : models.fast;
-        return ['unset', ...list.map((entry) => `${entry.name} [${entry.provider}]`)];
+        return ['unset', ...list.map(formatModelOption)];
     }
     return ['unset'];
+}
+
+function formatPrice(value) {
+    if (value === null || value === undefined) return '?';
+    const num = Number(value);
+    if (Number.isNaN(num)) return String(value);
+    return `$${num}`;
+}
+
+function formatModelOption(entry) {
+    if (!entry) return 'unset';
+    const priceIn = formatPrice(entry.inputPrice);
+    const priceOut = formatPrice(entry.outputPrice);
+    const ctx = entry.context || '?';
+    return `${entry.name} [${entry.provider}] (${priceIn}/${priceOut}, ctx ${ctx})`;
 }
 
 function extractValueFromOption(option) {
@@ -146,6 +167,7 @@ function createMenuRenderer() {
 
         const lines = [
             '=== Ploinky Env Config ===',
+            '(Prices shown per 1M tokens: input/output)',
             'Arrow Up/Down to navigate, Enter to edit, Esc/Backspace to exit.',
             '',
         ];
