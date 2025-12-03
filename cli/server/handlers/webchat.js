@@ -558,6 +558,9 @@ function handleWebChat(req, res, appConfig, appState) {
         }
 
         req.on('close', () => {
+            const pid = tab.pid || tab.tty?.pid;
+            console.log(`[webchat] Connection closed for tab ${tabId}, tty pid=${pid}`);
+
             if (keepaliveTimer) {
                 clearInterval(keepaliveTimer);
                 keepaliveTimer = null;
@@ -570,12 +573,12 @@ function handleWebChat(req, res, appConfig, appState) {
 
             // Clean up TTY process
             if (tab.tty) {
-                const pid = tab.pid || tab.tty.pid;
+                console.log(`[webchat] Disposing TTY for tab ${tabId}`);
 
                 if (typeof tab.tty.dispose === 'function') {
-                    try { tab.tty.dispose(); } catch (_) { }
+                    try { tab.tty.dispose(); console.log(`[webchat] dispose() called for pid ${pid}`); } catch (e) { console.error(`[webchat] dispose error: ${e?.message}`); }
                 } else if (typeof tab.tty.kill === 'function') {
-                    try { tab.tty.kill(); } catch (_) { }
+                    try { tab.tty.kill(); console.log(`[webchat] kill() called for pid ${pid}`); } catch (e) { console.error(`[webchat] kill error: ${e?.message}`); }
                 }
 
                 // CRITICAL FIX: Ensure process is actually killed
@@ -588,6 +591,7 @@ function handleWebChat(req, res, appConfig, appState) {
                             console.warn(`[webchat] Force killed lingering process ${pid}`);
                         } catch (_) {
                             // Process already dead, good
+                            console.log(`[webchat] Process ${pid} already dead`);
                         }
                     }, 2000); // Wait 2 seconds then force kill if still alive
                 }

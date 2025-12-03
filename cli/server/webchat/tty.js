@@ -50,7 +50,9 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
       shellCmd = `${shellCmd} ${ssoCliArgs.join(' ')}`;
     }
     
-    const execArgs = buildExecArgs(containerName, wd, shellCmd, true);
+    // Use interactive mode but NO TTY allocation - this ensures stdin EOF propagates
+    // to the container process when the host connection closes
+    const execArgs = buildExecArgs(containerName, wd, shellCmd, true, false);
     let ptyProc = null;
     const outputHandlers = new Set();
     const closeHandlers = new Set();
@@ -87,6 +89,7 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
     }
 
     return {
+      get pid() { return ptyProc?.pid; },
       onOutput(handler) {
         if (handler) outputHandlers.add(handler);
         return () => outputHandlers.delete(handler);
@@ -102,9 +105,29 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
       resize(cols, rows) {
         try { ptyProc?.resize?.(cols, rows); } catch (e) { log('resize error', e?.message || e); }
       },
-      close() {
+      kill() {
+        const pid = ptyProc?.pid;
         try { ptyProc?.kill?.(); } catch (_) {}
-      }
+        // Try to kill process group for thorough cleanup
+        if (pid) {
+          try { process.kill(-pid, 'SIGTERM'); } catch (_) {}
+        }
+      },
+      dispose() {
+        const pid = ptyProc?.pid;
+        // First try graceful termination
+        try { ptyProc?.kill?.(); } catch (_) {}
+        // Kill process group
+        if (pid) {
+          try { process.kill(-pid, 'SIGTERM'); } catch (_) {}
+          // Force kill after short delay
+          setTimeout(() => {
+            try { process.kill(-pid, 'SIGKILL'); } catch (_) {}
+            try { process.kill(pid, 'SIGKILL'); } catch (_) {}
+          }, 500);
+        }
+      },
+      close() { this.kill(); }
     };
   };
 
@@ -118,7 +141,8 @@ function createLocalTTYFactory({ ptyLib, workdir, command }) {
   const log = (...args) => { if (DEBUG) console.log('[webchat][tty-local]', ...args); };
   const factory = (ssoUser) => {
     const wd = workdir || process.cwd();
-    const env = { ...process.env, TERM: 'xterm-256color' };
+    // PLOINKY_NO_TTY=1 ensures stdin EOF propagates when webchat connection closes
+    const env = { ...process.env, TERM: 'xterm-256color', PLOINKY_NO_TTY: '1' };
     
     // Build SSO CLI arguments (no env vars)
     const ssoCliArgs = [];
@@ -198,11 +222,34 @@ function createLocalTTYFactory({ ptyLib, workdir, command }) {
 		startProc({ entry: hasCustom ? String(command) : fallbackEntry, isFallback: !hasCustom });
 
     return {
+      get pid() { return ptyProc?.pid; },
       onOutput(handler) { if (handler) outputHandlers.add(handler); return () => outputHandlers.delete(handler); },
       onClose(handler) { if (handler) closeHandlers.add(handler); return () => closeHandlers.delete(handler); },
       write(data) { try { ptyProc?.write?.(data); } catch (e) { log('write error', e?.message || e); } },
       resize(cols, rows) { try { ptyProc?.resize?.(cols, rows); } catch (e) { log('resize error', e?.message || e); } },
-      close() { try { ptyProc?.kill?.(); } catch (_) {} }
+      kill() {
+        const pid = ptyProc?.pid;
+        try { ptyProc?.kill?.(); } catch (_) {}
+        // Try to kill process group for thorough cleanup
+        if (pid) {
+          try { process.kill(-pid, 'SIGTERM'); } catch (_) {}
+        }
+      },
+      dispose() {
+        const pid = ptyProc?.pid;
+        // First try graceful termination
+        try { ptyProc?.kill?.(); } catch (_) {}
+        // Kill process group
+        if (pid) {
+          try { process.kill(-pid, 'SIGTERM'); } catch (_) {}
+          // Force kill after short delay
+          setTimeout(() => {
+            try { process.kill(-pid, 'SIGKILL'); } catch (_) {}
+            try { process.kill(pid, 'SIGKILL'); } catch (_) {}
+          }, 500);
+        }
+      },
+      close() { this.kill(); }
     };
   };
 

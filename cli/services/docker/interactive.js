@@ -307,19 +307,25 @@ function ensureAgentContainer(agentName, repoName, manifest) {
     return containerName;
 }
 
-function buildExecArgs(containerName, workdir, entryCommand, interactive = true) {
+function buildExecArgs(containerName, workdir, entryCommand, interactive = true, allocateTty = true) {
     const wd = workdir || process.cwd();
     const cmd = entryCommand && String(entryCommand).trim()
         ? entryCommand
         : 'exec /bin/bash || exec /bin/sh';
     const args = ['exec'];
-    if (interactive) args.push('-it');
+    if (interactive && allocateTty) {
+        args.push('-it');  // Full interactive with TTY (for direct terminal use)
+    } else if (interactive) {
+        args.push('-i');   // Interactive stdin only, no TTY (for webchat - ensures stdin EOF propagates)
+    }
     args.push(containerName, 'sh', '-lc', `cd '${wd}' && ${cmd}`);
     return args;
 }
 
 function attachInteractive(containerName, workdir, entryCommand) {
-    const execArgs = buildExecArgs(containerName, workdir, entryCommand, true);
+    // PLOINKY_NO_TTY=1 disables TTY allocation (used by webchat to ensure stdin EOF propagates)
+    const allocateTty = process.env.PLOINKY_NO_TTY !== '1';
+    const execArgs = buildExecArgs(containerName, workdir, entryCommand, true, allocateTty);
     const result = spawnSync(containerRuntime, execArgs, { stdio: 'inherit' });
     return result.status ?? 0;
 }
