@@ -225,18 +225,6 @@ function handleWebTTY(req, res, appConfig, appState) {
                     }
                 });
 
-                // CRITICAL FIX: Set aggressive cleanup timer
-                const FORCE_KILL_TIMEOUT_MS = 10000;
-                tab.cleanupTimer = setTimeout(() => {
-                    if (tab.tty && tab.pid) {
-                        try {
-                            process.kill(tab.pid, 'SIGKILL');
-                            console.warn(`[webtty] Force killed zombie process ${tab.pid} for tab ${tabId}`);
-                        } catch (_) { }
-                    }
-                    tab.cleanupTimer = null;
-                }, FORCE_KILL_TIMEOUT_MS);
-
             } catch (e) {
                 res.writeHead(500);
                 res.end('Failed to create TTY: ' + (e?.message || e));

@@ -512,9 +512,6 @@ function handleWebChat(req, res, appConfig, appState) {
                 };
                 session.tabs.set(tabId, tab);
 
-                // CRITICAL FIX: Set aggressive cleanup timer in case process doesn't die cleanly
-                const FORCE_KILL_TIMEOUT_MS = 10000; // 10 seconds
-
                 tty.onOutput((data) => {
                     if (tab.sseRes) {
                         tab.sseRes.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -531,20 +528,6 @@ function handleWebChat(req, res, appConfig, appState) {
                         tab.cleanupTimer = null;
                     }
                 });
-
-                // Set force kill timer for zombie processes
-                tab.cleanupTimer = setTimeout(() => {
-                    if (tab.tty && tab.pid) {
-                        try {
-                            // Try SIGKILL if process still exists
-                            process.kill(tab.pid, 'SIGKILL');
-                            console.warn(`[webchat] Force killed zombie process ${tab.pid} for tab ${tabId}`);
-                        } catch (err) {
-                            // Process already dead, that's fine
-                        }
-                    }
-                    tab.cleanupTimer = null;
-                }, FORCE_KILL_TIMEOUT_MS);
 
             } catch (e) {
                 res.writeHead(500);
