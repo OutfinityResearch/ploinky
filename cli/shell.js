@@ -22,7 +22,6 @@ import {
 } from './services/llmProviderUtils.js';
 import { runSettingsMenu } from './services/settingsMenu.js';
 import * as inputState from './services/inputState.js';
-import { isKnownCommand } from './services/commandRegistry.js';
 
 const WORKSPACE_ENV_FILENAME = '.env';
 const ANSI_RESET = '\x1b[0m';
@@ -442,12 +441,6 @@ async function handleUserInput(rawInput) {
     if (normalized === SETTINGS_COMMAND || normalized === SETTINGS_ALIAS) {
         await handleSetEnv();
         return true;
-    }
-
-    const firstToken = normalized.split(/\s+/)[0];
-    if (isKnownCommand(firstToken)) {
-        console.log(`[Ploinky Shell] '${normalized}' is a Ploinky CLI command. Shell mode cannot execute it; run 'ploinky ${normalized}' without -l to use the full CLI.`);
-        return false;
     }
 
     // Attempt to run as a system command first (mirrors main CLI behavior)
