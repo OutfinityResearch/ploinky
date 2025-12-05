@@ -168,14 +168,7 @@ function extractLlmErrorDetails(error) {
         }
     }
 
-    let message = primaryMessage || 'All model invocations failed.';
-    if (message.includes('\n')) {
-        message = message.split(/\r?\n/)[0].trim();
-    }
-    const MAX_LEN = 200;
-    if (message.length > MAX_LEN) {
-        message = `${message.slice(0, MAX_LEN)}...`;
-    }
+    const message = primaryMessage || 'All model invocations failed.';
 
     return {
         code,

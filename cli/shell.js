@@ -13,6 +13,7 @@ import {
     handleSystemCommand,
     resetLlmInvokerCache,
 } from './commands/llmSystemCommands.js';
+import { getPrioritizedModels } from 'achillesAgentLib/utils/LLMClient.mjs';
 import {
     loadValidLlmApiKeys,
     collectAvailableLlmKeys,
@@ -144,6 +145,13 @@ async function handleSetEnv() {
     // Refresh cache with new values for subsequent calls
     cachedKeyState = null;
     await ensureLlmKeyAvailability();
+    if (process.stdin.isTTY) {
+        try {
+            readline.clearLine(process.stdout, 0);
+            readline.cursorTo(process.stdout, 0);
+        } catch (_) { /* ignore */ }
+    }
+    await logCurrentModelChoice();
 }
 
 function showMissingKeyMessage(validKeys) {
@@ -190,6 +198,20 @@ async function logAvailableModels(availableKeys = []) {
         }
     } catch (error) {
         console.log(`${SHELL_TAG} ${ANSI_YELLOW}Failed to list LLM models: ${error?.message || error}${ANSI_RESET}`);
+    }
+}
+
+async function logCurrentModelChoice() {
+    try {
+        const prioritized = await getPrioritizedModels();
+        const current = Array.isArray(prioritized) && prioritized.length ? prioritized[0] : null;
+        if (current) {
+            console.log(`${SHELL_TAG} ${ANSI_GREEN}Current LLM model:${ANSI_RESET} ${current}`);
+        } else {
+            console.log(`${SHELL_TAG} ${ANSI_YELLOW}No LLM model available for current settings.${ANSI_RESET}`);
+        }
+    } catch (error) {
+        console.log(`${SHELL_TAG} ${ANSI_YELLOW}Unable to resolve current LLM model: ${error?.message || error}${ANSI_RESET}`);
     }
 }
 
@@ -478,13 +500,14 @@ function startInteractiveMode() {
             logEnvDetails(envPath);
             return logAvailableModels(state?.availableKeys || []);
         })
-        .catch(() => {
-            const envPath = resolveEnvFilePath(process.cwd());
-            logEnvDetails(envPath);
-        });
+        .catch(() => {});
 
     console.log('Ploinky Shell mode. Ploinky commands are disabled; only LLM recommendations are available. Type \'exit\' or \'quit\' to leave.');
-    rl.prompt();
+    logCurrentModelChoice()
+        .catch(() => {})
+        .finally(() => {
+            rl.prompt();
+        });
 
     rl.on('line', async (line) => {
         if (inputState.isSuspended && inputState.isSuspended()) {
@@ -531,6 +554,8 @@ async function main() {
         startInteractiveMode();
         return;
     }
+
+    await logCurrentModelChoice();
 
     const inlineInput = args.join(' ');
     const ok = await handleUserInput(inlineInput);
