@@ -23,8 +23,8 @@ function ensurePidFile() {
  */
 function clearPidFile() {
     if (!PID_FILE) return;
-    try { 
-        fs.unlinkSync(PID_FILE); 
+    try {
+        fs.unlinkSync(PID_FILE);
     } catch (err) {
         if (err && err.code !== 'ENOENT') {
             console.warn(`Failed to remove router pid file: ${PID_FILE}`);
@@ -113,7 +113,7 @@ function createGracefulShutdown(server, globalState, agentSessionStore) {
         closeWebchatSessions(globalState);
         server.close((err) => {
             clearTimeout(forceExitTimer);
-            
+
             const resolvedPort = resolveServerPort(server);
             let port = resolvedPort;
             if (port == null) {
@@ -187,20 +187,20 @@ function setupProcessLifecycle(server, globalState, agentSessionStore) {
         logCrash('uncaughtException', error, { origin });
         console.error('[FATAL] Uncaught Exception:', error);
         console.error('Origin:', origin);
-        
+
         // Exit with error code to trigger restart
-        gracefulShutdown('uncaughtException', 1);
+        // gracefulShutdown('uncaughtException', 1);
     });
 
     process.on('unhandledRejection', (reason, promise) => {
         const error = reason instanceof Error ? reason : new Error(String(reason));
-        logCrash('unhandledRejection', error, { 
+        logCrash('unhandledRejection', error, {
             reason: String(reason),
             promiseString: String(promise)
         });
         console.error('[FATAL] Unhandled Promise Rejection:', reason);
         console.error('Promise:', promise);
-        
+
         // Exit with error code to trigger restart
         gracefulShutdown('unhandledRejection', 1);
     });

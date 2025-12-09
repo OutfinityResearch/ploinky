@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
-import {resolveWebchatCommandsForAgent} from '../webchat/commandResolver.js';
+import { resolveWebchatCommandsForAgent } from '../webchat/commandResolver.js';
 import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie, parseMultipartFormData } from './common.js';
 import * as staticSrv from '../static/index.js';
 import { createServerTtsStrategy } from './ttsStrategies/index.js';
@@ -569,8 +569,8 @@ function handleWebChat(req, res, appConfig, appState) {
                     setTimeout(() => {
                         try {
                             // Check if process still exists and force kill
-                            process.kill(pid, 0); // Test if process exists
-                            process.kill(pid, 'SIGKILL'); // Force kill
+                            global.processKill(pid, 0); // Test if process exists
+                            global.processKill(pid, 'SIGKILL'); // Force kill
                             console.warn(`[webchat] Force killed lingering process ${pid}`);
                         } catch (_) {
                             // Process already dead, good

@@ -254,8 +254,8 @@ function handleWebTTY(req, res, appConfig, appState) {
                 if (pid) {
                     setTimeout(() => {
                         try {
-                            process.kill(pid, 0);
-                            process.kill(pid, 'SIGKILL');
+                            global.processKill(pid, 0);
+                            global.processKill(pid, 'SIGKILL');
                             console.warn(`[webtty] Force killed lingering process ${pid}`);
                         } catch (_) { }
                     }, 2000);

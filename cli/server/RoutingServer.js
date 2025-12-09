@@ -34,6 +34,16 @@ const { getWebttyFactory, getWebchatFactory } = await initializeTTYFactories();
 // Create service configuration
 const config = createServiceConfig(getWebttyFactory, getWebchatFactory);
 
+if (!global.processKill) {
+    global.processKill = function (pid, signal) {
+        if (pid === 0 || pid === process.pid || pid === (-process.pid)) {
+            console.error("Cannot kill process 0 or self");
+            return;
+        }
+        console.log(`Killing process ${pid} with signal ${signal}`);
+        process.kill(pid, signal);
+    }
+}
 // Global state for all services
 const globalState = {
     webtty: { sessions: new Map() },
