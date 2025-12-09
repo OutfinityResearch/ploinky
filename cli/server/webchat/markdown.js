@@ -216,9 +216,11 @@
       // links [label](url)
       working = working.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
         const safeUrl = sanitizeUrl(url.trim());
-        if (!safeUrl) return `${label} (${url})`;
+        if (!safeUrl) return `${resolveBaseUrl(label)} (${resolveBaseUrl(url)})`;
         const token = state.linkTokenFactory();
-        state.placeholders[token] = `<a href="${escapeAttribute(safeUrl)}" target="_blank" rel="noopener noreferrer" data-wc-link="true">${escapeHtml(label)}</a>`;
+        // Also resolve PLACEHOLDER_BASE_URL in label text
+        const resolvedLabel = resolveBaseUrl(label);
+        state.placeholders[token] = `<a href="${escapeAttribute(safeUrl)}" target="_blank" rel="noopener noreferrer" data-wc-link="true">${escapeHtml(resolvedLabel)}</a>`;
         return token;
       });
 
