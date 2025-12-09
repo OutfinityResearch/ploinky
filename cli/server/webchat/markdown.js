@@ -18,9 +18,14 @@
     return escapeHtml(str).replace(/`/g, '&#96;');
   }
 
+  function resolveBaseUrl(url) {
+    return url.replace(/PLACEHOLDER_BASE_URL/g, window.location.origin);
+  }
+
   function sanitizeUrl(rawUrl) {
     try {
-      const url = new URL(rawUrl, window.location.origin);
+      const resolved = resolveBaseUrl(rawUrl);
+      const url = new URL(resolved, window.location.origin);
       if (url.protocol === 'http:' || url.protocol === 'https:') return url.href;
     } catch (_) {
       return null;
