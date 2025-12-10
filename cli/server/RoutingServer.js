@@ -34,13 +34,22 @@ const { getWebttyFactory, getWebchatFactory } = await initializeTTYFactories();
 // Create service configuration
 const config = createServiceConfig(getWebttyFactory, getWebchatFactory);
 
+// Safe console write that catches EPIPE/EIO errors
+function safeLog(...args) {
+    try {
+        console.log(...args);
+    } catch (_) {
+        // Ignore write errors - stdout may be broken
+    }
+}
+
 if (!global.processKill) {
     global.processKill = function (pid, signal) {
         if (pid === 0 || pid === process.pid || pid === (-process.pid)) {
-            console.error("Cannot kill process 0 or self");
+            try { console.error("Cannot kill process 0 or self"); } catch (_) {}
             return;
         }
-        console.log(`Killing process ${pid} with signal ${signal}`);
+        safeLog(`Killing process ${pid} with signal ${signal}`);
         process.kill(pid, signal);
     }
 }
