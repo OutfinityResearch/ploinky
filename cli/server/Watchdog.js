@@ -87,23 +87,27 @@ function log(level, event, data = {}) {
     }
     
     if (!IS_TEST_MODE) {
-        // Console output with color
-        switch (level) {
-            case 'fatal':
-            case 'error':
-                console.error(consolePrefix, event, data);
-                break;
-            case 'warn':
-                console.warn(consolePrefix, event, data);
-                break;
-            case 'info':
-                console.log(consolePrefix, event, data);
-                break;
-            case 'debug':
-                if (process.env.DEBUG) {
+        // Console output with color (wrapped in try-catch to handle EIO/EPIPE)
+        try {
+            switch (level) {
+                case 'fatal':
+                case 'error':
+                    console.error(consolePrefix, event, data);
+                    break;
+                case 'warn':
+                    console.warn(consolePrefix, event, data);
+                    break;
+                case 'info':
                     console.log(consolePrefix, event, data);
-                }
-                break;
+                    break;
+                case 'debug':
+                    if (process.env.DEBUG) {
+                        console.log(consolePrefix, event, data);
+                    }
+                    break;
+            }
+        } catch (_) {
+            // Ignore EIO/EPIPE errors - stdout/stderr may be broken
         }
     }
     
