@@ -184,9 +184,37 @@ function setupProcessLifecycle(server, globalState, agentSessionStore) {
 
     // Global error handlers
     process.on('uncaughtException', (error, origin) => {
+        // EPIPE errors occur when stdout/stderr is closed (e.g., watchdog killed).
+        // Don't try to log these to console as it will cause more EPIPE errors.
+        // Just log to file and exit gracefully.
+        if (error?.code === 'EPIPE') {
+            try {
+                // Only log to file, skip console output
+                appendLog('crash', {
+                    level: 'fatal',
+                    errorType: 'uncaughtException',
+                    message: 'EPIPE - stdout/stderr disconnected',
+                    code: 'EPIPE',
+                    origin,
+                    pid: process.pid,
+                    uptime: process.uptime()
+                });
+            } catch (_) { /* ignore */ }
+            // Exit cleanly - this is expected when parent process dies
+            if (!isShuttingDown) {
+                isShuttingDown = true;
+                clearPidFile();
+                process.exit(0);
+            }
+            return;
+        }
+
         logCrash('uncaughtException', error, { origin });
-        console.error('[FATAL] Uncaught Exception:', error);
-        console.error('Origin:', origin);
+        // Use try-catch for console in case stderr is broken
+        try {
+            console.error('[FATAL] Uncaught Exception:', error);
+            console.error('Origin:', origin);
+        } catch (_) { /* ignore EPIPE */ }
 
         // Exit with error code to trigger restart
         // gracefulShutdown('uncaughtException', 1);

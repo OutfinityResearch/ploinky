@@ -3,6 +3,7 @@ import path from 'path';
 import net from 'net';
 import crypto from 'crypto';
 import { setEnvVar } from './secretVars.js';
+import { appendLog } from '../server/utils/logger.js';
 
 const SERVERS_CONFIG_FILE = path.resolve('.ploinky/servers.json');
 
@@ -137,8 +138,22 @@ export function stopServer(pidFile, serverName) {
             if (pid && !Number.isNaN(pid)) {
                 try {
                     process.kill(pid, 'SIGTERM');
+                    appendLog('process_signal', {
+                        action: 'stop_server',
+                        serverName,
+                        pid,
+                        signal: 'SIGTERM',
+                        source: 'serverManager.stopServer'
+                    });
                     console.log(`Stopped ${serverName} (pid ${pid}).`);
-                } catch (_) {
+                } catch (err) {
+                    appendLog('process_signal_failed', {
+                        action: 'stop_server',
+                        serverName,
+                        pid,
+                        signal: 'SIGTERM',
+                        error: err?.message || String(err)
+                    });
                     console.log(`Failed to stop ${serverName} (pid ${pid}).`);
                 }
             }

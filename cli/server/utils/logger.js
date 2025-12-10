@@ -31,36 +31,60 @@ export function logBootEvent(action, details = {}) {
     appendLog('boot_operation', { action, ...details });
 }
 
-export function logCrash(errorType, error, additionalData = {}) {
-    const errorDetails = {
-        level: 'fatal',
-        errorType,
-        message: error?.message || String(error),
-        stack: error?.stack || null,
-        code: error?.code || null,
-        pid: process.pid,
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-        ...additionalData
-    };
-    
+// Track if we're already in a crash logging to prevent EPIPE recursion
+let isLoggingCrash = false;
+
+// Safe console write that catches EPIPE errors
+function safeConsoleError(...args) {
     try {
-        ensureLogDirectory();
-        const record = JSON.stringify({
-            ts: new Date().toISOString(),
-            type: 'crash',
-            ...errorDetails
-        });
-        fs.appendFileSync(LOG_PATH, `${record}\n`);
-        
-        // Also write to stderr for immediate visibility
-        console.error(`[CRASH] ${errorType}:`, error?.message || String(error));
-        if (error?.stack) {
-            console.error(error.stack);
+        console.error(...args);
+    } catch (err) {
+        // Ignore EPIPE and other write errors - stderr may be broken
+        // This prevents EPIPE from triggering another uncaughtException
+    }
+}
+
+export function logCrash(errorType, error, additionalData = {}) {
+    // Prevent recursion: if we're already logging a crash and get another
+    // error (like EPIPE), just bail out silently
+    if (isLoggingCrash) {
+        return;
+    }
+    isLoggingCrash = true;
+
+    try {
+        const errorDetails = {
+            level: 'fatal',
+            errorType,
+            message: error?.message || String(error),
+            stack: error?.stack || null,
+            code: error?.code || null,
+            pid: process.pid,
+            uptime: process.uptime(),
+            memoryUsage: process.memoryUsage(),
+            ...additionalData
+        };
+
+        try {
+            ensureLogDirectory();
+            const record = JSON.stringify({
+                ts: new Date().toISOString(),
+                type: 'crash',
+                ...errorDetails
+            });
+            fs.appendFileSync(LOG_PATH, `${record}\n`);
+
+            // Also write to stderr for immediate visibility (safely)
+            safeConsoleError(`[CRASH] ${errorType}:`, error?.message || String(error));
+            if (error?.stack) {
+                safeConsoleError(error.stack);
+            }
+        } catch (_) {
+            // Last resort: try to write to stderr (safely)
+            safeConsoleError('[CRASH] Failed to log crash:', errorType, error);
         }
-    } catch (_) {
-        // Last resort: write to stderr
-        console.error('[CRASH] Failed to log crash:', errorType, error);
+    } finally {
+        isLoggingCrash = false;
     }
 }
 

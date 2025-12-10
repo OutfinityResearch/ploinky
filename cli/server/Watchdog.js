@@ -5,6 +5,7 @@ import fs from 'fs';
 import http from 'http';
 
 import { createContainerMonitor, startContainerMonitor, stopContainerMonitor, clearContainerTargets } from './containerMonitor.js';
+import { appendLog } from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -248,9 +249,18 @@ function startHealthCheckMonitoring() {
                     failures: state.healthCheckFailures,
                     action: 'restarting_process'
                 });
-                
+
                 // Kill the unresponsive process
                 if (state.childProcess) {
+                    const pid = state.childProcess.pid;
+                    appendLog('process_signal', {
+                        action: 'health_check_kill',
+                        pid,
+                        signal: 'SIGTERM',
+                        reason: 'health_check_threshold_exceeded',
+                        failures: state.healthCheckFailures,
+                        source: 'Watchdog.healthCheck'
+                    });
                     state.childProcess.kill('SIGTERM');
                 }
             }
@@ -469,15 +479,33 @@ function shutdownManager(signal) {
     stopContainerMonitor(state.containerMonitor);
     
     if (state.childProcess) {
-        log('info', 'stopping_child_process', { pid: state.childProcess.pid });
-        
+        const pid = state.childProcess.pid;
+        const killSignal = signal || 'SIGTERM';
+        log('info', 'stopping_child_process', { pid });
+        appendLog('process_signal', {
+            action: 'watchdog_shutdown',
+            pid,
+            signal: killSignal,
+            reason: 'watchdog_received_signal',
+            originalSignal: signal,
+            source: 'Watchdog.shutdownManager'
+        });
+
         // Forward the signal to the child
-        state.childProcess.kill(signal || 'SIGTERM');
-        
+        state.childProcess.kill(killSignal);
+
         // Set a timeout to force kill
         setTimeout(() => {
             if (state.childProcess) {
-                log('warn', 'force_killing_child', { pid: state.childProcess.pid });
+                const forcePid = state.childProcess.pid;
+                log('warn', 'force_killing_child', { pid: forcePid });
+                appendLog('process_signal', {
+                    action: 'watchdog_force_kill',
+                    pid: forcePid,
+                    signal: 'SIGKILL',
+                    reason: 'graceful_shutdown_timeout',
+                    source: 'Watchdog.shutdownManager'
+                });
                 state.childProcess.kill('SIGKILL');
                 setTimeout(() => process.exit(0), 1000);
             }
