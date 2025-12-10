@@ -186,26 +186,23 @@ function setupProcessLifecycle(server, globalState, agentSessionStore) {
     process.on('uncaughtException', (error, origin) => {
         // EPIPE/EIO errors occur when stdout/stderr is closed (e.g., watchdog killed).
         // Don't try to log these to console as it will cause more errors.
-        // Just log to file and exit gracefully.
+        // DON'T exit - the server can continue handling requests with broken stdout.
+        // If we exit with code 0, the watchdog interprets it as "clean shutdown" and stops.
         if (error?.code === 'EPIPE' || error?.code === 'EIO') {
             try {
                 // Only log to file, skip console output
-                appendLog('crash', {
-                    level: 'fatal',
+                appendLog('pipe_error', {
+                    level: 'warn',
                     errorType: 'uncaughtException',
-                    message: `${error.code} - stdout/stderr disconnected`,
+                    message: `${error.code} - stdout/stderr disconnected (continuing to run)`,
                     code: error.code,
                     origin,
                     pid: process.pid,
                     uptime: process.uptime()
                 });
             } catch (_) { /* ignore */ }
-            // Exit cleanly - this is expected when parent process dies
-            if (!isShuttingDown) {
-                isShuttingDown = true;
-                clearPidFile();
-                process.exit(0);
-            }
+            // Don't exit - just ignore and continue running
+            // The server can still handle HTTP requests even with broken stdout/stderr
             return;
         }
 
