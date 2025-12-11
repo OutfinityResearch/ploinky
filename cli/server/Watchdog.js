@@ -59,12 +59,21 @@ function createInitialState() {
 // State management
 const state = createInitialState();
 
+// Safe console write helper (ignores EIO/EPIPE errors)
+function safeConsole(method, ...args) {
+    try {
+        console[method](...args);
+    } catch (_) {
+        // Ignore EIO/EPIPE errors
+    }
+}
+
 // Ensure log directory exists
 function ensureLogDirectory() {
     try {
         fs.mkdirSync(CONFIG.LOG_DIR, { recursive: true });
     } catch (err) {
-        console.error('[ProcessManager] Failed to create log directory:', err.message);
+        safeConsole('error', '[ProcessManager] Failed to create log directory:', err.message);
     }
 }
 
@@ -117,7 +126,7 @@ function log(level, event, data = {}) {
             ensureLogDirectory();
             fs.appendFileSync(CONFIG.PROCESS_LOG, logLine + '\n');
         } catch (err) {
-            console.error('[Watchdog] Failed to write log:', err.message);
+            safeConsole('error', '[Watchdog] Failed to write log:', err.message);
         }
     }
 }
@@ -304,11 +313,11 @@ function spawnServer() {
         log('fatal', 'spawn_blocked_circuit_breaker', {
             message: 'Circuit breaker is tripped. Manual intervention required.'
         });
-        console.error('\n========================================');
-        console.error('CRITICAL: Circuit breaker tripped!');
-        console.error(`Server crashed ${CONFIG.MAX_RESTARTS_IN_WINDOW} times in ${CONFIG.RESTART_WINDOW_MS / 1000} seconds.`);
-        console.error('Manual intervention required. Check logs at:', CONFIG.PROCESS_LOG);
-        console.error('========================================\n');
+        safeConsole('error', '\n========================================');
+        safeConsole('error', 'CRITICAL: Circuit breaker tripped!');
+        safeConsole('error', `Server crashed ${CONFIG.MAX_RESTARTS_IN_WINDOW} times in ${CONFIG.RESTART_WINDOW_MS / 1000} seconds.`);
+        safeConsole('error', 'Manual intervention required. Check logs at:', CONFIG.PROCESS_LOG);
+        safeConsole('error', '========================================\n');
         process.exit(100);
     }
     
@@ -535,7 +544,7 @@ function main() {
             path: CONFIG.SERVER_SCRIPT,
             message: 'Server script does not exist'
         });
-        console.error(`[Watchdog] FATAL: Server script not found: ${CONFIG.SERVER_SCRIPT}`);
+        safeConsole('error', `[Watchdog] FATAL: Server script not found: ${CONFIG.SERVER_SCRIPT}`);
         process.exit(1);
     }
     
@@ -546,19 +555,38 @@ function main() {
     
     // Handle watchdog errors
     process.on('uncaughtException', (error) => {
+        // EPIPE/EIO errors occur when stdout/stderr is closed (e.g., watchdog killed).
+        // Don't try to log these to console as it will cause more errors.
+        // DON'T shutdown - the watchdog can continue monitoring with broken stdout.
+        if (error?.code === 'EPIPE' || error?.code === 'EIO') {
+            try {
+                // Only log to file, skip console output
+                appendLog('pipe_error', {
+                    level: 'warn',
+                    errorType: 'watchdog_uncaught_exception',
+                    message: `${error.code} - stdout/stderr disconnected (continuing to run)`,
+                    code: error.code,
+                    pid: process.pid,
+                    uptime: process.uptime()
+                });
+            } catch (_) { /* ignore */ }
+            // Don't shutdown - just ignore and continue running
+            return;
+        }
+
         log('fatal', 'watchdog_uncaught_exception', {
             error: error.message,
             stack: error.stack
         });
-        console.error('[Watchdog] FATAL: Uncaught exception:', error);
+        safeConsole('error', '[Watchdog] FATAL: Uncaught exception:', error);
         shutdownManager('SIGTERM');
     });
-    
+
     process.on('unhandledRejection', (reason) => {
         log('error', 'watchdog_unhandled_rejection', {
             reason: String(reason)
         });
-        console.error('[Watchdog] Unhandled rejection:', reason);
+        safeConsole('error', '[Watchdog] Unhandled rejection:', reason);
     });
     
     // Log on exit
@@ -571,15 +599,15 @@ function main() {
     spawnServer();
     startContainerMonitor(state.containerMonitor);
 
-    console.log('\n========================================');
-    console.log('Watchdog Started');
-    console.log('========================================');
-    console.log(`Server script: ${CONFIG.SERVER_SCRIPT}`);
-    console.log(`Port: ${CONFIG.PORT}`);
-    console.log(`Health checks: ${CONFIG.HEALTH_CHECK_ENABLED ? 'Enabled' : 'Disabled'}`);
-    console.log(`Max restarts: ${CONFIG.MAX_RESTARTS_IN_WINDOW} in ${CONFIG.RESTART_WINDOW_MS / 1000}s`);
-    console.log(`Logs: ${CONFIG.PROCESS_LOG}`);
-    console.log('========================================\n');
+    safeConsole('log', '\n========================================');
+    safeConsole('log', 'Watchdog Started');
+    safeConsole('log', '========================================');
+    safeConsole('log', `Server script: ${CONFIG.SERVER_SCRIPT}`);
+    safeConsole('log', `Port: ${CONFIG.PORT}`);
+    safeConsole('log', `Health checks: ${CONFIG.HEALTH_CHECK_ENABLED ? 'Enabled' : 'Disabled'}`);
+    safeConsole('log', `Max restarts: ${CONFIG.MAX_RESTARTS_IN_WINDOW} in ${CONFIG.RESTART_WINDOW_MS / 1000}s`);
+    safeConsole('log', `Logs: ${CONFIG.PROCESS_LOG}`);
+    safeConsole('log', '========================================\n');
 }
 
 // Start the process manager
