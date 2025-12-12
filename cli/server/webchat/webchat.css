@@ -789,7 +789,7 @@ body {
 .wa-message-text {
     white-space: normal;
     margin: 0;
-    padding-right: 60px;
+    padding-right: 90px;
     min-height: 19px;
 }
 
@@ -1637,33 +1637,45 @@ body {
 }
 
 .wa-context-menu {
-    position: fixed;
+    position: absolute;
+    bottom: -36px;
+    right: 6px;
     z-index: 160;
-    display: none;
-    flex-direction: column;
-    min-width: 140px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     background: var(--wa-bg-panel);
     border: 1px solid var(--wa-border);
-    border-radius: 10px;
-    box-shadow: var(--wa-shadow-md);
-    padding: 6px;
-    gap: 6px;
+    border-radius: 999px;
+    box-shadow: var(--wa-shadow-sm);
+    padding: 4px 8px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-.wa-context-menu.show {
-    display: flex;
+.wa-message:hover .wa-context-menu,
+.wa-message:focus-within .wa-context-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
 }
 
 .wa-context-menu button {
     all: unset;
-    padding: 8px 10px;
-    border-radius: 8px;
+    padding: 6px 8px;
+    border-radius: 999px;
     cursor: pointer;
     color: var(--wa-text-primary);
-    font-size: 13px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
-.wa-context-menu button:hover {
+.wa-context-menu button:hover,
+.wa-context-menu button[data-active="true"] {
     background: var(--wa-bg-hover);
     color: var(--wa-icon-color-active);
 }

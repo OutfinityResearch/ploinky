@@ -9,7 +9,7 @@ import { createUploader } from './upload.js';
 
 const SEND_TRIGGER_RE = /\bsend\b/i;
 const PURGE_TRIGGER_RE = /\bpurge\b/i;
-const MENU_PADDING_PX = 8;
+const EDITABLE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'OPTION'];
 
 const dom = initDom();
 const {
@@ -137,75 +137,10 @@ function refocusComposerAfterIcon(btn) {
     });
 }
 
-function initMessageContextMenu() {
+function initMessageToolbar() {
     if (!chatList || !composer) {
         return;
     }
-
-    const menu = document.createElement('div');
-    menu.className = 'wa-context-menu';
-    menu.innerHTML = `
-        <button type="button" data-action="copy">Copy</button>
-        <button type="button" data-action="resubmit">Resubmit</button>
-        <button type="button" data-action="cancel">Cancel</button>
-    `;
-    document.body.appendChild(menu);
-
-    let currentText = '';
-    let allowOutsideClose = false;
-
-    const focusComposer = () => {
-        setTimeout(() => composer.focus(), 0);
-    };
-
-    const hideMenu = ({ refocus = false } = {}) => {
-        menu.classList.remove('show');
-        menu.style.display = 'none';
-        currentText = '';
-        if (refocus) {
-            focusComposer();
-        }
-    };
-
-    const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-
-    const showMenu = (x, y, text) => {
-        const rawText = typeof text === 'string' ? text : '';
-        if (!rawText.trim()) {
-            return;
-        }
-        currentText = rawText;
-        menu.style.visibility = 'hidden';
-        allowOutsideClose = false;
-        menu.classList.add('show');
-        menu.style.left = '0px';
-        menu.style.top = '0px';
-        requestAnimationFrame(() => {
-            const rect = menu.getBoundingClientRect();
-            const maxX = window.innerWidth - rect.width - MENU_PADDING_PX;
-            const maxY = window.innerHeight - rect.height - MENU_PADDING_PX;
-            const left = clamp(x, MENU_PADDING_PX, maxX);
-            const top = clamp(y, MENU_PADDING_PX, maxY);
-            menu.style.left = `${left}px`;
-            menu.style.top = `${top}px`;
-            menu.style.visibility = 'visible';
-            menu.style.display = "block"
-            requestAnimationFrame(() => {
-                allowOutsideClose = true;
-            });
-        });
-    };
-
-    const getBubbleFromTarget = (target) => {
-        if (!target || !(target instanceof Element)) {
-            return null;
-        }
-        const bubble = target.closest('.wa-message-bubble');
-        if (!bubble || !chatList.contains(bubble)) {
-            return null;
-        }
-        return bubble;
-    };
 
     const getBubbleText = (bubble) => {
         if (!bubble) {
@@ -216,111 +151,142 @@ function initMessageContextMenu() {
         return (fromDataset || fallback || '').trim();
     };
 
-    const handleSelectionMenu = (event) => {
-        const selection = window.getSelection();
-        if (!selection || selection.isCollapsed) {
-            return;
-        }
-        const range = selection.getRangeAt(0);
-        if (!range) {
-            return;
-        }
-        const container = range.commonAncestorContainer;
-        const element = container instanceof Element ? container : container.parentElement;
-        const bubble = getBubbleFromTarget(element);
+    const setRating = (bubble, rating) => {
         if (!bubble) {
             return;
         }
-        const rawSelected = selection.toString() || '';
-        if (!rawSelected.trim()) {
+        const menu = bubble.querySelector('.wa-context-menu');
+        if (!menu) {
             return;
         }
-        const rect = range.getBoundingClientRect();
-        const x = rect.left + rect.width / 2;
-        const y = rect.bottom + 4;
-        showMenu(x, y, rawSelected);
-    };
-
-    chatList.addEventListener('mouseup', handleSelectionMenu);
-    chatList.addEventListener('touchend', handleSelectionMenu);
-
-    menu.addEventListener('click', async (event) => {
-        const btn = event.target?.closest('button[data-action]');
-        if (!btn) {
-            return;
+        if (rating) {
+            bubble.dataset.rating = rating;
+        } else {
+            delete bubble.dataset.rating;
         }
-        const action = btn.dataset.action;
-        const selectionText = (window.getSelection()?.toString() || '').trim();
-        const text = (currentText || selectionText || '').trim();
-        if (action === 'copy') {
-            if (!text) {
-                hideMenu({ refocus: true });
+        const upBtn = menu.querySelector('[data-action="thumb-up"]');
+        const downBtn = menu.querySelector('[data-action="thumb-down"]');
+        const mark = (btn, isActive) => {
+            if (!btn) {
                 return;
             }
-            try {
-                if (navigator.clipboard?.writeText) {
-                    await navigator.clipboard.writeText(text);
-                } else {
-                    throw new Error('Clipboard unavailable');
-                }
-            } catch (_) {
-                try {
-                    const textarea = document.createElement('textarea');
-                    textarea.value = text;
-                    textarea.style.position = 'fixed';
-                    textarea.style.left = '-9999px';
-                    document.body.appendChild(textarea);
-                    textarea.focus();
-                    textarea.select();
-                    document.execCommand('copy');
-                    textarea.remove();
-                } catch (_) {
-                    // ignore copy failures
-                }
+            if (isActive) {
+                btn.dataset.active = 'true';
+            } else {
+                delete btn.dataset.active;
             }
-            hideMenu({ refocus: true });
+        };
+        mark(upBtn, rating === 'up');
+        mark(downBtn, rating === 'down');
+    };
+
+    const copyText = async (text) => {
+        const value = (text || '').trim();
+        if (!value) {
             return;
         }
-        if (action === 'resubmit') {
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(value);
+            } else {
+                throw new Error('Clipboard unavailable');
+            }
+        } catch (_) {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = value;
+                textarea.style.position = 'fixed';
+                textarea.style.left = '-9999px';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                document.execCommand('copy');
+                textarea.remove();
+            } catch (_) {
+                // ignore copy failures
+            }
+        }
+    };
+
+    const handleAction = (action, bubble) => {
+        const text = getBubbleText(bubble);
+        if (action === 'copy') {
+            copyText(text);
+            return;
+        }
+        if (action === 'insert') {
             if (text) {
                 composer.setValue(text);
-                composer.submit();
+                composer.focus();
             }
-            hideMenu({ refocus: true });
             return;
         }
-        if (action === 'cancel') {
-            hideMenu({ refocus: true });
+        if (action === 'thumb-up' || action === 'thumb-down') {
+            const desired = action === 'thumb-up' ? 'up' : 'down';
+            const current = bubble?.dataset?.rating;
+            const next = current === desired ? '' : desired;
+            setRating(bubble, next);
+        }
+    };
+
+    const attachMenuToBubble = (bubble) => {
+        if (!bubble || bubble.querySelector('.wa-context-menu')) {
+            return;
+        }
+        const message = bubble.closest('.wa-message');
+        if (message && message.classList.contains('wa-typing')) {
+            return;
+        }
+        const menu = document.createElement('div');
+        menu.className = 'wa-context-menu';
+        menu.innerHTML = `
+            <button type="button" data-action="copy" title="Copy">Copy</button>
+            <button type="button" data-action="insert" title="Insert into prompt">Insert</button>
+            <button type="button" data-action="thumb-up" title="Thumb up">👍</button>
+            <button type="button" data-action="thumb-down" title="Thumb down">👎</button>
+        `;
+        menu.addEventListener('click', (event) => {
+            const btn = event.target?.closest('button[data-action]');
+            if (!btn) {
+                return;
+            }
+            const action = btn.dataset.action;
+            handleAction(action, bubble);
+        });
+        bubble.appendChild(menu);
+    };
+
+    const attachToExisting = () => {
+        const bubbles = chatList.querySelectorAll('.wa-message-bubble');
+        bubbles.forEach((bubble) => attachMenuToBubble(bubble));
+    };
+
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            mutation.addedNodes?.forEach((node) => {
+                if (!(node instanceof Element)) {
+                    return;
+                }
+                if (node.classList.contains('wa-message-bubble')) {
+                    attachMenuToBubble(node);
+                    return;
+                }
+                const nested = node.querySelectorAll?.('.wa-message-bubble');
+                if (nested && nested.length) {
+                    nested.forEach((bubble) => attachMenuToBubble(bubble));
+                }
+            });
         }
     });
 
-    document.addEventListener('click', (event) => {
-        if (!menu.classList.contains('show')) {
-            return;
-        }
-        if (!allowOutsideClose) {
-            return;
-        }
-        if (menu.contains(event.target)) {
-            return;
-        }
-        hideMenu({ refocus: true });
-    });
-
-    document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-            hideMenu({ refocus: true });
-        }
-    });
-
-    window.addEventListener('resize', () => hideMenu({ refocus: true }));
-    chatList.addEventListener('scroll', () => hideMenu({ refocus: true }));
+    attachToExisting();
+    observer.observe(chatList, { childList: true, subtree: true });
 }
 
 refocusComposerAfterIcon(attachmentBtn);
 refocusComposerAfterIcon(settingsBtn);
 refocusComposerAfterIcon(sttBtn);
-initMessageContextMenu();
+initMessageToolbar();
 
 composer.setSendHandler((cmdText) => {
     const cmd = cmdText.trim();
@@ -353,6 +319,45 @@ initSpeechToText({
     sendTriggerRe: SEND_TRIGGER_RE,
     dlog,
     provider: dom.sttProvider
+});
+
+const isEditableTarget = (target) => {
+    if (!target) {
+        return false;
+    }
+    if (target.isContentEditable) {
+        return true;
+    }
+    const tag = target.tagName;
+    if (!tag) {
+        return false;
+    }
+    return EDITABLE_TAGS.includes(tag);
+};
+
+document.addEventListener('keydown', (event) => {
+    if (!composer || !cmdInput) {
+        return;
+    }
+    if (event.defaultPrevented) {
+        return;
+    }
+    if (document.activeElement === cmdInput) {
+        return;
+    }
+    const activeEl = document.activeElement;
+    if (isEditableTarget(activeEl) && activeEl !== cmdInput) {
+        return;
+    }
+    if (isEditableTarget(event.target) && event.target !== cmdInput) {
+        return;
+    }
+    const handled = typeof composer.typeFromKeyEvent === 'function'
+        ? composer.typeFromKeyEvent(event)
+        : false;
+    if (handled) {
+        event.preventDefault();
+    }
 });
 
 (async () => {

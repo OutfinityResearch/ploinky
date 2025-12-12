@@ -14,10 +14,11 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
         }, 0);
     }
 
-    function focusInput() {
+    function focusInput(options = {}) {
         if (!cmdInput) {
             return;
         }
+        const { preserveSelection = false } = options;
         if (document.activeElement === cmdInput) {
             return;
         }
@@ -25,6 +26,9 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
             cmdInput.focus({ preventScroll: true });
         } catch (_) {
             cmdInput.focus();
+        }
+        if (preserveSelection) {
+            return;
         }
         const pos = cmdInput.value.length;
         try {
@@ -45,6 +49,35 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
         } catch (_) {
             // ignore
         }
+    }
+
+    function insertTextAtCursor(text) {
+        if (!cmdInput || !text) {
+            return false;
+        }
+        let selStart = cmdInput.value.length;
+        let selEnd = selStart;
+        try {
+            if (typeof cmdInput.selectionStart === 'number') {
+                selStart = cmdInput.selectionStart;
+            }
+            if (typeof cmdInput.selectionEnd === 'number') {
+                selEnd = cmdInput.selectionEnd;
+            }
+        } catch (_) {
+            // Ignore selection access issues
+        }
+        const before = cmdInput.value.slice(0, selStart);
+        const after = cmdInput.value.slice(selEnd);
+        cmdInput.value = `${before}${text}${after}`;
+        const nextPos = selStart + text.length;
+        try {
+            cmdInput.setSelectionRange(nextPos, nextPos);
+        } catch (_) {
+            // Ignore selection issues
+        }
+        autoResize();
+        return true;
     }
 
     function clear() {
@@ -115,6 +148,25 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
         }
     }
 
+    function typeFromKeyEvent(event) {
+        if (!cmdInput || !event) {
+            return false;
+        }
+        if (event.metaKey || event.ctrlKey || event.altKey) {
+            return false;
+        }
+        const key = event.key;
+        if (!key || key.length !== 1) {
+            return false;
+        }
+        focusInput({ preserveSelection: true });
+        const inserted = insertTextAtCursor(key);
+        if (inserted && purgeTriggerRe.test(cmdInput.value)) {
+            purge();
+        }
+        return inserted;
+    }
+
     function setValue(value) {
         if (!cmdInput) {
             return;
@@ -160,6 +212,7 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
         setValue,
         getValue,
         autoResize,
+        typeFromKeyEvent,
         focus: focusInput,
         setSendHandler: (handler) => {
             onSend = typeof handler === 'function' ? handler : null;
