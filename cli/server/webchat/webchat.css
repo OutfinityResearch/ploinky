@@ -540,19 +540,22 @@ body {
 }
 
 .wa-side-panel-close {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     background: transparent;
     border: none;
     color: var(--wa-icon-color);
     cursor: pointer;
-    font-size: 24px;
-    line-height: 1;
-    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: color 0.2s, background 0.2s;
 }
 
 .wa-side-panel-close:hover {
     color: var(--wa-icon-color-active);
+    background: var(--wa-bg-hover);
 }
 
 .wa-side-panel-content {
