@@ -144,8 +144,10 @@ fi
 load_state
 
 stage_header "START STAGE"
+set +e
 run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"
 start_action_exit=$?
+set -e
 handle_interrupt_exit "$start_action_exit"
 if [[ $start_action_exit -ne 0 ]]; then
   fail_message "START STAGE aborted. Proceeding to cleanup."
