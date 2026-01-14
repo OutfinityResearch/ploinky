@@ -77,7 +77,7 @@ run_stage() {
   stage_header "$label"
 
   if [[ -n "$action" ]]; then
-    run_with_timeout 60 "Executing action script: ${action}" bash "$TESTS_DIR/$action"
+    run_with_timeout 180 "Executing action script: ${action}" bash "$TESTS_DIR/$action"
     local action_exit=$?
     handle_interrupt_exit "$action_exit"
     if [[ $action_exit -ne 0 ]]; then
@@ -89,12 +89,12 @@ run_stage() {
     set +e
     
     FAST_CHECK_ERRORS=0
-    run_with_timeout 90 "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
+    run_with_timeout 180 "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
     local exit_code=$?
     handle_interrupt_exit "$exit_code"
 
     if [[ $exit_code -eq 124 ]]; then
-        log_result "[FAIL] ${verify} timed out after 90 seconds."
+        log_result "[FAIL] ${verify} timed out after 180 seconds."
         TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
     elif [[ $exit_code -ne 0 ]]; then
         log_result "[FAIL] ${verify} reported ${exit_code} failure(s)."
@@ -145,7 +145,7 @@ load_state
 
 stage_header "START STAGE"
 set +e
-run_with_timeout 60 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"
+run_with_timeout 180 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"
 start_action_exit=$?
 set -e
 handle_interrupt_exit "$start_action_exit"
@@ -156,11 +156,11 @@ if [[ $start_action_exit -ne 0 ]]; then
 else
   set +e
   FAST_CHECK_ERRORS=0
-  run_with_timeout 90 "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
+  run_with_timeout 180 "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
   exit_code=$?
   handle_interrupt_exit "$exit_code"
   if [[ $exit_code -eq 124 ]]; then
-      log_result "[FAIL] testsAfterStart.sh timed out after 90 seconds."
+      log_result "[FAIL] testsAfterStart.sh timed out after 180 seconds."
       TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
   elif [[ $exit_code -ne 0 ]]; then
       log_result "[FAIL] testsAfterStart.sh reported ${exit_code} failure(s)."

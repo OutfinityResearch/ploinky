@@ -148,6 +148,19 @@ require_var() {
 }
 
 detect_container_runtime() {
+  # Respect CONTAINER_RUNTIME env var if set (used by CI workflows)
+  if [[ -n "${CONTAINER_RUNTIME:-}" ]]; then
+    if command -v "$CONTAINER_RUNTIME" >/dev/null 2>&1; then
+      if $CONTAINER_RUNTIME ps >/dev/null 2>&1; then
+        echo "$CONTAINER_RUNTIME"
+        return 0
+      fi
+    fi
+    echo "Specified CONTAINER_RUNTIME='${CONTAINER_RUNTIME}' is not available or not working." >&2
+    return 1
+  fi
+
+  # Auto-detect if not specified
   local runtime
   for runtime in docker podman; do
     if command -v "$runtime" >/dev/null 2>&1; then
