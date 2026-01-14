@@ -52,7 +52,7 @@ jobs:
           path: ${{ env.TEST_REPORT_DIR }}/latest.log
 
       - name: Commit updated test report
-        if: success()
+        if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
