@@ -42,7 +42,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "${TEST_REPORT_DIR}"
-          ./tests/cli/test_all.sh | tee "${TEST_REPORT_DIR}/latest.log"
+          ./tests/test_all.sh | tee "${TEST_REPORT_DIR}/latest.log"
 
       - name: Upload test log artifact
         if: always()
