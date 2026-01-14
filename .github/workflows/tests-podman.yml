@@ -14,6 +14,7 @@ jobs:
     env:
       CONTAINER_RUNTIME: podman
       TEST_REPORT_DIR: reports/podman
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
