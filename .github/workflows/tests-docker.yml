@@ -14,6 +14,7 @@ jobs:
     env:
       CONTAINER_RUNTIME: docker
       TEST_REPORT_DIR: reports/docker
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -58,3 +59,4 @@ jobs:
             git push
           else
             echo "No report changes to commit."
+          fi

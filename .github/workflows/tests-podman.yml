@@ -65,3 +65,4 @@ jobs:
             git push
           else
             echo "No report changes to commit."
+          fi
