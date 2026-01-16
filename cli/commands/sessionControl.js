@@ -33,6 +33,30 @@ function killRouterIfRunning() {
             } catch (_) { }
         };
 
+        const findPids = () => {
+            const pids = new Set();
+            try {
+                const out = execSync(`lsof -t -i :${port} -sTCP:LISTEN`, { stdio: 'pipe' }).toString();
+                out.split(/\s+/).filter(Boolean).forEach(x => { const n = parseInt(x, 10); if (!Number.isNaN(n)) pids.add(n); });
+            } catch (_) { }
+            if (!pids.size) {
+                try {
+                    const out = execSync('ss -ltnp', { stdio: 'pipe' }).toString();
+                    out.split(/\n+/).forEach(line => {
+                        if (line.includes(`:${port}`) && line.includes('pid=')) {
+                            const m = line.match(/pid=(\d+)/);
+                            if (m) { const n = parseInt(m[1], 10); if (!Number.isNaN(n)) pids.add(n); }
+                        }
+                    });
+                } catch (_) { }
+            }
+            return Array.from(pids);
+        };
+
+        const isPortFree = () => {
+            return findPids().length === 0;
+        };
+
         if (fs.existsSync(pidFile)) {
             const pid = parseInt(fs.readFileSync(pidFile, 'utf8').trim(), 10);
             if (pid && !Number.isNaN(pid)) {
@@ -57,26 +81,6 @@ function killRouterIfRunning() {
                 } catch (_) { return false; }
             };
 
-            const findPids = () => {
-                const pids = new Set();
-                try {
-                    const out = execSync(`lsof -t -i :${port} -sTCP:LISTEN`, { stdio: 'pipe' }).toString();
-                    out.split(/\s+/).filter(Boolean).forEach(x => { const n = parseInt(x, 10); if (!Number.isNaN(n)) pids.add(n); });
-                } catch (_) { }
-                if (!pids.size) {
-                    try {
-                        const out = execSync('ss -ltnp', { stdio: 'pipe' }).toString();
-                        out.split(/\n+/).forEach(line => {
-                            if (line.includes(`:${port}`) && line.includes('pid=')) {
-                                const m = line.match(/pid=(\d+)/);
-                                if (m) { const n = parseInt(m[1], 10); if (!Number.isNaN(n)) pids.add(n); }
-                            }
-                        });
-                    } catch (_) { }
-                }
-                return Array.from(pids);
-            };
-
             const pids = findPids();
             for (const pid of pids) {
                 if (tryKill(pid)) { stopped = true; }
@@ -90,6 +94,19 @@ function killRouterIfRunning() {
                         stopped = true;
                     } catch (_) { }
                 }
+            }
+        }
+
+        // Wait for the port to be free after killing the process
+        if (stopped) {
+            const maxWait = 50; // 5 seconds max
+            for (let i = 0; i < maxWait; i++) {
+                if (isPortFree()) {
+                    break;
+                }
+                // Synchronous sleep using Atomics
+                const sleepArr = new Int32Array(new SharedArrayBuffer(4));
+                Atomics.wait(sleepArr, 0, 0, 100);
             }
         }
     } catch (_) { }

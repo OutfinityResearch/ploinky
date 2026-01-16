@@ -1,4 +1,5 @@
 import { resolveVarValue } from '../../services/secretVars.js';
+import { getAgentWorkDir } from '../../services/workspaceStructure.js';
 import { configCache } from '../utils/configCache.js';
 import { logBootEvent } from '../utils/logger.js';
 import { getAppName } from '../authHandlers.js';
@@ -137,15 +138,25 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
         source: commands?.source || 'unset',
         agentName: commands?.agentName || ''
     });
+    const resolveHostWorkdir = (config) => {
+        const agentName = config?.agentName || '';
+        if (!agentName) return process.cwd();
+        try {
+            return getAgentWorkDir(agentName);
+        } catch (_) {
+            return process.cwd();
+        }
+    };
 
     const buildFactoryResult = (config) => {
         if (!pty) {
             logBootEvent('webchat_factory_disabled', { reason: 'pty_unavailable' });
             return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '' };
         }
+        const hostWorkdir = resolveHostWorkdir(config);
         if (createWebChatLocalFactory) {
             const command = config.hostCommand;
-            const factory = buildLocalFactory(createWebChatLocalFactory, pty, { command });
+            const factory = buildLocalFactory(createWebChatLocalFactory, pty, { command, workdir: hostWorkdir });
             if (factory) {
                 logBootEvent('webchat_local_process_factory_ready', {
                     command: command || null,
@@ -162,7 +173,13 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
         if (createWebChatTTYFactory) {
             const entry = config.containerCommand;
             const containerLabel = config.agentName || 'webchat_agent';
-            const factory = createWebChatTTYFactory({ ptyLib: pty, runtime: 'docker', containerName: containerLabel, entry });
+            const factory = createWebChatTTYFactory({
+                ptyLib: pty,
+                runtime: 'docker',
+                containerName: containerLabel,
+                entry,
+                workdir: '/code'
+            });
             logBootEvent('webchat_container_factory_ready', {
                 containerName: containerLabel,
                 command: entry || null,
@@ -180,7 +197,10 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
     };
 
     return (commandsOverride = null) => {
-        const commands = commandsOverride || resolvedWebchatCommands;
+        let commands = commandsOverride || resolvedWebchatCommands;
+        if (!commandsOverride && (!commands || (!commands.host && !commands.container && !commands.agentName))) {
+            commands = resolveWebchatCommands();
+        }
         if (!commands) {
             return { factory: null, label: '-', runtime: 'disabled', agentName: '' };
         }

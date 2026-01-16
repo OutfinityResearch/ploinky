@@ -37,6 +37,7 @@ import {
 } from './envVarCommands.js';
 import { runSettingsMenu } from '../services/settingsMenu.js';
 import { configureWebttyShell } from './webttyCommands.js';
+import { handleProfileCommand } from './profileCommands.js';
 import {
     cleanupSessionContainers,
     destroyAll,
@@ -99,7 +100,16 @@ async function handleCommand(args) {
             break;
         // 'agent' command removed; use 'enable agent <agentName>' then 'start'
         case 'add':
-            if (options[0] === 'repo') addRepo(options[1], options[2]);
+            if (options[0] === 'repo') {
+                const branchIdx = options.indexOf('--branch');
+                let branch = null;
+                if (branchIdx !== -1 && options[branchIdx + 1]) {
+                    branch = options[branchIdx + 1];
+                } else if (options[3] && !options[3].startsWith('--')) {
+                    branch = options[3];
+                }
+                addRepo(options[1], options[2], branch);
+            }
             else showHelp();
             break;
         case 'vars':
@@ -120,7 +130,16 @@ async function handleCommand(args) {
             if (options[0] === 'agent' && options[1]) await refreshAgent(options[1]); else showHelp();
             break;
         case 'enable':
-            if (options[0] === 'repo') enableRepo(options[1]);
+            if (options[0] === 'repo') {
+                const branchIdx = options.indexOf('--branch');
+                let branch = null;
+                if (branchIdx !== -1 && options[branchIdx + 1]) {
+                    branch = options[branchIdx + 1];
+                } else if (options[2] && !options[2].startsWith('--')) {
+                    branch = options[2];
+                }
+                enableRepo(options[1], branch);
+            }
             else if (options[0] === 'agent') {
                 const parsed = parseEnableAgentArgs(options.slice(1));
                 await enableAgent(parsed.agentName, parsed.mode, parsed.repoName, parsed.alias);
@@ -443,6 +462,10 @@ async function handleCommand(args) {
         }
         case 'set': {
             console.log("Command renamed to '/settings'.");
+            break;
+        }
+        case 'profile': {
+            await handleProfileCommand(options);
             break;
         }
         default: {

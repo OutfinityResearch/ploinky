@@ -24,7 +24,8 @@ const rawCommands = {
     var: [],
     vars: [],
     echo: [],
-    help: []
+    help: [],
+    profile: ['list', 'validate', 'show']
 };
 
 for (const key of Object.keys(rawCommands)) {

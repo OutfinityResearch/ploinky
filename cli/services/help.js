@@ -15,7 +15,7 @@ export function showHelp(args = []) {
 ╔═══ PLOINKY ═══╗ Container Development & Cloud Platform
 
 ▶ LOCAL DEVELOPMENT
-  add repo <name> [url]          Add repository (basic/cloud/vibe/security/extra/demo)
+  add repo <name> [url] [branch] Add repository (basic/cloud/vibe/security/extra/demo)
   update repo <name>             Pull latest changes from remote for a repository
   start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
@@ -60,19 +60,22 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Add repositories or environment variables',
             subcommands: {
                 'repo': {
-                    syntax: 'add repo <name> [url]',
+                    syntax: 'add repo <name> [url] [branch] | add repo <name> [url] --branch <branch>',
                     description: 'Add an agent repository to your local environment',
                     params: {
                         '<name>': 'Repository name (cloud/vibe/security/extra for predefined, or custom name)',
-                        '[url]': 'Git URL for custom repositories (optional for predefined repos)'
+                        '[url]': 'Git URL for custom repositories (optional for predefined repos)',
+                        '[branch]': 'Git branch to clone (optional, defaults to repository default branch)'
                     },
                     examples: [
                         'add repo cloud           # Add predefined cloud repository',
-                        'add repo myrepo https://github.com/user/repo.git  # Add custom repo'
+                        'add repo myrepo https://github.com/user/repo.git  # Add custom repo',
+                        'add repo basic profile_implementation  # Add basic repo at specific branch',
+                        'add repo myrepo https://github.com/user/repo.git --branch feature  # Add with branch flag'
                     ],
-                    notes: 'Predefined repos: cloud (AWS/Azure/GCP), vibe (social), security (auth/crypto), extra (utilities)'
+                    notes: 'Predefined repos: cloud (AWS/Azure/GCP), vibe (social), security (auth/crypto), extra (utilities). Branch can be specified as a positional argument or with --branch flag.'
                 },
-                
+
             }
         },
         'var': {
@@ -202,9 +205,19 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Enable features for agents and repos',
             subcommands: {
                 'repo': {
-                    syntax: 'enable repo <name>',
-                    description: 'Enable a repository for agent listings (see list repos)',
-                    examples: [ 'enable repo cloud', 'enable repo basic' ]
+                    syntax: 'enable repo <name> [branch] | enable repo <name> --branch <branch>',
+                    description: 'Enable a repository for agent listings (see list repos). If not already installed, clones the repository.',
+                    params: {
+                        '<name>': 'Repository name (predefined or custom)',
+                        '[branch]': 'Git branch to clone (optional, only used when cloning)'
+                    },
+                    examples: [
+                        'enable repo cloud',
+                        'enable repo basic',
+                        'enable repo basic profile_implementation  # Enable and clone at specific branch',
+                        'enable repo demo --branch feature  # Enable with branch flag'
+                    ],
+                    notes: 'Branch is only used when the repository needs to be cloned. If the repo is already installed, the branch argument is ignored.'
                 },
                 'agent': {
                     syntax: 'enable agent <name|repo/name> [global|devel [repoName]] [as <alias>]',

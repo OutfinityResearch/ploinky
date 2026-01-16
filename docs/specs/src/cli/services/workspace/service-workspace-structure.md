@@ -83,16 +83,25 @@ export function createAgentSymlinks(agentName, repoName, agentPath) {
     const codeTargetPath = path.join(agentPath, 'code');
     const actualCodeTarget = fs.existsSync(codeTargetPath) ? codeTargetPath : agentPath;
 
-    // Remove existing symlink
-    if (fs.existsSync(codeSymlinkPath) || fs.lstatSync(codeSymlinkPath).isSymbolicLink?.()) {
-        try { fs.unlinkSync(codeSymlinkPath); } catch (_) {}
-    }
-
+    // Remove existing symlink, warn if blocked by real directory
+    let codeBlocked = false;
     try {
-        fs.symlinkSync(actualCodeTarget, codeSymlinkPath, 'dir');
-    } catch (err) {
-        if (err.code !== 'EEXIST') {
-            console.error(`Failed to create code symlink for ${agentName}: ${err.message}`);
+        const stat = fs.lstatSync(codeSymlinkPath);
+        if (stat.isSymbolicLink()) {
+            fs.unlinkSync(codeSymlinkPath);
+        } else {
+            console.warn(`Warning: ${codeSymlinkPath} exists and is not a symlink. Skipping code symlink for ${agentName}.`);
+            codeBlocked = true;
+        }
+    } catch (_) {}
+
+    if (!codeBlocked) {
+        try {
+            fs.symlinkSync(actualCodeTarget, codeSymlinkPath, 'dir');
+        } catch (err) {
+            if (err.code !== 'EEXIST') {
+                console.error(`Failed to create code symlink for ${agentName}: ${err.message}`);
+            }
         }
     }
 
@@ -101,17 +110,24 @@ export function createAgentSymlinks(agentName, repoName, agentPath) {
     const skillsTargetPath = path.join(agentPath, '.AchillesSkills');
 
     if (fs.existsSync(skillsTargetPath)) {
+        let skillsBlocked = false;
         try {
-            if (fs.existsSync(skillsSymlinkPath) || fs.lstatSync(skillsSymlinkPath).isSymbolicLink?.()) {
+            const stat = fs.lstatSync(skillsSymlinkPath);
+            if (stat.isSymbolicLink()) {
                 fs.unlinkSync(skillsSymlinkPath);
+            } else {
+                console.warn(`Warning: ${skillsSymlinkPath} exists and is not a symlink. Skipping skills symlink for ${agentName}.`);
+                skillsBlocked = true;
             }
         } catch (_) {}
 
-        try {
-            fs.symlinkSync(skillsTargetPath, skillsSymlinkPath, 'dir');
-        } catch (err) {
-            if (err.code !== 'EEXIST') {
-                console.error(`Failed to create skills symlink for ${agentName}: ${err.message}`);
+        if (!skillsBlocked) {
+            try {
+                fs.symlinkSync(skillsTargetPath, skillsSymlinkPath, 'dir');
+            } catch (err) {
+                if (err.code !== 'EEXIST') {
+                    console.error(`Failed to create skills symlink for ${agentName}: ${err.message}`);
+                }
             }
         }
     }
@@ -132,14 +148,15 @@ export function removeAgentSymlinks(agentName) {
     const codeSymlinkPath = path.join(cwd, 'code', agentName);
     const skillsSymlinkPath = path.join(cwd, 'skills', agentName);
 
+    // Only remove if it's a symlink (don't accidentally delete real directories)
     try {
-        if (fs.existsSync(codeSymlinkPath) || fs.lstatSync(codeSymlinkPath).isSymbolicLink()) {
+        if (fs.lstatSync(codeSymlinkPath).isSymbolicLink()) {
             fs.unlinkSync(codeSymlinkPath);
         }
     } catch (_) {}
 
     try {
-        if (fs.existsSync(skillsSymlinkPath) || fs.lstatSync(skillsSymlinkPath).isSymbolicLink()) {
+        if (fs.lstatSync(skillsSymlinkPath).isSymbolicLink()) {
             fs.unlinkSync(skillsSymlinkPath);
         }
     } catch (_) {}
@@ -359,9 +376,10 @@ workspace/
 
 | Host Path | Container Path | Mode |
 |-----------|----------------|------|
-| agents/<agent>/ | /agent | rw (always) |
+| $CWD | $CWD | rw (CWD passthrough for runtime data) |
 | code/<agent>/ | /code | rw (dev) / ro (qa/prod) |
-| skills/<agent>/ | /.AchillesSkills | rw (dev) / ro (qa/prod) |
+| agents/<agent>/node_modules/ | /code/node_modules | ro (always) |
+| skills/<agent>/ | /code/.AchillesSkills | rw (dev) / ro (qa/prod) |
 
 ## Usage Example
 

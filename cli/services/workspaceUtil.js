@@ -253,26 +253,35 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     const routerPath = path.resolve(__dirname, '../server/Watchdog.js');
     const updateRoutes = async () => {
       cfg.routes = cfg.routes || {};
+      const failedAgents = [];
       for (const name of names) {
         const rec = reg[name];
         if (!rec || !rec.agentName) continue;
         const shortAgentName = rec.agentName;
         const manifestRef = rec.repoName ? `${rec.repoName}/${shortAgentName}` : shortAgentName;
-        const manifestPath0 = findAgentManifest(manifestRef);
-        const manifest = JSON.parse(fs.readFileSync(manifestPath0, 'utf8'));
-        const agentPath = path.dirname(manifestPath0);
-        const repoName = rec.repoName || path.basename(path.dirname(agentPath));
-        const routeKey = rec.alias || shortAgentName;
-        const { containerName, hostPort } = ensureAgentService(shortAgentName, manifest, agentPath, { containerName: name, alias: rec.alias });
-        cfg.routes[routeKey] = cfg.routes[routeKey] || {};
-        cfg.routes[routeKey].container = containerName;
-        cfg.routes[routeKey].hostPath = agentPath;
-        cfg.routes[routeKey].repo = repoName;
-        cfg.routes[routeKey].agent = shortAgentName;
-        if (rec.alias) cfg.routes[routeKey].alias = rec.alias;
-        cfg.routes[routeKey].hostPort = hostPort || cfg.routes[routeKey].hostPort;
+        try {
+          const manifestPath0 = findAgentManifest(manifestRef);
+          const manifest = JSON.parse(fs.readFileSync(manifestPath0, 'utf8'));
+          const agentPath = path.dirname(manifestPath0);
+          const repoName = rec.repoName || path.basename(path.dirname(agentPath));
+          const routeKey = rec.alias || shortAgentName;
+          const { containerName, hostPort } = ensureAgentService(shortAgentName, manifest, agentPath, { containerName: name, alias: rec.alias });
+          cfg.routes[routeKey] = cfg.routes[routeKey] || {};
+          cfg.routes[routeKey].container = containerName;
+          cfg.routes[routeKey].hostPath = agentPath;
+          cfg.routes[routeKey].repo = repoName;
+          cfg.routes[routeKey].agent = shortAgentName;
+          if (rec.alias) cfg.routes[routeKey].alias = rec.alias;
+          cfg.routes[routeKey].hostPort = hostPort || cfg.routes[routeKey].hostPort;
+        } catch (agentErr) {
+          console.error(`[start] Failed to start agent '${shortAgentName}': ${agentErr.message}`);
+          failedAgents.push(shortAgentName);
+        }
       }
       fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+      if (failedAgents.length > 0) {
+        console.warn(`[start] ${failedAgents.length} agent(s) failed to start: ${failedAgents.join(', ')}`);
+      }
     };
     await updateRoutes();
     const routerPidFile = path.join(runningDir, 'router.pid');
@@ -319,6 +328,7 @@ async function runCli(agentName, args) {
   const { ensureAgentService, attachInteractive, getConfiguredProjectPath, getAgentContainerName } = dockerSvc;
   const agentDir = path.dirname(manifestPath);
   const repoName = path.basename(path.dirname(agentDir));
+  utils.debugLog(`[runCli] agent=${agentName} container=${registryRecord?.containerName || getAgentContainerName(shortAgentName, repoName)}`);
   const containerInfo = ensureAgentService(shortAgentName, manifest, agentDir, { containerName: registryRecord?.containerName, alias: registryRecord?.record?.alias });
   const containerName = (containerInfo && containerInfo.containerName)
     || registryRecord?.containerName
@@ -395,7 +405,11 @@ async function refreshAgent(agentName) {
         
         stopAndRemove(containerName);
         
-        const { containerName: newContainerName, hostPort } = await ensureAgentService(short, manifest, agentPath, { containerName, alias: registryRecord?.record?.alias });
+        const { containerName: newContainerName, hostPort } = await ensureAgentService(short, manifest, agentPath, {
+            containerName,
+            alias: registryRecord?.record?.alias,
+            forceRecreate: true
+        });
         console.log(`[refresh] refreshed '${short}' [container: ${newContainerName}]`);
 
         // Routing update logic from original restart command
@@ -413,6 +427,22 @@ async function refreshAgent(agentName) {
             cfg.routes[routeKey].agent = short;
             if (registryRecord?.record.alias) cfg.routes[routeKey].alias = registryRecord.record.alias;
             if (hostPort) cfg.routes[routeKey].hostPort = hostPort;
+
+            const savedCfg = workspaceSvc.getConfig();
+            if (!cfg.static && savedCfg?.static?.agent) {
+                cfg.static = { ...savedCfg.static };
+            }
+            const staticAgent = String(cfg.static?.agent || '').trim();
+            if (staticAgent) {
+                const matches = new Set([short, `${repoName}/${short}`, `${repoName}:${short}`]);
+                if (registryRecord?.record?.alias) {
+                    matches.add(registryRecord.record.alias);
+                }
+                if (matches.has(staticAgent)) {
+                    cfg.static.container = newContainerName;
+                    cfg.static.hostPath = agentPath;
+                }
+            }
             
             let port = 8080;
             if (cfg && cfg.port) { port = parseInt(cfg.port, 10) || port; }

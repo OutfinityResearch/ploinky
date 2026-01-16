@@ -3,7 +3,21 @@
 
 const DEFAULT_PROTOCOL_VERSION = '2025-06-18';
 const JSONRPC_VERSION = '2.0';
-const TASK_POLL_INTERVAL_MS = 30000;
+const DEFAULT_TASK_POLL_INTERVAL_MS = 5000;
+const TASK_POLL_INTERVAL_MS = (() => {
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            const raw = process.env.PLOINKY_MCP_TASK_POLL_INTERVAL_MS;
+            const parsed = Number.parseInt(raw, 10);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+    } catch {
+        // ignore env parsing errors
+    }
+    return DEFAULT_TASK_POLL_INTERVAL_MS;
+})();
 
 function resolveBaseUrl(baseUrl) {
     try {

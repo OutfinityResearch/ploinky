@@ -43,11 +43,16 @@ function resolveStaticAgentDetails(routingFilePath) {
 }
 
 function resolveCliTarget(record = {}, fallbackName = '') {
+    // Priority: alias > agent name (fallback) > container name
+    // The CLI command expects agent names or aliases, not container names
     const alias = trimCommand(record.alias);
     if (alias) return alias;
+    // Prefer agent name over container name - container names cause lookup issues
+    const agentName = trimCommand(fallbackName);
+    if (agentName) return agentName;
     const container = trimCommand(record.container);
     if (container) return container;
-    return trimCommand(fallbackName);
+    return '';
 }
 
 function resolveWebchatCommands(options = {}) {

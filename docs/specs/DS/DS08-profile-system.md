@@ -626,7 +626,8 @@ Error: Missing required secrets for profile 'prod'
   Ensure these secrets are:
     1. Set in GitHub Actions repository secrets, OR
     2. Defined in .ploinky/.secrets file, OR
-    3. Set as environment variables
+    3. Set in a local .env file, OR
+    4. Set as environment variables
 
   Run 'ploinky profile validate prod' for more details.
 ```

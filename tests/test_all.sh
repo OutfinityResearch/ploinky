@@ -11,6 +11,11 @@ set -euo pipefail
 
 TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
+# Load branch configuration if present
+if [[ -f "$TESTS_DIR/branch_config.sh" ]]; then
+    source "$TESTS_DIR/branch_config.sh"
+fi
+
 # State file for sharing variables between scripts
 FAST_STATE_FILE=$(mktemp "${TMPDIR:-/tmp}/fast-suite-state-XXXXXX.env")
 export FAST_STATE_FILE
@@ -67,6 +72,11 @@ source "$TESTS_DIR/lib.sh"
 # Initialize/clear the results file at the start of the run
 init_results
 
+# Default timeouts (seconds)
+ACTION_TIMEOUT="${FAST_ACTION_TIMEOUT:-180}"
+VERIFY_TIMEOUT="${FAST_VERIFY_TIMEOUT:-180}"
+START_ACTION_TIMEOUT="${FAST_START_ACTION_TIMEOUT:-240}"
+
 # Function to run a single stage of the test suite.
 # A stage consists of an "action" (do*) and a "verification" (tests*).
 run_stage() {
@@ -77,7 +87,7 @@ run_stage() {
   stage_header "$label"
 
   if [[ -n "$action" ]]; then
-    run_with_timeout 180 "Executing action script: ${action}" bash "$TESTS_DIR/$action"
+    run_with_timeout "$ACTION_TIMEOUT" "Executing action script: ${action}" bash "$TESTS_DIR/$action"
     local action_exit=$?
     handle_interrupt_exit "$action_exit"
     if [[ $action_exit -ne 0 ]]; then
@@ -89,12 +99,12 @@ run_stage() {
     set +e
     
     FAST_CHECK_ERRORS=0
-    run_with_timeout 180 "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
+    run_with_timeout "$VERIFY_TIMEOUT" "Running verification script: ${verify}" bash "$TESTS_DIR/$verify"
     local exit_code=$?
     handle_interrupt_exit "$exit_code"
 
     if [[ $exit_code -eq 124 ]]; then
-        log_result "[FAIL] ${verify} timed out after 180 seconds."
+        log_result "[FAIL] ${verify} timed out after ${VERIFY_TIMEOUT} seconds."
         TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
     elif [[ $exit_code -ne 0 ]]; then
         log_result "[FAIL] ${verify} reported ${exit_code} failure(s)."
@@ -145,7 +155,7 @@ load_state
 
 stage_header "START STAGE"
 set +e
-run_with_timeout 180 "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"
+run_with_timeout "$START_ACTION_TIMEOUT" "Executing action script: doStart.sh with args" bash "$TESTS_DIR/doStart.sh" "$TEST_AGENT_NAME" "$TEST_ROUTER_PORT"
 start_action_exit=$?
 set -e
 handle_interrupt_exit "$start_action_exit"
@@ -156,11 +166,11 @@ if [[ $start_action_exit -ne 0 ]]; then
 else
   set +e
   FAST_CHECK_ERRORS=0
-  run_with_timeout 180 "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
+  run_with_timeout "$VERIFY_TIMEOUT" "Running verification script: testsAfterStart.sh" bash "$TESTS_DIR/testsAfterStart.sh"
   exit_code=$?
   handle_interrupt_exit "$exit_code"
   if [[ $exit_code -eq 124 ]]; then
-      log_result "[FAIL] testsAfterStart.sh timed out after 180 seconds."
+      log_result "[FAIL] testsAfterStart.sh timed out after ${VERIFY_TIMEOUT} seconds."
       TOTAL_ERRORS=$((TOTAL_ERRORS + 1))
   elif [[ $exit_code -ne 0 ]]; then
       log_result "[FAIL] testsAfterStart.sh reported ${exit_code} failure(s)."

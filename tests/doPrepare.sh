@@ -137,7 +137,7 @@ mkdir -p "$dep_agent_root"
 cat >"${dep_agent_root}/manifest.json" <<'EOF'
 {
   "container": "node:20-bullseye",
-  "postinstall": "echo 'postinstall_ok' > ./postinstall_marker.txt"
+  "postinstall": "echo 'postinstall_ok' > \"$WORKSPACE_PATH/postinstall_marker.txt\""
 }
 EOF
 
@@ -165,8 +165,8 @@ EOF
 test_info "Enabling repository ${TEST_REPO_NAME}."
 ploinky enable repo "$TEST_REPO_NAME"
 
-test_info "Enabling repository demo."
-ploinky enable repo demo
+# Use helper function to enable demo repo with optional branch from environment
+enable_repo_with_branch "demo"
 
 test_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_QUALIFIED"
@@ -261,7 +261,7 @@ health_agent_container_name=$(compute_container_name "$HEALTH_AGENT_NAME" "$TEST
 write_state_var "TEST_HEALTH_AGENT_CONT_NAME" "$health_agent_container_name"
 test_info "Health probe container will be named: $health_agent_container_name"
 
-workspace_project="$TEST_RUN_DIR/$TEST_AGENT_NAME"
+workspace_project="$TEST_RUN_DIR/agents/$TEST_AGENT_NAME"
 write_state_var "TEST_AGENT_WORKSPACE" "$workspace_project"
 write_state_var "TEST_PERSIST_FILE" "$workspace_project/data/fast-persist.txt"
 write_state_var "TEST_AGENT_LOG" "$workspace_project/fast-start.log"

@@ -8,8 +8,8 @@ check_preinstall_run() {
     return 1
   fi
 
-  if ! grep -Fq "Running preinstall for 'explorer'" "$log_path"; then
-    echo "Preinstall entry for explorer not found in '$log_path'." >&2
+  if ! grep -Fq "[install] explorer:" "$log_path"; then
+    echo "Install entry for explorer not found in '$log_path'." >&2
     echo "--- start log tail ---" >&2
     tail -n 40 "$log_path" >&2
     echo "----------------------" >&2

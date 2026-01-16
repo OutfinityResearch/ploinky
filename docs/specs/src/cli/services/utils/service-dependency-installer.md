@@ -13,7 +13,7 @@ Manages npm dependency installation inside agent containers. Implements the depe
 ```javascript
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { containerRuntime } from './docker/common.js';
 import { TEMPLATES_DIR } from './config.js';
 import { getAgentWorkDir, getAgentCodePath, getPackageBaseTemplatePath } from './workspaceStructure.js';
@@ -39,6 +39,133 @@ function dockerExec(containerName, command, options = {}) {
     const cmd = `${containerRuntime} exec ${containerName} sh -c "${command.replace(/"/g, '\\"')}"`;
     debugLog(`dockerExec: ${cmd}`);
     return execSync(cmd, { stdio: options.stdio || 'pipe', ...options }).toString().trim();
+}
+```
+
+### writeFileInContainer(containerName, filePath, content)
+
+**Purpose**: Writes a file inside a running container via stdin
+
+**Parameters**:
+- `containerName` (string): Target container name
+- `filePath` (string): Destination path inside container
+- `content` (string): File content
+
+**Behavior**:
+- Uses `docker exec -i` with `cat >` to avoid shell-escaping issues
+
+**Implementation**:
+```javascript
+function writeFileInContainer(containerName, filePath, content) {
+    const cmd = `${containerRuntime} exec -i ${containerName} sh -c "cat > ${filePath}"`;
+    debugLog(`dockerExec: ${cmd}`);
+    execSync(cmd, { input: content });
+}
+```
+
+### ensureGitAvailable(containerName, log)
+
+**Purpose**: Ensures `git` is present for npm installs that pull from GitHub
+
+**Parameters**:
+- `containerName` (string): Target container name
+- `log` (Function): Logger (debugLog or console.log)
+
+**Returns**: `{ success: boolean, message: string }`
+
+**Behavior**:
+- Checks `git --version`
+- Installs git via `apk` or `apt-get` when missing
+- Returns failure when no package manager is available
+
+**Implementation**:
+```javascript
+function ensureGitAvailable(containerName, log = debugLog) {
+    try {
+        dockerExec(containerName, 'git --version');
+        return { success: true, message: 'git available' };
+    } catch (_) {}
+
+    const installers = [
+        { name: 'apk', check: 'command -v apk', command: 'apk add --no-cache git' },
+        { name: 'apt-get', check: 'command -v apt-get', command: 'apt-get update && apt-get install -y git' }
+    ];
+
+    for (const installer of installers) {
+        try {
+            dockerExec(containerName, installer.check);
+        } catch (_) {
+            continue;
+        }
+
+        try {
+            log(`[deps] Installing git via ${installer.name}...`);
+            dockerExec(containerName, installer.command, { maxBuffer: 1024 * 1024 * 10 });
+            return { success: true, message: `git installed via ${installer.name}` };
+        } catch (err) {
+            log(`[deps] git install via ${installer.name} failed: ${err.message}`);
+        }
+    }
+
+    return { success: false, message: 'git is required to install dependencies but could not be installed' };
+}
+```
+
+### ensureBuildTools(containerName, log)
+
+**Purpose**: Ensures native build tooling (python/make/g++) is available for node-gyp
+
+**Parameters**:
+- `containerName` (string): Target container name
+- `log` (Function): Logger (debugLog or console.log)
+
+**Returns**: `{ success: boolean, message: string }`
+
+**Behavior**:
+- Checks for `python3`, `make`, and `g++`
+- Installs build tools via `apk` or `apt-get` when missing
+- Returns failure when tooling cannot be installed
+
+**Implementation**:
+```javascript
+function ensureBuildTools(containerName, log = debugLog) {
+    const requiredCommands = ['python3', 'make', 'g++'];
+    const missing = [];
+
+    for (const command of requiredCommands) {
+        try {
+            dockerExec(containerName, `command -v ${command}`);
+        } catch (_) {
+            missing.push(command);
+        }
+    }
+
+    if (!missing.length) {
+        return { success: true, message: 'build tools available' };
+    }
+
+    const installers = [
+        { name: 'apk', check: 'command -v apk', command: 'apk add --no-cache python3 make g++' },
+        { name: 'apt-get', check: 'command -v apt-get', command: 'apt-get update && apt-get install -y python3 make g++' }
+    ];
+
+    for (const installer of installers) {
+        try {
+            dockerExec(containerName, installer.check);
+        } catch (_) {
+            continue;
+        }
+
+        try {
+            log(`[deps] Installing build tools via ${installer.name}...`);
+            dockerExec(containerName, installer.command, { maxBuffer: 1024 * 1024 * 10 });
+            return { success: true, message: `build tools installed via ${installer.name}` };
+        } catch (err) {
+            log(`[deps] build tool install via ${installer.name} failed: ${err.message}`);
+        }
+    }
+
+    return { success: false, message: `Missing build tools: ${missing.join(', ')}` };
 }
 ```
 
@@ -214,26 +341,87 @@ function setupAgentWorkDir(agentName) {
 
 **Checks**:
 1. /code/package.json exists
-2. /agent/node_modules exists
-3. /agent/node_modules is not empty
+2. $WORKSPACE_PATH/node_modules exists (via CWD passthrough mount)
+3. node_modules is not empty
 
 **Implementation**:
 ```javascript
-function needsReinstall(containerName, agentName) {
+function needsReinstall(containerName, agentName, agentWorkDir) {
+    // agentWorkDir = $CWD/agents/<agentName>/ (accessible via CWD passthrough mount)
+
     // Check if package.json exists in /code
     if (!fileExistsInContainer(containerName, '/code/package.json')) {
         return { needsInstall: false, reason: 'No package.json found in /code' };
     }
 
-    // Check if node_modules exists
-    if (!dirExistsInContainer(containerName, '/agent/node_modules')) {
+    // Check if node_modules exists (via CWD passthrough mount)
+    if (!dirExistsInContainer(containerName, `${agentWorkDir}/node_modules`)) {
         return { needsInstall: true, reason: 'node_modules directory does not exist' };
     }
 
     // Check if node_modules is empty
     try {
-        const output = dockerExec(containerName, 'ls /agent/node_modules 2>/dev/null | head -1');
+        const output = dockerExec(containerName, `ls "${agentWorkDir}/node_modules" 2>/dev/null | head -1`);
         if (!output) {
+            return { needsInstall: true, reason: 'node_modules directory is empty' };
+        }
+    } catch (_) {
+        return { needsInstall: true, reason: 'Cannot read node_modules directory' };
+    }
+
+    return { needsInstall: false, reason: 'Dependencies already installed' };
+}
+```
+
+### resolveAgentPackagePath(agentName, agentPath)
+
+**Purpose**: Locates an agent's `package.json` on the host filesystem
+
+**Parameters**:
+- `agentName` (string): Agent name
+- `agentPath` (string, optional): Agent root path
+
+**Returns**: (string|null) Path to package.json or null
+
+**Behavior**:
+- Checks the workspace symlink under `code/<agentName>`
+- Falls back to `<agentPath>/code/package.json` or `<agentPath>/package.json`
+
+### needsHostInstall(agentName, options)
+
+**Purpose**: Determines whether dependency installation is needed based on host cache state
+
+**Parameters**:
+- `agentName` (string): Agent name
+- `options` (Object):
+  - `agentPath` (string, optional): Agent root path
+  - `packagePath` (string, optional): Resolved package.json path
+
+**Returns**: `{ needsInstall: boolean, reason: string }`
+
+**Checks**:
+1. package.json exists on host (skip if missing)
+2. `agents/<agentName>/node_modules` exists
+3. node_modules contains at least one entry
+
+**Implementation**:
+```javascript
+function needsHostInstall(agentName, options = {}) {
+    const { agentPath, packagePath } = options;
+    const resolvedPackagePath = packagePath || resolveAgentPackagePath(agentName, agentPath);
+
+    if (!resolvedPackagePath) {
+        return { needsInstall: false, reason: 'No package.json found' };
+    }
+
+    const nodeModulesPath = path.join(getAgentWorkDir(agentName), 'node_modules');
+    if (!fs.existsSync(nodeModulesPath)) {
+        return { needsInstall: true, reason: 'node_modules directory does not exist' };
+    }
+
+    try {
+        const entries = fs.readdirSync(nodeModulesPath);
+        if (!entries.length) {
             return { needsInstall: true, reason: 'node_modules directory is empty' };
         }
     } catch (_) {
@@ -259,17 +447,20 @@ function needsReinstall(containerName, agentName) {
 
 **Installation Steps**:
 1. Check if /code/package.json exists (skip if not)
-2. Check if /agent/node_modules cached (skip if cached unless force)
-3. Create /agent directory
+2. Check if $WORKSPACE_PATH/node_modules cached (skip if cached unless force)
+3. Create agent work directory via CWD passthrough mount
 4. Read core package.base.json template
 5. Read agent's /code/package.json
 6. Merge packages (core takes precedence)
-7. Write merged package.json to /agent/package.json
-8. Run npm install in /agent
+7. Write merged package.json to agent work dir
+8. Ensure git is available (apk/apt-get)
+9. Ensure build tools are available (python3/make/g++)
+10. Run npm install in agent work dir
 
 **Implementation**:
 ```javascript
-async function installDependencies(containerName, agentName, options = {}) {
+function installDependencies(containerName, agentName, agentWorkDir, options = {}) {
+    // agentWorkDir = $CWD/agents/<agentName>/ (accessible via CWD passthrough mount)
     const { force = false, verbose = false } = options;
     const log = verbose ? console.log : debugLog;
 
@@ -281,7 +472,7 @@ async function installDependencies(containerName, agentName, options = {}) {
 
     // Step 2: Check cache
     if (!force) {
-        const { needsInstall, reason } = needsReinstall(containerName, agentName);
+        const { needsInstall, reason } = needsReinstall(containerName, agentName, agentWorkDir);
         if (!needsInstall) {
             log(`[deps] Using cached node_modules for ${agentName}: ${reason}`);
             return { success: true, message: `Using cached node_modules: ${reason}` };
@@ -290,8 +481,8 @@ async function installDependencies(containerName, agentName, options = {}) {
     }
 
     try {
-        // Step 3: Create /agent directory
-        dockerExec(containerName, 'mkdir -p /agent');
+        // Step 3: Create agent work directory via CWD mount
+        dockerExec(containerName, `mkdir -p "${agentWorkDir}"`);
 
         // Step 4-5: Read packages
         const corePackage = readPackageBaseTemplate();
@@ -303,12 +494,21 @@ async function installDependencies(containerName, agentName, options = {}) {
         const mergedJson = JSON.stringify(mergedPackage, null, 2);
 
         // Step 7: Write merged package.json
-        const escapedJson = mergedJson.replace(/'/g, "'\\''");
-        dockerExec(containerName, `echo '${escapedJson}' > /agent/package.json`);
+        writeFileInContainer(containerName, `${agentWorkDir}/package.json`, mergedJson);
 
-        // Step 8: Run npm install
+        const gitResult = ensureGitAvailable(containerName, log);
+        if (!gitResult.success) {
+            return { success: false, message: gitResult.message };
+        }
+
+        const toolsResult = ensureBuildTools(containerName, log);
+        if (!toolsResult.success) {
+            return { success: false, message: toolsResult.message };
+        }
+
+        // Step 10: Run npm install in agent work dir
         console.log(`[deps] Installing dependencies for ${agentName}... (this may take a while)`);
-        execSync(`${containerRuntime} exec -w /agent ${containerName} npm install`, {
+        execSync(`${containerRuntime} exec -w "${agentWorkDir}" ${containerName} npm install`, {
             stdio: 'inherit',
             timeout: 600000 // 10 minute timeout
         });
@@ -333,21 +533,31 @@ async function installDependencies(containerName, agentName, options = {}) {
 
 **Implementation**:
 ```javascript
-async function installCoreDependencies(containerName, agentName) {
+function installCoreDependencies(containerName, agentName, agentWorkDir) {
+    // agentWorkDir = $CWD/agents/<agentName>/ (accessible via CWD mount)
     try {
         debugLog(`[deps] Installing core dependencies for ${agentName}...`);
 
-        // Ensure /agent directory exists
-        dockerExec(containerName, 'mkdir -p /agent');
+        // Ensure agent work directory exists via CWD mount
+        dockerExec(containerName, `mkdir -p "${agentWorkDir}"`);
 
         // Copy core package.json
         const corePackage = readPackageBaseTemplate();
         const coreJson = JSON.stringify(corePackage, null, 2);
-        const escapedJson = coreJson.replace(/'/g, "'\\''");
-        dockerExec(containerName, `echo '${escapedJson}' > /agent/package.json`);
+        writeFileInContainer(containerName, `${agentWorkDir}/package.json`, coreJson);
 
-        // Run npm install
-        execSync(`${containerRuntime} exec -w /agent ${containerName} npm install`, {
+        const gitResult = ensureGitAvailable(containerName);
+        if (!gitResult.success) {
+            return { success: false, message: gitResult.message };
+        }
+
+        const toolsResult = ensureBuildTools(containerName);
+        if (!toolsResult.success) {
+            return { success: false, message: toolsResult.message };
+        }
+
+        // Run npm install in agent work dir
+        execSync(`${containerRuntime} exec -w "${agentWorkDir}" ${containerName} npm install`, {
             stdio: 'inherit',
             timeout: 600000
         });
@@ -359,19 +569,21 @@ async function installCoreDependencies(containerName, agentName) {
 }
 ```
 
-### installAgentDependencies(containerName, agentName)
+### installAgentDependencies(containerName, agentName, agentWorkDir)
 
 **Purpose**: Installs agent-specific dependencies (merging with existing)
 
 **Parameters**:
 - `containerName` (string): Container name
 - `agentName` (string): Agent name
+- `agentWorkDir` (string): Agent work directory ($CWD/agents/<agentName>/)
 
 **Returns**: `{ success: boolean, message: string }`
 
 **Implementation**:
 ```javascript
-async function installAgentDependencies(containerName, agentName) {
+function installAgentDependencies(containerName, agentName, agentWorkDir) {
+    // agentWorkDir = $CWD/agents/<agentName>/ (accessible via CWD mount)
     if (!fileExistsInContainer(containerName, '/code/package.json')) {
         return { success: true, message: 'No agent package.json found' };
     }
@@ -379,10 +591,10 @@ async function installAgentDependencies(containerName, agentName) {
     try {
         debugLog(`[deps] Installing agent dependencies for ${agentName}...`);
 
-        // Read current /agent/package.json
+        // Read current package.json from agent work dir
         let currentPackage;
         try {
-            const content = dockerExec(containerName, 'cat /agent/package.json');
+            const content = dockerExec(containerName, `cat "${agentWorkDir}/package.json"`);
             currentPackage = JSON.parse(content);
         } catch (_) {
             currentPackage = readPackageBaseTemplate();
@@ -395,11 +607,20 @@ async function installAgentDependencies(containerName, agentName) {
         // Merge and write
         const mergedPackage = mergePackageJson(currentPackage, agentPackage);
         const mergedJson = JSON.stringify(mergedPackage, null, 2);
-        const escapedJson = mergedJson.replace(/'/g, "'\\''");
-        dockerExec(containerName, `echo '${escapedJson}' > /agent/package.json`);
+        writeFileInContainer(containerName, `${agentWorkDir}/package.json`, mergedJson);
 
-        // Run npm install
-        execSync(`${containerRuntime} exec -w /agent ${containerName} npm install`, {
+        const gitResult = ensureGitAvailable(containerName);
+        if (!gitResult.success) {
+            return { success: false, message: gitResult.message };
+        }
+
+        const toolsResult = ensureBuildTools(containerName);
+        if (!toolsResult.success) {
+            return { success: false, message: toolsResult.message };
+        }
+
+        // Run npm install in agent work dir
+        execSync(`${containerRuntime} exec -w "${agentWorkDir}" ${containerName} npm install`, {
             stdio: 'inherit',
             timeout: 600000
         });
@@ -422,6 +643,7 @@ export {
     mergePackageJson,
     setupAgentWorkDir,
     needsReinstall,
+    needsHostInstall,
     installDependencies,
     installCoreDependencies,
     installAgentDependencies
@@ -431,15 +653,19 @@ export {
 ## Container Directory Structure
 
 ```
-/agent/
-├── package.json      # Merged core + agent dependencies
-├── node_modules/     # Installed dependencies (cached)
+/code/                              # Agent source code (working directory)
+├── package.json                    # Agent's original package.json
+├── node_modules/                   # Mounted from $CWD/agents/<agent>/node_modules/
 │   ├── achillesAgentLib/
 │   ├── mcp-sdk/
 │   └── ...
-/code/
-├── package.json      # Agent's original package.json
-└── ...               # Agent code
+└── ...                             # Agent code
+
+$CWD/agents/<agent>/                # Agent work dir (via CWD mount at same path)
+├── package.json                    # Merged core + agent dependencies
+├── package-lock.json
+├── node_modules/                   # Installed dependencies (mounted to /code/node_modules)
+└── ...                             # Runtime data (logs, cache)
 ```
 
 ## Usage Example
@@ -451,8 +677,9 @@ import { installDependencies, needsReinstall } from './dependencyInstaller.js';
 const { needsInstall, reason } = needsReinstall('ploinky_basic_node-dev', 'node-dev');
 console.log(`Needs install: ${needsInstall}, reason: ${reason}`);
 
-// Install dependencies
-const result = await installDependencies('ploinky_basic_node-dev', 'node-dev', {
+// Install dependencies inside a running container
+// Called from lifecycle hooks after the container starts
+const result = installDependencies('ploinky_basic_node-dev', 'node-dev', {
     force: false,
     verbose: true
 });

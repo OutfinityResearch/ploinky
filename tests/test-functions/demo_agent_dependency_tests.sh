@@ -21,3 +21,17 @@ fast_check_moderator_get() {
   # Use curl to send a GET request. -f fails on HTTP errors. -S shows errors, -v is verbose.
   curl -f -S -v -X GET "http://127.0.0.1:${moderator_port}/"
 }
+
+fast_check_explorer_dependencies() {
+  load_state
+  require_runtime || return 1
+
+  local container
+  # Explorer is in the fileExplorer repo, not demo repo
+  container=$(compute_container_name "explorer" "fileExplorer") || return 1
+
+  if ! $FAST_CONTAINER_RUNTIME exec "$container" test -d /code/node_modules/mcp-sdk; then
+    echo "Explorer runtime deps missing: /code/node_modules/mcp-sdk not found." >&2
+    return 1
+  fi
+}

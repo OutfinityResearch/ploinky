@@ -11,8 +11,11 @@ tests/
 ├── README.md                    # This file
 ├── unit-testing.md              # Unit test guidelines
 ├── integration-testing.md       # Integration test guidelines
+├── unit/                        # Unit test specifications
+│   └── profile-system.md
 ├── cli/                         # CLI test specifications
-│   └── README.md
+│   ├── README.md
+│   └── fast-suite.md
 └── smoke/                       # Smoke test specifications
     └── README.md
 ```
@@ -29,6 +32,7 @@ Individual component tests in isolation.
 - High coverage
 
 See: [unit-testing.md](./unit-testing.md)
+See: [unit/profile-system.md](./unit/profile-system.md)
 
 ### Integration Tests
 
@@ -51,6 +55,7 @@ Command-line interface testing.
 - Error handling
 
 See: [cli/README.md](./cli/README.md)
+See: [cli/fast-suite.md](./cli/fast-suite.md)
 
 ### Smoke Tests
 

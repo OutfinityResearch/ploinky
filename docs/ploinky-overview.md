@@ -1458,7 +1458,7 @@ Agents run with these environment variables:
 ````
 AGENT_NAME=MyAgent           # Agent name
 AGENT_REPO=myrepo           # Repository name
-WORKSPACE_PATH=/workspace   # Mounted workspace
+WORKSPACE_PATH=$CWD/agents/<agent>  # Agent work directory (via CWD passthrough)
 CODE_PATH=/code             # Agent code directory
 PORT=7000                   # Default service port
 ````
@@ -1618,7 +1618,7 @@ client task MyAgent
   "install": "npm install -g nodemon typescript @types/node",
   "update": "npm update -g",
   "cli": "node",
-  "agent": "nodemon --watch /workspace server.js",
+  "agent": "nodemon --watch /code server.js",
   "about": "Node.js development environment with hot reload"
 }
 ````

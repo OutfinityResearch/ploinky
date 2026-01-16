@@ -14,6 +14,7 @@ Manages the profile system for Ploinky agents. Profiles (dev, qa, prod) control 
 import fs from 'fs';
 import path from 'path';
 import { PROFILE_FILE, PLOINKY_DIR, REPOS_DIR } from './config.js';
+import { validateSecrets } from './secretInjector.js';
 import { debugLog, findAgent } from './utils.js';
 ```
 
@@ -166,11 +167,9 @@ export function validateProfile(agentName, profileName) {
 
         // Validate required secrets
         if (config.secrets && Array.isArray(config.secrets)) {
-            for (const secretName of config.secrets) {
-                const secretValue = process.env[secretName];
-                if (!secretValue) {
-                    issues.push(`Missing required secret: ${secretName}`);
-                }
+            const secretValidation = validateSecrets(config.secrets);
+            for (const secretName of secretValidation.missing) {
+                issues.push(`Missing required secret: ${secretName}`);
             }
         }
 

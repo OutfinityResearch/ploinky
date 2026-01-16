@@ -1,10 +1,32 @@
 import fs from 'fs';
 import path from 'path';
 
-export const PLOINKY_DIR = path.join(process.cwd(), '.ploinky');
+function findWorkspaceRoot(startDir = process.cwd()) {
+    let current = path.resolve(startDir);
+    while (true) {
+        if (fs.existsSync(path.join(current, '.ploinky'))) {
+            return current;
+        }
+        const parent = path.dirname(current);
+        if (parent === current) {
+            return path.resolve(startDir);
+        }
+        current = parent;
+    }
+}
+
+export const WORKSPACE_ROOT = findWorkspaceRoot();
+export const PLOINKY_DIR = path.join(WORKSPACE_ROOT, '.ploinky');
 export const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 export const AGENTS_FILE = path.join(PLOINKY_DIR, 'agents');
 export const SECRETS_FILE = path.join(PLOINKY_DIR, '.secrets');
+export const PROFILE_FILE = path.join(PLOINKY_DIR, 'profile');
+
+// New workspace directory structure
+export const AGENTS_WORK_DIR = path.join(WORKSPACE_ROOT, 'agents');
+export const CODE_DIR = path.join(WORKSPACE_ROOT, 'code');
+export const SKILLS_DIR = path.join(WORKSPACE_ROOT, 'skills');
+export const TEMPLATES_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), '../../templates');
 
 let DEBUG_MODE = process.env.PLOINKY_DEBUG === '1';
 

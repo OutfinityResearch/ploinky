@@ -45,7 +45,7 @@ Ploinky needs a consistent model for:
 │  │                                                         │ │
 │  │  ┌──────────────────────────────────────────────────┐  │ │
 │  │  │              Volume Mounts                        │  │ │
-│  │  │  /agent (working dir)  /code  /.AchillesSkills   │  │ │
+│  │  │  /code  /code/node_modules  /code/.AchillesSkills │  │ │
 │  │  └──────────────────────────────────────────────────┘  │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                              │
@@ -364,12 +364,13 @@ async function createAgentContainer(agent) {
     env: [
       ...getProfileEnv(agent.profile),
       ...agent.config.env,
-      { name: 'NODE_PATH', value: '/agent/node_modules' }
+      { name: 'WORKSPACE_PATH', value: getAgentWorkDir(agent.agentName) }
     ],
     binds: [
-      { source: getAgentWorkDir(agent.agentName), target: '/agent' },
+      { source: CWD, target: CWD },  // CWD passthrough for runtime data access
       { source: getAgentCodePath(agent.agentName), target: '/code', ro: isReadOnly(agent.profile) },
-      { source: getAgentSkillsPath(agent.agentName), target: '/.AchillesSkills', ro: isReadOnly(agent.profile) },
+      { source: path.join(getAgentWorkDir(agent.agentName), 'node_modules'), target: '/code/node_modules', ro: true },
+      { source: getAgentSkillsPath(agent.agentName), target: '/code/.AchillesSkills', ro: isReadOnly(agent.profile) },
       { source: path.join(PLOINKY_ROOT, 'Agent'), target: '/Agent', ro: true }
     ],
     ports: agent.config.ports
@@ -440,9 +441,9 @@ function getProjectPath(runMode, agentName, repoName) {
 // Default mount configuration
 const defaultMounts = [
   {
-    source: '$CWD/agents/$AGENT',
-    target: '/agent',
-    mode: 'rw'  // Always read-write
+    source: '$CWD',
+    target: '$CWD',
+    mode: 'rw'  // CWD passthrough for runtime data access
   },
   {
     source: '$CWD/code/$AGENT',
@@ -450,8 +451,13 @@ const defaultMounts = [
     mode: 'profile-dependent'  // rw in dev, ro in qa/prod
   },
   {
+    source: '$CWD/agents/$AGENT/node_modules',
+    target: '/code/node_modules',
+    mode: 'ro'  // Always read-only
+  },
+  {
     source: '$CWD/skills/$AGENT',
-    target: '/.AchillesSkills',
+    target: '/code/.AchillesSkills',
     mode: 'profile-dependent'  // rw in dev, ro in qa/prod
   },
   {
@@ -469,7 +475,7 @@ const defaultMounts = [
 | `PLOINKY_AGENT_NAME` | Current agent name |
 | `PLOINKY_REPO_NAME` | Repository name |
 | `PLOINKY_PROFILE` | Active profile |
-| `NODE_PATH` | Node.js module path (`/agent/node_modules`) |
+| `WORKSPACE_PATH` | Agent runtime data path (`$CWD/agents/<agent>/`) |
 | `AGENT_PORT` | AgentServer HTTP port (default: 7000) |
 | `ROUTER_HOST` | Router hostname for inter-agent calls |
 

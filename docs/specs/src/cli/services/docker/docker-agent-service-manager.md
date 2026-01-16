@@ -2,7 +2,7 @@
 
 ## Overview
 
-Manages agent container lifecycle with profile-aware mount modes. Creates, starts, and configures agent containers with proper volume mounts, environment variables, and port bindings. Supports the profile system (dev/qa/prod) for controlling mount permissions.
+Manages agent container lifecycle with profile-aware mount modes. Creates, starts, and configures agent containers with proper volume mounts, environment variables, and port bindings. Supports the profile system (dev/qa/prod) for controlling mount permissions, injecting profile env/secrets, and running profile lifecycle hooks when profiles are defined. Prepares `/agent/node_modules` before container start by running dependency installation in a temporary container.
 
 ## Source File
 
@@ -50,13 +50,16 @@ import {
 } from './agentCommands.js';
 import { ensureSharedHostDir, runInstallHook, runPostinstallHook } from './agentHooks.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './shellDetection.js';
+import { runPreContainerLifecycle, runProfileLifecycle } from '../lifecycleHooks.js';
+import { formatMissingSecretsError, getSecrets, validateSecrets } from '../secretInjector.js';
+import { getActiveProfile, getDefaultMountModes, getProfileConfig, getProfileEnvVars } from '../profileService.js';
 import {
     getAgentWorkDir,
     getAgentCodePath,
     getAgentSkillsPath,
     createAgentWorkDir
 } from '../workspaceStructure.js';
-import { PROFILE_FILE } from '../config.js';
+import { runPersistentInstall } from '../dependencyInstaller.js';
 ```
 
 ## Constants
@@ -69,49 +72,37 @@ const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
 
 ## Internal Functions
 
-### getActiveProfile()
-
-**Purpose**: Gets the current active profile
-
-**Returns**: (string) Profile name (default: 'dev')
-
-**Implementation**:
-```javascript
-function getActiveProfile() {
-    try {
-        if (fs.existsSync(PROFILE_FILE)) {
-            const profile = fs.readFileSync(PROFILE_FILE, 'utf8').trim();
-            if (profile) return profile;
-        }
-    } catch (_) {}
-    return 'dev';
-}
-```
-
-### getProfileMountModes(profile, runtime)
+### getProfileMountModes(profile, runtime, profileConfig)
 
 **Purpose**: Gets mount modes based on active profile
 
 **Parameters**:
 - `profile` (string): Active profile
 - `runtime` (string): Container runtime
+- `profileConfig` (Object): Profile configuration (optional)
 
-**Returns**: `{codeMountMode: string, skillsMountMode: string}`
+**Returns**: `{codeMountMode: string, skillsMountMode: string, codeReadOnly: boolean, skillsReadOnly: boolean}`
 
 **Behavior**:
 - dev: Read-write mounts
 - qa/prod: Read-only mounts
+- profile `mounts.code` / `mounts.skills` override defaults when provided
 
 **Implementation**:
 ```javascript
-function getProfileMountModes(profile, runtime) {
-    const isDev = profile === 'dev';
+function getProfileMountModes(profile, runtime, profileConfig = {}) {
+    const defaultMounts = getDefaultMountModes(profile);
+    const mounts = profileConfig?.mounts || {};
+    const codeMode = normalizeMountMode(mounts.code, defaultMounts.code);
+    const skillsMode = normalizeMountMode(mounts.skills, defaultMounts.skills);
     const roSuffix = runtime === 'podman' ? ':ro,z' : ':ro';
     const rwSuffix = runtime === 'podman' ? ':z' : '';
 
     return {
-        codeMountMode: isDev ? rwSuffix : roSuffix,
-        skillsMountMode: isDev ? rwSuffix : roSuffix
+        codeMountMode: codeMode === 'ro' ? roSuffix : rwSuffix,
+        skillsMountMode: skillsMode === 'ro' ? roSuffix : rwSuffix,
+        codeReadOnly: codeMode === 'ro',
+        skillsReadOnly: skillsMode === 'ro'
     };
 }
 ```
@@ -140,7 +131,7 @@ export function startAgentContainer(agentName, manifest, agentPath, options = {}
 
     // Remove existing container
     try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
-    try { execSync(`${containerRuntime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+    try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
     clearLivenessState(containerName);
 
     const runtime = containerRuntime;
@@ -160,6 +151,11 @@ export function startAgentContainer(agentName, manifest, agentPath, options = {}
     const agentWorkDir = getAgentWorkDir(agentName);
     const agentCodePath = getAgentCodePath(agentName);
     const agentSkillsPath = getAgentSkillsPath(agentName);
+    const agentNodeModulesPath = path.join(agentWorkDir, 'node_modules');
+    if (!fs.existsSync(agentNodeModulesPath)) {
+        fs.mkdirSync(agentNodeModulesPath, { recursive: true });
+    }
+    const nodeModulesMountMode = runtime === 'podman' ? ':ro,z' : ':ro';
 
     // Ensure agent work directory exists
     createAgentWorkDir(agentName);
@@ -167,23 +163,28 @@ export function startAgentContainer(agentName, manifest, agentPath, options = {}
     // Run install hook
     runInstallHook(agentName, manifest, agentPath, cwd);
 
+    // Dependencies are installed in the running container via installDependencies
+    // (called from lifecycleHooks after container starts)
+    // Just ensure the agent work directory exists on host
+    createAgentWorkDir(agentName);
+
     // Build volume mount arguments
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', '/code',
-        // Agent working directory (always rw)
-        '-v', `${agentWorkDir}:/agent${runtime === 'podman' ? ':z' : ''}`,
         // Agent library (always ro)
         '-v', `${AGENT_LIB_PATH}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
         // Code directory - profile dependent
         '-v', `${agentCodePath}:/code${codeMountMode}`,
+        // Node modules mounted for ESM resolution
+        '-v', `${agentNodeModulesPath}:/code/node_modules${nodeModulesMountMode}`,
         // Shared directory
         '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`,
-        // Legacy project path mount
+        // CWD passthrough - provides access to agents/<name>/ for runtime data
         '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`
     ];
 
     // Mount skills directory if it exists
     if (fs.existsSync(agentSkillsPath)) {
-        args.push('-v', `${agentSkillsPath}:/.AchillesSkills${skillsMountMode}`);
+        args.push('-v', `${agentSkillsPath}:/code/.AchillesSkills${skillsMountMode}`);
     }
 
     // Podman network configuration
@@ -221,6 +222,24 @@ export function startAgentContainer(agentName, manifest, agentPath, options = {}
         formatEnvFlag('AGENT_NAME', agentName)
     ];
 
+    const profileEnv = normalizeProfileEnv(profileConfig?.env);
+    appendEnvFlagsFromMap(envStrings, profileEnv);
+
+    const profileEnvVars = getProfileEnvVars(agentName, repoName, activeProfile, {
+        containerName,
+        containerId: containerName
+    });
+    appendEnvFlagsFromMap(envStrings, profileEnvVars);
+
+    if (profileConfig?.secrets && profileConfig.secrets.length > 0) {
+        const secretValidation = validateSecrets(profileConfig.secrets);
+        if (!secretValidation.valid) {
+            throw new Error(formatMissingSecretsError(secretValidation.missing, activeProfile));
+        }
+        const profileSecrets = getSecrets(profileConfig.secrets);
+        appendEnvFlagsFromMap(envStrings, profileSecrets);
+    }
+
     // Router port
     let routerPort = '8080';
     try {
@@ -248,10 +267,8 @@ export function startAgentContainer(agentName, manifest, agentPath, options = {}
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
 
-    // Additional environment
-    args.push('-e', 'NODE_PATH=/agent/node_modules');
-    args.push('-e', `PLOINKY_PROFILE=${activeProfile}`);
-    args.push('-e', `PLOINKY_AGENT_NAME=${agentName}`);
+    // Additional environment - node_modules mounted directly at /code/node_modules
+    // NODE_PATH not needed since modules resolve from /code/node_modules via ESM
 
     // Image and entry command
     args.push(image);
@@ -333,11 +350,12 @@ export {
 
 | Mount Point | Source | Mode |
 |-------------|--------|------|
-| `/agent` | Agent work directory | rw (always) |
 | `/Agent` | Agent library | ro (always) |
-| `/code` | Agent code | rw (dev) / ro (qa/prod) |
+| `/code` | Agent code | Profile dependent (rw/ro, override via profiles.mounts) |
+| `/code/node_modules` | Agent work directory node_modules | ro (always) |
 | `/shared` | Shared directory | rw |
-| `/.AchillesSkills` | Skills directory | Profile dependent |
+| `/code/.AchillesSkills` | Skills directory | Profile dependent (rw/ro, override via profiles.mounts) |
+| `$CWD` | Host CWD | rw (passthrough for runtime data access) |
 
 ## Environment Variables Set
 
@@ -345,12 +363,19 @@ export {
 |----------|-------------|
 | `PLOINKY_MCP_CONFIG_PATH` | Path to MCP config |
 | `AGENT_NAME` | Agent name |
+| `WORKSPACE_PATH` | Agent working directory path (`$CWD/agents/<agent>/`) |
 | `PLOINKY_ROUTER_PORT` | Router port |
 | `PLOINKY_AGENT_CLIENT_ID` | Agent OAuth client ID |
 | `PLOINKY_AGENT_CLIENT_SECRET` | Agent OAuth client secret |
 | `NODE_PATH` | Node modules path |
 | `PLOINKY_PROFILE` | Active profile |
+| `PLOINKY_PROFILE_ENV` | Profile environment label |
 | `PLOINKY_AGENT_NAME` | Agent name |
+| `PLOINKY_REPO_NAME` | Agent repository name |
+| `PLOINKY_CWD` | Host working directory |
+| `PLOINKY_CONTAINER_NAME` | Container name |
+| `PLOINKY_CONTAINER_ID` | Container identifier |
+| (Profile env/secrets) | `profiles.<name>.env` and `profiles.<name>.secrets` values |
 
 ## Usage Example
 

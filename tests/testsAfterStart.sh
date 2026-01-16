@@ -99,8 +99,11 @@ test_check "WebMeet whoami endpoint authenticates" assert_webmeet_whoami
 
 stage_header "Demo agent dependency tests"
 SIMULATOR_CONTAINER=$(compute_container_name "simulator" "demo")
+EXPLORER_CONTAINER=$(compute_container_name "explorer" "fileExplorer")
 MODERATOR_CONTAINER=$(compute_container_name "moderator" "webmeet")
 test_check "Simulator container is running" assert_container_running "$SIMULATOR_CONTAINER"
+test_check "Explorer container is running" assert_container_running "$EXPLORER_CONTAINER"
+test_check "Explorer installs runtime dependencies" fast_check_explorer_dependencies
 test_check "Moderator container is running" assert_container_running "$MODERATOR_CONTAINER"
 test_check "Moderator server responds to GET" fast_check_moderator_get
 test_check "Verify repo 'webmeet' is cloned" assert_dir_exists ".ploinky/repos/webmeet"
@@ -142,7 +145,7 @@ test_check "Variable MY_TEST_VAR from manifest is present after start" assert_co
 test_check "Custom volume mount exposes marker" fast_assert_volume_mount
 
 stage_header "Start Command Result"
-test_start_result_file="$TEST_RUN_DIR/$TEST_AGENT_NAME/start-result"
+test_start_result_file="$TEST_AGENT_WORKSPACE/start-result"
 test_check "Start command creates start-result file" assert_file_exists "$test_start_result_file"
 test_check "Start command writes expected content" assert_file_contains "$test_start_result_file" "started without shell"
 
