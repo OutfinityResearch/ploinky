@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { REPOS_DIR, PLOINKY_DIR } from '../config.js';
+import { REPOS_DIR, PLOINKY_DIR, WORKSPACE_ROOT } from '../config.js';
+import { getAgentWorkDir } from '../workspaceStructure.js';
 import { buildEnvFlags, buildEnvMap } from '../secretVars.js';
 import { loadAgents, saveAgents } from '../workspace.js';
 import { debugLog } from '../utils.js';
@@ -11,21 +12,44 @@ import { debugLog } from '../utils.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function isPathUnderRoot(candidate) {
+    if (!candidate) return false;
+    const root = path.resolve(WORKSPACE_ROOT);
+    const resolved = path.resolve(candidate);
+    const relative = path.relative(root, resolved);
+    return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function normalizeProjectPath(candidate, runMode) {
+    if (!candidate || typeof candidate !== 'string') return '';
+    const resolved = path.resolve(candidate);
+    if (!fs.existsSync(resolved)) return '';
+    if (runMode === 'isolated' && !isPathUnderRoot(resolved)) {
+        return '';
+    }
+    return resolved;
+}
+
 function getConfiguredProjectPath(agentName, repoName, alias) {
+    if (!agentName || agentName === '.') {
+        return WORKSPACE_ROOT;
+    }
     try {
         const map = loadAgentsMap();
         if (alias) {
             const aliasRec = Object.values(map || {}).find(r => r && r.type === 'agent' && r.alias === alias);
             if (aliasRec && aliasRec.projectPath && typeof aliasRec.projectPath === 'string') {
-                return aliasRec.projectPath;
+                const normalized = normalizeProjectPath(aliasRec.projectPath, aliasRec.runMode);
+                if (normalized) return normalized;
             }
         }
         const rec = Object.values(map || {}).find(r => r && r.type === 'agent' && r.agentName === agentName && r.repoName === repoName);
         if (rec && rec.projectPath && typeof rec.projectPath === 'string') {
-            return rec.projectPath;
+            const normalized = normalizeProjectPath(rec.projectPath, rec.runMode);
+            if (normalized) return normalized;
         }
     } catch (_) {}
-    const fallback = path.join(process.cwd(), agentName);
+    const fallback = getAgentWorkDir(agentName);
     try { fs.mkdirSync(fallback, { recursive: true }); } catch (_) {}
     return fallback;
 }
@@ -68,12 +92,12 @@ function getAgentContainerName(agentName, repoName) {
     const safeAgentName = String(agentName || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
     const safeRepoName = String(repoName || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
     const cwdHash = crypto.createHash('sha256')
-        .update(process.cwd())
+        .update(WORKSPACE_ROOT)
         .digest('hex')
         .substring(0, 8);
-    const projectDir = path.basename(process.cwd()).replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const projectDir = path.basename(WORKSPACE_ROOT).replace(/[^a-zA-Z0-9_.-]/g, '_');
     const containerName = `ploinky_${safeRepoName}_${safeAgentName}_${projectDir}_${cwdHash}`;
-    debugLog(`Calculated container name: ${containerName} (for path: ${process.cwd()})`);
+    debugLog(`Calculated container name: ${containerName} (for path: ${WORKSPACE_ROOT})`);
     return containerName;
 }
 
@@ -92,15 +116,15 @@ function isContainerRunning(containerName) {
 }
 
 function containerExists(containerName) {
-    const command = `${containerRuntime} ps -a --format "{{.Names}}" | grep -x "${containerName}"`;
+    // Use inspect instead of grep - more reliable and avoids race conditions
+    const command = `${containerRuntime} inspect --format "{{.Name}}" "${containerName}"`;
     debugLog(`Checking if container exists with command: ${command}`);
     try {
-        const result = execSync(command, { stdio: 'pipe' }).toString();
-        const exists = result.trim().length > 0;
-        debugLog(`Container '${containerName}' exists: ${exists}`);
-        return exists;
+        execSync(command, { stdio: 'pipe' });
+        debugLog(`Container '${containerName}' exists: true`);
+        return true;
     } catch (error) {
-        debugLog(`Container '${containerName}' does not exist (grep failed)`);
+        debugLog(`Container '${containerName}' does not exist`);
         return false;
     }
 }
@@ -121,9 +145,19 @@ function getAgentMcpConfigPath(agentPath) {
     return null;
 }
 
-function syncAgentMcpConfig(_containerName, agentPath) {
+function syncAgentMcpConfig(_containerName, agentPath, agentName) {
     try {
-        return !!getAgentMcpConfigPath(agentPath);
+        const source = getAgentMcpConfigPath(agentPath);
+        if (!source) return false;
+        const resolvedAgentName = agentName || path.basename(agentPath || '');
+        if (!resolvedAgentName) return false;
+        const workDir = getAgentWorkDir(resolvedAgentName);
+        if (!fs.existsSync(workDir)) {
+            fs.mkdirSync(workDir, { recursive: true });
+        }
+        const target = path.join(workDir, 'mcp-config.json');
+        fs.copyFileSync(source, target);
+        return true;
     } catch (_) {
         return false;
     }
@@ -233,7 +267,9 @@ function parseHostPort(output) {
 
 function computeEnvHash(manifest) {
     try {
-        const map = buildEnvMap(manifest);
+        // Skip process.env when computing hash to ensure consistency
+        // across different process contexts (ploinky start vs ploinky cli)
+        const map = buildEnvMap(manifest, { skipProcessEnv: true });
         const sorted = Object.keys(map).sort().reduce((acc, key) => {
             acc[key] = map[key];
             return acc;

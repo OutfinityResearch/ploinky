@@ -721,7 +721,7 @@ run_with_timeout() {
   local command_to_run=($@)
 
   test_info "$description"
-  
+
   timeout "$timeout_seconds" "${command_to_run[@]}"
   local exit_code=$?
 
@@ -731,4 +731,18 @@ run_with_timeout() {
   fi
 
   return $exit_code
+}
+
+enable_repo_with_branch() {
+  local repo_name="$1"
+  local branch_var="PLOINKY_${repo_name^^}_BRANCH"
+  local branch="${!branch_var:-}"
+
+  if [[ -n "$branch" ]]; then
+    test_info "Enabling repository ${repo_name} (branch: ${branch})."
+    ploinky enable repo "$repo_name" --branch "$branch"
+  else
+    test_info "Enabling repository ${repo_name}."
+    ploinky enable repo "$repo_name"
+  fi
 }

@@ -71,20 +71,24 @@ export function resolveRepoUrl(name, url) {
     return preset ? preset.url : null;
 }
 
-export function addRepo(name, url) {
+export function addRepo(name, url, branch = null) {
     if (!name) throw new Error('Missing repository name.');
     const REPOS_DIR = ensureReposDir();
     const repoPath = path.join(REPOS_DIR, name);
     if (fs.existsSync(repoPath)) {
-        return { status: 'exists', path: repoPath };
+        return { status: 'exists', path: repoPath, branch: null };
     }
     const actualUrl = resolveRepoUrl(name, url);
     if (!actualUrl) throw new Error(`Missing repository URL for '${name}'.`);
-    execSync(`git clone ${actualUrl} ${repoPath}`, { stdio: 'inherit' });
-    return { status: 'cloned', path: repoPath };
+    let cloneCmd = `git clone ${actualUrl} ${repoPath}`;
+    if (branch) {
+        cloneCmd = `git clone --branch ${branch} ${actualUrl} ${repoPath}`;
+    }
+    execSync(cloneCmd, { stdio: 'inherit' });
+    return { status: 'cloned', path: repoPath, branch: branch || 'default' };
 }
 
-export function enableRepo(name) {
+export function enableRepo(name, branch = null) {
     if (!name) throw new Error('Missing repository name.');
     const list = loadEnabledRepos();
     if (!list.includes(name)) {
@@ -96,7 +100,11 @@ export function enableRepo(name) {
     if (!fs.existsSync(repoPath)) {
         const url = resolveRepoUrl(name, null);
         if (!url) throw new Error(`No URL configured for repo '${name}'.`);
-        execSync(`git clone ${url} ${repoPath}`, { stdio: 'inherit' });
+        let cloneCmd = `git clone ${url} ${repoPath}`;
+        if (branch) {
+            cloneCmd = `git clone --branch ${branch} ${url} ${repoPath}`;
+        }
+        execSync(cloneCmd, { stdio: 'inherit' });
     }
     return true;
 }

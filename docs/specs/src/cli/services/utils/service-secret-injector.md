@@ -2,7 +2,7 @@
 
 ## Overview
 
-Manages secrets for agent containers and host hooks. Loads secrets from environment variables and `.ploinky/.secrets` file, validates required secrets for profiles, and builds docker environment flags.
+Manages secrets for agent containers and host hooks. Loads secrets from environment variables, `.ploinky/.secrets`, and `.env`, validates required secrets for profiles, and builds docker environment flags.
 
 ## Source File
 
@@ -21,6 +21,7 @@ import { debugLog } from './utils.js';
 
 ```javascript
 // Secrets file location: .ploinky/.secrets
+// Local fallback: .env
 ```
 
 ## Public API
@@ -42,61 +43,34 @@ SINGLE_QUOTED='another value'
 **Implementation**:
 ```javascript
 export function loadSecretsFile() {
-    const secrets = {};
+    return parseKeyValueFile(SECRETS_FILE);
+}
+```
 
-    if (!fs.existsSync(SECRETS_FILE)) {
-        return secrets;
-    }
+### loadEnvFile()
 
-    try {
-        const content = fs.readFileSync(SECRETS_FILE, 'utf8');
-        const lines = content.split('\n');
+**Purpose**: Loads secrets from the `.env` file
 
-        for (const line of lines) {
-            const trimmed = line.trim();
+**Returns**: (Object) Map of secret names to values
 
-            // Skip empty lines and comments
-            if (!trimmed || trimmed.startsWith('#')) {
-                continue;
-            }
-
-            // Parse KEY=VALUE
-            const eqIndex = trimmed.indexOf('=');
-            if (eqIndex === -1) {
-                continue;
-            }
-
-            const key = trimmed.slice(0, eqIndex).trim();
-            let value = trimmed.slice(eqIndex + 1).trim();
-
-            // Remove surrounding quotes if present
-            if ((value.startsWith('"') && value.endsWith('"')) ||
-                (value.startsWith("'") && value.endsWith("'"))) {
-                value = value.slice(1, -1);
-            }
-
-            if (key) {
-                secrets[key] = value;
-            }
-        }
-    } catch (err) {
-        debugLog(`Failed to load secrets file: ${err.message}`);
-    }
-
-    return secrets;
+**Implementation**:
+```javascript
+export function loadEnvFile() {
+    const envPath = path.join(process.cwd(), '.env');
+    return parseKeyValueFile(envPath);
 }
 ```
 
 ### getSecret(secretName)
 
-**Purpose**: Gets a secret value from environment or .secrets file
+**Purpose**: Gets a secret value from environment, `.ploinky/.secrets`, or `.env`
 
 **Parameters**:
 - `secretName` (string): The secret name
 
 **Returns**: (string|undefined) The secret value or undefined
 
-**Priority**: Environment variables take precedence over .secrets file
+**Priority**: Environment variables take precedence over `.ploinky/.secrets`, then `.env`
 
 **Implementation**:
 ```javascript
@@ -108,13 +82,19 @@ export function getSecret(secretName) {
 
     // Then check .secrets file
     const fileSecrets = loadSecretsFile();
-    return fileSecrets[secretName];
+    if (fileSecrets[secretName] !== undefined) {
+        return fileSecrets[secretName];
+    }
+
+    // Finally check .env file
+    const envSecrets = loadEnvFile();
+    return envSecrets[secretName];
 }
 ```
 
 ### getSecrets(secretNames)
 
-**Purpose**: Gets multiple secrets
+**Purpose**: Gets multiple secrets (environment, `.secrets`, `.env`)
 
 **Parameters**:
 - `secretNames` (string[]): Array of secret names
@@ -126,6 +106,7 @@ export function getSecret(secretName) {
 export function getSecrets(secretNames) {
     const secrets = {};
     const fileSecrets = loadSecretsFile();
+    const envSecrets = loadEnvFile();
 
     for (const name of secretNames) {
         // Environment takes precedence
@@ -133,6 +114,8 @@ export function getSecrets(secretNames) {
             secrets[name] = process.env[name];
         } else if (fileSecrets[name] !== undefined) {
             secrets[name] = fileSecrets[name];
+        } else if (envSecrets[name] !== undefined) {
+            secrets[name] = envSecrets[name];
         }
     }
 
@@ -152,7 +135,7 @@ export function getSecrets(secretNames) {
 {
     valid: boolean,      // True if all secrets found
     missing: string[],   // Names of missing secrets
-    source: Object       // Map of secret names to sources ('environment' or '.secrets file')
+    source: Object       // Map of secret names to sources ('environment', '.secrets file', '.env file')
 }
 ```
 
@@ -166,12 +149,15 @@ export function validateSecrets(requiredSecrets) {
     const missing = [];
     const source = {};
     const fileSecrets = loadSecretsFile();
+    const envSecrets = loadEnvFile();
 
     for (const name of requiredSecrets) {
         if (process.env[name] !== undefined) {
             source[name] = 'environment';
         } else if (fileSecrets[name] !== undefined) {
             source[name] = '.secrets file';
+        } else if (envSecrets[name] !== undefined) {
+            source[name] = '.env file';
         } else {
             missing.push(name);
         }
@@ -242,6 +228,7 @@ export function buildSecretFlags(secretNames) {
 **Source Values**:
 - `'environment'` - From environment variable
 - `'.secrets'` - From .secrets file
+- `'.env'` - From .env file
 - `'not found'` - Not available
 
 **Implementation**:
@@ -249,12 +236,15 @@ export function buildSecretFlags(secretNames) {
 export function getSecretsSource(secretNames) {
     const sources = {};
     const fileSecrets = loadSecretsFile();
+    const envSecrets = loadEnvFile();
 
     for (const name of secretNames) {
         if (process.env[name] !== undefined) {
             sources[name] = 'environment';
         } else if (fileSecrets[name] !== undefined) {
             sources[name] = '.secrets';
+        } else if (envSecrets[name] !== undefined) {
+            sources[name] = '.env';
         } else {
             sources[name] = 'not found';
         }
@@ -284,6 +274,7 @@ Missing required secrets for profile 'prod':
 To provide secrets, either:
   1. Set environment variables before running ploinky
   2. Add them to .ploinky/.secrets
+  3. Add them to .env
 
 Example (.ploinky/.secrets):
   API_KEY=your_value_here
@@ -379,7 +370,7 @@ function shellEscape(value) {
 
 ## Secrets File Format
 
-Location: `.ploinky/.secrets`
+Locations: `.ploinky/.secrets`, `.env`
 
 ```
 # Ploinky Secrets File

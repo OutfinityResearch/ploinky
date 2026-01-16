@@ -719,7 +719,7 @@ watchdog.on('circuit_open', ({ name }) => {
 await watchdog.start('web-server');
 
 // Start container monitoring
-watchdog.startContainerMonitoring('/workspace/.ploinky/agents.json');
+watchdog.startContainerMonitoring('.ploinky/agents.json');
 
 // Get status
 const status = watchdog.getStatus('web-server');

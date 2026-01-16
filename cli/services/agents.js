@@ -11,12 +11,37 @@ import {
     collectLiveAgentContainers
 } from './docker/index.js';
 import { findAgent } from './utils.js';
-import { REPOS_DIR } from './config.js';
+import { REPOS_DIR, WORKSPACE_ROOT } from './config.js';
+import {
+    createAgentSymlinks,
+    removeAgentSymlinks,
+    createAgentWorkDir,
+    removeAgentWorkDir,
+    getAgentWorkDir
+} from './workspaceStructure.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const RESERVED_AGENT_KEYS = new Set(['_config']);
 const ALIAS_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+
+function isPathUnderRoot(candidate) {
+    if (!candidate) return false;
+    const root = path.resolve(WORKSPACE_ROOT);
+    const resolved = path.resolve(candidate);
+    const relative = path.relative(root, resolved);
+    return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+function normalizeExistingProjectPath(candidate, runMode) {
+    if (!candidate || typeof candidate !== 'string') return '';
+    const resolved = path.resolve(candidate);
+    if (!fs.existsSync(resolved)) return '';
+    if ((runMode || 'isolated') === 'isolated' && !isPathUnderRoot(resolved)) {
+        return '';
+    }
+    return resolved;
+}
 
 function normalizeAlias(aliasInput) {
     if (aliasInput === undefined || aliasInput === null) {
@@ -119,22 +144,6 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam) {
     const containerBaseName = alias || shortAgentName;
     const containerName = getAgentContainerName(containerBaseName, repoName);
 
-    const preinstallEntry = manifest?.preinstall;
-    const preinstallCommands = Array.isArray(preinstallEntry)
-        ? preinstallEntry.filter(cmd => typeof cmd === 'string' && cmd.trim())
-        : (typeof preinstallEntry === 'string' && preinstallEntry.trim() ? [preinstallEntry] : []);
-
-    if (preinstallCommands.length) {
-        for (const cmd of preinstallCommands) {
-            try {
-                console.log(`Running preinstall for '${shortAgentName}': ${cmd}`);
-                execSync(cmd, { cwd: agentPath, stdio: 'inherit' });
-            } catch (error) {
-                throw new Error(`preinstall command failed ('${cmd}'): ${error?.message || error}`);
-            }
-        }
-    }
-
     const normalizedMode = (normalized.mode || '').toLowerCase();
     let runMode = 'isolated';
     let projectPath = '';
@@ -145,18 +154,22 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam) {
                 r => r && r.type === 'agent' && r.agentName === shortAgentName && r.repoName === repoName && !r.alias
             );
             if (existing && (!existing.runMode || existing.runMode === 'isolated') && existing.projectPath) {
-                projectPath = existing.projectPath;
-                runMode = 'isolated';
+                const normalizedPath = normalizeExistingProjectPath(existing.projectPath, existing.runMode || 'isolated');
+                if (normalizedPath) {
+                    projectPath = normalizedPath;
+                    runMode = 'isolated';
+                }
             }
         } catch (_) {}
         if (!projectPath) {
             runMode = 'isolated';
-            projectPath = path.join(process.cwd(), shortAgentName);
+            // Use new workspace structure: $WORKSPACE_ROOT/agents/<agentName>/
+            projectPath = getAgentWorkDir(shortAgentName);
             try { fs.mkdirSync(projectPath, { recursive: true }); } catch (_) {}
         }
     } else if (normalizedMode === 'global') {
         runMode = 'global';
-        projectPath = process.cwd();
+        projectPath = WORKSPACE_ROOT;
     } else if (normalizedMode === 'devel') {
         const repoCandidate = String(normalized.repoNameParam || '').trim();
         if (!repoCandidate) {
@@ -215,6 +228,18 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam) {
     }
     map[containerName] = record;
     saveAgents(map);
+
+    // Create workspace structure for the agent
+    try {
+        // Create agent working directory: $CWD/agents/<agentName>/
+        createAgentWorkDir(shortAgentName);
+
+        // Create symlinks: $CWD/code/<agentName> and $CWD/skills/<agentName>
+        createAgentSymlinks(shortAgentName, repoName, agentPath);
+    } catch (err) {
+        console.error(`Warning: Failed to create workspace structure for ${shortAgentName}: ${err.message}`);
+    }
+
     return { containerName, repoName, shortAgentName, alias: alias || undefined };
 }
 
@@ -372,6 +397,18 @@ export function disableAgent(agentRef) {
     });
 
     saveAgents(map);
+
+    // Remove workspace structure for the agent
+    try {
+        // Remove symlinks: $CWD/code/<agentName> and $CWD/skills/<agentName>
+        removeAgentSymlinks(record.agentName);
+
+        // Note: We don't remove the agent work directory by default to preserve data
+        // Use removeAgentWorkDir(record.agentName, true) to force removal if needed
+    } catch (err) {
+        console.error(`Warning: Failed to remove workspace structure for ${record.agentName}: ${err.message}`);
+    }
+
     return {
         status: 'removed',
         containerName,

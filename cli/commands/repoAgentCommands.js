@@ -50,11 +50,14 @@ function getAgentNames() {
     return Array.from(suggestions).sort();
 }
 
-function addRepo(repoName, repoUrl) {
+function addRepo(repoName, repoUrl, branch = null) {
     if (!repoName) { showHelp(); throw new Error('Missing repository name.'); }
-    const res = reposSvc.addRepo(repoName, repoUrl);
+    const res = reposSvc.addRepo(repoName, repoUrl, branch);
     if (res.status === 'exists') console.log(`✓ Repository '${repoName}' already exists.`);
-    else console.log(`✓ Repository '${repoName}' added successfully.`);
+    else {
+        const branchNote = branch ? ` (branch: ${branch})` : '';
+        console.log(`✓ Repository '${repoName}' added successfully${branchNote}.`);
+    }
 }
 
 async function updateRepo(repoName) {
@@ -67,10 +70,11 @@ async function updateRepo(repoName) {
     }
 }
 
-function enableRepo(repoName) {
-    if (!repoName) throw new Error('Usage: enable repo <name>');
-    reposSvc.enableRepo(repoName);
-    console.log(`✓ Repo '${repoName}' enabled. Use 'list agents' to view agents.`);
+function enableRepo(repoName, branch = null) {
+    if (!repoName) throw new Error('Usage: enable repo <name> [branch]');
+    reposSvc.enableRepo(repoName, branch);
+    const branchNote = branch ? ` (branch: ${branch})` : '';
+    console.log(`✓ Repo '${repoName}' enabled${branchNote}. Use 'list agents' to view agents.`);
 }
 
 function disableRepo(repoName) {

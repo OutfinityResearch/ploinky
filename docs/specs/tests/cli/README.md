@@ -97,6 +97,12 @@ tests/cli-errors/
 | network-error | Connection failure | Network error |
 | timeout | Operation timeout | Timeout error |
 
+### Fast Suite
+
+The fast CLI integration suite validates end-to-end `ploinky` workflows used by `npm test`.
+
+See: [fast-suite.md](./fast-suite.md)
+
 ## Test Implementation
 
 ### Test Script Template

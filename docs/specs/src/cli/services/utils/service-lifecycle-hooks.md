@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implements the complete profile lifecycle for agent startup. Provides functions to execute hooks on the host and within containers, managing the full 12-step agent initialization process.
+Implements the complete profile lifecycle for agent startup. Provides functions to execute hooks on the host and within containers, managing the full 12-step agent initialization process. Profile-specific `env` values are merged into the hook environment and secrets are validated before hook execution.
 
 ## Source File
 
@@ -13,7 +13,7 @@ Implements the complete profile lifecycle for agent startup. Provides functions 
 ```javascript
 import fs from 'fs';
 import path from 'path';
-import { execSync, spawn } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
 import { containerRuntime } from './docker/common.js';
 import { debugLog } from './utils.js';
 import { getProfileConfig, getProfileEnvVars } from './profileService.js';
@@ -117,26 +117,44 @@ export function executeContainerHook(containerName, script, env = {}, options = 
         return { success: true, message: 'No hook script specified' };
     }
 
-    const envFlags = Object.entries(env)
-        .map(([key, value]) => `-e ${key}="${String(value).replace(/"/g, '\\"')}"`)
-        .join(' ');
-
     try {
+        const envFlags = [];
+        for (const [key, value] of Object.entries(env)) {
+            envFlags.push('-e', `${key}=${String(value ?? '')}`);
+        }
+
         debugLog(`[hook] Executing container hook in ${containerName}: ${script}`);
-        const cmd = `${containerRuntime} exec ${envFlags} -w ${workdir} ${containerName} sh -c "${script.replace(/"/g, '\\"')}"`;
-        const output = execSync(cmd, {
+        const result = spawnSync(containerRuntime, [
+            'exec',
+            ...envFlags,
+            '-w',
+            workdir,
+            containerName,
+            'sh',
+            '-c',
+            script
+        ], {
+            encoding: 'utf8',
             stdio: 'pipe',
             timeout
-        }).toString();
+        });
 
-        return { success: true, message: 'Hook executed successfully', output };
+        if (result.status === 0) {
+            return { success: true, message: 'Hook executed successfully', output: result.stdout };
+        }
+
+        const output = `${result.stdout || ''}${result.stderr || ''}`;
+        const errorMessage = result.error ? result.error.message : `command exited with ${result.status}`;
+        return {
+            success: false,
+            message: `Hook execution failed: ${errorMessage}`,
+            output
+        };
     } catch (err) {
-        const stderr = err.stderr ? err.stderr.toString() : '';
-        const stdout = err.stdout ? err.stdout.toString() : '';
         return {
             success: false,
             message: `Hook execution failed: ${err.message}`,
-            output: stdout + stderr
+            output: err.output ? err.output.toString() : ''
         };
     }
 }
@@ -215,6 +233,10 @@ export function executeContainerHook(containerName, script, env = {}, options = 
 
 **Steps**: dependencies, preinstall, install, postinstall, hosthook_postinstall
 
+**Notes**:
+- Validates required secrets before executing container hooks.
+- Merges `profiles.<name>.env` into the hook environment.
+
 ### printLifecycleSummary(result)
 
 **Purpose**: Prints formatted lifecycle summary
@@ -285,7 +307,7 @@ import {
 } from './lifecycleHooks.js';
 
 // Run full lifecycle
-const result = await runProfileLifecycle('node-dev', 'prod', {
+const result = runProfileLifecycle('node-dev', 'prod', {
     containerName: 'ploinky_basic_node-dev_proj_abc',
     agentPath: '/path/to/agent',
     repoName: 'basic',

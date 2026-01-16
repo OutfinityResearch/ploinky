@@ -759,7 +759,7 @@ export { ContainerMonitor, ContainerState };
 ```javascript
 import { ContainerMonitor, ContainerState } from './containerMonitor.js';
 
-const monitor = new ContainerMonitor('/workspace/.ploinky/agents.json', {
+const monitor = new ContainerMonitor('.ploinky/agents.json', {
     onContainerExit: (containerName, exitCode) => {
         console.log(`Container ${containerName} exited with code ${exitCode}`);
     },

@@ -20,7 +20,7 @@ check_dir() {
   rm -f "$test_file" >/dev/null 2>&1
 }
 
-check_dir "/node_modules" "node_modules_root"
+check_dir "/code/node_modules" "code_node_modules"
 check_dir "/code" "code_dir"
 check_dir "/Agent" "agent_root"
 exit
@@ -33,11 +33,13 @@ EOS
   local parsed_output
   parsed_output=$(echo "$raw_output" | tr -d '\r' | grep -E '^(Exists|Missing|ReadOnly|Writable) ')
 
+  # New workspace structure expectations:
+  # - /code/node_modules: exists and read-only (mounted from host)
+  # - /code: exists (rw in dev profile, ro in qa/prod)
+  # - /Agent: exists and read-only (always)
+  # - Runtime data accessed via $WORKSPACE_PATH (CWD passthrough mount)
   local expected_markers=(
-    "Exists node_modules_root"
-    "ReadOnly node_modules_root"
     "Exists code_dir"
-    "ReadOnly code_dir"
     "Exists agent_root"
     "ReadOnly agent_root"
   )
@@ -60,16 +62,14 @@ EOS
     return 1
   fi
 
-  local writable
-  local writable_markers=(
-    "Writable node_modules_root"
-    "Writable code_dir"
-    "Writable agent_root"
+  # In the new structure, /Agent is always read-only
+  local must_be_readonly=(
+    "agent_root"
   )
-
-  for writable in "${writable_markers[@]}"; do
-    if grep -Fqx -- "$writable" <<<"$parsed_output"; then
-      echo "Directory write test unexpectedly succeeded: ${writable#Writable }" >&2
+  local label
+  for label in "${must_be_readonly[@]}"; do
+    if grep -Fqx -- "Writable $label" <<<"$parsed_output"; then
+      echo "Directory write test unexpectedly succeeded: ${label}" >&2
       echo "--- Parsed directory markers ---" >&2
       echo "$parsed_output" >&2
       echo "--- Full shell output ---" >&2

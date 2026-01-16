@@ -91,6 +91,16 @@ fast_mcp_start_demo() {
 
 test_action "Action: Starting demo agent..." fast_mcp_start_demo
 
-wait_for_router
+if ! wait_for_router; then
+  test_info "Router failed to respond. start-demo.log contents:"
+  cat "$start_log" >&2
+  test_info "Watchdog log contents:"
+  cat "$TEST_RUN_DIR/logs/watchdog.log" >&2 2>/dev/null || true
+  test_info "Router log contents:"
+  cat "$TEST_RUN_DIR/logs/router.log" >&2 2>/dev/null || true
+  test_info "Running containers:"
+  docker ps -a 2>/dev/null || podman ps -a 2>/dev/null || true
+  exit 1
+fi
 
 test_info "Start procedure completed."

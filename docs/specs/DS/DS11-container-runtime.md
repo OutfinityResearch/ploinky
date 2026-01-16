@@ -542,22 +542,23 @@ export function startHealthMonitoring(containerId, config, onUnhealthy) {
 ```javascript
 // Standard agent container mounts
 const agentMounts = [
-  // Agent working directory (always read-write)
-  {
-    source: '$CWD/agents/$AGENT',
-    target: '/agent'
-  },
-
   // Agent source code (profile-dependent)
   {
-    source: '$CWD/code/$AGENT',  // Symlink
+    source: '$CWD/code/$AGENT',  // Symlink to .ploinky/repos/<repo>/<agent>/code/
     target: '/code',
     ro: profile !== 'dev'  // Read-only in qa/prod
   },
 
+  // Node modules (from workspace agents directory)
+  {
+    source: '$CWD/agents/$AGENT/node_modules',
+    target: '/code/node_modules',
+    ro: true  // Read-only in container, installed on host
+  },
+
   // Agent skills (profile-dependent)
   {
-    source: '$CWD/skills/$AGENT',  // Symlink
+    source: '$CWD/skills/$AGENT',  // Symlink to .ploinky/repos/<repo>/<agent>/.AchillesSkills/
     target: '/.AchillesSkills',
     ro: profile !== 'dev'  // Read-only in qa/prod
   },
@@ -567,8 +568,44 @@ const agentMounts = [
     source: '$PLOINKY_ROOT/Agent',
     target: '/Agent',
     ro: true
+  },
+
+  // Shared directory (read-write)
+  {
+    source: '$CWD/.ploinky/shared',
+    target: '/shared'
+  },
+
+  // CWD passthrough (read-write) - for accessing workspace files
+  {
+    source: '$CWD',
+    target: '$CWD'
   }
 ];
+```
+
+### Dependency Installation
+
+Dependencies are installed in the workspace `agents/<agent>/` directory on the host, then mounted into the container. See [DS12 - Dependency Installation](./DS12-dependency-installation.md) for details.
+
+```
+Host Filesystem:
+$CWD/
+├── agents/
+│   └── <agent>/
+│       ├── package.json      # Merged package.json (core + agent)
+│       ├── package-lock.json
+│       └── node_modules/     # Installed dependencies
+│           ├── achillesAgentLib/
+│           ├── flexsearch/
+│           ├── @anthropic-ai/
+│           └── node-pty/
+
+Container View:
+/code/
+├── index.js                  # Agent source (from .ploinky/repos/...)
+├── package.json              # Agent's package.json
+└── node_modules/             # Mounted from $CWD/agents/<agent>/node_modules/
 ```
 
 ### Container Naming Convention

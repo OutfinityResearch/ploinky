@@ -36,7 +36,7 @@ import {
     splitCommandArgs
 } from './agentCommands.js';
 import { WORKSPACE_ROOT } from '../config.js';
-import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
+import { ensureSharedHostDir, runPreinstallHook, runPostinstallHook } from './agentHooks.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './shellDetection.js';
 import {
     runPreContainerLifecycle,
@@ -220,6 +220,12 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     // (called from lifecycleHooks after container starts)
     // Just ensure the agent work directory exists on host
     createAgentWorkDir(agentName);
+
+    // Run preinstall hook for non-profile manifests (e.g., npm install)
+    // This runs in a temporary container before the main container starts
+    if (!useProfileLifecycle && manifest.preinstall) {
+        runPreinstallHook(agentName, manifest, agentPath, cwd, agentNodeModulesPath);
+    }
 
     // Build volume mount arguments using new workspace structure
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', '/code',
