@@ -102,9 +102,18 @@ function toBool(value, defaultValue = false) {
     return defaultValue;
 }
 
-export function getManifestEnvSpecs(manifest) {
+/**
+ * Get environment variable specifications from manifest or profile configuration.
+ * Profile-based env takes precedence over top-level manifest env.
+ *
+ * @param {object} manifest - The manifest object
+ * @param {object} [profileConfig] - The merged profile configuration (optional)
+ * @returns {Array} Array of env specs
+ */
+export function getManifestEnvSpecs(manifest, profileConfig) {
     const specs = [];
-    const env = manifest?.env;
+    // Profile env takes precedence over top-level manifest env
+    const env = profileConfig?.env || manifest?.env;
     if (!env) return specs;
 
     if (Array.isArray(env)) {
@@ -189,7 +198,8 @@ function isEmptyValue(value) {
 }
 
 function resolveManifestEnv(manifest, secrets, options = {}) {
-    const specs = getManifestEnvSpecs(manifest);
+    const { profileConfig } = options;
+    const specs = getManifestEnvSpecs(manifest, profileConfig);
     const resolved = [];
     const missing = [];
 
@@ -246,17 +256,17 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
     return { resolved, missing };
 }
 
-export function getManifestEnvNames(manifest) {
-    return getManifestEnvSpecs(manifest).map(spec => spec.insideName);
+export function getManifestEnvNames(manifest, profileConfig) {
+    return getManifestEnvSpecs(manifest, profileConfig).map(spec => spec.insideName);
 }
 
-export function collectManifestEnv(manifest, { enforceRequired = false } = {}) {
+export function collectManifestEnv(manifest, { enforceRequired = false, profileConfig } = {}) {
     const secrets = parseSecrets();
-    return resolveManifestEnv(manifest, secrets, { enforceRequired });
+    return resolveManifestEnv(manifest, secrets, { enforceRequired, profileConfig });
 }
 
-export function getExposedNames(manifest) {
-    const names = new Set(getManifestEnvNames(manifest));
+export function getExposedNames(manifest, profileConfig) {
+    const names = new Set(getManifestEnvNames(manifest, profileConfig));
     const exp = manifest?.expose;
     if (Array.isArray(exp)) {
         exp.forEach(e => {
@@ -278,9 +288,9 @@ export function formatEnvFlag(name, value) {
     return `-e ${name}=${quoteEnvValue(value)}`;
 }
 
-export function buildEnvFlags(manifest) {
+export function buildEnvFlags(manifest, profileConfig) {
     const secrets = parseSecrets();
-    const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: true }).resolved;
+    const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: true, profileConfig }).resolved;
     const out = [];
     for (const entry of envEntries) {
         if (entry.value !== undefined) {
@@ -311,10 +321,10 @@ export function buildEnvFlags(manifest) {
     return out;
 }
 
-export function buildEnvMap(manifest) {
+export function buildEnvMap(manifest, profileConfig) {
     const secrets = parseSecrets();
     const out = {};
-    const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: false }).resolved;
+    const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: false, profileConfig }).resolved;
     for (const entry of envEntries) {
         if (entry.value !== undefined) {
             out[entry.insideName] = entry.value;

@@ -35,18 +35,115 @@ import {
     readManifestStartCommand,
     splitCommandArgs
 } from './agentCommands.js';
-import { ensureSharedHostDir, runInstallHook, runPostinstallHook } from './agentHooks.js';
+import { WORKSPACE_ROOT } from '../config.js';
+import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './shellDetection.js';
+import {
+    runPreContainerLifecycle,
+    runProfileLifecycle
+} from '../lifecycleHooks.js';
+import {
+    formatMissingSecretsError,
+    getSecrets,
+    validateSecrets
+} from '../secretInjector.js';
+import {
+    getActiveProfile,
+    getDefaultMountModes,
+    getProfileConfig,
+    getProfileEnvVars,
+    mergeProfiles
+} from '../profileService.js';
+import {
+    getAgentWorkDir,
+    getAgentCodePath,
+    getAgentSkillsPath,
+    createAgentWorkDir
+} from '../workspaceStructure.js';
+import { runPersistentInstall } from '../dependencyInstaller.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
 
+/**
+ * Resolve a symlink path to its actual target.
+ * If the path is not a symlink or doesn't exist, returns the original path.
+ * @param {string} symlinkPath - The path that might be a symlink
+ * @returns {string} The resolved real path, or original if not a symlink
+ */
+function resolveSymlinkPath(symlinkPath) {
+    try {
+        if (fs.existsSync(symlinkPath)) {
+            const stat = fs.lstatSync(symlinkPath);
+            if (stat.isSymbolicLink()) {
+                return fs.realpathSync(symlinkPath);
+            }
+        }
+    } catch (err) {
+        debugLog(`Warning: could not resolve symlink ${symlinkPath}: ${err.message}`);
+    }
+    return symlinkPath;
+}
+
+/**
+ * Get mount mode based on active profile.
+ * In dev profile, mounts are rw. In qa/prod, mounts are ro.
+ * @param {string} profile - The active profile
+ * @param {string} runtime - Container runtime (docker/podman)
+ * @param {object} profileConfig - Profile configuration
+ * @returns {{ codeMountMode: string, skillsMountMode: string, codeReadOnly: boolean, skillsReadOnly: boolean }}
+ */
+function getProfileMountModes(profile, runtime, profileConfig = {}) {
+    const defaultMounts = getDefaultMountModes(profile);
+    const mounts = profileConfig?.mounts || {};
+    const codeMode = normalizeMountMode(mounts.code, defaultMounts.code);
+    const skillsMode = normalizeMountMode(mounts.skills, defaultMounts.skills);
+    const roSuffix = runtime === 'podman' ? ':ro,z' : ':ro';
+    const rwSuffix = runtime === 'podman' ? ':z' : '';
+
+    return {
+        codeMountMode: codeMode === 'ro' ? roSuffix : rwSuffix,
+        skillsMountMode: skillsMode === 'ro' ? roSuffix : rwSuffix,
+        codeReadOnly: codeMode === 'ro',
+        skillsReadOnly: skillsMode === 'ro'
+    };
+}
+
+function normalizeMountMode(mode, fallback) {
+    if (mode === 'ro' || mode === 'rw') {
+        return mode;
+    }
+    return fallback;
+}
+
+function normalizeProfileEnv(env) {
+    if (!env || typeof env !== 'object' || Array.isArray(env)) {
+        return {};
+    }
+    const normalized = {};
+    for (const [key, value] of Object.entries(env)) {
+        if (!key) continue;
+        normalized[String(key)] = value === undefined ? '' : String(value);
+    }
+    return normalized;
+}
+
+function appendEnvFlagsFromMap(envFlags, envMap) {
+    if (!envMap || typeof envMap !== 'object' || Array.isArray(envMap)) {
+        return;
+    }
+    for (const [name, value] of Object.entries(envMap)) {
+        if (!name) continue;
+        envFlags.push(formatEnvFlag(String(name), value ?? ''));
+    }
+}
+
 function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const repoName = path.basename(path.dirname(agentPath));
     const containerName = options.containerName || getAgentContainerName(agentName, repoName);
     try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
-    try { execSync(`${containerRuntime} rm ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+    try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
     clearLivenessState(containerName);
 
     const runtime = containerRuntime;
@@ -56,25 +153,99 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const useStartEntry = Boolean(startCmd);
     const cwd = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), options.alias);
     const envHash = computeEnvHash(manifest);
-    const projectRoot = process.env.PLOINKY_ROOT;
-    const nodeModulesPath = projectRoot ? path.join(projectRoot, 'node_modules') : null;
     const sharedDir = ensureSharedHostDir();
 
-    runInstallHook(agentName, manifest, agentPath, cwd);
+    // Get active profile and configuration
+    const activeProfile = getActiveProfile();
+    const hasProfileConfig = Boolean(manifest?.profiles && Object.keys(manifest.profiles).length > 0);
+    const profileConfig = hasProfileConfig
+        ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
+        : null;
+    if (hasProfileConfig && !profileConfig) {
+        const availableProfiles = Object.keys(manifest.profiles || {});
+        throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
+    }
+    const useProfileLifecycle = Boolean(profileConfig);
 
-    const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', cwd,
-        '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`,
+    // Get profile mount modes (profile overrides default if provided)
+    const {
+        codeMountMode,
+        skillsMountMode,
+        codeReadOnly,
+        skillsReadOnly
+    } = getProfileMountModes(activeProfile, runtime, profileConfig || {});
+
+    // New workspace structure paths
+    const agentWorkDir = getAgentWorkDir(agentName);
+    const agentCodePathSymlink = getAgentCodePath(agentName);
+    const agentSkillsPathSymlink = getAgentSkillsPath(agentName);
+
+    // Resolve symlinks to get actual paths - ensures container mounts work correctly
+    // The paths might be symlinks like $CWD/code/agent -> .ploinky/repos/repo/agent
+    const agentCodePath = resolveSymlinkPath(agentCodePathSymlink);
+    const agentSkillsPath = resolveSymlinkPath(agentSkillsPathSymlink);
+
+    const agentNodeModulesPath = path.join(agentWorkDir, 'node_modules');
+    if (!fs.existsSync(agentNodeModulesPath)) {
+        fs.mkdirSync(agentNodeModulesPath, { recursive: true });
+    }
+    const nodeModulesMountMode = runtime === 'podman' ? ':ro,z' : ':ro';
+
+    // Ensure workspace structure exists before container creation
+    const preLifecycle = runPreContainerLifecycle(agentName, repoName, agentPath);
+    if (!preLifecycle.success) {
+        console.error(`[profile] ${agentName}: workspace init warnings: ${preLifecycle.errors.join('; ')}`);
+    }
+
+    // Ensure agent work directory exists
+    createAgentWorkDir(agentName);
+    // Ensure MCP config is staged in the agent work dir before container start
+    syncAgentMcpConfig(containerName, path.resolve(agentPath), agentName);
+
+    // Run install hook with persistent changes (git clone, etc)
+    // Install command comes from profile config (merged default + active profile)
+    const installCmd = String(profileConfig?.install || '').trim();
+    if (installCmd) {
+        const installResult = runPersistentInstall(agentName, image, installCmd, {
+            agentPath,
+            cwd,
+            verbose: true
+        });
+        if (!installResult.success) {
+            console.warn(`[install] ${agentName}: ${installResult.message}`);
+        }
+    }
+
+    // Dependencies are installed in the running container via installDependencies
+    // (called from lifecycleHooks after container starts)
+    // Just ensure the agent work directory exists on host
+    createAgentWorkDir(agentName);
+
+    // Build volume mount arguments using new workspace structure
+    const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', '/code',
+        // Agent library (always ro)
         '-v', `${AGENT_LIB_PATH}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
-        '-v', `${path.resolve(agentPath)}:/code${resolveVarValue('PLOINKY_CODE_WRITABLE') === '1' ? (runtime === 'podman' ? ':z' : '') : (runtime === 'podman' ? ':ro,z' : ':ro')}`,
-        ...(nodeModulesPath ? ['-v', `${nodeModulesPath}:/node_modules${runtime === 'podman' ? ':ro,z' : ':ro'}`] : []),
-        '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`
+        // Code directory - profile dependent (rw in dev, ro in qa/prod)
+        '-v', `${agentCodePath}:/code${codeMountMode}`,
+        // Node modules mounted for ESM resolution
+        '-v', `${agentNodeModulesPath}:/code/node_modules${nodeModulesMountMode}`,
+        // Shared directory
+        '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`,
+        // CWD passthrough - provides access to agents/<name>/ for runtime data
+        '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`
     ];
+
+    // Mount skills directory if it exists
+    if (fs.existsSync(agentSkillsPath)) {
+        args.push('-v', `${agentSkillsPath}:/code/.AchillesSkills${skillsMountMode}`);
+    }
     if (runtime === 'podman') {
         args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
+        args.splice(1, 0, '--replace');
     }
 
     if (manifest.volumes && typeof manifest.volumes === 'object') {
-        const workspaceRoot = getConfiguredProjectPath('.', '', undefined);
+        const workspaceRoot = WORKSPACE_ROOT;
         for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
             const resolvedHostPath = path.isAbsolute(hostPath)
                 ? hostPath
@@ -93,8 +264,18 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (!p) continue;
         args.splice(1, 0, '-p', String(p));
     }
-    const envStrings = [...buildEnvFlags(manifest), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
+    const envStrings = [...buildEnvFlags(manifest, profileConfig), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
     envStrings.push(formatEnvFlag('AGENT_NAME', agentName));
+    envStrings.push(formatEnvFlag('WORKSPACE_PATH', agentWorkDir));
+
+    const profileEnv = normalizeProfileEnv(profileConfig?.env);
+    appendEnvFlagsFromMap(envStrings, profileEnv);
+
+    const profileEnvVars = getProfileEnvVars(agentName, repoName, activeProfile, {
+        containerName,
+        containerId: containerName
+    });
+    appendEnvFlagsFromMap(envStrings, profileEnvVars);
 
     let routerPort = '8080';
     try {
@@ -122,9 +303,20 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         envStrings.push(formatEnvFlag('PLOINKY_AGENT_CLIENT_SECRET', agentClientSecret));
     }
 
+    if (profileConfig?.secrets && profileConfig.secrets.length > 0) {
+        const secretValidation = validateSecrets(profileConfig.secrets);
+        if (!secretValidation.valid) {
+            throw new Error(formatMissingSecretsError(secretValidation.missing, activeProfile));
+        }
+        const profileSecrets = getSecrets(profileConfig.secrets);
+        appendEnvFlagsFromMap(envStrings, profileSecrets);
+    }
+
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
-    args.push('-e', 'NODE_PATH=/node_modules');
+    // Set NODE_PATH to agent working directory node_modules
+    args.push('-e', 'NODE_PATH=/code/node_modules');
+    // Profile metadata is already included via getProfileEnvVars
 
     args.push(image);
     let entrySummary = DEFAULT_AGENT_ENTRY;
@@ -150,7 +342,11 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const res = spawnSync(runtime, args, { stdio: 'inherit' });
     if (res.status !== 0) { throw new Error(`${runtime} run failed with code ${res.status}`); }
     const agents = loadAgentsMap();
-    const declaredEnvNames2 = [...getManifestEnvNames(manifest), ...getExposedNames(manifest)];
+    const declaredEnvNames2 = [
+        ...getManifestEnvNames(manifest, profileConfig),
+        ...getExposedNames(manifest, profileConfig),
+        ...Object.keys(profileEnv)
+    ];
     const existingRecord = agents[containerName] || {};
     agents[containerName] = {
         agentName,
@@ -160,13 +356,16 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         projectPath: cwd,
         runMode: existingRecord.runMode,
         develRepo: existingRecord.develRepo,
+        profile: activeProfile,
         type: 'agent',
         config: {
             binds: [
-                { source: cwd, target: cwd },
                 { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
-                { source: agentPath, target: '/code', ro: process.env.PLOINKY_CODE_WRITABLE !== '1' },
-                { source: sharedDir, target: '/shared' }
+                { source: agentCodePath, target: '/code', ro: codeReadOnly },
+                { source: agentNodeModulesPath, target: '/code/node_modules', ro: true },
+                { source: sharedDir, target: '/shared' },
+                ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/.AchillesSkills', ro: skillsReadOnly }] : []),
+                { source: cwd, target: cwd }
             ],
             env: Array.from(new Set(declaredEnvNames2)).map((name) => ({ name })),
             ports: portMappings
@@ -178,7 +377,20 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     }
     saveAgentsMap(agents);
     try {
-        runPostinstallHook(agentName, containerName, manifest, cwd);
+        if (useProfileLifecycle) {
+            const lifecycleResult = runProfileLifecycle(agentName, activeProfile, {
+                containerName,
+                agentPath,
+                repoName,
+                manifest
+            });
+            if (!lifecycleResult.success) {
+                const details = lifecycleResult.errors.join('; ');
+                throw new Error(`[profile] ${agentName}: lifecycle failed (${details})`);
+            }
+        } else {
+            runPostinstallHook(agentName, containerName, manifest, cwd);
+        }
     } catch (error) {
         try { stopAndRemove(containerName); } catch (_) { }
         throw error;
@@ -191,7 +403,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             throw error;
         }
     }
-    syncAgentMcpConfig(containerName, path.resolve(agentPath));
+    syncAgentMcpConfig(containerName, path.resolve(agentPath), agentName);
     return containerName;
 }
 
@@ -232,12 +444,14 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     let preferredHostPort;
     let containerOverride;
     let aliasOverride;
+    let forceRecreate = false;
     if (typeof options === 'number') {
         preferredHostPort = options;
     } else if (options && typeof options === 'object') {
         preferredHostPort = options.preferredHostPort;
         containerOverride = options.containerName;
         aliasOverride = options.alias;
+        forceRecreate = options.forceRecreate === true;
     }
 
     const repoName = path.basename(path.dirname(agentPath));
@@ -260,15 +474,25 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     const startCmd = readManifestStartCommand(manifest);
     const withParallelAgent = Boolean(startCmd);
 
+    if (forceRecreate && containerExists(containerName)) {
+        try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+        clearLivenessState(containerName);
+    }
+
     if (containerExists(containerName)) {
         const desired = computeEnvHash(manifest);
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
-            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+            // Only recreate if hash actually changed (not just empty vs non-empty)
+            if (current && desired) {
+                debugLog(`[ensureAgentService] ${agentName}: env hash changed, recreating container`);
+                try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+            }
         }
     }
     if (containerExists(containerName)) {
         if (!isContainerRunning(containerName)) {
+            syncAgentMcpConfig(containerName, agentPath, agentName);
             try { execSync(`${containerRuntime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
             if (withParallelAgent) {
                 try {
@@ -280,7 +504,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
             }
         }
         const hostPort = resolveHostPort(containerName, existingRecord, containerPortCandidates);
-        syncAgentMcpConfig(containerName, agentPath);
+        syncAgentMcpConfig(containerName, agentPath, agentName);
         return { containerName, hostPort };
     }
 
@@ -295,8 +519,33 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
 
     startAgentContainer(agentName, manifest, agentPath, { publish: additionalPorts, containerName, alias: aliasOverride });
 
+    // Get paths for the new workspace structure
+    const agentWorkDir = getAgentWorkDir(agentName);
+    const agentCodePath = getAgentCodePath(agentName);
+    const agentSkillsPath = getAgentSkillsPath(agentName);
+    const agentNodeModulesPath = path.join(agentWorkDir, 'node_modules');
+    if (!fs.existsSync(agentNodeModulesPath)) {
+        fs.mkdirSync(agentNodeModulesPath, { recursive: true });
+    }
+    const runtime = containerRuntime;
+    const activeProfile = getActiveProfile();
+    const hasProfileConfig = Boolean(manifest?.profiles && Object.keys(manifest.profiles).length > 0);
+    const profileConfig = hasProfileConfig
+        ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
+        : null;
+    if (hasProfileConfig && !profileConfig) {
+        const availableProfiles = Object.keys(manifest.profiles || {});
+        throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
+    }
+    const profileEnv = normalizeProfileEnv(profileConfig?.env);
+    const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, runtime, profileConfig || {});
+
     const agents = loadAgentsMap();
-    const declaredEnvNames3 = [...getManifestEnvNames(manifest), ...getExposedNames(manifest)];
+    const declaredEnvNames3 = [
+        ...getManifestEnvNames(manifest, profileConfig),
+        ...getExposedNames(manifest, profileConfig),
+        ...Object.keys(profileEnv)
+    ];
     let projPath = existingRecord.projectPath;
     if (!projPath) {
         projPath = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), aliasOverride);
@@ -309,12 +558,15 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         projectPath: projPath,
         runMode: existingRecord.runMode,
         develRepo: existingRecord.develRepo,
+        profile: activeProfile,
         type: 'agent',
         config: {
             binds: [
-                { source: projPath, target: projPath },
-                { source: AGENT_LIB_PATH, target: '/agent', ro: true },
-                { source: agentPath, target: '/code', ro: process.env.PLOINKY_CODE_WRITABLE !== '1' }
+                { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
+                { source: agentCodePath, target: '/code', ro: codeReadOnly },
+                { source: agentNodeModulesPath, target: '/code/node_modules', ro: true },
+                ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/.AchillesSkills', ro: skillsReadOnly }] : []),
+                { source: projPath, target: projPath }
             ],
             env: Array.from(new Set(declaredEnvNames3)).map((name) => ({ name })),
             ports: allPortMappings
@@ -325,7 +577,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     }
     saveAgentsMap(agents);
 
-    syncAgentMcpConfig(containerName, agentPath);
+    syncAgentMcpConfig(containerName, agentPath, agentName);
     const returnPort = allPortMappings.find((p) => p.containerPort === 7000)?.hostPort || allPortMappings[0]?.hostPort || 0;
     return { containerName, hostPort: returnPort };
 }
