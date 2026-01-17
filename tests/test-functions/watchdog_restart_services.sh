@@ -34,8 +34,13 @@ watchdog_restart_services() {
     return 1
   fi
 
-  sleep 3
   test_info "Waiting for watchdog to restore services."
+
+  # Wait for the router to come back up (up to 60 seconds)
+  if ! wait_for_router; then
+    echo "Router did not restart within expected time after SIGKILL." >&2
+    return 1
+  fi
 
   local new_router_pid
   new_router_pid=$(lsof -nP -t -iTCP:"$TEST_ROUTER_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1)
