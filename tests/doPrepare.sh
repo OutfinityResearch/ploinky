@@ -137,7 +137,11 @@ mkdir -p "$dep_agent_root"
 cat >"${dep_agent_root}/manifest.json" <<'EOF'
 {
   "container": "node:20-bullseye",
-  "postinstall": "echo 'postinstall_ok' > \"$WORKSPACE_PATH/postinstall_marker.txt\""
+  "profiles": {
+    "default": {
+      "postinstall": "echo 'postinstall_ok' > \"$WORKSPACE_PATH/postinstall_marker.txt\""
+    }
+  }
 }
 EOF
 
@@ -167,6 +171,11 @@ ploinky enable repo "$TEST_REPO_NAME"
 
 # Use helper function to enable demo repo with optional branch from environment
 enable_repo_with_branch "demo"
+
+# Pre-clone manifest repos with branches before demo agent processes them
+# These repos are referenced in demo's manifest.repos and need branch support for testing
+preclone_manifest_repo "fileExplorer" "https://github.com/PloinkyRepos/AsssistOSExplorer.git"
+preclone_manifest_repo "soplangBuilder" "https://github.com/PloinkyRepos/SOPLangBuilder.git"
 
 test_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_QUALIFIED"
@@ -202,8 +211,12 @@ cat >"${global_agent_root}/manifest.json" <<EOF
   "ports": [
     "127.0.0.1:${global_agent_host_port}:${global_agent_internal_port}"
   ],
-  "env": {
-    "PORT": "${global_agent_internal_port}"
+  "profiles": {
+    "default": {
+      "env": {
+        "PORT": "${global_agent_internal_port}"
+      }
+    }
   }
 }
 EOF

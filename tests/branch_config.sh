@@ -16,4 +16,8 @@
 # export PLOINKY_VIBE_BRANCH=""
 # export PLOINKY_SECURITY_BRANCH=""
 # export PLOINKY_EXTRA_BRANCH=""
-# export PLOINKY_DEMO_BRANCH=""
+
+# For testing profile-based manifest changes, enable these branches:
+export PLOINKY_DEMO_BRANCH="profile_implementation"
+export PLOINKY_FILEEXPLORER_BRANCH="profile_implementation"
+# Note: soplangBuilder may also need profile_implementation branch if it has manifests to update
