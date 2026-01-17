@@ -174,7 +174,7 @@ enable_repo_with_branch "demo"
 
 # Pre-clone manifest repos with branches before demo agent processes them
 # These repos are referenced in demo's manifest.repos and need branch support for testing
-preclone_manifest_repo "fileExplorer" "https://github.com/PloinkyRepos/AsssistOSExplorer.git"
+preclone_manifest_repo "fileExplorer" "https://github.com/PloinkyRepos/AssistOSExplorer.git"
 preclone_manifest_repo "soplangBuilder" "https://github.com/PloinkyRepos/SOPLangBuilder.git"
 
 test_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
