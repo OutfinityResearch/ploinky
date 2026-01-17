@@ -21,16 +21,6 @@ watchdog_restart_services() {
     return 1
   fi
 
-  # Get the Watchdog PID from the pid file
-  local watchdog_pid_file="${TEST_RUN_DIR}/.ploinky/running/router.pid"
-  local watchdog_pid=""
-  if [[ -f "$watchdog_pid_file" ]]; then
-    watchdog_pid=$(cat "$watchdog_pid_file")
-    test_info "Watchdog PID from file: ${watchdog_pid}, RoutingServer PID: ${router_pid}"
-  else
-    test_info "Warning: Watchdog PID file not found at ${watchdog_pid_file}"
-  fi
-
   test_info "Sending SIGKILL to RoutingServer (PID: ${router_pid})."
 
   if ! kill -9 "$router_pid" 2>/dev/null; then
@@ -49,22 +39,6 @@ watchdog_restart_services() {
   # Wait for the router to come back up (up to 60 seconds)
   if ! wait_for_router; then
     echo "Router did not restart within expected time after SIGKILL." >&2
-    # Debug: Check if watchdog is still running
-    if [[ -n "$watchdog_pid" ]]; then
-      if kill -0 "$watchdog_pid" 2>/dev/null; then
-        echo "Debug: Watchdog (PID ${watchdog_pid}) is still running." >&2
-      else
-        echo "Debug: Watchdog (PID ${watchdog_pid}) is NOT running!" >&2
-      fi
-    fi
-    # Debug: Show watchdog log tail
-    local watchdog_log="${TEST_RUN_DIR}/logs/watchdog.log"
-    if [[ -f "$watchdog_log" ]]; then
-      echo "Debug: Last 30 lines of watchdog.log:" >&2
-      tail -30 "$watchdog_log" >&2
-    else
-      echo "Debug: Watchdog log not found at ${watchdog_log}" >&2
-    fi
     return 1
   fi
 
