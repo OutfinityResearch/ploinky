@@ -329,8 +329,11 @@ function spawnServer() {
         backoff: state.currentBackoff
     });
     
+    // Don't pass PLOINKY_ROUTER_PID_FILE to the child - that file stores
+    // the Watchdog PID, not the RoutingServer PID
+    const { PLOINKY_ROUTER_PID_FILE, ...restEnv } = process.env;
     const env = {
-        ...process.env,
+        ...restEnv,
         MANAGED_BY_PROCESS_MANAGER: 'true',
     };
     
