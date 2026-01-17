@@ -746,3 +746,27 @@ enable_repo_with_branch() {
     ploinky enable repo "$repo_name"
   fi
 }
+
+# Pre-clone a manifest repo with a specific branch before the manifest is processed
+# This allows testing with feature branches for repos defined in manifest.repos
+preclone_manifest_repo() {
+  local repo_name="$1"
+  local repo_url="$2"
+  local branch_var="PLOINKY_${repo_name^^}_BRANCH"
+  local branch="${!branch_var:-}"
+
+  local repo_path=".ploinky/repos/${repo_name}"
+
+  if [[ -d "$repo_path" ]]; then
+    test_info "Repository ${repo_name} already exists, skipping pre-clone."
+    return 0
+  fi
+
+  if [[ -n "$branch" ]]; then
+    test_info "Pre-cloning manifest repo ${repo_name} (branch: ${branch})."
+    git clone --branch "$branch" "$repo_url" "$repo_path"
+  else
+    test_info "Pre-cloning manifest repo ${repo_name}."
+    git clone "$repo_url" "$repo_path"
+  fi
+}
