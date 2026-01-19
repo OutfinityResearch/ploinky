@@ -1,107 +1,15 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { buildEnvFlags } from '../secretVars.js';
 import { normalizeLifecycleCommands } from './agentCommands.js';
-import { containerRuntime, flagsToArgs, waitForContainerRunning, isContainerRunning } from './common.js';
+import { containerRuntime, waitForContainerRunning, isContainerRunning } from './common.js';
 import { WORKSPACE_ROOT } from '../config.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
 
 function ensureSharedHostDir() {
     const dir = path.resolve(WORKSPACE_ROOT, 'shared');
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
     return dir;
-}
-
-function runInstallHook(agentName, manifest, agentPath, cwd) {
-    const installCmd = String(manifest.install || '').trim();
-    if (!installCmd) return;
-
-    const runtime = containerRuntime;
-    const image = manifest.container || manifest.image || 'node:18-alpine';
-    const projectRoot = process.env.PLOINKY_ROOT;
-    const nodeModulesPath = projectRoot ? path.join(projectRoot, 'node_modules') : null;
-    const sharedDir = ensureSharedHostDir();
-    const volZ = runtime === 'podman' ? ':z' : '';
-    const roZ = runtime === 'podman' ? ':ro,z' : ':ro';
-
-    const args = ['run', '--rm', '-w', cwd,
-        '-v', `${cwd}:${cwd}${volZ}`,
-        '-v', `${AGENT_LIB_PATH}:/Agent${roZ}`,
-        '-v', `${path.resolve(agentPath)}:/code${roZ}`,
-        '-v', `${sharedDir}:/shared${volZ}`
-    ];
-    if (runtime === 'podman') {
-        args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
-    }
-    if (nodeModulesPath) {
-        args.push('-v', `${nodeModulesPath}:/node_modules${roZ}`);
-    }
-    const envFlags = flagsToArgs(buildEnvFlags(manifest));
-    if (envFlags.length) args.push(...envFlags);
-    console.log(`[install] ${agentName}: cd '${cwd}' && ${installCmd}`);
-    args.push(image, '/bin/sh', '-lc', `cd '${cwd}' && ${installCmd}`);
-    const res = spawnSync(runtime, args, { stdio: 'inherit' });
-    if (res.status !== 0) {
-        throw new Error(`[install] ${agentName}: command exited with ${res.status}`);
-    }
-}
-
-/**
- * Run preinstall hook for manifests without profiles.
- * Runs the preinstall command inside a temporary container before the main container starts.
- * The preinstall typically installs dependencies (npm install, pip install, etc.)
- *
- * @param {string} agentName - Agent name
- * @param {object} manifest - Agent manifest
- * @param {string} agentPath - Path to agent source code
- * @param {string} cwd - Working directory (agent workspace)
- * @param {string} nodeModulesPath - Path to mount node_modules (for persistence)
- */
-function runPreinstallHook(agentName, manifest, agentPath, cwd, nodeModulesPath) {
-    const preinstallCmd = String(manifest.preinstall || '').trim();
-    if (!preinstallCmd) return;
-
-    const runtime = containerRuntime;
-    const image = manifest.container || manifest.image || 'node:18-alpine';
-    const sharedDir = ensureSharedHostDir();
-    const volZ = runtime === 'podman' ? ':z' : '';
-    const roZ = runtime === 'podman' ? ':ro,z' : ':ro';
-
-    // Use /code as working directory to match the main container
-    const args = ['run', '--rm', '-w', '/code',
-        '-v', `${cwd}:${cwd}${volZ}`,
-        '-v', `${AGENT_LIB_PATH}:/Agent${roZ}`,
-        '-v', `${path.resolve(agentPath)}:/code${volZ}`,
-        '-v', `${sharedDir}:/shared${volZ}`
-    ];
-
-    if (runtime === 'podman') {
-        args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
-    }
-
-    // Mount node_modules for npm install to persist
-    if (nodeModulesPath && fs.existsSync(path.dirname(nodeModulesPath))) {
-        if (!fs.existsSync(nodeModulesPath)) {
-            fs.mkdirSync(nodeModulesPath, { recursive: true });
-        }
-        args.push('-v', `${nodeModulesPath}:/code/node_modules${volZ}`);
-    }
-
-    const envFlags = flagsToArgs(buildEnvFlags(manifest));
-    if (envFlags.length) args.push(...envFlags);
-
-    console.log(`[preinstall] ${agentName}: ${preinstallCmd}`);
-    args.push(image, '/bin/sh', '-lc', preinstallCmd);
-
-    const res = spawnSync(runtime, args, { stdio: 'inherit' });
-    if (res.status !== 0) {
-        throw new Error(`[preinstall] ${agentName}: command exited with ${res.status}`);
-    }
 }
 
 function runPostinstallHook(agentName, containerName, manifest, cwd) {
@@ -153,7 +61,5 @@ function runPostinstallHook(agentName, containerName, manifest, cwd) {
 
 export {
     ensureSharedHostDir,
-    runInstallHook,
-    runPreinstallHook,
     runPostinstallHook
 };

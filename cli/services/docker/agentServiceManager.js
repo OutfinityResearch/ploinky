@@ -36,7 +36,7 @@ import {
     splitCommandArgs
 } from './agentCommands.js';
 import { WORKSPACE_ROOT } from '../config.js';
-import { ensureSharedHostDir, runPreinstallHook, runPostinstallHook } from './agentHooks.js';
+import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './shellDetection.js';
 import {
     runPreContainerLifecycle,
@@ -185,12 +185,6 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const agentCodePath = resolveSymlinkPath(agentCodePathSymlink);
     const agentSkillsPath = resolveSymlinkPath(agentSkillsPathSymlink);
 
-    const agentNodeModulesPath = path.join(agentWorkDir, 'node_modules');
-    if (!fs.existsSync(agentNodeModulesPath)) {
-        fs.mkdirSync(agentNodeModulesPath, { recursive: true });
-    }
-    const nodeModulesMountMode = runtime === 'podman' ? ':ro,z' : ':ro';
-
     // Ensure workspace structure exists before container creation
     const preLifecycle = runPreContainerLifecycle(agentName, repoName, agentPath);
     if (!preLifecycle.success) {
@@ -204,9 +198,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     // Run install hook with persistent changes (git clone, etc)
     // Install command comes from profile config (merged default + active profile)
-    const installCmd = String(profileConfig?.install || '').trim();
-    if (installCmd) {
-        const installResult = runPersistentInstall(agentName, image, installCmd, {
+    const profileInstallCmd = String(profileConfig?.install || '').trim();
+    if (profileInstallCmd) {
+        const installResult = runPersistentInstall(agentName, image, profileInstallCmd, {
             agentPath,
             cwd,
             verbose: true
@@ -216,16 +210,22 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         }
     }
 
-    // Dependencies are installed in the running container via installDependencies
-    // (called from lifecycleHooks after container starts)
-    // Just ensure the agent work directory exists on host
+    // Ensure the agent work directory exists on host
     createAgentWorkDir(agentName);
 
-    // Run preinstall hook for non-profile manifests (e.g., npm install)
-    // This runs in a temporary container before the main container starts
-    if (!useProfileLifecycle && manifest.preinstall) {
-        runPreinstallHook(agentName, manifest, agentPath, cwd, agentNodeModulesPath);
-    }
+    // Get lifecycle hook commands (for non-profile manifests)
+    // These will run inside the main container entrypoint
+    const preinstallCmd = !useProfileLifecycle ? String(manifest.preinstall || '').trim() : '';
+    const installCmd = !useProfileLifecycle ? String(manifest.install || '').trim() : '';
+
+    // Log hooks that will run in the container entrypoint
+    if (preinstallCmd) console.log(`[preinstall] ${agentName}: cd '${cwd}' && ${preinstallCmd}`);
+    if (installCmd) console.log(`[install] ${agentName}: cd '${cwd}' && ${installCmd}`);
+
+    // Build hook chain for entrypoint: preinstall -> install -> agent
+    let hookChain = '';
+    if (preinstallCmd) hookChain += `cd '${cwd}' && ${preinstallCmd} && `;
+    if (installCmd) hookChain += `cd '${cwd}' && ${installCmd} && `;
 
     // Build volume mount arguments using new workspace structure
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', '/code',
@@ -233,11 +233,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         '-v', `${AGENT_LIB_PATH}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
         // Code directory - profile dependent (rw in dev, ro in qa/prod)
         '-v', `${agentCodePath}:/code${codeMountMode}`,
-        // Node modules mounted for ESM resolution
-        '-v', `${agentNodeModulesPath}:/code/node_modules${nodeModulesMountMode}`,
         // Shared directory
         '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`,
-        // CWD passthrough - provides access to agents/<name>/ for runtime data
+        // CWD passthrough - provides access to agents/<name>/ for runtime data and node_modules
         '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`
     ];
 
@@ -320,8 +318,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
-    // Set NODE_PATH to agent working directory node_modules
-    args.push('-e', 'NODE_PATH=/code/node_modules');
+    // Set NODE_PATH to agent working directory node_modules (in the passthrough mount)
+    args.push('-e', `NODE_PATH=${cwd}/node_modules`);
     // Profile metadata is already included via getProfileEnvVars
 
     args.push(image);
@@ -338,10 +336,19 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (shellPath === SHELL_FALLBACK_DIRECT) {
             throw new Error(`[start] ${agentName}: no supported shell found to execute agent command.`);
         }
-        args.push(shellPath, '-lc', explicitAgentCmd);
-        entrySummary = `${shellPath} -lc ${explicitAgentCmd}`;
+        // Chain lifecycle hooks before agent command
+        const fullCmd = hookChain + `cd /code && ${explicitAgentCmd}`;
+        args.push(shellPath, '-lc', fullCmd);
+        entrySummary = `${shellPath} -lc ${fullCmd}`;
     } else {
-        args.push('sh', '/Agent/server/AgentServer.sh');
+        // Chain lifecycle hooks before default agent server
+        if (hookChain) {
+            const fullCmd = hookChain + 'cd /code && sh /Agent/server/AgentServer.sh';
+            args.push('sh', '-lc', fullCmd);
+            entrySummary = `sh -lc ${fullCmd}`;
+        } else {
+            args.push('sh', '/Agent/server/AgentServer.sh');
+        }
     }
 
     console.log(`[start] ${agentName}: ${runtime} run (cwd='${cwd}') -> ${entrySummary}`);
@@ -368,7 +375,6 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             binds: [
                 { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
                 { source: agentCodePath, target: '/code', ro: codeReadOnly },
-                { source: agentNodeModulesPath, target: '/code/node_modules', ro: true },
                 { source: sharedDir, target: '/shared' },
                 ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/.AchillesSkills', ro: skillsReadOnly }] : []),
                 { source: cwd, target: cwd }
@@ -395,6 +401,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
                 throw new Error(`[profile] ${agentName}: lifecycle failed (${details})`);
             }
         } else {
+            // Preinstall already ran before container start (installs deps to $cwd/node_modules)
+            // Run postinstall after container is running
             runPostinstallHook(agentName, containerName, manifest, cwd);
         }
     } catch (error) {
@@ -529,10 +537,6 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     const agentWorkDir = getAgentWorkDir(agentName);
     const agentCodePath = getAgentCodePath(agentName);
     const agentSkillsPath = getAgentSkillsPath(agentName);
-    const agentNodeModulesPath = path.join(agentWorkDir, 'node_modules');
-    if (!fs.existsSync(agentNodeModulesPath)) {
-        fs.mkdirSync(agentNodeModulesPath, { recursive: true });
-    }
     const runtime = containerRuntime;
     const activeProfile = getActiveProfile();
     const hasProfileConfig = Boolean(manifest?.profiles && Object.keys(manifest.profiles).length > 0);
@@ -570,7 +574,6 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
             binds: [
                 { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
                 { source: agentCodePath, target: '/code', ro: codeReadOnly },
-                { source: agentNodeModulesPath, target: '/code/node_modules', ro: true },
                 ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/.AchillesSkills', ro: skillsReadOnly }] : []),
                 { source: projPath, target: projPath }
             ],
