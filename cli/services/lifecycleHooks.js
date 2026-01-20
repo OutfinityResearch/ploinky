@@ -170,6 +170,7 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
         repoName,
         manifest,
         skipContainer = false,
+        skipInstallHooks = false,  // Skip steps 6-10 if install already ran in temp container
         verbose = false
     } = options;
 
@@ -241,43 +242,61 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
 
     // Container should be started by caller before calling post-start hooks
 
-    // Step 6 & 7: Dependencies Installation [CONTAINER] (conditional)
-    if (containerName) {
-        log('[lifecycle] Steps 6-7: Installing dependencies...');
-        const depResult = installDependencies(containerName, agentName, { verbose });
-        steps.push({ step: 6, name: 'dependencies', success: depResult.success, message: depResult.message });
-        if (!depResult.success) {
-            errors.push(`Dependency installation failed: ${depResult.message}`);
+    // Steps 6-10: Install hooks (skip if already ran in temp container before main container start)
+    if (!skipInstallHooks) {
+        // Step 6 & 7: Dependencies Installation [CONTAINER] (conditional)
+        if (containerName) {
+            log('[lifecycle] Steps 6-7: Installing dependencies...');
+            const depResult = installDependencies(containerName, agentName, { verbose });
+            steps.push({ step: 6, name: 'dependencies', success: depResult.success, message: depResult.message });
+            if (!depResult.success) {
+                errors.push(`Dependency installation failed: ${depResult.message}`);
+            }
         }
-    }
 
-    // Step 8: preinstall [CONTAINER]
-    if (profileConfig.preinstall && containerName) {
-        log('[lifecycle] Step 8: Running preinstall hook...');
-        const result = executeContainerHook(containerName, profileConfig.preinstall, hookEnv);
-        steps.push({ step: 8, name: 'preinstall', success: result.success, output: result.output });
-        if (!result.success) {
-            errors.push(`preinstall hook failed: ${result.message}`);
+        // Step 8: preinstall [CONTAINER]
+        if (profileConfig.preinstall && containerName) {
+            log('[lifecycle] Step 8: Running preinstall hook...');
+            const result = executeContainerHook(containerName, profileConfig.preinstall, hookEnv);
+            steps.push({ step: 8, name: 'preinstall', success: result.success, output: result.output });
+            if (!result.success) {
+                errors.push(`preinstall hook failed: ${result.message}`);
+            }
         }
-    }
 
-    // Step 9: install [CONTAINER]
-    if (profileConfig.install && containerName) {
-        log('[lifecycle] Step 9: Running install hook...');
-        const result = executeContainerHook(containerName, profileConfig.install, hookEnv);
-        steps.push({ step: 9, name: 'install', success: result.success, output: result.output });
-        if (!result.success) {
-            errors.push(`install hook failed: ${result.message}`);
+        // Step 9: install [CONTAINER]
+        if (profileConfig.install && containerName) {
+            log('[lifecycle] Step 9: Running install hook...');
+            const result = executeContainerHook(containerName, profileConfig.install, hookEnv);
+            steps.push({ step: 9, name: 'install', success: result.success, output: result.output });
+            if (!result.success) {
+                errors.push(`install hook failed: ${result.message}`);
+            }
         }
-    }
 
-    // Step 10: postinstall [CONTAINER]
-    if (profileConfig.postinstall && containerName) {
-        log('[lifecycle] Step 10: Running postinstall hook...');
-        const result = executeContainerHook(containerName, profileConfig.postinstall, hookEnv);
-        steps.push({ step: 10, name: 'postinstall', success: result.success, output: result.output });
-        if (!result.success) {
-            errors.push(`postinstall hook failed: ${result.message}`);
+        // Step 10: postinstall [CONTAINER]
+        if (profileConfig.postinstall && containerName) {
+            log('[lifecycle] Step 10: Running postinstall hook...');
+            const result = executeContainerHook(containerName, profileConfig.postinstall, hookEnv);
+            steps.push({ step: 10, name: 'postinstall', success: result.success, output: result.output });
+            if (!result.success) {
+                errors.push(`postinstall hook failed: ${result.message}`);
+            }
+        }
+    } else {
+        log('[lifecycle] Steps 6-9: Skipped (install already ran in temp container)');
+        steps.push({ step: 6, name: 'dependencies', success: true, skipped: true });
+        steps.push({ step: 8, name: 'preinstall', success: true, skipped: true });
+        steps.push({ step: 9, name: 'install', success: true, skipped: true });
+
+        // Step 10: postinstall [CONTAINER] - runs AFTER main container is up, not in temp container
+        if (profileConfig.postinstall && containerName) {
+            log('[lifecycle] Step 10: Running postinstall hook...');
+            const result = executeContainerHook(containerName, profileConfig.postinstall, hookEnv);
+            steps.push({ step: 10, name: 'postinstall', success: result.success, output: result.output });
+            if (!result.success) {
+                errors.push(`postinstall hook failed: ${result.message}`);
+            }
         }
     }
 

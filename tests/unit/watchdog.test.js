@@ -103,3 +103,35 @@ test('circuit breaker trips after repeated crashes within window', () => {
     assert.equal(state.circuitBreakerTripped, true);
     assert.ok(extractEvents().includes('circuit_breaker_tripped'));
 });
+
+test('restarts after health check kill even with clean exit', () => {
+    resetManagerState();
+    clearTestLogs();
+
+    // Simulate health check setting the flag before killing the process
+    state.pendingHealthCheckRestart = true;
+
+    // Process exits cleanly (code 0) after receiving SIGTERM from health check
+    const shouldRestart = determineShouldRestart(0, null);
+
+    assert.equal(shouldRestart, true, 'Should restart when health check initiated the kill');
+    assert.equal(state.pendingHealthCheckRestart, false, 'Flag should be cleared');
+    assert.ok(extractEvents().includes('health_check_restart'));
+});
+
+test('pendingHealthCheckRestart flag is cleared after restart decision', () => {
+    resetManagerState();
+    clearTestLogs();
+
+    state.pendingHealthCheckRestart = true;
+    determineShouldRestart(0, null);
+
+    // Flag should be cleared after first call
+    assert.equal(state.pendingHealthCheckRestart, false);
+
+    // Second call should not restart (normal clean exit)
+    clearTestLogs();
+    const shouldRestart = determineShouldRestart(0, null);
+    assert.equal(shouldRestart, false);
+    assert.ok(extractEvents().includes('clean_exit'));
+});

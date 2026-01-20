@@ -73,9 +73,11 @@ source "$TESTS_DIR/lib.sh"
 init_results
 
 # Default timeouts (seconds)
-ACTION_TIMEOUT="${FAST_ACTION_TIMEOUT:-180}"
+ACTION_TIMEOUT="${FAST_ACTION_TIMEOUT:-240}"
 VERIFY_TIMEOUT="${FAST_VERIFY_TIMEOUT:-180}"
-START_ACTION_TIMEOUT="${FAST_START_ACTION_TIMEOUT:-240}"
+# START_ACTION_TIMEOUT increased to 420s to account for container-based dependency installation
+# Each agent runs npm install in a container (~15s), and multiple agents are started
+START_ACTION_TIMEOUT="${FAST_START_ACTION_TIMEOUT:-420}"
 
 # Function to run a single stage of the test suite.
 # A stage consists of an "action" (do*) and a "verification" (tests*).

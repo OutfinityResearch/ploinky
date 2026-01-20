@@ -3,7 +3,7 @@ import path from 'path';
 import { execSync, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { containerRuntime } from './docker/common.js';
-import { TEMPLATES_DIR } from './config.js';
+import { TEMPLATES_DIR, GLOBAL_DEPS_PATH } from './config.js';
 import { getAgentWorkDir, getAgentCodePath, getPackageBaseTemplatePath } from './workspaceStructure.js';
 import { debugLog } from './utils.js';
 
@@ -216,38 +216,6 @@ function resolveRootNodeModules() {
         return null;
     }
     return nodeModulesPath;
-}
-
-function seedNodeModulesFromRoot(agentName, log = debugLog) {
-    const rootNodeModules = resolveRootNodeModules();
-    if (!rootNodeModules) return { seeded: false, reason: 'No root node_modules found' };
-
-    const agentWorkDir = getAgentWorkDir(agentName);
-    const agentNodeModules = path.join(agentWorkDir, 'node_modules');
-    try {
-        if (fs.existsSync(agentNodeModules)) {
-            const entries = fs.readdirSync(agentNodeModules);
-            if (entries.length > 0) {
-                return { seeded: false, reason: 'Agent node_modules already populated' };
-            }
-        }
-    } catch (_) {
-        // If we cannot read, fall through to overwrite.
-    }
-
-    try {
-        fs.mkdirSync(agentNodeModules, { recursive: true });
-        if (typeof fs.cpSync === 'function') {
-            fs.cpSync(rootNodeModules, agentNodeModules, { recursive: true });
-        } else {
-            execSync(`cp -a "${rootNodeModules}/." "${agentNodeModules}/"`);
-        }
-        log(`[deps] Seeded node_modules for ${agentName} from PLOINKY_ROOT`);
-        return { seeded: true, reason: 'Seeded from root node_modules' };
-    } catch (err) {
-        log(`[deps] Failed to seed node_modules for ${agentName}: ${err.message}`);
-        return { seeded: false, reason: err.message };
-    }
 }
 
 /**
@@ -848,12 +816,26 @@ function runPersistentInstall(agentName, image, installCommand, options = {}) {
 
     // Mount the resolved code path as /code with rw so install scripts can write
     // This ensures git clone, npm install, etc. persist to the host filesystem
-    const installWorkdir = process.env.PLOINKY_INSTALL_WORKDIR || '/code';
+    // Use cwd as install workdir if provided (for npm install to write to $cwd/node_modules)
+    const installWorkdir = cwd || process.env.PLOINKY_INSTALL_WORKDIR || '/code';
+
+    // Ensure node_modules directory exists before mounting
+    const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
+    if (!fs.existsSync(nodeModulesDir)) {
+        fs.mkdirSync(nodeModulesDir, { recursive: true });
+    }
+
     const args = ['run', '-d', '--name', containerName, '-w', installWorkdir,
         '-v', `${resolvedCodePath}:/code${volZ}`,  // rw - resolved path ensures changes persist
+        '-v', `${nodeModulesDir}:/code/node_modules${volZ}`,  // rw - npm install writes to agent workdir node_modules
         '-v', `${agentWorkDir}:${agentWorkDir}${volZ}`,  // rw - CWD passthrough for runtime data
         '-e', `WORKSPACE_PATH=${agentWorkDir}`,  // Set WORKSPACE_PATH for install scripts
     ];
+
+    // If cwd is different from agentWorkDir, also mount cwd so install can write there
+    if (cwd && cwd !== agentWorkDir) {
+        args.push('-v', `${cwd}:${cwd}${volZ}`);
+    }
 
     if (runtime === 'podman') {
         args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
@@ -869,10 +851,23 @@ function runPersistentInstall(agentName, image, installCommand, options = {}) {
     }
 
     try {
-        // Ensure git is available for install scripts that need it
+        // Ensure git is available as a fallback for repos that don't have it in preinstall
+        // This is needed for npm install with github dependencies
         const gitResult = ensureGitAvailable(containerName, log);
         if (!gitResult.success) {
             log(`[install] ${agentName}: Warning - ${gitResult.message}`);
+        }
+
+        // If running npm install in a different dir than /code, copy package.json first
+        // This allows npm to find dependencies while installing to the correct location
+        if (installWorkdir !== '/code' && installCommand.includes('npm install')) {
+            const copyResult = spawnSync(runtime, [
+                'exec', containerName, 'sh', '-c',
+                `test -f /code/package.json && mkdir -p "${installWorkdir}" && cp /code/package.json "${installWorkdir}/" || true`
+            ], { stdio: 'inherit' });
+            if (copyResult.status === 0) {
+                log(`[install] ${agentName}: Copied package.json from /code to ${installWorkdir}`);
+            }
         }
 
         // Run the install command
@@ -890,10 +885,142 @@ function runPersistentInstall(agentName, image, installCommand, options = {}) {
         return { success: true, message: 'Install completed' };
 
     } finally {
-        // Clean up the container
+        // Clean up the container - stop first with short timeout, then remove
         try {
-            execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' });
+            execSync(`${runtime} stop -t 2 ${containerName}`, { stdio: 'ignore', timeout: 10000 });
         } catch (_) {}
+        try {
+            execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore', timeout: 10000 });
+        } catch (_) {}
+    }
+}
+
+/**
+ * Read the global dependencies package.json.
+ * @returns {object} The parsed global package.json
+ */
+function readGlobalDepsPackage() {
+    const globalPackagePath = path.join(GLOBAL_DEPS_PATH, 'package.json');
+    if (fs.existsSync(globalPackagePath)) {
+        return JSON.parse(fs.readFileSync(globalPackagePath, 'utf8'));
+    }
+    // Fall back to base template if globalDeps doesn't exist
+    return readPackageBaseTemplate();
+}
+
+/**
+ * Install dependencies inside a container.
+ * This is the main container-based installation function that:
+ * 1. Copies global package.json to agent work dir
+ * 2. Merges agent's package.json if it exists (agent deps override global)
+ * 3. Runs npm install inside a temporary container
+ *
+ * @param {string} agentName - The agent name
+ * @param {string} containerImage - The container image to use
+ * @param {object} options - Options
+ * @param {boolean} [options.verbose=false] - Enable verbose logging
+ * @param {boolean} [options.force=false] - Force reinstall even if cached
+ * @returns {{ success: boolean, message: string }}
+ */
+function installDependenciesInContainer(agentName, containerImage, options = {}) {
+    const { verbose = false, force = false } = options;
+    const log = verbose ? console.log : debugLog;
+    const runtime = containerRuntime;
+
+    const agentWorkDir = getAgentWorkDir(agentName);
+    const agentCodePath = getAgentCodePath(agentName);
+    const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
+    const workDirPackageJson = path.join(agentWorkDir, 'package.json');
+
+    // Check if we can skip installation (cached node_modules exist)
+    const mcpSdkPath = path.join(nodeModulesDir, 'mcp-sdk');
+    if (!force && fs.existsSync(mcpSdkPath)) {
+        log(`[deps] ${agentName}: Using cached node_modules`);
+        return { success: true, message: 'Using cached node_modules' };
+    }
+
+    // Ensure directories exist
+    if (!fs.existsSync(agentWorkDir)) {
+        fs.mkdirSync(agentWorkDir, { recursive: true });
+    }
+    if (!fs.existsSync(nodeModulesDir)) {
+        fs.mkdirSync(nodeModulesDir, { recursive: true });
+    }
+
+    // Step 1: Copy global package.json to agent work dir
+    log(`[deps] ${agentName}: Preparing package.json with global dependencies...`);
+    const globalPkg = readGlobalDepsPackage();
+
+    // Step 2: Check for agent-specific package.json and merge
+    const agentCodePackageJson = path.join(agentCodePath, 'package.json');
+    if (fs.existsSync(agentCodePackageJson)) {
+        log(`[deps] ${agentName}: Merging agent-specific dependencies...`);
+        const agentPkg = JSON.parse(fs.readFileSync(agentCodePackageJson, 'utf8'));
+
+        // Agent deps override global (agent takes precedence for conflicts)
+        globalPkg.dependencies = {
+            ...globalPkg.dependencies,
+            ...(agentPkg.dependencies || {})
+        };
+
+        if (agentPkg.devDependencies) {
+            globalPkg.devDependencies = {
+                ...(globalPkg.devDependencies || {}),
+                ...agentPkg.devDependencies
+            };
+        }
+
+        // Preserve agent's name if available
+        if (agentPkg.name) {
+            globalPkg.name = agentPkg.name;
+        }
+    }
+
+    // Write merged package.json to agent work dir
+    fs.writeFileSync(workDirPackageJson, JSON.stringify(globalPkg, null, 2));
+
+    // Step 3: Run npm install inside TEMPORARY container (removed after)
+    const sanitizedName = String(agentName || 'agent')
+        .toLowerCase()
+        .replace(/[^a-z0-9_.-]/g, '-');
+    const tempContainerName = `ploinky-deps-${sanitizedName}-${Date.now()}`;
+    const volZ = runtime === 'podman' ? ':z' : '';
+
+    const args = [
+        'run', '--rm',
+        '--name', tempContainerName,
+        '-v', `${agentWorkDir}:/install${volZ}`,
+        '-w', '/install',
+    ];
+
+    if (runtime === 'podman') {
+        args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
+    }
+
+    // Use a shell script that ensures git and build tools are available before running npm install
+    // Git is needed for github: dependencies
+    // Build tools (python3, make, g++) are needed for native modules like node-pty
+    const installScript = [
+        '(',
+        '  command -v git >/dev/null 2>&1 ||',
+        '  (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
+        '  (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
+        ') 2>/dev/null',
+        '&& npm install'
+    ].join(' ');
+
+    args.push(containerImage, 'sh', '-c', installScript);
+
+    log(`[deps] ${agentName}: Running npm install in container...`);
+    try {
+        const result = spawnSync(runtime, args, { stdio: 'inherit', timeout: 600000 });
+        if (result.status !== 0) {
+            return { success: false, message: `npm install failed with code ${result.status}` };
+        }
+        log(`[deps] ${agentName}: Dependencies installed successfully`);
+        return { success: true, message: 'Dependencies installed successfully' };
+    } catch (err) {
+        return { success: false, message: `npm install failed: ${err.message}` };
     }
 }
 
@@ -902,11 +1029,13 @@ export {
     fileExistsInContainer,
     dirExistsInContainer,
     readPackageBaseTemplate,
+    readGlobalDepsPackage,
     mergePackageJson,
     setupAgentWorkDir,
     needsReinstall,
     needsHostInstall,
     installDependencies,
+    installDependenciesInContainer,
     installCoreDependencies,
     installAgentDependencies,
     syncSourceNodeModules,

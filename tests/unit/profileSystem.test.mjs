@@ -94,17 +94,20 @@ test('listProfiles returns manifest profiles and defaultProfile', () => {
 test('getProfileConfig returns the profile config when present', () => {
     writeManifest('repo-two', 'agent-two', {
         profiles: {
+            default: { env: { NODE_ENV: 'default' } },
             dev: { env: { NODE_ENV: 'development' } }
         }
     });
 
     const config = getProfileConfig('repo-two/agent-two', 'dev');
+    // Result is merged: default + dev (dev overrides)
     assert.deepStrictEqual(config, { env: { NODE_ENV: 'development' } });
 });
 
 test('validateProfile reports missing secrets', () => {
     writeManifest('repo-three', 'agent-three', {
         profiles: {
+            default: {},
             dev: { secrets: ['TEST_SECRET'] }
         }
     });
@@ -124,6 +127,7 @@ test('validateProfile reports missing secrets', () => {
 test('validateProfile succeeds when secrets and hooks are present', () => {
     const agentDir = writeManifest('repo-four', 'agent-four', {
         profiles: {
+            default: {},
             dev: {
                 secrets: ['TEST_SECRET'],
                 hosthook_aftercreation: 'scripts/hook.sh'
@@ -151,6 +155,7 @@ test('validateProfile succeeds when secrets and hooks are present', () => {
 test('validateProfile accepts secrets from .env', () => {
     writeManifest('repo-five', 'agent-five', {
         profiles: {
+            default: {},
             dev: { secrets: ['ENV_SECRET'] }
         }
     });

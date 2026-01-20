@@ -20,7 +20,8 @@ check_dir() {
   rm -f "$test_file" >/dev/null 2>&1
 }
 
-check_dir "/code/node_modules" "code_node_modules"
+# Note: /code/node_modules no longer exists with the new architecture.
+# Dependencies are now in $WORKSPACE_PATH/node_modules (via NODE_PATH).
 check_dir "/code" "code_dir"
 check_dir "/Agent" "agent_root"
 exit
@@ -31,13 +32,14 @@ EOS
   fi
 
   local parsed_output
-  parsed_output=$(echo "$raw_output" | tr -d '\r' | grep -E '^(Exists|Missing|ReadOnly|Writable) ')
+  # Strip shell prompt prefix (# or >) and carriage returns, then extract markers
+  # The shell echoes heredoc continuation prompts (> >) which need to be stripped
+  parsed_output=$(echo "$raw_output" | tr -d '\r' | sed 's/^[#> ]*//' | grep -E '^(Exists|Missing|ReadOnly|Writable) ')
 
   # New workspace structure expectations:
-  # - /code/node_modules: exists and read-only (mounted from host)
   # - /code: exists (rw in dev profile, ro in qa/prod)
   # - /Agent: exists and read-only (always)
-  # - Runtime data accessed via $WORKSPACE_PATH (CWD passthrough mount)
+  # - Runtime data and node_modules accessed via $WORKSPACE_PATH (CWD passthrough mount)
   local expected_markers=(
     "Exists code_dir"
     "Exists agent_root"
