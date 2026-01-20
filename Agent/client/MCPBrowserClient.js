@@ -331,7 +331,8 @@ function createAgentClient(baseUrl) {
                 const response = await fetch(endpoint, {
                     method: 'GET',
                     headers,
-                    signal: abortController.signal
+                    signal: abortController.signal,
+                    credentials: 'include'
                 });
 
                 if (response.status === 405) {

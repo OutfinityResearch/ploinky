@@ -30,7 +30,8 @@ fast_check_explorer_dependencies() {
   # Explorer is in the fileExplorer repo, not demo repo
   container=$(compute_container_name "explorer" "fileExplorer") || return 1
 
-  if ! $FAST_CONTAINER_RUNTIME exec "$container" test -d /code/node_modules/mcp-sdk; then
+  # With the new architecture, node_modules is mounted as overlay at /code/node_modules
+  if ! $FAST_CONTAINER_RUNTIME exec "$container" sh -c 'test -d "/code/node_modules/mcp-sdk"'; then
     echo "Explorer runtime deps missing: /code/node_modules/mcp-sdk not found." >&2
     return 1
   fi

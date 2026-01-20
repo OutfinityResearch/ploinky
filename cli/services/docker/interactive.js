@@ -42,7 +42,12 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     debugLog(`Checking if container '${containerName}' exists...`);
     if (!containerExists(containerName)) {
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
-        const envVarParts = [...getSecretsForAgent(manifest), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
+        const envVarParts = [
+            ...getSecretsForAgent(manifest),
+            formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH),
+            // Set NODE_PATH to project directory node_modules (in the passthrough mount)
+            formatEnvFlag('NODE_PATH', `${projectDir}/node_modules`)
+        ];
         const envVars = envVarParts.join(' ');
         const mountOptions = containerRuntime === 'podman'
             ? [
@@ -224,7 +229,12 @@ function ensureAgentContainer(agentName, repoName, manifest) {
     let createdNew = false;
     if (!containerExists(containerName)) {
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
-        const envVars = getSecretsForAgent(manifest).join(' ');
+        const envVarParts = [
+            ...getSecretsForAgent(manifest),
+            // Set NODE_PATH to project directory node_modules (in the passthrough mount)
+            formatEnvFlag('NODE_PATH', `${projectDir}/node_modules`)
+        ];
+        const envVars = envVarParts.join(' ');
         const volZ = (containerRuntime === 'podman') ? ':z' : '';
         const roOpt = (containerRuntime === 'podman') ? ':ro,z' : ':ro';
         let containerImage = manifest.container;

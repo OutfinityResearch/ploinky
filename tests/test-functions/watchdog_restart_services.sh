@@ -2,6 +2,7 @@ watchdog_restart_services() {
   load_state
   require_var "TEST_AGENT_CONT_NAME" || return 1
   require_var "TEST_ROUTER_PORT" || return 1
+  require_var "TEST_RUN_DIR" || return 1
 
   require_runtime || return 1
 
@@ -12,6 +13,21 @@ watchdog_restart_services() {
 
   local original_container_pid
   original_container_pid=$(get_container_pid "$TEST_AGENT_CONT_NAME" 2>/dev/null || true)
+
+  # Get the Watchdog PID from the pid file
+  local watchdog_pid_file="$TEST_RUN_DIR/.ploinky/running/router.pid"
+  local watchdog_pid=""
+  if [[ -f "$watchdog_pid_file" ]]; then
+    watchdog_pid=$(cat "$watchdog_pid_file" 2>/dev/null)
+    test_info "Watchdog PID from file: ${watchdog_pid}"
+    if kill -0 "$watchdog_pid" 2>/dev/null; then
+      test_info "Watchdog (PID ${watchdog_pid}) is running."
+    else
+      echo "WARNING: Watchdog (PID ${watchdog_pid}) is NOT running!" >&2
+    fi
+  else
+    echo "WARNING: Watchdog PID file not found at $watchdog_pid_file" >&2
+  fi
 
   local router_pid
   router_pid=$(lsof -nP -t -iTCP:"$TEST_ROUTER_PORT" -sTCP:LISTEN 2>/dev/null | head -n 1)
@@ -36,9 +52,28 @@ watchdog_restart_services() {
 
   test_info "Waiting for watchdog to restore services."
 
+  # Check if Watchdog is still running after killing the RoutingServer
+  sleep 1
+  if [[ -n "$watchdog_pid" ]]; then
+    if kill -0 "$watchdog_pid" 2>/dev/null; then
+      test_info "Watchdog (PID ${watchdog_pid}) is still running after RoutingServer kill."
+    else
+      echo "ERROR: Watchdog (PID ${watchdog_pid}) has EXITED after RoutingServer kill!" >&2
+      echo "This means the Watchdog is not restarting the RoutingServer." >&2
+    fi
+  fi
+
   # Wait for the router to come back up (up to 60 seconds)
   if ! wait_for_router; then
     echo "Router did not restart within expected time after SIGKILL." >&2
+    # Extra debug: check Watchdog status again
+    if [[ -n "$watchdog_pid" ]]; then
+      if kill -0 "$watchdog_pid" 2>/dev/null; then
+        echo "DEBUG: Watchdog is still running but router didn't restart." >&2
+      else
+        echo "DEBUG: Watchdog has exited." >&2
+      fi
+    fi
     return 1
   fi
 

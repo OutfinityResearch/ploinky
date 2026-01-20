@@ -27,6 +27,7 @@ export const AGENTS_WORK_DIR = path.join(WORKSPACE_ROOT, 'agents');
 export const CODE_DIR = path.join(WORKSPACE_ROOT, 'code');
 export const SKILLS_DIR = path.join(WORKSPACE_ROOT, 'skills');
 export const TEMPLATES_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), '../../templates');
+export const GLOBAL_DEPS_PATH = path.join(path.dirname(new URL(import.meta.url).pathname), '../../globalDeps');
 
 let DEBUG_MODE = process.env.PLOINKY_DEBUG === '1';
 

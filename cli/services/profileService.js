@@ -116,22 +116,29 @@ export function getProfileConfig(agentName, profileName) {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
         const profiles = manifest?.profiles || {};
 
-        // Always start with default profile
-        const defaultProfile = profiles.default || {};
+        // Every agent MUST have a default profile for isolation
+        const defaultProfile = profiles.default;
+        if (!defaultProfile) {
+            throw new Error(`Agent ${agentName} missing required 'default' profile in manifest.json`);
+        }
 
         // Get active profile name
         const activeProfileName = profileName || getActiveProfile();
 
-        // If requesting default or no active profile, just return default
+        // If requesting default or no active profile config exists, return default
         if (activeProfileName === 'default' || !profiles[activeProfileName]) {
-            return Object.keys(defaultProfile).length > 0 ? defaultProfile : null;
+            return defaultProfile;
         }
 
-        // Merge default with active profile
+        // Merge default with active profile (active overrides default)
         const activeProfile = profiles[activeProfileName];
         return mergeProfiles(defaultProfile, activeProfile);
     } catch (err) {
         debugLog(`getProfileConfig: ${err.message}`);
+        // Re-throw missing profile errors so they bubble up
+        if (err.message.includes('missing required')) {
+            throw err;
+        }
         return null;
     }
 }
@@ -157,9 +164,9 @@ export function validateProfile(agentName, profileName) {
             return { valid: false, issues, config: null };
         }
 
-        if (!manifest.profiles.default && !manifest.profiles[profileName]) {
-            const availableProfiles = Object.keys(manifest.profiles);
-            issues.push(`Neither 'default' nor '${profileName}' profile found. Available: ${availableProfiles.join(', ')}`);
+        // Mandatory: every agent must have a 'default' profile
+        if (!manifest.profiles.default) {
+            issues.push(`Agent missing required 'default' profile in manifest.json`);
             return { valid: false, issues, config: null };
         }
 

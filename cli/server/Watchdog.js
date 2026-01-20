@@ -52,7 +52,8 @@ function createInitialState() {
         totalRestarts: 0,
         lastStartTime: null,
         circuitBreakerTripped: false,
-        containerMonitor: null
+        containerMonitor: null,
+        pendingHealthCheckRestart: false  // True when Watchdog initiated a restart via health check
     };
 }
 
@@ -263,8 +264,9 @@ function startHealthCheckMonitoring() {
                     action: 'restarting_process'
                 });
 
-                // Kill the unresponsive process
+                // Kill the unresponsive process - set flag so we know to restart
                 if (state.childProcess) {
+                    state.pendingHealthCheckRestart = true;
                     const pid = state.childProcess.pid;
                     appendLog('process_signal', {
                         action: 'health_check_kill',
@@ -362,10 +364,14 @@ function spawnServer() {
         });
     });
     
-    // Start health monitoring after a brief delay
+    // Start health monitoring and restart container monitor after a brief delay
     setTimeout(() => {
         if (!state.isShuttingDown && state.childProcess === child) {
             startHealthCheckMonitoring();
+            // Restart container monitor (may have been stopped during restart)
+            if (state.containerMonitor) {
+                startContainerMonitor(state.containerMonitor);
+            }
         }
     }, 10000); // Wait 10 seconds for server to start
 }
@@ -424,14 +430,18 @@ function handleProcessExit(code, signal) {
     
     // Calculate backoff
     const backoff = calculateBackoff();
-    
+
     log('info', 'scheduling_restart', {
         backoffMs: backoff,
         consecutiveFailures: state.consecutiveFailures,
         totalRestarts: state.totalRestarts,
         recentRestarts: state.restartHistory.length
     });
-    
+
+    // Stop container monitor to prevent its sync operations from blocking the restart
+    // This ensures the setTimeout callback executes promptly
+    stopContainerMonitor(state.containerMonitor);
+
     // Restart after backoff
     setTimeout(() => {
         spawnServer();
@@ -440,6 +450,15 @@ function handleProcessExit(code, signal) {
 
 // Determine if we should restart based on exit conditions
 function determineShouldRestart(code, signal) {
+    // If the Watchdog initiated the kill (health check), always restart
+    if (state.pendingHealthCheckRestart) {
+        state.pendingHealthCheckRestart = false;  // Clear the flag
+        log('info', 'health_check_restart', {
+            message: 'Watchdog-initiated kill (health check), restarting process'
+        });
+        return true;
+    }
+
     // Clean exit (code 0) = no restart
     if (code === 0) {
         log('info', 'clean_exit', { message: 'Process exited cleanly, no restart needed' });
