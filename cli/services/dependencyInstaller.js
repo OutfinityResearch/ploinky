@@ -927,6 +927,21 @@ function installDependenciesInContainer(agentName, containerImage, options = {})
     const log = verbose ? console.log : debugLog;
     const runtime = containerRuntime;
 
+    // Check if npm is available in the container image before proceeding
+    try {
+        const checkResult = spawnSync(runtime, [
+            'run', '--rm', containerImage, 'sh', '-c', 'command -v npm'
+        ], { stdio: 'pipe', timeout: 30000 });
+
+        if (checkResult.status !== 0) {
+            log(`[deps] ${agentName}: Skipping core dependencies (npm not available in container)`);
+            return { success: true, message: 'Skipped - npm not available in container' };
+        }
+    } catch (err) {
+        log(`[deps] ${agentName}: Skipping core dependencies (could not check npm: ${err.message})`);
+        return { success: true, message: 'Skipped - could not verify npm availability' };
+    }
+
     const agentWorkDir = getAgentWorkDir(agentName);
     const agentCodePath = getAgentCodePath(agentName);
     const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
