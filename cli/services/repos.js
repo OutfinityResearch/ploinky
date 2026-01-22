@@ -50,7 +50,8 @@ const PREDEFINED_REPOS = {
     vibe: { url: 'https://github.com/PloinkyRepos/vibe.git', description: 'Vibe coding agents' },
     security: { url: 'https://github.com/PloinkyRepos/security.git', description: 'Security and scanning tools' },
     extra: { url: 'https://github.com/PloinkyRepos/extra.git', description: 'Additional utility agents' },
-    demo: { url: 'https://github.com/PloinkyRepos/demo.git', description: 'Demo agents and examples' }
+    demo: { url: 'https://github.com/PloinkyRepos/demo.git', description: 'Demo agents and examples' },
+    proxies: { url: 'https://github.com/PloinkyRepos/proxies.git', description: 'API proxy agents (Kiro Gateway)' }
 };
 
 export function getPredefinedRepos() {
