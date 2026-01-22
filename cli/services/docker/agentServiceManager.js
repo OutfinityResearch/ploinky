@@ -212,24 +212,13 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         debugLog(`[deps] ${agentName}: Skipping npm install (uses start command, no package.json)`);
     }
 
-    // Step 2: Run profile's preinstall + install commands
-    // These are additional commands beyond core npm install (e.g., apt-get, custom scripts)
+    // Step 2: Build preinstall + install commands to run in main container
+    // These run inside the main container before the agent command starts
     const preinstallCmd = String(profileConfig?.preinstall || manifest?.preinstall || '').trim();
     const installCmd = String(profileConfig?.install || manifest?.install || '').trim();
 
-    // Combine preinstall + install into one container run for efficiency
+    // Combine preinstall + install - will be prepended to agent command
     const combinedInstallCmd = [preinstallCmd, installCmd].filter(Boolean).join(' && ');
-
-    if (combinedInstallCmd) {
-        // Run install in /code context so relative paths (./scripts/...) work correctly
-        const installResult = runPersistentInstall(agentName, image, combinedInstallCmd, {
-            agentPath,
-            verbose: true
-        });
-        if (!installResult.success) {
-            console.warn(`[install] ${agentName}: ${installResult.message}`);
-        }
-    }
 
     // Ensure the agent work directory exists on host
     createAgentWorkDir(agentName);
@@ -354,13 +343,19 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (shellPath === SHELL_FALLBACK_DIRECT) {
             throw new Error(`[start] ${agentName}: no supported shell found to execute agent command.`);
         }
-        // Install hooks already ran in temp container - just run the agent command
-        const fullCmd = `cd /code && ${explicitAgentCmd}`;
+        // Run preinstall + install in main container before agent command
+        const fullCmd = combinedInstallCmd
+            ? `cd /code && ${combinedInstallCmd} && ${explicitAgentCmd}`
+            : `cd /code && ${explicitAgentCmd}`;
         args.push(shellPath, '-lc', fullCmd);
         entrySummary = `${shellPath} -lc ${fullCmd}`;
     } else {
-        // Install hooks already ran in temp container - just run the default agent server
-        args.push('sh', '/Agent/server/AgentServer.sh');
+        // Run preinstall + install in main container before default agent server
+        if (combinedInstallCmd) {
+            args.push('sh', '-c', `${combinedInstallCmd} && sh /Agent/server/AgentServer.sh`);
+        } else {
+            args.push('sh', '/Agent/server/AgentServer.sh');
+        }
     }
 
     console.log(`[start] ${agentName}: ${runtime} run (cwd='${cwd}') -> ${entrySummary}`);
