@@ -203,7 +203,8 @@ function createAgentClient(baseUrl) {
                 method: 'GET',
                 headers: {
                     accept: 'application/json'
-                }
+                },
+                credentials: 'include'
             });
             if (!response.ok) {
                 const bodyText = await response.text().catch(() => '');
@@ -364,7 +365,8 @@ function createAgentClient(baseUrl) {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers: buildHeaders({ includeContentType: true }),
-            body: JSON.stringify(message)
+            body: JSON.stringify(message),
+            credentials: 'include'
         });
 
         const receivedSession = response.headers.get('mcp-session-id');
@@ -541,7 +543,8 @@ function createAgentClient(baseUrl) {
             if (sessionId) {
                 await fetch(endpoint, {
                     method: 'DELETE',
-                    headers: buildHeaders()
+                    headers: buildHeaders(),
+                    credentials: 'include'
                 });
             }
         } catch {
