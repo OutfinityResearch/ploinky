@@ -202,6 +202,7 @@ export function executeContainerHook(containerName, script, env = {}, options = 
 | 6-7 | dependencies | CONTAINER | Install dependencies |
 | 8 | preinstall | CONTAINER | Pre-install hook |
 | 9 | install | CONTAINER | Install hook |
+| 9.5 | readycheck | CONTAINER | Poll until agent services are ready (optional) |
 | 10 | postinstall | CONTAINER | Post-install hook |
 | 11 | hosthook_postinstall | HOST | Post-install host hook |
 | 12 | agent_ready | N/A | Final status |
@@ -279,11 +280,27 @@ export {
             "hosthook_aftercreation": "scripts/setup-host.sh",
             "preinstall": "npm ci --production",
             "install": "npm run build",
+            "readycheck": "wget -q --spider --timeout=2 http://localhost:3000 || exit 1",
             "postinstall": "npm run migrate",
             "hosthook_postinstall": "scripts/notify-ready.sh"
         }
     }
 }
+```
+
+### readycheck
+
+The `readycheck` field specifies a command that is polled until it succeeds before running `postinstall`. This is essential when:
+- The agent command starts background services (e.g., databases, HTTP servers)
+- The `postinstall` hook depends on those services being ready
+
+The readycheck command runs inside the container with a 2-second timeout per attempt, polling every 2 seconds for up to 60 seconds total. If the readycheck fails, `postinstall` is skipped and the lifecycle fails.
+
+**Example readychecks:**
+```json
+"readycheck": "wget -q --spider --timeout=2 http://localhost:3000 || exit 1"
+"readycheck": "pg_isready -h localhost -p 5432"
+"readycheck": "curl -sf http://localhost:8080/health"
 ```
 
 ## Environment Variables Passed to Hooks
