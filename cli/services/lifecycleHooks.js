@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync, spawnSync } from 'child_process';
-import { containerRuntime, sleepMs } from './docker/common.js';
+import { containerRuntime } from './docker/common.js';
 import { debugLog } from './utils.js';
 import { getProfileConfig, getProfileEnvVars, getHookNames } from './profileService.js';
 import { validateSecrets, getSecrets, createEnvWithSecrets, formatMissingSecretsError } from './secretInjector.js';
@@ -11,9 +11,6 @@ import {
     createAgentSymlinks,
     createAgentWorkDir
 } from './workspaceStructure.js';
-
-const DEFAULT_READY_TIMEOUT_MS = 120000;  // 2 minutes - install + service startup can take time
-const DEFAULT_READY_INTERVAL_MS = 2000;
 
 function normalizeProfileEnv(env) {
     if (!env || typeof env !== 'object' || Array.isArray(env)) {
@@ -134,77 +131,6 @@ export function executeContainerHook(containerName, script, env = {}, options = 
             output: err.output ? err.output.toString() : ''
         };
     }
-}
-
-/**
- * Wait for an agent to be ready by polling a readycheck command.
- * This should be called after container start but before postinstall.
- *
- * @param {string} containerName - The container name
- * @param {string} agentName - The agent name (for logging)
- * @param {string} readycheckCmd - The command to run to check readiness
- * @param {object} env - Environment variables to pass
- * @param {object} options - Options (timeout, interval)
- * @returns {{ success: boolean, message: string, attempts: number }}
- */
-export function waitForAgentReady(containerName, agentName, readycheckCmd, env = {}, options = {}) {
-    const {
-        timeout = DEFAULT_READY_TIMEOUT_MS,
-        interval = DEFAULT_READY_INTERVAL_MS
-    } = options;
-
-    if (!readycheckCmd) {
-        return { success: true, message: 'No readycheck specified', attempts: 0 };
-    }
-
-    const maxAttempts = Math.ceil(timeout / interval);
-    console.log(`[readycheck] ${agentName}: Waiting for agent to be ready (max ${maxAttempts} attempts)...`);
-
-    const envFlags = [];
-    for (const [key, value] of Object.entries(env)) {
-        envFlags.push('-e', `${key}=${String(value ?? '')}`);
-    }
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-            const result = spawnSync(containerRuntime, [
-                'exec',
-                ...envFlags,
-                '-w', '/code',
-                containerName,
-                'sh', '-c', readycheckCmd
-            ], {
-                encoding: 'utf8',
-                stdio: 'pipe',
-                timeout: interval
-            });
-
-            if (result.status === 0) {
-                console.log(`[readycheck] ${agentName}: Agent is ready (attempt ${attempt}/${maxAttempts})`);
-                return { success: true, message: 'Agent is ready', attempts: attempt };
-            }
-
-            // Log every 10th attempt or first few attempts for debugging
-            if (attempt <= 3 || attempt % 10 === 0) {
-                const stderr = (result.stderr || '').trim();
-                console.log(`[readycheck] ${agentName}: attempt ${attempt}/${maxAttempts} failed (exit=${result.status})${stderr ? ': ' + stderr : ''}`);
-            }
-        } catch (err) {
-            if (attempt <= 3 || attempt % 10 === 0) {
-                console.log(`[readycheck] ${agentName}: attempt ${attempt}/${maxAttempts} error: ${err.message}`);
-            }
-        }
-
-        if (attempt < maxAttempts) {
-            sleepMs(interval);
-        }
-    }
-
-    return {
-        success: false,
-        message: `Agent not ready after ${maxAttempts} attempts`,
-        attempts: maxAttempts
-    };
 }
 
 /**
@@ -350,17 +276,6 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
 
         // Step 10: postinstall [CONTAINER]
         if (profileConfig.postinstall && containerName) {
-            // Wait for agent to be ready before running postinstall
-            if (profileConfig.readycheck) {
-                const readyTimeout = profileConfig.readycheck_timeout || DEFAULT_READY_TIMEOUT_MS;
-                const readyResult = waitForAgentReady(containerName, agentName, profileConfig.readycheck, hookEnv, { timeout: readyTimeout });
-                steps.push({ step: '9.5', name: 'readycheck', success: readyResult.success, attempts: readyResult.attempts });
-                if (!readyResult.success) {
-                    errors.push(`readycheck failed: ${readyResult.message}`);
-                    // Don't run postinstall if agent isn't ready
-                    return { success: false, steps, errors };
-                }
-            }
             log('[lifecycle] Step 10: Running postinstall hook...');
             const result = executeContainerHook(containerName, profileConfig.postinstall, hookEnv);
             steps.push({ step: 10, name: 'postinstall', success: result.success, output: result.output });
@@ -376,17 +291,6 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
 
         // Step 10: postinstall [CONTAINER] - runs AFTER main container is up, not in temp container
         if (profileConfig.postinstall && containerName) {
-            // Wait for agent to be ready before running postinstall
-            if (profileConfig.readycheck) {
-                const readyTimeout = profileConfig.readycheck_timeout || DEFAULT_READY_TIMEOUT_MS;
-                const readyResult = waitForAgentReady(containerName, agentName, profileConfig.readycheck, hookEnv, { timeout: readyTimeout });
-                steps.push({ step: '9.5', name: 'readycheck', success: readyResult.success, attempts: readyResult.attempts });
-                if (!readyResult.success) {
-                    errors.push(`readycheck failed: ${readyResult.message}`);
-                    // Don't run postinstall if agent isn't ready
-                    return { success: false, steps, errors };
-                }
-            }
             console.log(`[postinstall] ${agentName}: ${profileConfig.postinstall}`);
             const result = executeContainerHook(containerName, profileConfig.postinstall, hookEnv);
             if (result.output) {

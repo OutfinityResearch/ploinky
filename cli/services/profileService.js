@@ -11,8 +11,79 @@ const VALID_PROFILES = ['default', 'dev', 'qa', 'prod'];
 const HOOK_NAMES = ['hosthook_aftercreation', 'preinstall', 'install', 'postinstall', 'hosthook_postinstall'];
 
 /**
+ * Merge env configurations, handling both array and object formats.
+ * Array format: ["VAR1", "VAR2=value"] - variable names to pull from .secrets
+ * Object format: { "VAR1": "value" } - explicit key-value pairs
+ *
+ * For arrays: concatenate and deduplicate (active entries override default for same var name)
+ * For objects: shallow merge (active overrides default)
+ * For mixed: convert to array format and merge
+ *
+ * @param {Array|object} defaultEnv - Default profile env
+ * @param {Array|object} activeEnv - Active profile env
+ * @returns {Array|object} Merged env
+ */
+function mergeEnv(defaultEnv, activeEnv) {
+    const defaultIsArray = Array.isArray(defaultEnv);
+    const activeIsArray = Array.isArray(activeEnv);
+
+    // Both arrays - merge and deduplicate
+    if (defaultIsArray && activeIsArray) {
+        const result = [];
+        const seenVars = new Set();
+
+        // Helper to extract variable name from array entry
+        const getVarName = (entry) => {
+            if (typeof entry === 'string') {
+                const eqIdx = entry.indexOf('=');
+                return eqIdx >= 0 ? entry.slice(0, eqIdx) : entry;
+            }
+            if (entry && typeof entry === 'object') {
+                return entry.name || '';
+            }
+            return '';
+        };
+
+        // Add active entries first (they take precedence)
+        for (const entry of activeEnv) {
+            const varName = getVarName(entry);
+            if (varName) {
+                seenVars.add(varName);
+                result.push(entry);
+            }
+        }
+
+        // Add default entries that aren't overridden
+        for (const entry of defaultEnv) {
+            const varName = getVarName(entry);
+            if (varName && !seenVars.has(varName)) {
+                result.push(entry);
+            }
+        }
+
+        return result;
+    }
+
+    // Both objects - shallow merge
+    if (!defaultIsArray && !activeIsArray) {
+        return { ...(defaultEnv || {}), ...(activeEnv || {}) };
+    }
+
+    // Mixed formats - convert object to array entries and merge as arrays
+    const toArray = (env) => {
+        if (Array.isArray(env)) return env;
+        if (!env || typeof env !== 'object') return [];
+        return Object.entries(env).map(([key, val]) =>
+            val === '' || val === undefined ? key : `${key}=${val}`
+        );
+    };
+
+    return mergeEnv(toArray(defaultEnv), toArray(activeEnv));
+}
+
+/**
  * Merge default profile with active profile.
- * - Env variables: deep merge (active overrides default)
+ * - Env variables: smart merge (handles both array and object formats)
  * - Hooks: active overrides default (not concatenate)
  * - Secrets: concatenate (active adds to default)
  * - Mounts: deep merge (active overrides default)
@@ -27,9 +98,9 @@ export function mergeProfiles(defaultProfile, activeProfile) {
 
     const merged = { ...defaultProfile };
 
-    // Merge env (deep merge - active overrides default)
-    if (activeProfile.env) {
-        merged.env = { ...defaultProfile.env, ...activeProfile.env };
+    // Merge env - handle both array and object formats
+    if (activeProfile.env !== undefined) {
+        merged.env = mergeEnv(defaultProfile.env, activeProfile.env);
     }
 
     // Hooks: active overrides default
