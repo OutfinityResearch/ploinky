@@ -291,8 +291,11 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
 
         // Step 10: postinstall [CONTAINER] - runs AFTER main container is up, not in temp container
         if (profileConfig.postinstall && containerName) {
-            log('[lifecycle] Step 10: Running postinstall hook...');
+            console.log(`[postinstall] ${agentName}: ${profileConfig.postinstall}`);
             const result = executeContainerHook(containerName, profileConfig.postinstall, hookEnv);
+            if (result.output) {
+                console.log(result.output.trim());
+            }
             steps.push({ step: 10, name: 'postinstall', success: result.success, output: result.output });
             if (!result.success) {
                 errors.push(`postinstall hook failed: ${result.message}`);

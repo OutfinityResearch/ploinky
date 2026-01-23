@@ -13,7 +13,9 @@ function ensureSharedHostDir() {
 }
 
 function runPostinstallHook(agentName, containerName, manifest, cwd) {
-    const commands = normalizeLifecycleCommands(manifest?.postinstall);
+    // Read postinstall from profiles.default
+    const postinstallCmd = manifest?.profiles?.default?.postinstall;
+    const commands = normalizeLifecycleCommands(postinstallCmd);
     if (!commands.length) return;
 
     if (!waitForContainerRunning(containerName, 40, 250)) {
