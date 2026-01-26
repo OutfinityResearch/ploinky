@@ -345,6 +345,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         }
         // Run install command before start script if defined
         if (combinedInstallCmd) {
+            console.log(`[install] ${agentName}: ${combinedInstallCmd}`);
             const fullCmd = `cd /code && ${combinedInstallCmd} && ${startArgs.join(' ')}`;
             args.push('sh', '-c', fullCmd);
             entrySummary = `sh -c ${fullCmd}`;
@@ -357,7 +358,10 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (shellPath === SHELL_FALLBACK_DIRECT) {
             throw new Error(`[start] ${agentName}: no supported shell found to execute agent command.`);
         }
-        // Run preinstall + install in main container before agent command
+        // Run install command before agent command
+        if (combinedInstallCmd) {
+            console.log(`[install] ${agentName}: ${combinedInstallCmd}`);
+        }
         const fullCmd = combinedInstallCmd
             ? `cd /code && ${combinedInstallCmd} && ${explicitAgentCmd}`
             : `cd /code && ${explicitAgentCmd}`;

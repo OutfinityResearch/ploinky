@@ -318,8 +318,11 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
 
         // Step 9: install [CONTAINER]
         if (profileConfig.install && containerName) {
-            log('[lifecycle] Step 9: Running install hook...');
+            console.log(`[install] ${agentName}: ${profileConfig.install}`);
             const result = executeContainerHook(containerName, profileConfig.install, hookEnv);
+            if (result.output) {
+                console.log(result.output.trim());
+            }
             steps.push({ step: 9, name: 'install', success: result.success, output: result.output });
             if (!result.success) {
                 errors.push(`install hook failed: ${result.message}`);
