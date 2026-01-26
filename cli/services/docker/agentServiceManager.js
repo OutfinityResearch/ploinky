@@ -124,6 +124,11 @@ function normalizeProfileEnv(env) {
     const normalized = {};
     for (const [key, value] of Object.entries(env)) {
         if (!key) continue;
+        // Handle complex env specs with varName/default - skip these as they're handled by buildEnvFlags
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            // Complex spec like { varName: "...", default: "..." } - skip, handled by buildEnvFlags
+            continue;
+        }
         normalized[String(key)] = value === undefined ? '' : String(value);
     }
     return normalized;
@@ -338,8 +343,15 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (!startArgs.length) {
             throw new Error(`[start] ${agentName}: manifest.start is defined but empty.`);
         }
-        args.push(...startArgs);
-        entrySummary = startArgs.join(' ');
+        // Run install command before start script if defined
+        if (combinedInstallCmd) {
+            const fullCmd = `cd /code && ${combinedInstallCmd} && ${startArgs.join(' ')}`;
+            args.push('sh', '-c', fullCmd);
+            entrySummary = `sh -c ${fullCmd}`;
+        } else {
+            args.push(...startArgs);
+            entrySummary = startArgs.join(' ');
+        }
     } else if (explicitAgentCmd) {
         const shellPath = detectShellForImage(agentName, image);
         if (shellPath === SHELL_FALLBACK_DIRECT) {

@@ -208,14 +208,14 @@ write_state_var "TEST_GLOBAL_AGENT_CONTAINER_PORT" "$global_agent_internal_port"
 cat >"${global_agent_root}/manifest.json" <<EOF
 {
   "container": "node:18-alpine",
-  "ports": [
-    "127.0.0.1:${global_agent_host_port}:${global_agent_internal_port}"
-  ],
   "profiles": {
     "default": {
       "env": {
         "PORT": "${global_agent_internal_port}"
-      }
+      },
+      "ports": [
+        "127.0.0.1:${global_agent_host_port}:${global_agent_internal_port}"
+      ]
     }
   }
 }
