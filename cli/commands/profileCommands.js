@@ -237,7 +237,8 @@ function showProfileConfigSummary(config) {
         console.log(`  Mount modes: code=${config.mounts.code || 'default'}, skills=${config.mounts.skills || 'default'}`);
     }
 
-    const hooks = ['hosthook_aftercreation', 'preinstall', 'install', 'postinstall', 'hosthook_postinstall']
+    // Hook execution order: preinstall [HOST], hosthook_aftercreation [HOST], install [CONTAINER], postinstall [CONTAINER], hosthook_postinstall [HOST]
+    const hooks = ['preinstall', 'hosthook_aftercreation', 'install', 'postinstall', 'hosthook_postinstall']
         .filter(h => config[h]);
     if (hooks.length > 0) {
         console.log(`  Hooks: ${hooks.join(', ')}`);

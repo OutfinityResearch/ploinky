@@ -7,6 +7,9 @@ import * as agentsSvc from './agents.js';
 import * as workspaceSvc from './workspace.js';
 import * as dockerSvc from './docker/index.js';
 import { applyManifestDirectives } from './bootstrapManifest.js';
+import { executeHostHook } from './lifecycleHooks.js';
+import { getActiveProfile, getProfileConfig, getProfileEnvVars } from './profileService.js';
+import { getSecrets, createEnvWithSecrets } from './secretInjector.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -146,6 +149,39 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
         utils.debugLog('Failed to refresh component tokens:', e.message);
       }
     }
+    // Run preinstall hook for the static (main) agent BEFORE starting dependencies.
+    // This allows the main agent's preinstall to set ploinky vars that dependencies need.
+    // Note: This only runs the preinstall hook; workspace init/symlinks are done in agentServiceManager.
+    try {
+      const staticAgentForPreinstall = cfg0.static.agent;
+      if (staticAgentForPreinstall) {
+        const resolved = utils.findAgent(staticAgentForPreinstall);
+        if (resolved) {
+          const agentPath = path.dirname(resolved.manifestPath);
+          const activeProfile = getActiveProfile();
+          const profileConfig = getProfileConfig(`${resolved.repo}/${resolved.shortAgentName}`, activeProfile);
+          if (profileConfig?.preinstall) {
+            console.log(`[start] Running preinstall hook for ${resolved.shortAgentName} (profile: ${activeProfile})...`);
+            const hookPath = path.join(agentPath, profileConfig.preinstall);
+            
+            // Build environment for the hook
+            const envVars = getProfileEnvVars(resolved.shortAgentName, resolved.repo, activeProfile, {});
+            const profileEnv = profileConfig.env && typeof profileConfig.env === 'object' && !Array.isArray(profileConfig.env) 
+              ? profileConfig.env : {};
+            const secrets = profileConfig.secrets ? getSecrets(profileConfig.secrets) : {};
+            const hookEnv = createEnvWithSecrets({ ...envVars, ...profileEnv }, secrets);
+            
+            const result = executeHostHook(hookPath, hookEnv, { cwd: process.cwd() });
+            if (!result.success) {
+              console.error(`[start] Preinstall failed: ${result.message}`);
+            }
+          }
+        }
+      }
+    } catch (preErr) {
+      console.error(`[start] Preinstall hook error: ${preErr.message}`);
+    }
+
     try { await applyManifestDirectives(cfg0.static.agent); } catch (_) {}
     let reg = workspaceSvc.loadAgents();
     const { getAgentContainerName } = dockerSvc;
@@ -214,8 +250,27 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     }
     workspaceSvc.saveAgents(dedup);
     reg = dedup;
-    const names = Object.keys(reg || {}).filter(name => name !== '_config');
+
+    // Get all agent names, we'll reorder them below
+    const allNames = Object.keys(reg || {}).filter(name => name !== '_config');
     const { ensureAgentService } = dockerSvc;
+
+    // Reorder agents: dependencies first, static agent last
+    // This ensures enable list agents start before the main agent
+    const reorderAgentsForStart = (agentNames, staticAgentName, staticRepoName) => {
+      const staticContainerName = getAgentContainerName(staticAgentName, staticRepoName);
+      const isStaticAgent = (name) => {
+        const rec = reg[name];
+        return rec && rec.agentName === staticAgentName && rec.repoName === staticRepoName;
+      };
+
+      // Separate static agent from dependencies
+      const dependencies = agentNames.filter(name => !isStaticAgent(name));
+      const staticAgents = agentNames.filter(name => isStaticAgent(name));
+
+      // Dependencies first, then static agent
+      return [...dependencies, ...staticAgents];
+    };
     const routingFile = path.resolve('.ploinky/routing.json');
     let cfg = { routes: {} };
     try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch (_) {}
@@ -237,6 +292,10 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
       return;
     }
     cfg.port = staticPort;
+
+    // Reorder agents: start dependencies before the static agent
+    const names = reorderAgentsForStart(allNames, staticShortAgent, staticRepoName);
+
     const staticCandidates = Object.entries(reg || {})
       .filter(([key, rec]) => key !== '_config' && rec && rec.type === 'agent')
       .filter(([, rec]) => rec.agentName === staticShortAgent && rec.repoName === staticRepoName);
