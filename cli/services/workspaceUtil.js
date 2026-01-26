@@ -7,7 +7,7 @@ import * as agentsSvc from './agents.js';
 import * as workspaceSvc from './workspace.js';
 import * as dockerSvc from './docker/index.js';
 import { applyManifestDirectives } from './bootstrapManifest.js';
-import { executeHostHook } from './lifecycleHooks.js';
+import { executeHostHook, isInlineCommand } from './lifecycleHooks.js';
 import { getActiveProfile, getProfileConfig, getProfileEnvVars } from './profileService.js';
 import { getSecrets, createEnvWithSecrets } from './secretInjector.js';
 
@@ -162,7 +162,10 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
           const profileConfig = getProfileConfig(`${resolved.repo}/${resolved.shortAgentName}`, activeProfile);
           if (profileConfig?.preinstall) {
             console.log(`[start] Running preinstall hook for ${resolved.shortAgentName} (profile: ${activeProfile})...`);
-            const hookPath = path.join(agentPath, profileConfig.preinstall);
+            // For inline commands, pass as-is; for script paths, join with agentPath
+            const hookValue = isInlineCommand(profileConfig.preinstall)
+              ? profileConfig.preinstall
+              : path.join(agentPath, profileConfig.preinstall);
             
             // Build environment for the hook
             const envVars = getProfileEnvVars(resolved.shortAgentName, resolved.repo, activeProfile, {});
@@ -171,7 +174,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
             const secrets = profileConfig.secrets ? getSecrets(profileConfig.secrets) : {};
             const hookEnv = createEnvWithSecrets({ ...envVars, ...profileEnv }, secrets);
             
-            const result = executeHostHook(hookPath, hookEnv, { cwd: process.cwd() });
+            const result = executeHostHook(hookValue, hookEnv, { cwd: process.cwd() });
             if (!result.success) {
               console.error(`[start] Preinstall failed: ${result.message}`);
             }

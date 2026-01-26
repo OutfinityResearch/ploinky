@@ -19,14 +19,49 @@ function normalizeProfileEnv(env) {
     const normalized = {};
     for (const [key, value] of Object.entries(env)) {
         if (!key) continue;
+        // Handle complex env specs with varName/default - skip these as they're handled by buildEnvFlags
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            // Complex spec like { varName: "...", default: "..." } - skip, handled elsewhere
+            continue;
+        }
         normalized[String(key)] = value === undefined ? '' : String(value);
     }
     return normalized;
 }
 
 /**
+ * Determine if a hook value is an inline command rather than a script path.
+ * Inline commands typically contain shell operators or are clearly not file paths.
+ * @param {string} hookValue - The hook value from manifest
+ * @returns {boolean}
+ */
+export function isInlineCommand(hookValue) {
+    if (!hookValue || typeof hookValue !== 'string') {
+        return false;
+    }
+    // Contains shell operators (&&, ||, |, ;, >, <, etc.)
+    if (/[&|;<>]/.test(hookValue)) {
+        return true;
+    }
+    // Starts with a common command (not a path)
+    const commonCommands = ['apt-get', 'apt', 'npm', 'yarn', 'pnpm', 'pip', 'pip3', 'python', 'node', 'echo', 'mkdir', 'cp', 'mv', 'rm', 'chmod', 'chown', 'curl', 'wget', 'git', 'apk', 'yum', 'dnf', 'pacman'];
+    const firstWord = hookValue.trim().split(/\s+/)[0];
+    if (commonCommands.includes(firstWord)) {
+        return true;
+    }
+    // Contains spaces but doesn't look like a path (no .sh, .bash, etc.)
+    if (hookValue.includes(' ') && !hookValue.match(/\.(sh|bash|zsh|fish)$/i)) {
+        return true;
+    }
+    return false;
+}
+
+
+
+/**
  * Execute a hook script on the host.
- * @param {string} scriptPath - Path to the script
+ * Supports both script paths and inline commands.
+ * @param {string} scriptPath - Path to the script or inline command
  * @param {object} env - Environment variables to pass
  * @param {object} options - Options
  * @returns {{ success: boolean, message: string, output?: string }}
@@ -38,6 +73,34 @@ export function executeHostHook(scriptPath, env = {}, options = {}) {
         return { success: true, message: 'No hook script specified' };
     }
 
+    const hookEnv = {
+        ...process.env,
+        ...env,
+        PLOINKY_HOOK_TYPE: 'host'
+    };
+
+    // Check if this is an inline command
+    if (isInlineCommand(scriptPath)) {
+        try {
+            debugLog(`[hook] Executing inline host hook: ${scriptPath}`);
+            execSync(scriptPath, {
+                cwd,
+                env: hookEnv,
+                stdio: 'inherit',
+                shell: true,
+                timeout
+            });
+            return { success: true, message: 'Hook executed successfully', output: '' };
+        } catch (err) {
+            return {
+                success: false,
+                message: `Hook execution failed: ${err.message}`,
+                output: ''
+            };
+        }
+    }
+
+    // Script path handling
     const resolvedPath = path.isAbsolute(scriptPath) ? scriptPath : path.join(cwd, scriptPath);
 
     if (!fs.existsSync(resolvedPath)) {
@@ -48,12 +111,6 @@ export function executeHostHook(scriptPath, env = {}, options = {}) {
     try {
         fs.chmodSync(resolvedPath, '755');
     } catch (_) {}
-
-    const hookEnv = {
-        ...process.env,
-        ...env,
-        PLOINKY_HOOK_TYPE: 'host'
-    };
 
     try {
         debugLog(`[hook] Executing host hook: ${resolvedPath}`);
@@ -367,7 +424,10 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath, profile
             if (fs.existsSync(markerFile)) {
                 debugLog(`[lifecycle] Skipping preinstall [HOST] for ${agentName} (already run)`);
             } else {
-                const hookPath = path.join(agentPath || '', profileConfig.preinstall);
+                // For inline commands, pass as-is; for script paths, join with agentPath
+                const hookValue = isInlineCommand(profileConfig.preinstall)
+                    ? profileConfig.preinstall
+                    : path.join(agentPath || '', profileConfig.preinstall);
                 
                 // Build environment for the hook
                 const envVars = getProfileEnvVars(agentName, repoName, profileName || getActiveProfile(), {});
@@ -375,9 +435,9 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath, profile
                 const secrets = profileConfig.secrets ? getSecrets(profileConfig.secrets) : {};
                 const hookEnv = createEnvWithSecrets({ ...envVars, ...profileEnv }, secrets);
                 
-                debugLog(`[lifecycle] Running preinstall [HOST]: ${hookPath}`);
+                debugLog(`[lifecycle] Running preinstall [HOST]: ${hookValue}`);
                 // Run from workspace root so ploinky var commands can find .ploinky directory
-                const result = executeHostHook(hookPath, hookEnv, { cwd: process.cwd() });
+                const result = executeHostHook(hookValue, hookEnv, { cwd: process.cwd() });
                 if (!result.success) {
                     errors.push(`preinstall hook failed: ${result.message}`);
                 } else {
@@ -442,7 +502,7 @@ export function runPostStartLifecycle(containerName, agentName, profileName, opt
         errors.push(`Dependencies: ${depResult.message}`);
     }
 
-    // Container hooks (preinstall is now a HOST hook, not a container hook)
+    // Container hooks (preinstall is a HOST hook, not a container hook)
     const hooks = ['install', 'postinstall'];
     for (const hookName of hooks) {
         if (profileConfig[hookName]) {
