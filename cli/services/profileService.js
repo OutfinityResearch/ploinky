@@ -8,7 +8,12 @@ import { debugLog, findAgent } from './utils.js';
 const VALID_PROFILES = ['default', 'dev', 'qa', 'prod'];
 
 // Hook names in execution order
-const HOOK_NAMES = ['hosthook_aftercreation', 'preinstall', 'install', 'postinstall', 'hosthook_postinstall'];
+// preinstall: HOST hook that runs BEFORE container creation (can set ploinky vars)
+// hosthook_aftercreation: HOST hook that runs after container creation
+// install: CONTAINER hook for installation
+// postinstall: CONTAINER hook after install
+// hosthook_postinstall: HOST hook after container postinstall
+const HOOK_NAMES = ['preinstall', 'hosthook_aftercreation', 'install', 'postinstall', 'hosthook_postinstall'];
 
 /**
  * Merge env configurations, handling both array and object formats.
@@ -120,6 +125,11 @@ export function mergeProfiles(defaultProfile, activeProfile) {
         merged.mounts = { ...defaultProfile.mounts, ...activeProfile.mounts };
     }
 
+    // Merge ports - active replaces default (like hooks)
+    if (activeProfile.ports !== undefined) {
+        merged.ports = activeProfile.ports;
+    }
+
     return merged;
 }
 
@@ -185,9 +195,14 @@ export function getProfileConfig(agentName, profileName) {
     try {
         const { manifestPath } = findAgent(agentName);
         const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-        const profiles = manifest?.profiles || {};
+        const profiles = manifest?.profiles;
 
-        // Every agent MUST have a default profile for isolation
+        // If no profiles section exists, agent uses legacy mode (no profile config)
+        if (!profiles || Object.keys(profiles).length === 0) {
+            return null;
+        }
+
+        // If profiles exist, a 'default' profile is required for proper isolation
         const defaultProfile = profiles.default;
         if (!defaultProfile) {
             throw new Error(`Agent ${agentName} missing required 'default' profile in manifest.json`);
@@ -258,7 +273,8 @@ export function validateProfile(agentName, profileName) {
         }
 
         // Validate hook scripts exist (only host hooks need file validation)
-        const hostHookFields = ['hosthook_aftercreation', 'hosthook_postinstall'];
+        // preinstall is now a host hook that runs before container creation
+        const hostHookFields = ['preinstall', 'hosthook_aftercreation', 'hosthook_postinstall'];
         for (const hookField of hostHookFields) {
             if (config[hookField]) {
                 const agentPath = path.dirname(manifestPath);

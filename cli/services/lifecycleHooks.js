@@ -3,7 +3,7 @@ import path from 'path';
 import { execSync, spawnSync } from 'child_process';
 import { containerRuntime } from './docker/common.js';
 import { debugLog } from './utils.js';
-import { getProfileConfig, getProfileEnvVars, getHookNames } from './profileService.js';
+import { getProfileConfig, getProfileEnvVars, getHookNames, getActiveProfile } from './profileService.js';
 import { validateSecrets, getSecrets, createEnvWithSecrets, formatMissingSecretsError } from './secretInjector.js';
 import { installDependencies } from './dependencyInstaller.js';
 import {
@@ -57,21 +57,20 @@ export function executeHostHook(scriptPath, env = {}, options = {}) {
 
     try {
         debugLog(`[hook] Executing host hook: ${resolvedPath}`);
-        const output = execSync(resolvedPath, {
+        // Use inherit for stdout/stderr so hook output is visible to user
+        execSync(resolvedPath, {
             cwd,
             env: hookEnv,
-            stdio: 'pipe',
+            stdio: 'inherit',
             timeout
-        }).toString();
+        });
 
-        return { success: true, message: 'Hook executed successfully', output };
+        return { success: true, message: 'Hook executed successfully', output: '' };
     } catch (err) {
-        const stderr = err.stderr ? err.stderr.toString() : '';
-        const stdout = err.stdout ? err.stdout.toString() : '';
         return {
             success: false,
             message: `Hook execution failed: ${err.message}`,
-            output: stdout + stderr
+            output: ''
         };
     }
 }
@@ -138,8 +137,8 @@ export function executeContainerHook(containerName, script, env = {}, options = 
  * Uses merged profile configuration (default + active profile).
  *
  * Hook execution order:
- * 1. hosthook_aftercreation [HOST] - Runs after container creation
- * 2. preinstall [CONTAINER] - Runs before install
+ * 1. preinstall [HOST] - Runs BEFORE container creation (can set ploinky vars)
+ * 2. hosthook_aftercreation [HOST] - Runs after container creation
  * 3. install [CONTAINER] - Main installation
  * 4. postinstall [CONTAINER] - Runs after install
  * 5. hosthook_postinstall [HOST] - Runs after container postinstall completes
@@ -147,12 +146,12 @@ export function executeContainerHook(containerName, script, env = {}, options = 
  * Full Lifecycle order:
  * 1. Workspace Structure Init [HOST]
  * 2. Symbolic Links Creation [HOST]
- * 3. Container Creation (handled externally)
- * 4. hosthook_aftercreation [HOST]
- * 5. Container Start (handled externally)
- * 6. Core Dependencies Installation [CONTAINER] (conditional)
- * 7. Agent Dependencies Installation [CONTAINER] (conditional)
- * 8. preinstall [CONTAINER]
+ * 3. preinstall [HOST] - Profile setup, can run `ploinky var` commands
+ * 4. Container Creation (handled externally) - env vars read from .secrets
+ * 5. hosthook_aftercreation [HOST]
+ * 6. Container Start (handled externally)
+ * 7. Core Dependencies Installation [CONTAINER] (conditional)
+ * 8. Agent Dependencies Installation [CONTAINER] (conditional)
  * 9. install [CONTAINER]
  * 10. postinstall [CONTAINER]
  * 11. hosthook_postinstall [HOST]
@@ -224,17 +223,23 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
         errors.push(`Symlink creation failed: ${err.message}`);
     }
 
-    // Steps 3-5 are handled externally (container creation and start)
+    // Step 3: preinstall [HOST] - Already ran in runPreContainerLifecycle BEFORE container creation
+    // We just record that it was done (or skipped if not defined)
+    if (profileConfig.preinstall) {
+        steps.push({ step: 3, name: 'preinstall', success: true, message: 'Already executed before container creation' });
+    }
+
+    // Steps 4-6 are handled externally (container creation and start)
     if (skipContainer) {
         return { success: errors.length === 0, steps, errors };
     }
 
-    // Step 4: hosthook_aftercreation [HOST]
+    // Step 5: hosthook_aftercreation [HOST]
     if (profileConfig.hosthook_aftercreation) {
-        log('[lifecycle] Step 4: Running hosthook_aftercreation...');
+        log('[lifecycle] Step 5: Running hosthook_aftercreation...');
         const hookPath = path.join(agentPath || '', profileConfig.hosthook_aftercreation);
         const result = executeHostHook(hookPath, hookEnv, { cwd: agentPath });
-        steps.push({ step: 4, name: 'hosthook_aftercreation', success: result.success, output: result.output });
+        steps.push({ step: 5, name: 'hosthook_aftercreation', success: result.success, output: result.output });
         if (!result.success) {
             errors.push(`hosthook_aftercreation failed: ${result.message}`);
         }
@@ -242,25 +247,15 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
 
     // Container should be started by caller before calling post-start hooks
 
-    // Steps 6-10: Install hooks (skip if already ran in temp container before main container start)
+    // Steps 7-10: Install hooks (skip if already ran in temp container before main container start)
     if (!skipInstallHooks) {
-        // Step 6 & 7: Dependencies Installation [CONTAINER] (conditional)
+        // Step 7 & 8: Dependencies Installation [CONTAINER] (conditional)
         if (containerName) {
-            log('[lifecycle] Steps 6-7: Installing dependencies...');
+            log('[lifecycle] Steps 7-8: Installing dependencies...');
             const depResult = installDependencies(containerName, agentName, { verbose });
-            steps.push({ step: 6, name: 'dependencies', success: depResult.success, message: depResult.message });
+            steps.push({ step: 7, name: 'dependencies', success: depResult.success, message: depResult.message });
             if (!depResult.success) {
                 errors.push(`Dependency installation failed: ${depResult.message}`);
-            }
-        }
-
-        // Step 8: preinstall [CONTAINER]
-        if (profileConfig.preinstall && containerName) {
-            log('[lifecycle] Step 8: Running preinstall hook...');
-            const result = executeContainerHook(containerName, profileConfig.preinstall, hookEnv);
-            steps.push({ step: 8, name: 'preinstall', success: result.success, output: result.output });
-            if (!result.success) {
-                errors.push(`preinstall hook failed: ${result.message}`);
             }
         }
 
@@ -284,9 +279,8 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
             }
         }
     } else {
-        log('[lifecycle] Steps 6-9: Skipped (install already ran in temp container)');
-        steps.push({ step: 6, name: 'dependencies', success: true, skipped: true });
-        steps.push({ step: 8, name: 'preinstall', success: true, skipped: true });
+        log('[lifecycle] Steps 7-9: Skipped (install already ran in temp container)');
+        steps.push({ step: 7, name: 'dependencies', success: true, skipped: true });
         steps.push({ step: 9, name: 'install', success: true, skipped: true });
 
         // Step 10: postinstall [CONTAINER] - runs AFTER main container is up, not in temp container
@@ -305,12 +299,19 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
 
     // Step 11: hosthook_postinstall [HOST]
     if (profileConfig.hosthook_postinstall) {
-        log('[lifecycle] Step 11: Running hosthook_postinstall...');
+        console.log(`[hosthook_postinstall] Running for profile '${profileName}'...`);
         const hookPath = path.join(agentPath || '', profileConfig.hosthook_postinstall);
+        console.log(`[hosthook_postinstall] Hook path: ${hookPath}`);
         const result = executeHostHook(hookPath, hookEnv, { cwd: agentPath });
         steps.push({ step: 11, name: 'hosthook_postinstall', success: result.success, output: result.output });
+        if (result.output) {
+            console.log(result.output.trim());
+        }
         if (!result.success) {
+            console.log(`[hosthook_postinstall] Warning: ${result.message}`);
             errors.push(`hosthook_postinstall failed: ${result.message}`);
+        } else {
+            console.log(`[hosthook_postinstall] Completed successfully`);
         }
     }
 
@@ -326,13 +327,18 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
 
 /**
  * Run only the pre-container steps of the lifecycle.
- * Steps: workspace init, symlinks
+ * Steps: workspace init, symlinks, preinstall [HOST]
+ * 
+ * The preinstall hook runs on the HOST before container creation,
+ * allowing it to set ploinky vars that will be available when the container is created.
+ * 
  * @param {string} agentName - The agent name
  * @param {string} repoName - The repository name
  * @param {string} agentPath - Path to the agent directory
+ * @param {string} profileName - The profile name (optional, defaults to active profile)
  * @returns {{ success: boolean, errors: string[] }}
  */
-export function runPreContainerLifecycle(agentName, repoName, agentPath) {
+export function runPreContainerLifecycle(agentName, repoName, agentPath, profileName) {
     const errors = [];
 
     try {
@@ -348,6 +354,45 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath) {
         errors.push(`Symlink creation failed: ${err.message}`);
     }
 
+    // Run preinstall [HOST] hook - this runs BEFORE container creation
+    // This allows the hook to set ploinky vars via `ploinky var` commands
+    // Skip if already run in this session (e.g., for static agent in workspaceUtil.js)
+    try {
+        const profileConfig = getProfileConfig(`${repoName}/${agentName}`, profileName) || {};
+        if (profileConfig.preinstall) {
+            // Check if preinstall was already run for this agent in this session
+            const markerDir = path.join(process.cwd(), '.ploinky', 'running');
+            const markerFile = path.join(markerDir, `preinstall-${agentName}-${profileName || 'default'}`);
+            
+            if (fs.existsSync(markerFile)) {
+                debugLog(`[lifecycle] Skipping preinstall [HOST] for ${agentName} (already run)`);
+            } else {
+                const hookPath = path.join(agentPath || '', profileConfig.preinstall);
+                
+                // Build environment for the hook
+                const envVars = getProfileEnvVars(agentName, repoName, profileName || getActiveProfile(), {});
+                const profileEnv = normalizeProfileEnv(profileConfig.env);
+                const secrets = profileConfig.secrets ? getSecrets(profileConfig.secrets) : {};
+                const hookEnv = createEnvWithSecrets({ ...envVars, ...profileEnv }, secrets);
+                
+                debugLog(`[lifecycle] Running preinstall [HOST]: ${hookPath}`);
+                // Run from workspace root so ploinky var commands can find .ploinky directory
+                const result = executeHostHook(hookPath, hookEnv, { cwd: process.cwd() });
+                if (!result.success) {
+                    errors.push(`preinstall hook failed: ${result.message}`);
+                } else {
+                    // Mark preinstall as done for this session
+                    try {
+                        fs.mkdirSync(markerDir, { recursive: true });
+                        fs.writeFileSync(markerFile, new Date().toISOString());
+                    } catch (_) {}
+                }
+            }
+        }
+    } catch (err) {
+        errors.push(`preinstall hook error: ${err.message}`);
+    }
+
     return {
         success: errors.length === 0,
         errors
@@ -356,7 +401,10 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath) {
 
 /**
  * Run only the post-container-start steps of the lifecycle.
- * Steps: dependencies, preinstall, install, postinstall
+ * Steps: dependencies, install, postinstall, hosthook_postinstall
+ * 
+ * Note: preinstall now runs on HOST before container creation (see runPreContainerLifecycle)
+ * 
  * @param {string} containerName - The container name
  * @param {string} agentName - The agent name
  * @param {string} profileName - The profile name
@@ -394,8 +442,8 @@ export function runPostStartLifecycle(containerName, agentName, profileName, opt
         errors.push(`Dependencies: ${depResult.message}`);
     }
 
-    // Container hooks
-    const hooks = ['preinstall', 'install', 'postinstall'];
+    // Container hooks (preinstall is now a HOST hook, not a container hook)
+    const hooks = ['install', 'postinstall'];
     for (const hookName of hooks) {
         if (profileConfig[hookName]) {
             log(`[lifecycle] Running ${hookName}...`);

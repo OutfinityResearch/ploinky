@@ -217,8 +217,9 @@ function sleepMs(ms) {
     Atomics.wait(SLEEP_ARRAY, 0, 0, ms);
 }
 
-function parseManifestPorts(manifest) {
-    const ports = manifest.ports || manifest.port;
+function parseManifestPorts(manifest, profileConfig = null) {
+    // Ports must be defined in profile configuration
+    const ports = profileConfig?.ports;
     if (!ports) return { publishArgs: [], portMappings: [] };
 
     const portArray = Array.isArray(ports) ? ports : [ports];

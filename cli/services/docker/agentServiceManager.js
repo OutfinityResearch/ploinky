@@ -185,10 +185,12 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const agentCodePath = resolveSymlinkPath(agentCodePathSymlink);
     const agentSkillsPath = resolveSymlinkPath(agentSkillsPathSymlink);
 
-    // Ensure workspace structure exists before container creation
-    const preLifecycle = runPreContainerLifecycle(agentName, repoName, agentPath);
+    // Ensure workspace structure exists and run preinstall [HOST] hook before container creation
+    // The preinstall hook can set ploinky vars that will be available when the container is created
+    const preLifecycle = runPreContainerLifecycle(agentName, repoName, agentPath, activeProfile);
     if (!preLifecycle.success) {
-        console.error(`[profile] ${agentName}: workspace init warnings: ${preLifecycle.errors.join('; ')}`);
+        // preinstall failure is fatal - don't create the container
+        throw new Error(`[profile] ${agentName}: pre-container lifecycle failed: ${preLifecycle.errors.join('; ')}`);
     }
 
     // Ensure agent work directory exists
@@ -212,13 +214,13 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         debugLog(`[deps] ${agentName}: Skipping npm install (uses start command, no package.json)`);
     }
 
-    // Step 2: Build preinstall + install commands to run in main container
-    // These run inside the main container before the agent command starts
-    const preinstallCmd = String(profileConfig?.preinstall || manifest?.preinstall || '').trim();
+    // Step 2: Build install command to run in main container
+    // Note: preinstall is now a HOST hook that runs before container creation (see runPreContainerLifecycle)
+    // Only the install command runs inside the container before the agent command starts
     const installCmd = String(profileConfig?.install || manifest?.install || '').trim();
 
-    // Combine preinstall + install - will be prepended to agent command
-    const combinedInstallCmd = [preinstallCmd, installCmd].filter(Boolean).join(' && ');
+    // Install command will be prepended to agent command
+    const combinedInstallCmd = installCmd;
 
     // Ensure the agent work directory exists on host
     createAgentWorkDir(agentName);
@@ -268,7 +270,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         }
     }
 
-    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
+    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest, profileConfig);
     const runtimePorts = (options && Array.isArray(options.publish)) ? options.publish : [];
     const pubs = [...manifestPorts, ...runtimePorts];
     for (const p of pubs) {
@@ -484,7 +486,19 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         aliasOverride = existingRecord.alias;
     }
     const image = manifest.container || manifest.image || 'node:18-alpine';
-    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
+
+    // Resolve profile config early - needed for port resolution
+    const activeProfile = getActiveProfile();
+    const hasProfileConfig = Boolean(manifest?.profiles && Object.keys(manifest.profiles).length > 0);
+    const profileConfig = hasProfileConfig
+        ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
+        : null;
+    if (hasProfileConfig && !profileConfig) {
+        const availableProfiles = Object.keys(manifest.profiles || {});
+        throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
+    }
+
+    const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest, profileConfig);
     const containerPortCandidates = portMappings
         .map((mapping) => mapping?.containerPort)
         .filter((port) => typeof port === 'number' && port > 0);
@@ -513,6 +527,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         }
     }
     if (containerExists(containerName)) {
+        console.log(`[ensureAgentService] ${agentName}: container exists, checking if running...`);
         if (!isContainerRunning(containerName)) {
             syncAgentMcpConfig(containerName, agentPath, agentName);
             try { execSync(`${containerRuntime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
@@ -525,6 +540,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
                 }
             }
         }
+        console.log(`[ensureAgentService] ${agentName}: returning early (container exists)`);
         const hostPort = resolveHostPort(containerName, existingRecord, containerPortCandidates);
         syncAgentMcpConfig(containerName, agentPath, agentName);
         return { containerName, hostPort };
@@ -546,15 +562,6 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     const agentCodePath = getAgentCodePath(agentName);
     const agentSkillsPath = getAgentSkillsPath(agentName);
     const runtime = containerRuntime;
-    const activeProfile = getActiveProfile();
-    const hasProfileConfig = Boolean(manifest?.profiles && Object.keys(manifest.profiles).length > 0);
-    const profileConfig = hasProfileConfig
-        ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
-        : null;
-    if (hasProfileConfig && !profileConfig) {
-        const availableProfiles = Object.keys(manifest.profiles || {});
-        throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
-    }
     const profileEnv = normalizeProfileEnv(profileConfig?.env);
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, runtime, profileConfig || {});
 
