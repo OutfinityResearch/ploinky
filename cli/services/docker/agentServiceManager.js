@@ -215,6 +215,19 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (!depsResult.success) {
             console.warn(`[deps] ${agentName}: ${depsResult.message}`);
         }
+        
+        // Copy LLMConfig.json from agent code to node_modules if it exists
+        // This is needed because achillesAgentLib's package.json "files" field doesn't include LLMConfig.json
+        const llmConfigSrc = path.join(agentCodePath, 'config', 'LLMConfig.json');
+        const llmConfigDest = path.join(agentWorkDir, 'node_modules', 'achillesAgentLib', 'LLMConfig.json');
+        if (fs.existsSync(llmConfigSrc) && fs.existsSync(path.dirname(llmConfigDest))) {
+            try {
+                fs.copyFileSync(llmConfigSrc, llmConfigDest);
+                debugLog(`[deps] ${agentName}: Copied LLMConfig.json to node_modules`);
+            } catch (err) {
+                debugLog(`[deps] ${agentName}: Failed to copy LLMConfig.json: ${err.message}`);
+            }
+        }
     } else {
         debugLog(`[deps] ${agentName}: Skipping npm install (uses start command, no package.json)`);
     }
