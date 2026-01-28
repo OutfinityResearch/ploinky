@@ -18,6 +18,7 @@
 # export PLOINKY_EXTRA_BRANCH=""
 
 # For testing profile-based manifest changes, enable these branches:
-export PLOINKY_DEMO_BRANCH="profile_implementation"
-export PLOINKY_FILEEXPLORER_BRANCH="profile_implementation"
-export PLOINKY_SOPLANGBUILDER_BRANCH="profile_implementation"
+# (These are now merged to main, so no branch override is needed)
+# export PLOINKY_DEMO_BRANCH="profile_implementation"
+# export PLOINKY_FILEEXPLORER_BRANCH="profile_implementation"
+# export PLOINKY_SOPLANGBUILDER_BRANCH="profile_implementation"
