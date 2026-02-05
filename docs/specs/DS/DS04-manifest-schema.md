@@ -82,13 +82,21 @@ Agent configuration needs to be:
 /**
  * Environment variable specification
  * Supports three formats: array of strings, array of objects, or object map
+ * Also supports wildcard patterns for automatic variable expansion:
+ *   - "LLM_MODEL_*"   - Matches all variables starting with LLM_MODEL_
+ *   - "ACHILLES_*"    - Matches all variables starting with ACHILLES_
+ *   - "*"             - Matches ALL variables except API_KEY (for security)
+ *
+ * SECURITY: Variables containing "API_KEY" or "APIKEY" are excluded from
+ * the "*" wildcard and must be explicitly listed in the manifest.
+ *
  * @typedef {string[]|EnvObject[]|Object.<string, string|EnvObjectValue>} EnvSpec
  */
 
 /**
  * Environment variable object format
  * @typedef {Object} EnvObject
- * @property {string} name - Variable name inside container
+ * @property {string} name - Variable name inside container (supports wildcards)
  * @property {string} [varName] - Source variable name (on host)
  * @property {boolean} [required] - Whether variable is required
  * @property {string} [value] - Default value
@@ -601,6 +609,39 @@ const manifestErrors = {
   }
 }
 ```
+
+### Agent with Wildcard Environment Variables
+
+```json
+{
+  "container": "node:20-bullseye",
+  "about": "LLM-powered agent with wildcard env injection",
+  "agent": "node /Agent/server/AgentServer.mjs",
+
+  "env": [
+    "LLM_MODEL_*",
+    "ACHILLES_*",
+    "OPENAI_*_URL",
+    "ANTHROPIC_*_URL",
+
+    "DATABASE_URL",
+    "LOG_LEVEL=info",
+
+    "OPENAI_API_KEY"
+  ]
+}
+```
+
+**Wildcard Pattern Reference:**
+
+| Pattern | Description |
+|---------|-------------|
+| `LLM_MODEL_*` | Matches `LLM_MODEL_01`, `LLM_MODEL_02`, etc. |
+| `ACHILLES_*` | Matches `ACHILLES_DEBUG`, `ACHILLES_DEFAULT_MODEL`, etc. |
+| `PREFIX_*_SUFFIX` | Matches `PREFIX_FOO_SUFFIX`, `PREFIX_BAR_SUFFIX`, etc. |
+| `*` | Matches ALL environment variables EXCEPT those containing `API_KEY` |
+
+**Security Note:** The `*` wildcard automatically excludes variables containing `API_KEY` or `APIKEY` to prevent accidental exposure of sensitive credentials. To include API keys, they must be explicitly listed.
 
 ## Success Criteria
 
