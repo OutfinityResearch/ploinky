@@ -3,6 +3,7 @@ import path from 'path';
 import { SECRETS_FILE } from './config.js';
 import { getConfig } from './workspace.js';
 import { findAgent } from './utils.js';
+import { loadSecretsFile, loadEnvFile } from './secretInjector.js';
 
 function ensureSecretsFile() {
     try {
@@ -103,8 +104,131 @@ function toBool(value, defaultValue = false) {
 }
 
 /**
+ * Check if a string is a wildcard pattern (contains * character).
+ * @param {string} pattern - The pattern to check
+ * @returns {boolean} True if the pattern contains wildcard
+ */
+function isWildcardPattern(pattern) {
+    return typeof pattern === 'string' && pattern.includes('*');
+}
+
+/**
+ * Convert a wildcard pattern to a regular expression.
+ * Supports patterns like:
+ *   - "LLM_MODEL_*" - matches LLM_MODEL_ followed by anything
+ *   - "LLM_MODEL*" - matches LLM_MODEL followed by anything
+ *   - "*" - matches everything
+ *   - "PREFIX_*_SUFFIX" - matches PREFIX_ + anything + _SUFFIX
+ *
+ * @param {string} pattern - The wildcard pattern
+ * @returns {RegExp} The compiled regular expression
+ */
+function wildcardToRegex(pattern) {
+    // Escape special regex characters except *
+    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+    // Replace * with .* to match any characters
+    const regexStr = '^' + escaped.replace(/\*/g, '.*') + '$';
+    return new RegExp(regexStr);
+}
+
+/**
+ * Check if a variable name contains API_KEY (case-insensitive check).
+ * These variables are considered sensitive and excluded from wildcard expansion.
+ * @param {string} name - The variable name
+ * @returns {boolean} True if the variable is an API key
+ */
+function isApiKeyVariable(name) {
+    if (!name || typeof name !== 'string') return false;
+    const upper = name.toUpperCase();
+    return upper.includes('API_KEY') || upper.includes('APIKEY');
+}
+
+/**
+ * Get all available environment variable names from all sources.
+ * Sources checked (in order):
+ *   1. process.env (current environment)
+ *   2. .ploinky/.secrets file
+ *   3. .env file in workspace root
+ *
+ * @returns {Set<string>} Set of all available variable names
+ */
+function getAllAvailableEnvNames() {
+    const names = new Set();
+
+    // Add from process.env
+    for (const key of Object.keys(process.env)) {
+        names.add(key);
+    }
+
+    // Add from .ploinky/.secrets
+    try {
+        const secretsMap = loadSecretsFile();
+        for (const key of Object.keys(secretsMap)) {
+            names.add(key);
+        }
+    } catch (_) {
+        // Ignore errors
+    }
+
+    // Add from .env file
+    try {
+        const envMap = loadEnvFile();
+        for (const key of Object.keys(envMap)) {
+            names.add(key);
+        }
+    } catch (_) {
+        // Ignore errors
+    }
+
+    return names;
+}
+
+/**
+ * Expand a wildcard pattern into matching environment variable names.
+ * For the special "*" pattern (match all), API_KEY variables are excluded.
+ *
+ * @param {string} pattern - The wildcard pattern (e.g., "LLM_MODEL_*", "*")
+ * @returns {string[]} Array of matching variable names (sorted)
+ */
+function expandEnvWildcard(pattern) {
+    if (!isWildcardPattern(pattern)) {
+        return [pattern];
+    }
+
+    const allNames = getAllAvailableEnvNames();
+    const regex = wildcardToRegex(pattern);
+    const isMatchAll = pattern === '*';
+    const matches = [];
+
+    for (const name of allNames) {
+        if (!regex.test(name)) {
+            continue;
+        }
+
+        // For "*" (match all), exclude API_KEY variables
+        // They must be explicitly specified in the manifest
+        if (isMatchAll && isApiKeyVariable(name)) {
+            continue;
+        }
+
+        matches.push(name);
+    }
+
+    // Sort for deterministic ordering
+    return matches.sort();
+}
+
+/**
  * Get environment variable specifications from manifest or profile configuration.
  * Profile-based env takes precedence over top-level manifest env.
+ *
+ * Supports wildcard patterns in variable names:
+ *   - "LLM_MODEL_*" - matches all variables starting with LLM_MODEL_
+ *   - "LLM_MODEL*" - matches all variables starting with LLM_MODEL
+ *   - "*" - matches all variables EXCEPT those containing API_KEY
+ *
+ * Variables containing "API_KEY" (case-insensitive) must be explicitly listed
+ * and will not be included when using the "*" wildcard pattern.
  *
  * @param {object} manifest - The manifest object
  * @param {object} [profileConfig] - The merged profile configuration (optional)
@@ -112,9 +236,45 @@ function toBool(value, defaultValue = false) {
  */
 export function getManifestEnvSpecs(manifest, profileConfig) {
     const specs = [];
+    const seenNames = new Set(); // Track seen names to avoid duplicates
     // Profile env takes precedence over top-level manifest env
     const env = profileConfig?.env || manifest?.env;
     if (!env) return specs;
+
+    /**
+     * Add a spec, handling wildcard expansion.
+     * @param {string} insideName - The name inside the container
+     * @param {string} sourceName - The source variable name
+     * @param {boolean} required - Whether the variable is required
+     * @param {*} defaultValue - Default value if not found
+     */
+    function addSpec(insideName, sourceName, required, defaultValue) {
+        // Check if this is a wildcard pattern
+        if (isWildcardPattern(insideName)) {
+            // Expand the wildcard into matching variable names
+            const expandedNames = expandEnvWildcard(insideName);
+            for (const expandedName of expandedNames) {
+                if (seenNames.has(expandedName)) continue;
+                seenNames.add(expandedName);
+                specs.push({
+                    insideName: expandedName,
+                    sourceName: expandedName,
+                    required: false, // Wildcards are not required by default
+                    defaultValue: undefined
+                });
+            }
+        } else {
+            // Regular non-wildcard entry
+            if (seenNames.has(insideName)) return;
+            seenNames.add(insideName);
+            specs.push({
+                insideName,
+                sourceName,
+                required,
+                defaultValue
+            });
+        }
+    }
 
     if (Array.isArray(env)) {
         for (const entry of env) {
@@ -124,12 +284,7 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                 const insideName = typeof name === 'string' ? name.trim() : '';
                 if (!insideName) continue;
                 const sourceName = typeof varName === 'string' && varName.trim() ? varName.trim() : insideName;
-                specs.push({
-                    insideName,
-                    sourceName,
-                    required: toBool(required, false),
-                    defaultValue: value
-                });
+                addSpec(insideName, sourceName, toBool(required, false), value);
                 continue;
             }
             const text = String(entry).trim();
@@ -142,12 +297,7 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                 defaultValue = text.slice(eqIdx + 1);
             }
             if (!insideName) continue;
-            specs.push({
-                insideName,
-                sourceName: insideName,
-                required: false,
-                defaultValue
-            });
+            addSpec(insideName, insideName, false, defaultValue);
         }
         return specs;
     }
@@ -179,12 +329,7 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                 defaultValue = rawSpec;
             }
 
-            specs.push({
-                insideName,
-                sourceName,
-                required,
-                defaultValue
-            });
+            addSpec(insideName, sourceName, required, defaultValue);
         }
     }
 
@@ -412,3 +557,12 @@ export function exposeEnv(exposedName, valueOrRef, agentNameOpt) {
     updateAgentExpose(manifestPath, exposedName, source);
     return { agentName, manifestPath };
 }
+
+// Export wildcard-related functions for testing and external use
+export {
+    isWildcardPattern,
+    wildcardToRegex,
+    isApiKeyVariable,
+    getAllAvailableEnvNames,
+    expandEnvWildcard
+};

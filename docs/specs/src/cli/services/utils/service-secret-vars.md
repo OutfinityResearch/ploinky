@@ -176,12 +176,38 @@ export function setEnvVar(name, value) {
 
 **Returns**: (string) Resolved value
 
-### getManifestEnvSpecs(manifest)
+### getManifestEnvSpecs(manifest, profileConfig)
 
-**Purpose**: Extracts environment variable specifications from manifest
+**Purpose**: Extracts environment variable specifications from manifest. Supports wildcard patterns for automatic variable expansion.
 
 **Parameters**:
 - `manifest` (Object): Agent manifest
+- `profileConfig` (Object, optional): Merged profile configuration
+
+**Wildcard Support**:
+
+The `env` field supports wildcard patterns using `*`:
+
+| Pattern | Description |
+|---------|-------------|
+| `LLM_MODEL_*` | Matches all variables starting with `LLM_MODEL_` |
+| `LLM_MODEL*` | Matches all variables starting with `LLM_MODEL` |
+| `PREFIX_*_SUFFIX` | Matches variables with pattern `PREFIX_..._SUFFIX` |
+| `*` | Matches ALL variables except those containing `API_KEY` |
+
+**Security Note**: Variables containing `API_KEY` or `APIKEY` (case-insensitive) are excluded from the `*` wildcard expansion for security. To include API keys, they must be explicitly listed in the manifest.
+
+**Example with wildcards**:
+```json
+{
+  "env": [
+    "LLM_MODEL_*",           
+    "ACHILLES_*",            
+    "DATABASE_URL",          
+    "OPENAI_API_KEY"         
+  ]
+}
+```
 
 **Returns**: Array of env specs with structure:
 ```javascript
@@ -381,6 +407,52 @@ export function buildEnvFlags(manifest) {
 
 **Returns**: `{agentName: string, manifestPath: string}`
 
+## Wildcard Functions
+
+### isWildcardPattern(pattern)
+
+**Purpose**: Checks if a string contains a wildcard character (`*`)
+
+**Parameters**:
+- `pattern` (string): The pattern to check
+
+**Returns**: (boolean) True if pattern contains `*`
+
+### wildcardToRegex(pattern)
+
+**Purpose**: Converts a wildcard pattern to a regular expression
+
+**Parameters**:
+- `pattern` (string): The wildcard pattern (e.g., `LLM_MODEL_*`)
+
+**Returns**: (RegExp) Compiled regular expression
+
+### isApiKeyVariable(name)
+
+**Purpose**: Checks if a variable name contains `API_KEY` or `APIKEY` (case-insensitive)
+
+**Parameters**:
+- `name` (string): Variable name to check
+
+**Returns**: (boolean) True if variable is an API key
+
+### getAllAvailableEnvNames()
+
+**Purpose**: Gets all available environment variable names from all sources (process.env, .ploinky/.secrets, .env)
+
+**Returns**: (Set<string>) Set of all available variable names
+
+### expandEnvWildcard(pattern)
+
+**Purpose**: Expands a wildcard pattern into matching environment variable names
+
+**Parameters**:
+- `pattern` (string): Wildcard pattern (e.g., `LLM_MODEL_*`, `*`)
+
+**Returns**: (string[]) Sorted array of matching variable names
+
+**Note**: For the `*` pattern, API_KEY variables are automatically excluded
+
 ## File Format
 
 ### .ploinky/secrets
@@ -401,7 +473,9 @@ import {
     parseSecrets,
     resolveVarValue,
     buildEnvFlags,
-    exposeEnv
+    exposeEnv,
+    isWildcardPattern,
+    expandEnvWildcard
 } from './secretVars.js';
 
 // Set a variable
@@ -421,6 +495,38 @@ const flags = buildEnvFlags(manifest);
 
 // Expose to agent
 exposeEnv('DB_CONN', '$DATABASE_URL', 'postgres');
+```
+
+### Wildcard Usage Example
+
+```javascript
+// Example: Using wildcards in manifest
+
+// Manifest with wildcards
+const manifest = {
+    env: [
+        'LLM_MODEL_*',        // All LLM model configurations
+        'ACHILLES_*',         // All Achilles settings
+        'DATABASE_URL',       // Explicit variable
+        'OPENAI_API_KEY'      // Explicit API key (required since * excludes API_KEY)
+    ]
+};
+
+// Or use * to include all non-sensitive variables
+const manifestAll = {
+    env: [
+        '*',                  // All variables except API_KEY variables
+        'OPENAI_API_KEY'      // Explicit API key override
+    ]
+};
+
+// Check if a pattern is a wildcard
+isWildcardPattern('LLM_MODEL_*');  // true
+isWildcardPattern('DATABASE_URL'); // false
+
+// Expand a wildcard pattern manually
+const matches = expandEnvWildcard('LLM_MODEL_*');
+// ['LLM_MODEL_01', 'LLM_MODEL_02', ...] (sorted)
 ```
 
 ## Related Modules
