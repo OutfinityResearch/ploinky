@@ -1,9 +1,36 @@
 import { resolveVarValue } from '../../services/secretVars.js';
 import { getAgentWorkDir } from '../../services/workspaceStructure.js';
+import fs from 'fs';
+import os from 'os';
 import { configCache } from '../utils/configCache.js';
 import { logBootEvent } from '../utils/logger.js';
 import { getAppName } from '../authHandlers.js';
 import { resolveWebchatCommands, resolveWebchatCommandsForAgent } from '../webchat/commandResolver.js';
+
+function tryGetCwd() {
+    try {
+        return process.cwd();
+    } catch (_) {
+        return '';
+    }
+}
+
+function resolveSafeHostWorkdir(preferred = '') {
+    const candidates = [
+        preferred,
+        tryGetCwd(),
+        process.env.PWD || '',
+        os.homedir(),
+        '/',
+    ];
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        try {
+            if (fs.existsSync(candidate)) return candidate;
+        } catch (_) { }
+    }
+    return '/';
+}
 
 /**
  * Load PTY library (optional dependency)
@@ -71,7 +98,8 @@ async function loadTTYModules(pty) {
  */
 function buildLocalFactory(createFactoryFn, pty, defaults = {}) {
     if (!pty || !createFactoryFn) return null;
-    return createFactoryFn({ ptyLib: pty, workdir: process.cwd(), ...defaults });
+    const safeWorkdir = resolveSafeHostWorkdir(defaults.workdir);
+    return createFactoryFn({ ptyLib: pty, ...defaults, workdir: safeWorkdir });
 }
 
 /**
@@ -140,11 +168,11 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
     });
     const resolveHostWorkdir = (config) => {
         const agentName = config?.agentName || '';
-        if (!agentName) return process.cwd();
+        if (!agentName) return resolveSafeHostWorkdir();
         try {
             return getAgentWorkDir(agentName);
         } catch (_) {
-            return process.cwd();
+            return resolveSafeHostWorkdir();
         }
     };
 
