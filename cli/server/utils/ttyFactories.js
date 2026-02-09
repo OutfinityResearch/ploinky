@@ -1,11 +1,11 @@
 import { resolveVarValue } from '../../services/secretVars.js';
-import { getAgentWorkDir } from '../../services/workspaceStructure.js';
 import fs from 'fs';
 import os from 'os';
 import { configCache } from '../utils/configCache.js';
 import { logBootEvent } from '../utils/logger.js';
 import { getAppName } from '../authHandlers.js';
 import { resolveWebchatCommands, resolveWebchatCommandsForAgent } from '../webchat/commandResolver.js';
+import { WORKSPACE_ROOT } from '../../services/config.js';
 
 function tryGetCwd() {
     try {
@@ -167,13 +167,12 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
         agentName: commands?.agentName || ''
     });
     const resolveHostWorkdir = (config) => {
-        const agentName = config?.agentName || '';
-        if (!agentName) return resolveSafeHostWorkdir();
-        try {
-            return getAgentWorkDir(agentName);
-        } catch (_) {
-            return resolveSafeHostWorkdir();
-        }
+        // webchat hostCommand frequently runs `ploinky cli <agent>`.
+        // That command must run from the *workspace root* so it sees the correct
+        // `.ploinky/` state (enabled repos, enabled agents). If it runs from
+        // `agents/<name>/`, Ploinky bootstraps a new `.ploinky/` and then fails
+        // with: "Agent '<name>' not found".
+        return resolveSafeHostWorkdir(WORKSPACE_ROOT);
     };
 
     const buildFactoryResult = (config) => {
