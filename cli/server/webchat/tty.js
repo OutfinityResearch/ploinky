@@ -1,5 +1,20 @@
 import { buildExecArgs } from '../../services/docker/index.js';
 
+import fs from 'fs';
+import os from 'os';
+
+function safeProcessCwd() {
+    try {
+        const cwd = process.cwd();
+        if (cwd && fs.existsSync(cwd)) return cwd;
+    } catch (_) { }
+    try {
+        const home = os.homedir();
+        if (home && fs.existsSync(home)) return home;
+    } catch (_) { }
+    return '/';
+}
+
 // Escape special characters for shell arguments
 function shellEscape(str) {
     if (!str) return '';
@@ -14,7 +29,7 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
     const DEBUG = process.env.WEBTTY_DEBUG === '1';
     const log = (...args) => { if (DEBUG) console.log('[webchat][tty]', ...args); };
     const factory = (ssoUser) => {
-        const wd = workdir || process.cwd();
+        const wd = workdir || safeProcessCwd();
         const env = { ...process.env, TERM: 'xterm-256color' };
 
         // Build SSO CLI arguments (no env vars)
@@ -74,7 +89,7 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
                 name: 'xterm-color',
                 cols: 80,
                 rows: 24,
-                cwd: process.cwd(),
+                cwd: safeProcessCwd(),
                 env
             });
             log('spawned PTY', { runtime, containerName });
