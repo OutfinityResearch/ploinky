@@ -139,12 +139,21 @@ export function proxyApi(req, res, targetPort, identityHeaders = {}) {
 
 export function createAgentRouteEntries() {
     const routes = loadApiRoutes();
+    const routeKeys = Object.keys(routes || {});
+    console.log(`[router-diag] loadApiRoutes returned ${routeKeys.length} route(s): ${routeKeys.join(', ') || '(none)'}`);
     const entries = [];
     for (const [agentName, route] of Object.entries(routes || {})) {
-        if (!route || route.disabled) continue;
+        if (!route || route.disabled) {
+            console.log(`[router-diag]   skip '${agentName}': disabled or empty`);
+            continue;
+        }
         const port = Number(route.hostPort);
-        if (!Number.isFinite(port)) continue;
+        if (!Number.isFinite(port)) {
+            console.log(`[router-diag]   skip '${agentName}': invalid hostPort=${route.hostPort}`);
+            continue;
+        }
         const baseUrl = `http://127.0.0.1:${port}/mcp`;
+        console.log(`[router-diag]   agent '${agentName}' -> ${baseUrl}`);
         entries.push({ agentName, port, baseUrl, client: createAgentClient(baseUrl) });
     }
     return entries;
@@ -313,8 +322,10 @@ function canonicalCommand(command) {
 
 async function executeRouterCommand(command, payload = {}) {
     const normalized = canonicalCommand(command);
+    console.log(`[router-diag] executeRouterCommand: command='${command}' normalized='${normalized}' agent='${payload?.agent || '(none)'}' tool='${payload?.tool || '(none)'}'`);
     const entries = createAgentRouteEntries();
     if (!entries.length) {
+        console.log('[router-diag] executeRouterCommand: 503 — no agents registered');
         return {
             statusCode: 503,
             body: { error: 'no MCP agents are registered with the router' }
@@ -363,12 +374,21 @@ async function executeRouterCommand(command, payload = {}) {
                     : entries;
 
                 if (requestedAgent && !candidates.length) {
+                    const registeredAgents = entries.map(e => e.agentName);
+                    console.log(`[router-diag] tool 404: agent '${requestedAgent}' not found. Registered: [${registeredAgents.join(', ')}]`);
                     return { statusCode: 404, body: { error: `agent '${requestedAgent}' is not registered` } };
                 }
 
                 const { toolIndex, errors, failures } = await collectTools(candidates);
+                console.log(`[router-diag] collectTools: ${toolIndex.size} tool(s) indexed, ${errors.length} error(s), ${failures.size} failure(s)`);
+                if (failures.size > 0) {
+                    for (const [agent, msg] of failures) {
+                        console.log(`[router-diag]   failure: agent='${agent}' -> ${msg}`);
+                    }
+                }
 
                 if (requestedAgent && failures.has(requestedAgent)) {
+                    console.log(`[router-diag] tool 502: agent '${requestedAgent}' failed during collectTools`);
                     return { statusCode: 502, body: { error: failures.get(requestedAgent) } };
                 }
 
@@ -389,6 +409,8 @@ async function executeRouterCommand(command, payload = {}) {
                         const agents = matches.map(item => item.entry.agentName);
                         return { statusCode: 409, body: { error: `tool '${toolName}' is provided by multiple agents`, agents } };
                     }
+                    const allTools = [...toolIndex.keys()];
+                    console.log(`[router-diag] tool 404: '${toolName}' not found. Available tools: [${allTools.join(', ')}]. Errors: ${JSON.stringify(errors)}`);
                     return { statusCode: 404, body: { error: `tool '${toolName}' was not found`, errors } };
                 }
 
@@ -409,7 +431,9 @@ async function executeRouterCommand(command, payload = {}) {
                     }
                 }
 
+                console.log(`[router-diag] calling tool '${toolName}' on agent '${resolved.entry.agentName}' at ${resolved.entry.baseUrl}`);
                 const response = await resolved.entry.client.callTool(toolName, args);
+                console.log(`[router-diag] tool '${toolName}' returned successfully from '${resolved.entry.agentName}'`);
                 return {
                     statusCode: 200,
                     body: {
@@ -683,17 +707,22 @@ export async function handleRouterMcp(req, res) {
         }
 
         try {
-            if (isJsonRpcMessage(payload)) {
+            const isRpc = isJsonRpcMessage(payload);
+            console.log(`[router-diag] handleRouterMcp: POST /mcp isJsonRpc=${isRpc} command='${payload?.command || ''}' agent='${payload?.agent || ''}'`);
+
+            if (isRpc) {
                 await handleRouterJsonRpc(req, res, payload);
                 return;
             }
 
             const command = payload && typeof payload.command === 'string' ? payload.command : '';
             const { statusCode, body } = await executeRouterCommand(command, payload);
+            console.log(`[router-diag] handleRouterMcp: responding ${statusCode}${body?.error ? ' error=' + body.error : ''}`);
             res.writeHead(statusCode, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(body));
         } catch (err) {
             const message = err && err.message ? err.message : String(err || 'unknown error');
+            console.error(`[router-diag] handleRouterMcp: 500 error: ${message}`);
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: message }));
         }
