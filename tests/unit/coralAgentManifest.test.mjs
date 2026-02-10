@@ -36,7 +36,7 @@ function setupTestEnv() {
     process.env.ACHILLES_DEFAULT_DEEP_MODEL = 'axiologic_antigravity/claude-opus-4-5-thinking';
     process.env.ACHILLES_ENABLED_FAST_MODELS = 'model1,model2,model3';
     process.env.ACHILLES_ENABLED_DEEP_MODELS = 'model4,model5';
-    process.env.ACHILLES_DEBUG_ENABLED = 'true';
+    process.env.ACHILLES_DEBUG = 'true';
     
     // Provider URLs
     process.env.OPENAI_AXIOLOGIC_KIRO_URL = 'https://kiro.axiologic.dev/v1/chat/completions';
@@ -70,7 +70,7 @@ function cleanupTestEnv() {
         'LLM_MODEL_01', 'LLM_MODEL_02', 'LLM_MODEL_03', 'LLM_MODEL_04', 'LLM_MODEL_05',
         'LLM_MODEL_06', 'LLM_MODEL_07', 'LLM_MODEL_08', 'LLM_MODEL_09', 'LLM_MODEL_10',
         'ACHILLES_ORCHESTRATOR_MODE', 'ACHILLES_DEFAULT_FAST_MODEL', 'ACHILLES_DEFAULT_DEEP_MODEL',
-        'ACHILLES_ENABLED_FAST_MODELS', 'ACHILLES_ENABLED_DEEP_MODELS', 'ACHILLES_DEBUG_ENABLED',
+        'ACHILLES_ENABLED_FAST_MODELS', 'ACHILLES_ENABLED_DEEP_MODELS', 'ACHILLES_DEBUG',
         'OPENAI_AXIOLOGIC_KIRO_URL', 'OPENAI_AXIOLOGIC_KIRO_KEY_ENV', 'OPENAI_OPENCODE_URL',
         'ANTHROPIC_AXIOLOGIC_ANTIGRAVITY_URL', 'ANTHROPIC_AXIOLOGIC_ANTIGRAVITY_KEY_ENV',
         'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'AXIOLOGIC_API_KEY', 'OPENROUTER_API_KEY',
@@ -121,7 +121,7 @@ test('coral-agent manifest: should expand ACHILLES_* wildcard', () => {
         assert.ok(names.includes('ACHILLES_DEFAULT_FAST_MODEL'), 'Should include ACHILLES_DEFAULT_FAST_MODEL');
         assert.ok(names.includes('ACHILLES_DEFAULT_DEEP_MODEL'), 'Should include ACHILLES_DEFAULT_DEEP_MODEL');
         assert.ok(names.includes('ACHILLES_ENABLED_FAST_MODELS'), 'Should include ACHILLES_ENABLED_FAST_MODELS');
-        assert.ok(names.includes('ACHILLES_DEBUG_ENABLED'), 'Should include ACHILLES_DEBUG_ENABLED');
+        assert.ok(names.includes('ACHILLES_DEBUG'), 'Should include ACHILLES_DEBUG');
         
         const achillesVars = names.filter(n => n.startsWith('ACHILLES_'));
         console.log(`  ✓ ACHILLES_* expanded to ${achillesVars.length} variables`);
