@@ -149,3 +149,4 @@ test_run_dir/
 .idea/
 
 /.claude/
+/node_modules/achillesAgentLib/
