@@ -49,6 +49,7 @@ const {
     ttsRate,
     ttsRateValue,
     settingsBtn,
+    logoutBtn,
     settingsPanel,
     attachmentBtn,
     attachmentMenu,
@@ -287,6 +288,39 @@ refocusComposerAfterIcon(attachmentBtn);
 refocusComposerAfterIcon(settingsBtn);
 refocusComposerAfterIcon(sttBtn);
 initMessageToolbar();
+
+function resolveLogoutRedirect(payload) {
+    const redirect = typeof payload?.redirect === 'string' ? payload.redirect.trim() : '';
+    if (redirect) {
+        return redirect;
+    }
+    return basePath ? `${basePath}/` : '/webchat/';
+}
+
+async function handleLogout() {
+    if (!logoutBtn) {
+        return;
+    }
+    logoutBtn.setAttribute('aria-disabled', 'true');
+    try {
+        const response = await fetch(toEndpoint('logout'), {
+            method: 'POST',
+            credentials: 'include'
+        });
+        const payload = await response.json().catch(() => ({}));
+        network.stop();
+        window.location.href = resolveLogoutRedirect(payload);
+    } catch (_) {
+        network.stop();
+        window.location.href = basePath ? `${basePath}/` : '/webchat/';
+    } finally {
+        logoutBtn.removeAttribute('aria-disabled');
+    }
+}
+
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', handleLogout);
+}
 
 composer.setSendHandler((cmdText) => {
     const cmd = cmdText.trim();

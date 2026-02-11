@@ -60,6 +60,7 @@ export function initDom() {
     const sttLang = document.getElementById('sttLang');
     const sttEnable = document.getElementById('sttEnable');
     const settingsBtn = document.getElementById('settingsBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
     const settingsPanel = document.getElementById('settingsPanel');
     const viewMoreLinesInput = document.getElementById('viewMoreLines');
     const ttsEnable = document.getElementById('ttsEnable');
@@ -237,6 +238,7 @@ export function initDom() {
             ttsRate,
             ttsRateValue,
             settingsBtn,
+            logoutBtn,
             settingsPanel,
             viewMoreLinesInput,
             attachmentBtn,

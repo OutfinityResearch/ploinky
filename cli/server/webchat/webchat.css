@@ -256,6 +256,37 @@ body {
     opacity: 0.6;
 }
 
+.wa-icon-btn[data-tooltip] {
+    position: relative;
+}
+
+.wa-icon-btn[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-2px);
+    background: var(--wa-bg-panel);
+    color: var(--wa-text-primary);
+    border: 1px solid var(--wa-border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    box-shadow: var(--wa-shadow-sm);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+    z-index: 300;
+}
+
+.wa-icon-btn[data-tooltip]:hover::after,
+.wa-icon-btn[data-tooltip]:focus-visible::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
 .wa-settings-panel {
     position: absolute;
     top: calc(var(--wa-header-height) + 8px);

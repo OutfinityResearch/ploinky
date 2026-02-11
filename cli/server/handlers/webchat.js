@@ -86,6 +86,116 @@ function ensureAppSession(req, res, appState) {
     return sid;
 }
 
+function forceKillPid(pid, tabId) {
+    if (!pid || typeof global.processKill !== 'function') {
+        return;
+    }
+    setTimeout(() => {
+        try {
+            global.processKill(pid, 0);
+            global.processKill(pid, 'SIGKILL');
+            console.warn(`[webchat] Force killed lingering process ${pid} for tab ${tabId}`);
+        } catch (_) {
+            console.log(`[webchat] Process ${pid} already dead for tab ${tabId}`);
+        }
+    }, 2000);
+}
+
+function disposeTab(tab, tabId, session) {
+    if (!tab) {
+        return;
+    }
+    const pid = tab.pid || tab.tty?.pid;
+    if (tab.disposed) {
+        if (session?.tabs instanceof Map) {
+            session.tabs.delete(tabId);
+        }
+        return;
+    }
+    tab.disposed = true;
+
+    if (tab.cleanupTimer) {
+        clearTimeout(tab.cleanupTimer);
+        tab.cleanupTimer = null;
+    }
+
+    if (tab.tty) {
+        console.log(`[webchat] Disposing TTY for tab ${tabId}`);
+        if (typeof tab.tty.dispose === 'function') {
+            try {
+                tab.tty.dispose();
+                console.log(`[webchat] dispose() called for pid ${pid}`);
+            } catch (error) {
+                console.error(`[webchat] dispose error: ${error?.message}`);
+            }
+        } else if (typeof tab.tty.kill === 'function') {
+            try {
+                tab.tty.kill();
+                console.log(`[webchat] kill() called for pid ${pid}`);
+            } catch (error) {
+                console.error(`[webchat] kill error: ${error?.message}`);
+            }
+        }
+        tab.tty = null;
+        forceKillPid(pid, tabId);
+    }
+
+    if (tab.sseRes) {
+        try {
+            tab.sseRes.end();
+        } catch (_) {
+            // Ignore disconnect write failures
+        }
+    }
+    tab.sseRes = null;
+
+    if (session?.tabs instanceof Map) {
+        session.tabs.delete(tabId);
+    }
+}
+
+function buildLogoutRedirect(agentQuery) {
+    return agentQuery ? `/${appName}/?${agentQuery}` : `/${appName}/`;
+}
+
+function buildSsoLogoutRedirect(agentQuery) {
+    const returnTo = buildLogoutRedirect(agentQuery);
+    return `/auth/logout?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+function handleLogout(req, res, appState, agentQuery) {
+    const sid = getSession(req, appState);
+    const session = sid ? appState.sessions.get(sid) : null;
+
+    if (session?.tabs instanceof Map) {
+        for (const [tabId, tab] of session.tabs.entries()) {
+            disposeTab(tab, tabId, session);
+        }
+    }
+
+    if (sid) {
+        appState.sessions.delete(sid);
+    }
+
+    const cookies = [
+        buildCookie(SID_COOKIE, '', req, `/${appName}`, { maxAge: 0 }),
+        buildCookie(`${appName}_token`, '', req, `/${appName}`, { maxAge: 0 })
+    ];
+
+    res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Set-Cookie': cookies,
+        'Cache-Control': 'no-store'
+    });
+    const redirect = req.user
+        ? buildSsoLogoutRedirect(agentQuery)
+        : buildLogoutRedirect(agentQuery);
+    res.end(JSON.stringify({
+        ok: true,
+        redirect
+    }));
+}
+
 async function handleTextToSpeech(req, res) {
     let body;
     try {
@@ -306,6 +416,7 @@ function handleWebChat(req, res, appConfig, appState) {
     }
 
     if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
+    if (pathname === '/logout' && req.method === 'POST') return handleLogout(req, res, appState, agentQuery);
     if (pathname === '/whoami') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ ok: authorized(req, appState) }));
@@ -548,46 +659,7 @@ function handleWebChat(req, res, appConfig, appState) {
                 clearInterval(keepaliveTimer);
                 keepaliveTimer = null;
             }
-            // Clear the force kill timer
-            if (tab.cleanupTimer) {
-                clearTimeout(tab.cleanupTimer);
-                tab.cleanupTimer = null;
-            }
-
-            // Clean up TTY process
-            if (tab.tty) {
-                console.log(`[webchat] Disposing TTY for tab ${tabId}`);
-
-                if (typeof tab.tty.dispose === 'function') {
-                    try { tab.tty.dispose(); console.log(`[webchat] dispose() called for pid ${pid}`); } catch (e) { console.error(`[webchat] dispose error: ${e?.message}`); }
-                } else if (typeof tab.tty.kill === 'function') {
-                    try { tab.tty.kill(); console.log(`[webchat] kill() called for pid ${pid}`); } catch (e) { console.error(`[webchat] kill error: ${e?.message}`); }
-                }
-
-                // CRITICAL FIX: Ensure process is actually killed
-                if (pid) {
-                    setTimeout(() => {
-                        try {
-                            // Check if process still exists and force kill
-                            global.processKill(pid, 0); // Test if process exists
-                            global.processKill(pid, 'SIGKILL'); // Force kill
-                            console.warn(`[webchat] Force killed lingering process ${pid}`);
-                        } catch (_) {
-                            // Process already dead, good
-                            console.log(`[webchat] Process ${pid} already dead`);
-                        }
-                    }, 2000); // Wait 2 seconds then force kill if still alive
-                }
-            }
-
-            if (tab.sseRes) {
-                try { tab.sseRes.end(); } catch (_) { }
-            }
-            tab.sseRes = null;
-
-            if (session.tabs && session.tabs instanceof Map) {
-                session.tabs.delete(tabId);
-            }
+            disposeTab(tab, tabId, session);
         });
         return;
     }
