@@ -683,7 +683,9 @@ export async function handleRouterMcp(req, res) {
         }
 
         try {
-            if (isJsonRpcMessage(payload)) {
+            const isRpc = isJsonRpcMessage(payload);
+
+            if (isRpc) {
                 await handleRouterJsonRpc(req, res, payload);
                 return;
             }
