@@ -84,3 +84,91 @@ fast_check_webchat_alias_override() {
 
   rm -f "$tmp_file"
 }
+
+fast_check_webchat_logout_flow() {
+  load_state
+  require_var "TEST_RUN_DIR"
+  require_var "TEST_ROUTER_PORT"
+
+  local secrets_file="$TEST_RUN_DIR/.ploinky/.secrets"
+  local webchat_token
+  webchat_token=$(awk -F'=' 'BEGIN{found=0} $1=="WEBCHAT_TOKEN"{print substr($0, index($0, "=")+1); found=1; exit} END{if(!found) exit 1}' "$secrets_file" 2>/dev/null || true)
+  webchat_token="${webchat_token//$'\r'/}"
+  if [[ -z "${webchat_token:-}" ]]; then
+    echo "WEBCHAT_TOKEN missing in '$secrets_file'." >&2
+    return 1
+  fi
+
+  local router_url="http://127.0.0.1:${TEST_ROUTER_PORT}"
+  local cookie_jar
+  local body_file
+  local header_file
+  cookie_jar=$(mktemp) || return 1
+  body_file=$(mktemp) || { rm -f "$cookie_jar"; return 1; }
+  header_file=$(mktemp) || { rm -f "$cookie_jar" "$body_file"; return 1; }
+
+  local status
+  status=$(curl -sS -o "$body_file" -w '%{http_code}' -c "$cookie_jar" \
+    -H 'Content-Type: application/json' \
+    -X POST "${router_url}/webchat/auth" \
+    -d "{\"token\":\"${webchat_token}\"}" 2>/dev/null || echo "000")
+  if [[ "$status" != "200" ]]; then
+    echo "WebChat auth failed with HTTP ${status}." >&2
+    cat "$body_file" >&2 || true
+    rm -f "$cookie_jar" "$body_file" "$header_file"
+    return 1
+  fi
+
+  status=$(curl -sS -o "$body_file" -w '%{http_code}' -b "$cookie_jar" \
+    "${router_url}/webchat/whoami" 2>/dev/null || echo "000")
+  if [[ "$status" != "200" ]] || ! grep -q '"ok":[[:space:]]*true' "$body_file"; then
+    echo "WebChat whoami should be authenticated after login." >&2
+    cat "$body_file" >&2 || true
+    rm -f "$cookie_jar" "$body_file" "$header_file"
+    return 1
+  fi
+
+  status=$(curl -sS -o "$body_file" -D "$header_file" -w '%{http_code}' -b "$cookie_jar" -c "$cookie_jar" \
+    -X POST "${router_url}/webchat/logout" 2>/dev/null || echo "000")
+  if [[ "$status" != "200" ]]; then
+    echo "WebChat logout failed with HTTP ${status}." >&2
+    cat "$body_file" >&2 || true
+    rm -f "$cookie_jar" "$body_file" "$header_file"
+    return 1
+  fi
+  if ! grep -q '"ok":[[:space:]]*true' "$body_file"; then
+    echo "WebChat logout response missing ok=true." >&2
+    cat "$body_file" >&2 || true
+    rm -f "$cookie_jar" "$body_file" "$header_file"
+    return 1
+  fi
+  if ! grep -Eiq '^Set-Cookie: webchat_sid=.*Max-Age=0' "$header_file"; then
+    echo "WebChat logout did not clear webchat_sid cookie." >&2
+    cat "$header_file" >&2 || true
+    rm -f "$cookie_jar" "$body_file" "$header_file"
+    return 1
+  fi
+  if ! grep -Eiq '^Set-Cookie: webchat_token=.*Max-Age=0' "$header_file"; then
+    echo "WebChat logout did not clear webchat_token cookie." >&2
+    cat "$header_file" >&2 || true
+    rm -f "$cookie_jar" "$body_file" "$header_file"
+    return 1
+  fi
+  if ! grep -q '"redirect":[[:space:]]*"/webchat/' "$body_file"; then
+    echo "WebChat logout response missing redirect to /webchat/." >&2
+    cat "$body_file" >&2 || true
+    rm -f "$cookie_jar" "$body_file" "$header_file"
+    return 1
+  fi
+
+  status=$(curl -sS -o "$body_file" -w '%{http_code}' -b "$cookie_jar" \
+    "${router_url}/webchat/whoami" 2>/dev/null || echo "000")
+  if [[ "$status" != "200" ]] || ! grep -q '"ok":[[:space:]]*false' "$body_file"; then
+    echo "WebChat whoami should be unauthenticated after logout." >&2
+    cat "$body_file" >&2 || true
+    rm -f "$cookie_jar" "$body_file" "$header_file"
+    return 1
+  fi
+
+  rm -f "$cookie_jar" "$body_file" "$header_file"
+}

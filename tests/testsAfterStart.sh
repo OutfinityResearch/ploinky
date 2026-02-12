@@ -130,6 +130,7 @@ test_check "Agent sees exposed ${FAST_VAR_TEST_NAME} via shell" fast_cli_verify_
 stage_header "WebChat Command"
 test_check "webchat --rotate regenerates token" fast_check_webchat_token_rotation
 test_check "WebChat agent override responds via curl" fast_check_webchat_alias_override
+test_check "WebChat logout clears session cookies and access" fast_check_webchat_logout_flow
 
 stage_header "WebChat SSO Parameters"
 test_action "Configure WebChat CLI for test agent" configure_webchat_cli_for_test_agent
