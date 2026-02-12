@@ -26,14 +26,20 @@ function parseKeyValueFile(filePath) {
                 trimmed = trimmed.slice('export '.length).trim();
             }
 
-            // Parse KEY=VALUE
+            // Parse KEY=VALUE or KEY<space>VALUE
+            let key, value;
             const eqIndex = trimmed.indexOf('=');
-            if (eqIndex === -1) {
-                continue;
+            if (eqIndex !== -1) {
+                key = trimmed.slice(0, eqIndex).trim();
+                value = trimmed.slice(eqIndex + 1).trim();
+            } else {
+                const spaceMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+(.*)$/);
+                if (!spaceMatch) {
+                    continue;
+                }
+                key = spaceMatch[1];
+                value = spaceMatch[2].trim();
             }
-
-            const key = trimmed.slice(0, eqIndex).trim();
-            let value = trimmed.slice(eqIndex + 1).trim();
 
             // Remove surrounding quotes if present
             if ((value.startsWith('"') && value.endsWith('"')) ||
@@ -62,12 +68,37 @@ export function loadSecretsFile() {
 }
 
 /**
- * Load secrets from the .env file.
+ * Walk up from `startDir` towards the filesystem root looking for a `.env` file.
+ * Returns the first match or `null` when none is found.
+ * @param {string} [startDir=process.cwd()]
+ * @returns {string|null} Absolute path to the `.env` file, or null
+ */
+function findEnvFile(startDir = process.cwd()) {
+    let current = path.resolve(startDir);
+    const { root } = path.parse(current);
+
+    while (true) {
+        const candidate = path.join(current, '.env');
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+        if (current === root) {
+            return null;
+        }
+        current = path.dirname(current);
+    }
+}
+
+/**
+ * Load secrets from the nearest `.env` file found by walking up from cwd.
  * File format is KEY=VALUE, one per line, with # comments.
  * @returns {object} Map of secret names to values
  */
 export function loadEnvFile() {
-    const envPath = path.join(process.cwd(), '.env');
+    const envPath = findEnvFile();
+    if (!envPath) {
+        return {};
+    }
     return parseKeyValueFile(envPath);
 }
 
@@ -242,7 +273,8 @@ export function formatMissingSecretsError(missingSecrets, profileName) {
     lines.push('To provide secrets, either:');
     lines.push('  1. Set environment variables before running ploinky');
     lines.push(`  2. Add them to ${SECRETS_FILE}`);
-    lines.push(`  3. Add them to ${path.join(process.cwd(), '.env')}`);
+    const envFilePath = findEnvFile() || path.join(process.cwd(), '.env');
+    lines.push(`  3. Add them to ${envFilePath}`);
     lines.push('');
     lines.push('Example (.ploinky/.secrets):');
     for (const secret of missingSecrets.slice(0, 2)) {

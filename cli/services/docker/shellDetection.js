@@ -51,7 +51,9 @@ function detectShellViaImageMount(image) {
 
 function detectShellViaContainerRun(image) {
     for (const shellPath of SHELL_PROBE_PATHS) {
-        const res = spawnSync(containerRuntime, ['run', '--rm', image, 'test', '-x', shellPath], { stdio: 'ignore' });
+        // Use --entrypoint to bypass any custom ENTRYPOINT (e.g. Keycloak's
+        // kc.sh) that would intercept the probe command.
+        const res = spawnSync(containerRuntime, ['run', '--rm', '--entrypoint', 'test', image, '-x', shellPath], { stdio: 'ignore' });
         if (res.status === 0) {
             return shellPath;
         }

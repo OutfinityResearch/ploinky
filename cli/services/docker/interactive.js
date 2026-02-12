@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { getExposedNames, getManifestEnvNames, formatEnvFlag } from '../secretVars.js';
 import { debugLog } from '../utils.js';
+import { getActiveProfile, getProfileConfig } from '../profileService.js';
 import {
     CONTAINER_CONFIG_PATH,
     containerRuntime,
@@ -219,8 +220,15 @@ function ensureAgentContainer(agentName, repoName, manifest) {
     const sharedDir = ensureSharedHostDir();
     let agents = loadAgentsMap();
 
+    // Resolve profile config for env hash computation
+    const activeProfile = getActiveProfile();
+    const hasProfileConfig = Boolean(manifest?.profiles && Object.keys(manifest.profiles).length > 0);
+    const profileConfig = hasProfileConfig
+        ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
+        : null;
+
     if (containerExists(containerName)) {
-        const desired = computeEnvHash(manifest);
+        const desired = computeEnvHash(manifest, profileConfig);
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
             try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
@@ -238,7 +246,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         const volZ = (containerRuntime === 'podman') ? ':z' : '';
         const roOpt = (containerRuntime === 'podman') ? ':ro,z' : ':ro';
         let containerImage = manifest.container;
-        const envHash = computeEnvHash(manifest);
+        const envHash = computeEnvHash(manifest, profileConfig);
         const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
         const portOptions = manifestPorts.map(p => `-p ${p}`).join(' ');
         try {

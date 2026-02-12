@@ -1039,6 +1039,113 @@ function installDependenciesInContainer(agentName, containerImage, options = {})
     }
 }
 
+/**
+ * Prepare the merged package.json on the host filesystem.
+ * Reads globalDeps/package.json, merges with the agent's own package.json
+ * (if present), and writes the result to $CWD/agents/<agent>/package.json.
+ *
+ * This runs on the HOST before the container starts so the file is ready
+ * when the entrypoint's npm install picks it up via the CWD mount.
+ *
+ * @param {string} agentName - The agent name
+ * @returns {{ success: boolean, message: string }}
+ */
+function prepareAgentPackageJson(agentName) {
+    const agentWorkDir = getAgentWorkDir(agentName);
+    const agentCodePath = getAgentCodePath(agentName);
+    const workDirPackageJson = path.join(agentWorkDir, 'package.json');
+
+    // Ensure work directory exists
+    if (!fs.existsSync(agentWorkDir)) {
+        fs.mkdirSync(agentWorkDir, { recursive: true });
+    }
+
+    // Start from global deps (or base template fallback)
+    const globalPkg = readGlobalDepsPackage();
+
+    // Merge agent-specific package.json if it exists (agent deps take precedence)
+    const agentCodePackageJson = path.join(agentCodePath, 'package.json');
+    if (fs.existsSync(agentCodePackageJson)) {
+        debugLog(`[deps] ${agentName}: Merging agent-specific dependencies...`);
+        const agentPkg = JSON.parse(fs.readFileSync(agentCodePackageJson, 'utf8'));
+
+        globalPkg.dependencies = {
+            ...globalPkg.dependencies,
+            ...(agentPkg.dependencies || {}),
+        };
+
+        if (agentPkg.devDependencies) {
+            globalPkg.devDependencies = {
+                ...(globalPkg.devDependencies || {}),
+                ...agentPkg.devDependencies,
+            };
+        }
+
+        if (agentPkg.name) {
+            globalPkg.name = agentPkg.name;
+        }
+    }
+
+    fs.writeFileSync(workDirPackageJson, JSON.stringify(globalPkg, null, 2));
+    debugLog(`[deps] ${agentName}: Prepared ${workDirPackageJson}`);
+    return { success: true, message: 'package.json prepared' };
+}
+
+/**
+ * Return a shell script snippet that installs npm dependencies inside the
+ * running container's entrypoint.  The snippet is designed to be concatenated
+ * with `&&` into the container's `sh -c "..."` command.
+ *
+ * What it does (in order):
+ *  1. Checks the cache marker ($WORKSPACE_PATH/node_modules/mcp-sdk/).
+ *     If present, skips the heavy install and jumps straight to the
+ *     LLMConfig copy.
+ *  2. Installs git + native build tools (python3, make, g++) via apk or
+ *     apt-get — needed for github: deps and node-pty.
+ *  3. Runs `npm install` in $WORKSPACE_PATH (the CWD-mounted agent workdir).
+ *  4. Copies /code/config/LLMConfig.json into the achillesAgentLib module
+ *     directory so the agent can find it at runtime.
+ *
+ * @param {string} agentName - The agent name (used only for log lines)
+ * @returns {string} A POSIX-shell script fragment (no trailing &&)
+ */
+function buildEntrypointInstallScript(agentName) {
+    // The snippet is a single compound command wrapped in a subshell so it
+    // can be safely joined with && on either side.
+    //
+    // Implementation notes:
+    //  - $WORKSPACE_PATH is always set by agentServiceManager before the
+    //    container runs (see envStrings.push(formatEnvFlag('WORKSPACE_PATH', agentWorkDir))).
+    //  - We redirect most tool-install noise to /dev/null to keep logs clean.
+    //  - The mcp-sdk marker check mirrors what installDependenciesInContainer
+    //    used to do on the host.
+    const snippet = [
+        '(',
+        // --- cache check -----------------------------------------------------------
+        '  if [ -d "$WORKSPACE_PATH/node_modules/mcp-sdk" ]; then',
+        `    echo "[deps] ${agentName}: Using cached node_modules";`,
+        '  else',
+        `    echo "[deps] ${agentName}: Installing dependencies...";`,
+        // --- install git + build tools (apk first, then apt-get) -------------------
+        '    (',
+        '      command -v git >/dev/null 2>&1 ||',
+        '      (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
+        '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
+        '    ) 2>/dev/null;',
+        // --- npm install -----------------------------------------------------------
+        `    npm install --prefix "$WORKSPACE_PATH";`,
+        '  fi;',
+        // --- LLMConfig copy (always, even on cache hit) ----------------------------
+        '  if [ -f /code/config/LLMConfig.json ] && [ -d "$WORKSPACE_PATH/node_modules/achillesAgentLib" ]; then',
+        '    cp /code/config/LLMConfig.json "$WORKSPACE_PATH/node_modules/achillesAgentLib/LLMConfig.json";',
+        `    echo "[deps] ${agentName}: Copied LLMConfig.json";`,
+        '  fi',
+        ')',
+    ].join('\n');
+
+    return snippet;
+}
+
 export {
     dockerExec,
     fileExistsInContainer,
@@ -1057,5 +1164,7 @@ export {
     syncModuleSubdirectories,
     syncCoreDependencies,
     getCoreDependencyNames,
-    runPersistentInstall
+    runPersistentInstall,
+    prepareAgentPackageJson,
+    buildEntrypointInstallScript,
 };
