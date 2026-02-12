@@ -68,18 +68,57 @@ function sanitizeRelative(relPath) {
     return cleaned;
 }
 
+function toRealPathSafe(value) {
+    try {
+        return fs.realpathSync(value);
+    } catch (_) {
+        return null;
+    }
+}
+
+function isPathWithinAllowedRoots(allowedRoots, targetPath) {
+    try {
+        const realTarget = fs.realpathSync(targetPath);
+        for (const root of allowedRoots || []) {
+            const realRoot = toRealPathSafe(root);
+            if (!realRoot) continue;
+            if (realTarget === realRoot || realTarget.startsWith(realRoot + path.sep)) {
+                return true;
+            }
+        }
+        return false;
+    } catch (_) {
+        return false;
+    }
+}
+
+function getStaticAllowedRoots() {
+    const staticRoot = getStaticHostPath();
+    if (!staticRoot) return [];
+    return [staticRoot, path.resolve(staticRoot, '..')];
+}
+
+function getAgentAllowedRoots(agentName) {
+    const agentRoot = getAgentHostPath(agentName);
+    if (!agentRoot) return [];
+    return [agentRoot, path.resolve(agentRoot, '..')];
+}
+
 function resolveAssetPath(appName, fallbackDir, relPath) {
     const sanitized = sanitizeRelative(relPath);
     if (!sanitized) return null;
     const bases = getBaseDirs(appName, fallbackDir);
     for (const base of bases) {
+        const allowedRoots = [base, path.resolve(base, '..')];
         const candidates = [
             path.join(base, sanitized),
             path.join(base, 'assets', sanitized)
         ];
         for (const candidate of candidates) {
             try {
-                if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+                if (fs.existsSync(candidate)
+                    && fs.statSync(candidate).isFile()
+                    && isPathWithinAllowedRoots(allowedRoots, candidate)) {
                     return candidate;
                 }
             } catch (_) { }
@@ -100,6 +139,7 @@ function resolveFirstAvailable(appName, fallbackDir, filenames) {
 function resolveStaticFile(requestPath) {
     const root = getStaticHostPath();
     if (!root) return null;
+    const allowedRoots = getStaticAllowedRoots();
     const rel = sanitizeRelative(requestPath);
     if (rel === null) return null;
     const candidates = [];
@@ -108,12 +148,17 @@ function resolveStaticFile(requestPath) {
     // If request maps to directory, handle later
     for (const candidate of candidates) {
         try {
+            if (!isPathWithinAllowedRoots(allowedRoots, candidate)) {
+                continue;
+            }
             const stat = fs.statSync(candidate);
             if (stat.isDirectory()) {
                 const indexFiles = ['index.html', 'index.htm', 'default.html'];
                 for (const name of indexFiles) {
                     const idx = path.join(candidate, name);
-                    if (fs.existsSync(idx) && fs.statSync(idx).isFile()) return idx;
+                    if (fs.existsSync(idx)
+                        && fs.statSync(idx).isFile()
+                        && isPathWithinAllowedRoots(allowedRoots, idx)) return idx;
                 }
                 continue;
             }
@@ -210,15 +255,21 @@ function safeJoin(base, rel) {
 function resolveAgentStaticFile(agentName, agentRelPath) {
     const root = getAgentHostPath(agentName);
     if (!root) return null;
+    const allowedRoots = getAgentAllowedRoots(agentName);
     const candidate = safeJoin(root, agentRelPath);
     if (!candidate) return null;
     try {
+        if (!isPathWithinAllowedRoots(allowedRoots, candidate)) {
+            return null;
+        }
         const stat = fs.statSync(candidate);
         if (stat.isDirectory()) {
             const indexFiles = ['index.html', 'index.htm', 'default.html'];
             for (const name of indexFiles) {
                 const idx = path.join(candidate, name);
-                if (fs.existsSync(idx) && fs.statSync(idx).isFile()) return idx;
+                if (fs.existsSync(idx)
+                    && fs.statSync(idx).isFile()
+                    && isPathWithinAllowedRoots(allowedRoots, idx)) return idx;
             }
             return null;
         }
