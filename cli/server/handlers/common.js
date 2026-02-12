@@ -67,8 +67,8 @@ function buildCookie(name, value, req, pathPrefix, options = {}) {
     const secure = Boolean(req.socket && req.socket.encrypted) ||
         String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
     if (secure) parts.push('Secure');
-    // Use custom maxAge if provided, otherwise default to 7 days
-    const maxAge = options.maxAge || 604800;
+    // Use custom maxAge when provided (including 0), otherwise default to 7 days
+    const maxAge = options.maxAge ?? 604800;
     parts.push(`Max-Age=${maxAge}`);
     return parts.join('; ');
 }
