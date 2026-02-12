@@ -348,6 +348,17 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
     const resolved = [];
     const missing = [];
 
+    // Lazy-load .env so we only read the file when .secrets and process.env
+    // both miss.  Mirrors the fallback order in secretInjector.getSecret():
+    //   1. .ploinky/.secrets  2. process.env  3. $CWD/.env
+    let envFileCache;
+    const getEnvFile = () => {
+        if (envFileCache === undefined) {
+            try { envFileCache = loadEnvFile(); } catch (_) { envFileCache = {}; }
+        }
+        return envFileCache;
+    };
+
     for (const spec of specs) {
         let resolvedValue;
         let usedDefault = false;
@@ -356,6 +367,8 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
             resolvedValue = resolveAlias(secrets[spec.sourceName], secrets);
         } else if (spec.sourceName && Object.prototype.hasOwnProperty.call(process.env, spec.sourceName)) {
             resolvedValue = process.env[spec.sourceName];
+        } else if (spec.sourceName && Object.prototype.hasOwnProperty.call(getEnvFile(), spec.sourceName)) {
+            resolvedValue = getEnvFile()[spec.sourceName];
         } else if (Object.prototype.hasOwnProperty.call(spec, 'defaultValue')) {
             resolvedValue = spec.defaultValue;
             usedDefault = true;

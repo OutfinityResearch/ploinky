@@ -266,11 +266,9 @@ function parseHostPort(output) {
     }
 }
 
-function computeEnvHash(manifest) {
+function computeEnvHash(manifest, profileConfig) {
     try {
-        // Skip process.env when computing hash to ensure consistency
-        // across different process contexts (ploinky start vs ploinky cli)
-        const map = buildEnvMap(manifest, { skipProcessEnv: true });
+        const map = buildEnvMap(manifest, profileConfig || null);
         const sorted = Object.keys(map).sort().reduce((acc, key) => {
             acc[key] = map[key];
             return acc;

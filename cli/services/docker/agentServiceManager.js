@@ -60,7 +60,12 @@ import {
     getAgentSkillsPath,
     createAgentWorkDir
 } from '../workspaceStructure.js';
-import { runPersistentInstall, installDependenciesInContainer } from '../dependencyInstaller.js';
+import {
+    runPersistentInstall,
+    installDependenciesInContainer,
+    prepareAgentPackageJson,
+    buildEntrypointInstallScript,
+} from '../dependencyInstaller.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -157,7 +162,6 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const startCmd = readManifestStartCommand(manifest);
     const useStartEntry = Boolean(startCmd);
     const cwd = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), options.alias);
-    const envHash = computeEnvHash(manifest);
     const sharedDir = ensureSharedHostDir();
 
     // Get active profile and configuration
@@ -171,6 +175,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
     const useProfileLifecycle = Boolean(profileConfig);
+    const envHash = computeEnvHash(manifest, profileConfig);
 
     // Get profile mount modes (profile overrides default if provided)
     const {
@@ -203,42 +208,32 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     // Ensure MCP config is staged in the agent work dir before container start
     syncAgentMcpConfig(containerName, path.resolve(agentPath), agentName);
 
-    // Run install hooks in a temporary container (INSTALL PHASE)
-    // Step 1: Install core dependencies (mcp-sdk, achillesAgentLib, etc.)
-    // Only install for agents that use AgentServer (need mcp-sdk) or have their own package.json
-    // Agents with 'start' command that have no package.json don't need npm deps
+    // INSTALL PHASE — deps install runs inside the main container entrypoint,
+    // not in a throwaway temp container.  The host-side prep (package.json merge)
+    // still happens here so the file is ready when the container starts.
     const agentHasPackageJson = fs.existsSync(path.join(agentCodePath, 'package.json'));
     const needsCoreDeps = !useStartEntry || agentHasPackageJson;
 
     if (needsCoreDeps) {
-        const depsResult = installDependenciesInContainer(agentName, image, { verbose: true });
-        if (!depsResult.success) {
-            console.warn(`[deps] ${agentName}: ${depsResult.message}`);
-        }
-        
-        // Copy LLMConfig.json from agent code to node_modules if it exists
-        // This is needed because achillesAgentLib's package.json "files" field doesn't include LLMConfig.json
-        const llmConfigSrc = path.join(agentCodePath, 'config', 'LLMConfig.json');
-        const llmConfigDest = path.join(agentWorkDir, 'node_modules', 'achillesAgentLib', 'LLMConfig.json');
-        if (fs.existsSync(llmConfigSrc) && fs.existsSync(path.dirname(llmConfigDest))) {
-            try {
-                fs.copyFileSync(llmConfigSrc, llmConfigDest);
-                debugLog(`[deps] ${agentName}: Copied LLMConfig.json to node_modules`);
-            } catch (err) {
-                debugLog(`[deps] ${agentName}: Failed to copy LLMConfig.json: ${err.message}`);
-            }
-        }
+        // Merge global + agent package.json on the host (written to agentWorkDir/package.json)
+        prepareAgentPackageJson(agentName);
     } else {
         debugLog(`[deps] ${agentName}: Skipping npm install (uses start command, no package.json)`);
     }
 
-    // Step 2: Build install command to run in main container
-    // Note: preinstall is now a HOST hook that runs before container creation (see runPreContainerLifecycle)
-    // Only the install command runs inside the container before the agent command starts
-    const installCmd = String(profileConfig?.install || manifest?.install || '').trim();
+    // Build the shell snippet that runs inside the container before the agent command.
+    // It installs build tools + npm deps (if not cached) and copies LLMConfig.json.
+    const entrypointInstallSnippet = needsCoreDeps
+        ? buildEntrypointInstallScript(agentName)
+        : '';
 
-    // Install command will be prepended to agent command
-    const combinedInstallCmd = installCmd;
+    // Manifest / profile install hook (e.g. coral-agent's installPrerequisites.sh)
+    const manifestInstallCmd = String(profileConfig?.install || manifest?.install || '').trim();
+
+    // Combine: entrypoint deps install first, then manifest install hook
+    const combinedInstallCmd = [entrypointInstallSnippet, manifestInstallCmd]
+        .filter(Boolean)
+        .join(' && ');
 
     // Ensure the agent work directory exists on host
     createAgentWorkDir(agentName);
@@ -250,7 +245,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     }
 
     // Build volume mount arguments using new workspace structure
-    const nodeModulesMount = runtime === 'podman' ? ':ro,z' : ':ro';
+    // node_modules are rw so npm install can run inside the main container entrypoint
+    const nodeModulesMount = runtime === 'podman' ? ':z' : '';
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', '/code',
         // Agent library (always ro)
         '-v', `${AGENT_LIB_PATH}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
@@ -358,10 +354,11 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         }
         // Run install command before start script if defined
         if (combinedInstallCmd) {
-            console.log(`[install] ${agentName}: ${combinedInstallCmd}`);
+            console.log(`[install] ${agentName}: entrypoint deps + manifest hooks`);
             const fullCmd = `cd /code && ${combinedInstallCmd} && ${startArgs.join(' ')}`;
             args.push('sh', '-c', fullCmd);
-            entrySummary = `sh -c ${fullCmd}`;
+            entrySummary = `sh -c "cd /code && <install> && ${startArgs.join(' ')}"`;
+
         } else {
             args.push(...startArgs);
             entrySummary = startArgs.join(' ');
@@ -373,13 +370,15 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         }
         // Run install command before agent command
         if (combinedInstallCmd) {
-            console.log(`[install] ${agentName}: ${combinedInstallCmd}`);
+            console.log(`[install] ${agentName}: entrypoint deps + manifest hooks`);
         }
         const fullCmd = combinedInstallCmd
             ? `cd /code && ${combinedInstallCmd} && ${explicitAgentCmd}`
             : `cd /code && ${explicitAgentCmd}`;
         args.push(shellPath, '-lc', fullCmd);
-        entrySummary = `${shellPath} -lc ${fullCmd}`;
+        entrySummary = combinedInstallCmd
+            ? `${shellPath} -lc "cd /code && <install> && ${explicitAgentCmd}"`
+            : `${shellPath} -lc "cd /code && ${explicitAgentCmd}"`;
     } else {
         // Run preinstall + install in main container before default agent server
         if (combinedInstallCmd) {
@@ -433,7 +432,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
                 agentPath,
                 repoName,
                 manifest,
-                skipInstallHooks: true  // Install already ran in temp container before main container start
+                skipInstallHooks: true  // Install runs in main container entrypoint (deps + manifest hook)
             });
             if (!lifecycleResult.success) {
                 const details = lifecycleResult.errors.join('; ');
@@ -545,14 +544,12 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     }
 
     if (containerExists(containerName)) {
-        const desired = computeEnvHash(manifest);
+        const desired = computeEnvHash(manifest, profileConfig);
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
-            // Only recreate if hash actually changed (not just empty vs non-empty)
-            if (current && desired) {
-                debugLog(`[ensureAgentService] ${agentName}: env hash changed, recreating container`);
-                try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
-            }
+            debugLog(`[ensureAgentService] ${agentName}: env hash changed (current=${current || '<none>'}, desired=${desired.slice(0, 12)}…), recreating container`);
+            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+            clearLivenessState(containerName);
         }
     }
     if (containerExists(containerName)) {
