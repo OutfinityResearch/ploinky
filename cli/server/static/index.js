@@ -8,6 +8,7 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 const MCP_BROWSER_CLIENT_URL = '/MCPBrowserClient.js';
 const MCP_BROWSER_CLIENT_FILE = path.resolve(PROJECT_ROOT, 'Agent/client/MCPBrowserClient.js');
 const PROJECT_WEB_LIBS = path.resolve(PROJECT_ROOT, 'webLibs');
+const WORKSPACE_FILES_URL_PREFIX = '/workspace-files/';
 
 function readRouting() {
     try {
@@ -26,6 +27,28 @@ function getStaticHostPath() {
         if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) return abs;
     } catch (_) { }
     return null;
+}
+
+function getWorkspaceRoot() {
+    const staticRoot = getStaticHostPath();
+    if (!staticRoot) return null;
+    let current = path.resolve(staticRoot);
+    while (true) {
+        if (path.basename(current) === '.ploinky') {
+            const workspaceRoot = path.dirname(current);
+            try {
+                if (fs.existsSync(workspaceRoot) && fs.statSync(workspaceRoot).isDirectory()) {
+                    return workspaceRoot;
+                }
+            } catch (_) { }
+            return null;
+        }
+        const parent = path.dirname(current);
+        if (parent === current) {
+            return null;
+        }
+        current = parent;
+    }
 }
 
 function dedupe(paths) {
@@ -222,11 +245,111 @@ function sendFile(res, filePath) {
     }
 }
 
+function sendFileStream(res, filePath) {
+    try {
+        const mime = getMimeType(filePath);
+        res.writeHead(200, {
+            'Content-Type': mime,
+            'Cache-Control': 'no-store'
+        });
+        const stream = fs.createReadStream(filePath);
+        stream.on('error', () => {
+            if (!res.headersSent) {
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
+            }
+            res.end('Internal Server Error');
+        });
+        stream.pipe(res);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function resolveWorkspaceFile(requestPath) {
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) {
+        return { status: 'unavailable', filePath: null };
+    }
+
+    const rel = sanitizeRelative(requestPath);
+    if (rel === null || !rel.length) {
+        return { status: 'denied', filePath: null };
+    }
+
+    const candidate = path.join(workspaceRoot, rel);
+    const allowedRoots = [workspaceRoot];
+
+    try {
+        if (!isPathWithinAllowedRoots(allowedRoots, candidate)) {
+            return { status: 'denied', filePath: null };
+        }
+        const stat = fs.statSync(candidate);
+        if (stat.isDirectory()) {
+            const indexFiles = ['index.html', 'index.htm', 'default.html'];
+            for (const name of indexFiles) {
+                const idx = path.join(candidate, name);
+                if (fs.existsSync(idx)
+                    && fs.statSync(idx).isFile()
+                    && isPathWithinAllowedRoots(allowedRoots, idx)) {
+                    return { status: 'ok', filePath: idx };
+                }
+            }
+            return { status: 'not_found', filePath: null };
+        }
+        if (stat.isFile()) {
+            return { status: 'ok', filePath: candidate };
+        }
+    } catch (_) {
+        return { status: 'not_found', filePath: null };
+    }
+
+    return { status: 'not_found', filePath: null };
+}
+
+function serveWorkspaceFileRequest(req, res) {
+    try {
+        const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+        const pathname = decodeURIComponent(parsed.pathname || '/');
+        if (!(pathname === '/workspace-files' || pathname.startsWith(WORKSPACE_FILES_URL_PREFIX))) {
+            return false;
+        }
+
+        if (pathname === '/workspace-files' || pathname === '/workspace-files/') {
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Missing workspace file path');
+            return true;
+        }
+
+        const rel = pathname.slice(WORKSPACE_FILES_URL_PREFIX.length);
+        const resolved = resolveWorkspaceFile(rel);
+        if (resolved.status === 'denied') {
+            res.writeHead(403, { 'Content-Type': 'text/plain' });
+            res.end('Access denied');
+            return true;
+        }
+        if (resolved.status !== 'ok' || !resolved.filePath) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Not Found');
+            return true;
+        }
+        if (sendFileStream(res, resolved.filePath)) {
+            return true;
+        }
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal Server Error');
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 export {
     getStaticHostPath,
     resolveAssetPath,
     resolveFirstAvailable,
     sendFile,
+    serveWorkspaceFileRequest,
     serveStaticRequest,
 };
 

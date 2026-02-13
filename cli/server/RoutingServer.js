@@ -255,6 +255,7 @@ async function processRequest(req, res) {
         return;
     } else {
         // Static file serving
+        if (staticSrv.serveWorkspaceFileRequest(req, res)) return;
         if (staticSrv.serveAgentStaticRequest(req, res)) return;
         if (staticSrv.serveStaticRequest(req, res)) return;
 
