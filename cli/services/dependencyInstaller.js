@@ -947,13 +947,6 @@ function installDependenciesInContainer(agentName, containerImage, options = {})
     const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
     const workDirPackageJson = path.join(agentWorkDir, 'package.json');
 
-    // Check if we can skip installation (cached node_modules exist)
-    const mcpSdkPath = path.join(nodeModulesDir, 'mcp-sdk');
-    if (!force && fs.existsSync(mcpSdkPath)) {
-        log(`[deps] ${agentName}: Using cached node_modules`);
-        return { success: true, message: 'Using cached node_modules' };
-    }
-
     // Ensure directories exist
     if (!fs.existsSync(agentWorkDir)) {
         fs.mkdirSync(agentWorkDir, { recursive: true });
@@ -1121,10 +1114,6 @@ function buildEntrypointInstallScript(agentName) {
     //    used to do on the host.
     const snippet = [
         '(',
-        // --- cache check -----------------------------------------------------------
-        '  if [ -d "$WORKSPACE_PATH/node_modules/mcp-sdk" ]; then',
-        `    echo "[deps] ${agentName}: Using cached node_modules";`,
-        '  else',
         `    echo "[deps] ${agentName}: Installing dependencies...";`,
         // --- install git + build tools (apk first, then apt-get) -------------------
         '    (',
@@ -1134,7 +1123,6 @@ function buildEntrypointInstallScript(agentName) {
         '    ) 2>/dev/null;',
         // --- npm install -----------------------------------------------------------
         `    npm install --prefix "$WORKSPACE_PATH";`,
-        '  fi;',
         // --- LLMConfig copy (always, even on cache hit) ----------------------------
         '  if [ -f /code/config/LLMConfig.json ] && [ -d "$WORKSPACE_PATH/node_modules/achillesAgentLib" ]; then',
         '    cp /code/config/LLMConfig.json "$WORKSPACE_PATH/node_modules/achillesAgentLib/LLMConfig.json";',
