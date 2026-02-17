@@ -314,6 +314,15 @@ export function createNetwork({
         return true;
     }
 
+    function sendQuickCommand(cmd) {
+        const message = typeof cmd === 'string' ? cmd : '';
+        if (!message.trim()) {
+            return false;
+        }
+        postEnvelope({ text: message });
+        return true;
+    }
+
     function uploadAttachment(filePayload, caption) {
         const { file, previewUrl, revokePreview, previewNeedsRevoke, isImage } = filePayload || {};
         const isFileObject = (typeof File !== 'undefined' && file instanceof File)
@@ -453,6 +462,7 @@ export function createNetwork({
         start,
         stop,
         sendCommand,
+        sendQuickCommand,
         sendAttachments
     };
 }

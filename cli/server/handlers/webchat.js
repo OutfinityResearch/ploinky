@@ -638,6 +638,9 @@ function handleWebChat(req, res, appConfig, appState) {
                         clearTimeout(tab.cleanupTimer);
                         tab.cleanupTimer = null;
                     }
+                    // Ensure tab resources are fully released so the next reconnect
+                    // creates a fresh TTY session instead of writing into a dead process.
+                    disposeTab(tab, tabId, session);
                 });
 
             } catch (e) {

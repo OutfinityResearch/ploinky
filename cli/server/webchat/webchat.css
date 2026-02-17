@@ -1077,6 +1077,113 @@ body {
     padding: 4px;
 }
 
+.wa-pagination-actions {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wa-pagination-more-btn,
+.wa-pagination-all-btn {
+    appearance: none;
+    border: 1px solid var(--wa-border);
+    background: var(--wa-bg-input);
+    color: var(--wa-text-primary);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wa-pagination-more-btn:hover:not(:disabled),
+.wa-pagination-all-btn:hover:not(:disabled) {
+    background: var(--wa-bg-panel);
+    border-color: var(--wa-accent);
+}
+
+.wa-pagination-more-btn:disabled,
+.wa-pagination-all-btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+}
+
+.wa-confirm-actions {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wa-confirm-yes-btn,
+.wa-confirm-no-btn {
+    appearance: none;
+    border: 1px solid var(--wa-border);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: filter 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+}
+
+.wa-confirm-yes-btn {
+    background: var(--wa-accent);
+    border-color: var(--wa-accent);
+    color: #fff;
+}
+
+.wa-confirm-no-btn {
+    background: var(--wa-bg-input);
+    color: var(--wa-text-primary);
+}
+
+.wa-confirm-yes-btn:hover:not(:disabled),
+.wa-confirm-no-btn:hover:not(:disabled) {
+    filter: brightness(0.97);
+    transform: translateY(-1px);
+}
+
+.wa-confirm-yes-btn:disabled,
+.wa-confirm-no-btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+    transform: none;
+}
+
+.wa-abort-actions {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wa-abort-cancel-btn {
+    appearance: none;
+    border: 1px solid var(--wa-border);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    background: var(--wa-bg-input);
+    color: var(--wa-text-primary);
+    transition: filter 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+}
+
+.wa-abort-cancel-btn:hover:not(:disabled) {
+    filter: brightness(0.97);
+    transform: translateY(-1px);
+}
+
+.wa-abort-cancel-btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+    transform: none;
+}
+
 /* --- Composer (Footer) --- */
 .wa-composer {
     display: flex;
