@@ -84,7 +84,8 @@ const messages = createMessages({
     markdown,
     initialViewMoreLineLimit: getViewMoreLineLimit(),
     sidePanel: sidePanelApi,
-    onServerOutput: textToSpeech.handleServerOutput
+    onServerOutput: textToSpeech.handleServerOutput,
+    onQuickCommand: null
 });
 
 dom.setViewMoreChangeHandler((limit) => {
@@ -110,6 +111,13 @@ const network = createNetwork({
     showTypingIndicator: messages.showTypingIndicator,
     hideTypingIndicator: messages.hideTypingIndicator,
     markUserInputSent: messages.markUserInputSent
+});
+
+messages.setQuickCommandHandler((command) => {
+    if (!command || typeof command !== 'string') {
+        return false;
+    }
+    return network.sendQuickCommand(command);
 });
 
 const composer = createComposer({

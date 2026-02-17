@@ -1,5 +1,7 @@
 import { formatBytes, getFileIcon } from './fileHelpers.js';
 
+const ENABLE_SELECT_PAGINATION_ACTIONS = false;
+
 function formatTime() {
     const date = new Date();
     const hours = String(date.getHours()).padStart(2, '0');
@@ -14,13 +16,15 @@ export function createMessages({
     markdown,
     initialViewMoreLineLimit,
     sidePanel,
-    onServerOutput
+    onServerOutput,
+    onQuickCommand
 }) {
     const lastServerMsg = { bubble: null, fullText: '' };
     let userInputSent = false;
     let lastClientCommand = '';
     let viewMoreLineLimit = Math.max(1, initialViewMoreLineLimit || 1);
     let serverSpeechHandler = typeof onServerOutput === 'function' ? onServerOutput : null;
+    let quickCommandHandler = typeof onQuickCommand === 'function' ? onQuickCommand : null;
     let speechDebounceTimer = null;
 
     function appendMessageEl(node) {
@@ -91,6 +95,269 @@ export function createMessages({
         }
     }
 
+    function parseSelectPaginationState(text) {
+        const safeText = typeof text === 'string' ? text : '';
+        const match = safeText.match(/Showing\s+(\d+)\s*-\s*(\d+)\s+of\s+(\d+)\s+(.+?)\(s\)\./i);
+        if (!match) {
+            return null;
+        }
+
+        const start = Number.parseInt(match[1], 10);
+        const end = Number.parseInt(match[2], 10);
+        const total = Number.parseInt(match[3], 10);
+        const entity = (match[4] || '').trim().toLowerCase();
+        if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(total) || total <= 0) {
+            return null;
+        }
+        return {
+            start,
+            end,
+            total,
+            entity,
+            hasMore: end < total,
+        };
+    }
+
+    function parseConfirmationPromptState(text) {
+        const safeText = typeof text === 'string' ? text : '';
+        const normalized = safeText.replace(/\s+/g, ' ').trim();
+        if (!normalized) {
+            return null;
+        }
+
+        const confirmPattern = /(?:^|\b)(?:reply|please reply|type)\s+(?:\*\*|["'`])?yes(?:\*\*|["'`])?\s+to\s+[^.\n]{1,120}?\s+or\s+(?:\*\*|["'`])?no(?:\*\*|["'`])?\s+to\s+[^.\n]{1,120}/i;
+        if (!confirmPattern.test(normalized)) {
+            return null;
+        }
+
+        return {
+            yesCommand: 'yes',
+            noCommand: 'no',
+        };
+    }
+
+    function parseAbortPromptState(text) {
+        const safeText = typeof text === 'string' ? text : '';
+        const normalized = safeText.replace(/\s+/g, ' ').trim();
+        if (!normalized) {
+            return null;
+        }
+
+        const abortPattern = /(?:^|\b)(?:type|reply with|reply)\s+(?:\*\*|["'`])?cancel(?:\*\*|["'`])?\s+to\s+(?:abort|cancel)\b/i;
+        if (!abortPattern.test(normalized)) {
+            return null;
+        }
+
+        return {
+            cancelCommand: 'cancel',
+        };
+    }
+
+    function updatePaginationActions(bubble, fullText) {
+        if (!bubble) {
+            return;
+        }
+        const existing = bubble.querySelector('.wa-pagination-actions');
+        if (!ENABLE_SELECT_PAGINATION_ACTIONS) {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+        const pagination = parseSelectPaginationState(fullText);
+
+        if (!pagination || !pagination.hasMore || typeof quickCommandHandler !== 'function') {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+
+        const holder = existing || document.createElement('div');
+        holder.className = 'wa-pagination-actions';
+        holder.innerHTML = '';
+
+        const createActionButton = ({ label, command, className }) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = className;
+            btn.textContent = label;
+            btn.addEventListener('click', () => {
+                if (btn.disabled) {
+                    return;
+                }
+                btn.disabled = true;
+                btn.setAttribute('aria-busy', 'true');
+                try {
+                    const accepted = quickCommandHandler(command);
+                    if (accepted !== false) {
+                        holder.remove();
+                    } else {
+                        btn.disabled = false;
+                        btn.removeAttribute('aria-busy');
+                    }
+                } catch (_) {
+                    btn.disabled = false;
+                    btn.removeAttribute('aria-busy');
+                }
+            });
+            return btn;
+        };
+
+        const nextCommand = pagination.entity ? `next ${pagination.entity}` : 'next';
+        const showAllCommand = pagination.entity ? `show all ${pagination.entity}` : 'show all';
+
+        holder.appendChild(createActionButton({
+            label: `Show more (${pagination.end}/${pagination.total})`,
+            command: nextCommand,
+            className: 'wa-pagination-more-btn',
+        }));
+        holder.appendChild(createActionButton({
+            label: 'Show all',
+            command: showAllCommand,
+            className: 'wa-pagination-all-btn',
+        }));
+        const timeNode = bubble.querySelector('.wa-message-time');
+        if (!existing) {
+            if (timeNode) {
+                bubble.insertBefore(holder, timeNode);
+            } else {
+                bubble.appendChild(holder);
+            }
+        }
+    }
+
+    function updateConfirmationActions(bubble, fullText) {
+        if (!bubble) {
+            return;
+        }
+        const existing = bubble.querySelector('.wa-confirm-actions');
+        const messageNode = bubble.closest('.wa-message');
+        const isIncoming = Boolean(messageNode?.classList?.contains('in'));
+        const confirmation = parseConfirmationPromptState(fullText);
+
+        if (!isIncoming || !confirmation || typeof quickCommandHandler !== 'function') {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+
+        const holder = existing || document.createElement('div');
+        holder.className = 'wa-confirm-actions';
+        holder.innerHTML = '';
+
+        const setButtonsEnabled = (enabled) => {
+            const buttons = holder.querySelectorAll('button');
+            buttons.forEach((button) => {
+                button.disabled = !enabled;
+                if (enabled) {
+                    button.removeAttribute('aria-busy');
+                }
+            });
+        };
+
+        const createActionButton = ({ label, command, className }) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = className;
+            button.textContent = label;
+            button.addEventListener('click', () => {
+                if (button.disabled) {
+                    return;
+                }
+                setButtonsEnabled(false);
+                button.setAttribute('aria-busy', 'true');
+                try {
+                    const accepted = quickCommandHandler(command);
+                    if (accepted !== false) {
+                        holder.remove();
+                    } else {
+                        setButtonsEnabled(true);
+                    }
+                } catch (_) {
+                    setButtonsEnabled(true);
+                }
+            });
+            return button;
+        };
+
+        holder.appendChild(createActionButton({
+            label: 'Yes',
+            command: confirmation.yesCommand,
+            className: 'wa-confirm-yes-btn',
+        }));
+        holder.appendChild(createActionButton({
+            label: 'No',
+            command: confirmation.noCommand,
+            className: 'wa-confirm-no-btn',
+        }));
+
+        if (!existing) {
+            const timeNode = bubble.querySelector('.wa-message-time');
+            if (timeNode) {
+                bubble.insertBefore(holder, timeNode);
+            } else {
+                bubble.appendChild(holder);
+            }
+        }
+    }
+
+    function updateAbortActions(bubble, fullText) {
+        if (!bubble) {
+            return;
+        }
+        const existing = bubble.querySelector('.wa-abort-actions');
+        const messageNode = bubble.closest('.wa-message');
+        const isIncoming = Boolean(messageNode?.classList?.contains('in'));
+        const abortState = parseAbortPromptState(fullText);
+
+        if (!isIncoming || !abortState || typeof quickCommandHandler !== 'function') {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+
+        const holder = existing || document.createElement('div');
+        holder.className = 'wa-abort-actions';
+        holder.innerHTML = '';
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'wa-abort-cancel-btn';
+        button.textContent = 'Cancel';
+        button.addEventListener('click', () => {
+            if (button.disabled) {
+                return;
+            }
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+            try {
+                const accepted = quickCommandHandler(abortState.cancelCommand);
+                if (accepted !== false) {
+                    holder.remove();
+                } else {
+                    button.disabled = false;
+                    button.removeAttribute('aria-busy');
+                }
+            } catch (_) {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+            }
+        });
+        holder.appendChild(button);
+
+        if (!existing) {
+            const timeNode = bubble.querySelector('.wa-message-time');
+            if (timeNode) {
+                bubble.insertBefore(holder, timeNode);
+            } else {
+                bubble.appendChild(holder);
+            }
+        }
+    }
+
     function updateBubbleContent(bubble, fullText) {
         const safeText = typeof fullText === 'string' ? fullText : '';
         bubble.dataset.fullText = safeText;
@@ -126,6 +393,10 @@ export function createMessages({
         } else if (sidePanel.isActive(bubble)) {
             sidePanel.close();
         }
+
+        updatePaginationActions(bubble, safeText);
+        updateConfirmationActions(bubble, safeText);
+        updateAbortActions(bubble, safeText);
     }
 
     function applyViewMoreSettingToAllBubbles() {
@@ -473,6 +744,10 @@ export function createMessages({
                 clearTimeout(speechDebounceTimer);
                 speechDebounceTimer = null;
             }
+        },
+        setQuickCommandHandler: (fn) => {
+            quickCommandHandler = typeof fn === 'function' ? fn : null;
+            applyViewMoreSettingToAllBubbles();
         }
     };
 }
