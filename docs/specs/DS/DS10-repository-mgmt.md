@@ -434,12 +434,13 @@ Each repository must follow this structure:
 
 | Repository | Description | Agents |
 |------------|-------------|--------|
-| `basic` | Common development tools | alpine-bash, node-dev, postgres, shell, ubuntu-bash, etc. |
-| `cloud` | Cloud CLI tools | aws-cli, gcloud, azure-cli, terraform |
+| `basic` | Default base agents | alpine-bash, node-dev, postgres, shell, ubuntu-bash, etc. |
+| `cloud` | Cloud infrastructure agents | aws-cli, gcloud, azure-cli, terraform |
 | `vibe` | Vibe coding agents | claude-code, copilot-agent |
 | `security` | Security tools | clamav-scanner, trivy, snyk |
-| `extra` | Additional utilities | curl-agent, jq-agent, yq-agent |
-| `demo` | Demo and example agents | hello-world, echo-agent |
+| `extra` | Additional utility agents | curl-agent, jq-agent, yq-agent |
+| `demo` | Demo agents and examples | hello-world, echo-agent |
+| `proxies` | API proxy agents | Kiro Gateway |
 
 ### Basic Repository Agents
 

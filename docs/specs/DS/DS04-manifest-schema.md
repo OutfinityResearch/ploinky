@@ -651,9 +651,21 @@ const manifestErrors = {
 4. Profile resolution works correctly
 5. Environment normalization handles all formats
 
+## Environment Variable Aliasing
+
+The secret variable system (`cli/services/secretVars.js`) supports variable aliasing using `$VAR` syntax:
+
+```bash
+# .ploinky/.secrets
+MAIN_API_KEY=sk-abc123
+AGENT_API_KEY=$MAIN_API_KEY    # Alias: resolves to sk-abc123
+```
+
+When `resolveVarValue()` encounters a value starting with `$`, it recursively resolves the referenced variable. This enables sharing a single key across multiple agents that expect different variable names.
+
 ## References
 
 - [DS01 - Vision](./DS01-vision.md)
 - [DS03 - Agent Model](./DS03-agent-model.md)
 - [DS08 - Profile System](./DS08-profile-system.md)
-- [DS11 - Container Runtime](./DS11-container-runtime.md)
+- [DS11 - Container Runtime & Dependencies](./DS11-container-runtime.md)

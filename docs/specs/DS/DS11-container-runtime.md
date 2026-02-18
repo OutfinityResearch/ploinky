@@ -1,8 +1,8 @@
-# DS11 - Container Runtime
+# DS11 - Container Runtime & Dependencies
 
 ## Summary
 
-Ploinky uses Docker or Podman as the container runtime for agent isolation. This specification documents container creation, lifecycle management, networking, volume mounting, and runtime detection.
+Ploinky uses Docker or Podman as the container runtime for agent isolation. This specification documents container creation, lifecycle management, networking, volume mounting, runtime detection, and Node.js dependency installation.
 
 ## Background / Problem Statement
 
@@ -539,54 +539,138 @@ export function startHealthMonitoring(containerId, config, onUnhealthy) {
 
 ### Agent Container Volume Mounts
 
-```javascript
-// Standard agent container mounts
-const agentMounts = [
-  // Agent source code (profile-dependent)
-  {
-    source: '$CWD/code/$AGENT',  // Symlink to .ploinky/repos/<repo>/<agent>/code/
-    target: '/code',
-    ro: profile !== 'dev'  // Read-only in qa/prod
-  },
+| Host Path | Container Path | Mode | Purpose |
+|---|---|---|---|
+| `<ploinky>/Agent/` | `/Agent` | `ro` (always) | Agent runtime framework (AgentServer.mjs, TaskQueue.mjs) |
+| `$CWD/code/<agent>/` (resolved) | `/code` | `rw` or `ro` (profile) | Agent source code |
+| `$CWD/agents/<agent>/node_modules/` | `/code/node_modules` | `rw` | npm dependencies (for agent code) |
+| `$CWD/agents/<agent>/node_modules/` | `/Agent/node_modules` | `rw` | npm dependencies (for AgentServer.mjs) |
+| `$CWD/shared/` | `/shared` | `rw` | Shared data between agents |
+| `$CWD/agents/<agent>/` | same path | `rw` | CWD passthrough for runtime data |
+| `$CWD/skills/<agent>/` (resolved) | `/code/.AchillesSkills` | `rw` or `ro` (profile) | Skills directory (only if exists) |
 
-  // Node modules (from workspace agents directory)
-  {
-    source: '$CWD/agents/$AGENT/node_modules',
-    target: '/code/node_modules',
-    ro: true  // Read-only in container, installed on host
-  },
+**Mount mode is profile-dependent:**
+- `dev` profile: code=`rw`, skills=`rw`
+- `qa`/`prod` profiles: code=`ro`, skills=`ro`
+- Profiles can override via `manifest.profiles.<profile>.mounts.code` and `.skills`
 
-  // Agent skills (profile-dependent)
-  {
-    source: '$CWD/skills/$AGENT',  // Symlink to .ploinky/repos/<repo>/<agent>/.AchillesSkills/
-    target: '/.AchillesSkills',
-    ro: profile !== 'dev'  // Read-only in qa/prod
-  },
+Additional volumes can be declared via `manifest.volumes` (object mapping host paths to container paths).
 
-  // Ploinky Agent tools (always read-only)
-  {
-    source: '$PLOINKY_ROOT/Agent',
-    target: '/Agent',
-    ro: true
-  },
+### Container Filesystem Layout (at runtime)
 
-  // Shared directory (read-write)
-  {
-    source: '$CWD/.ploinky/shared',
-    target: '/shared'
-  },
+Inside a running agent container:
 
-  // CWD passthrough (read-write) - for accessing workspace files
-  {
-    source: '$CWD',
-    target: '$CWD'
-  }
-];
 ```
+/
+├── Agent/                        # Ploinky agent framework (ro)
+│   ├── server/
+│   │   ├── AgentServer.mjs
+│   │   ├── AgentServer.sh
+│   │   └── TaskQueue.mjs
+│   └── node_modules/             # --> host: $CWD/agents/<agent>/node_modules/ (rw)
+│
+├── code/                         # Agent source code (rw or ro per profile)
+│   ├── main.mjs                  # (example agent entry)
+│   ├── package.json              # Agent's own package.json
+│   ├── .AchillesSkills/          # Skills directory (if mounted)
+│   └── node_modules/             # --> host: $CWD/agents/<agent>/node_modules/ (rw)
+│
+├── shared/                       # Shared data between agents (rw)
+│
+└── $CWD/agents/<agent>/          # CWD passthrough mount (rw)
+```
+
+Note: `/code/node_modules` and `/Agent/node_modules` point to the **same** host directory.
 
 ### Dependency Installation
 
-Dependencies are installed in the workspace `agents/<agent>/` directory on the host, then mounted into the container. See [DS12 - Dependency Installation](./DS12-dependency-installation.md) for details.
+Ploinky manages Node.js dependencies for agents by merging global + agent dependencies on the host, then running `npm install` inside the container entrypoint. Dependencies persist in the workspace `agents/<agent>/` directory.
+
+#### Global Dependencies
+
+Defined in `globalDeps/package.json`, these are available to **every** agent:
+
+```json
+{
+  "dependencies": {
+    "achillesAgentLib": "github:OutfinityResearch/achillesAgentLib",
+    "mcp-sdk": "github:PloinkyRepos/MCPSDK#main",
+    "flexsearch": "github:PloinkyRepos/flexsearch#main",
+    "node-pty": "^1.0.0"
+  }
+}
+```
+
+| Package | Purpose |
+|---------|---------|
+| `achillesAgentLib` | Agent framework and skill system |
+| `mcp-sdk` | MCP protocol implementation |
+| `flexsearch` | Full-text search for document indexing |
+| `node-pty` | PTY support for interactive terminals |
+
+#### Installation Flow
+
+**Phase 1: Host-Side Preparation** (before container starts)
+
+`dependencyInstaller.js:prepareAgentPackageJson(agentName)`:
+
+1. Reads `globalDeps/package.json` (4 global dependencies)
+2. Checks if agent has its own `package.json` at `$CWD/code/<agentName>/package.json`
+3. If yes, **merges** agent dependencies into global (agent deps take precedence for conflicts)
+4. Writes merged `package.json` to `$CWD/agents/<agentName>/package.json`
+
+Decision logic in `agentServiceManager.js`:
+```
+if agent does NOT use "start" entry  OR  agent has its own package.json:
+    prepareAgentPackageJson()        # merge global + agent deps
+else:
+    skip npm install entirely        # agent uses start command with no deps
+```
+
+**Phase 2: In-Container Entrypoint Install** (when container starts)
+
+`dependencyInstaller.js:buildEntrypointInstallScript()` generates a shell snippet injected before the agent command:
+
+```sh
+(
+    echo "[deps] <agentName>: Installing dependencies...";
+    (
+      command -v git >/dev/null 2>&1 ||
+      (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||
+      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)
+    ) 2>/dev/null;
+    npm install --prefix "$WORKSPACE_PATH";
+)
+```
+
+Build tools (`git`, `python3`, `make`, `g++`) are installed if missing — needed for GitHub dependencies and native modules like `node-pty`.
+
+**Phase 3: Manifest Install Hooks** (after npm install)
+
+If the manifest or active profile defines an `install` command, it runs after entrypoint deps:
+
+```
+cd /code && <entrypoint-deps-install> && <manifest-install-hook> && <agent-command>
+```
+
+#### Where Dependencies End Up
+
+```
+Host:       $CWD/agents/<agentName>/node_modules/   (persists across container restarts)
+
+Container:  /code/node_modules      <── same host directory
+            /Agent/node_modules     <── same host directory
+```
+
+Both container paths mount the **same** host directory. The dual mount is needed because `AgentServer.mjs` runs from `/Agent/server/` — Node.js ESM resolution walks up from script location, so without `/Agent/node_modules/` it can't find dependencies.
+
+#### Core Dependencies Sync (Alternative Path)
+
+`syncCoreDependencies()` can copy core deps directly from ploinky's own `node_modules/` to the agent's `node_modules/` on the host, avoiding npm install for the core packages. It uses `PLOINKY_ROOT` to locate ploinky's `node_modules/`.
+
+Note: The sync list (`CORE_DEPENDENCIES = ['achillesAgentLib', 'mcp-sdk', 'flexsearch']`) differs from the global deps — `node-pty` is excluded because it's a native module that must be compiled inside the container via npm, not copied from the host.
+
+#### Dependency Directory Structure
 
 ```
 Host Filesystem:
@@ -598,15 +682,31 @@ $CWD/
 │       └── node_modules/     # Installed dependencies
 │           ├── achillesAgentLib/
 │           ├── flexsearch/
-│           ├── @anthropic-ai/
+│           ├── mcp-sdk/
 │           └── node-pty/
 
 Container View:
 /code/
-├── index.js                  # Agent source (from .ploinky/repos/...)
+├── main.mjs                  # Agent source (from .ploinky/repos/...)
 ├── package.json              # Agent's package.json
 └── node_modules/             # Mounted from $CWD/agents/<agent>/node_modules/
 ```
+
+### Module Resolution Inside Containers
+
+The codebase uses **ES Modules** exclusively (`"type": "module"`).
+
+| Code Location | Resolution Strategy |
+|---|---|
+| Agent code at `/code/` | Standard ESM — walks up to `/code/node_modules/` |
+| `AgentServer.mjs` at `/Agent/server/` | Dual mount at `/Agent/node_modules/` + `NODE_PATH=/code/node_modules` |
+
+```javascript
+// In agentServiceManager.js — NODE_PATH for AgentServer.mjs
+args.push('-e', 'NODE_PATH=/code/node_modules');
+```
+
+No import maps, custom resolvers, or path aliases are used.
 
 ### Container Naming Convention
 
@@ -621,12 +721,26 @@ Examples:
 
 ## Configuration
 
-### Environment Variables
+### Host Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `CONTAINER_RUNTIME` | Force docker or podman | Auto-detected |
 | `CONTAINER_TIMEOUT` | Default stop timeout | `10` |
+
+### Container Environment Variables
+
+These are injected into every agent container:
+
+| Variable | Value | Purpose |
+|---|---|---|
+| `WORKSPACE_PATH` | `$CWD/agents/<agentName>/` | Agent working directory |
+| `AGENT_NAME` | `<agentName>` | Agent identifier |
+| `NODE_PATH` | `/code/node_modules` | Module resolution for AgentServer.mjs |
+| `PLOINKY_MCP_CONFIG_PATH` | `/tmp/ploinky/mcp-config.json` | MCP configuration file path |
+| `PLOINKY_ROUTER_PORT` | Port from routing.json (default `8080`) | Router port for inter-agent communication |
+| Profile env vars | From `manifest.profiles.<profile>.env` | Profile-specific configuration |
+| Secret vars | From `.ploinky/.secrets` | Secret environment variables |
 
 ### Container Labels
 
@@ -670,3 +784,5 @@ Examples:
 - [DS08 - Profile System](./DS08-profile-system.md)
 - [Docker Documentation](https://docs.docker.com/)
 - [Podman Documentation](https://podman.io/docs/)
+
+> **Note:** DS12 (Dependency Installation) has been merged into this document.
