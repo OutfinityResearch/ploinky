@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Design Specifications - Ploinky</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .spec-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 0;
+            max-width: 1400px;
+            margin: 0 auto;
+            min-height: calc(100vh - 160px);
+        }
+
+        .spec-sidebar {
+            background: var(--bg-primary);
+            border-right: 1px solid var(--border-primary);
+            padding: 1.5rem 0;
+            position: sticky;
+            top: 62px;
+            height: calc(100vh - 62px);
+            overflow-y: auto;
+        }
+
+        .spec-sidebar h3 {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .spec-sidebar ul {
+            list-style: none;
+        }
+
+        .spec-sidebar li a {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            padding: 0.5rem 1.25rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            line-height: 1.4;
+            transition: all 0.15s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .spec-sidebar li a:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .spec-sidebar li a.active {
+            background: var(--bg-active);
+            color: var(--text-link);
+            border-left-color: var(--text-link);
+            font-weight: 500;
+        }
+
+        .spec-sidebar .spec-id {
+            font-family: 'Cascadia Code', 'SF Mono', Monaco, monospace;
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            min-width: 36px;
+        }
+
+        .spec-sidebar li a.active .spec-id {
+            color: var(--text-link);
+        }
+
+        .spec-sidebar .sidebar-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .spec-sidebar .sidebar-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .spec-content {
+            background: var(--bg-primary);
+            padding: 2rem 3rem;
+            min-height: 100%;
+            overflow-y: auto;
+        }
+
+        /* Markdown content styling */
+        .spec-content .md-body h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--border-primary);
+            color: var(--text-primary);
+        }
+
+        .spec-content .md-body h2 {
+            font-size: 1.5rem;
+            margin-top: 2.5rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-primary);
+            color: var(--text-primary);
+        }
+
+        .spec-content .md-body h3 {
+            font-size: 1.2rem;
+            margin-top: 2rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+
+        .spec-content .md-body h4 {
+            font-size: 1rem;
+            margin-top: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        .spec-content .md-body p {
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            line-height: 1.7;
+        }
+
+        .spec-content .md-body ul,
+        .spec-content .md-body ol {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+            line-height: 1.7;
+        }
+
+        .spec-content .md-body li {
+            margin-bottom: 0.35rem;
+        }
+
+        .spec-content .md-body pre {
+            background: var(--bg-code);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+
+        .spec-content .md-body pre code {
+            background: none;
+            padding: 0;
+            color: var(--text-primary);
+            font-size: inherit;
+        }
+
+        .spec-content .md-body code {
+            background: var(--bg-code);
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: var(--text-code);
+        }
+
+        .spec-content .md-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+
+        .spec-content .md-body th {
+            background: var(--bg-tertiary);
+            text-align: left;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            border-bottom: 2px solid var(--border-primary);
+        }
+
+        .spec-content .md-body td {
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid var(--border-primary);
+            color: var(--text-primary);
+        }
+
+        .spec-content .md-body tr:hover td {
+            background: var(--bg-hover);
+        }
+
+        .spec-content .md-body blockquote {
+            border-left: 4px solid var(--bg-header);
+            padding: 0.5rem 1rem;
+            margin: 1rem 0;
+            background: var(--bg-secondary);
+            border-radius: 0 8px 8px 0;
+            color: var(--text-secondary);
+        }
+
+        .spec-content .md-body strong {
+            color: var(--text-primary);
+        }
+
+        .spec-content .md-body a {
+            color: var(--text-link);
+            text-decoration: none;
+        }
+
+        .spec-content .md-body a:hover {
+            text-decoration: underline;
+        }
+
+        .spec-content .md-body hr {
+            border: none;
+            border-top: 1px solid var(--border-primary);
+            margin: 2rem 0;
+        }
+
+        /* Loading state */
+        .spec-loading {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-secondary);
+        }
+
+        .spec-loading .spinner {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            border: 3px solid var(--border-primary);
+            border-top-color: var(--bg-header);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Welcome card */
+        .spec-welcome {
+            max-width: 640px;
+            margin: 2rem auto;
+        }
+
+        .spec-welcome h2 {
+            margin-bottom: 1rem;
+            font-size: 1.75rem;
+            color: var(--text-primary);
+        }
+
+        .spec-welcome p {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+            line-height: 1.7;
+        }
+
+        .spec-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .spec-card {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+            padding: 0.85rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.15s ease;
+            font-size: 0.9rem;
+        }
+
+        .spec-card:hover {
+            border-color: var(--bg-header);
+            background: var(--bg-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .spec-card .card-id {
+            font-family: 'Cascadia Code', 'SF Mono', Monaco, monospace;
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            min-width: 36px;
+        }
+
+        /* Search */
+        .spec-search {
+            padding: 0.75rem 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .spec-search input {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border-primary);
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            outline: none;
+            transition: border-color 0.15s ease;
+        }
+
+        .spec-search input:focus {
+            border-color: var(--bg-header);
+        }
+
+        .spec-search input::placeholder {
+            color: var(--text-tertiary);
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .spec-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .spec-sidebar {
+                position: relative;
+                top: 0;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--border-primary);
+                padding: 1rem 0;
+            }
+
+            .spec-content {
+                padding: 1.5rem 1rem;
+            }
+        }
+
+        /* Scrollbar */
+        .spec-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .spec-sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .spec-sidebar::-webkit-scrollbar-thumb {
+            background: var(--border-primary);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="index.html" class="logo">
+                    <div class="logo-icon">🚀</div>
+                    <span>Ploinky</span>
+                </a>
+                <nav>
+                    <ul>
+                        <li><a href="index.html">Home</a></li>
+                        <li><a href="cli-reference.html">CLI Reference</a></li>
+                        <li><a href="architecture.html">Architecture</a></li>
+                        <li><a href="specs.html" class="active">Specs</a></li>
+                        <li><a href="webchat.html">WebChat</a></li>
+                        <li><a href="spec-webmeet.html">WebMeet</a></li>
+                        <li><button class="theme-toggle" id="themeToggle">🌙</button></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="spec-layout">
+        <aside class="spec-sidebar">
+            <div class="spec-search">
+                <input type="text" id="specSearch" placeholder="Filter specs...">
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Core</h3>
+                <ul>
+                    <li><a href="#DS01" data-spec="DS01-vision"><span class="spec-id">DS01</span> Vision & Goals</a></li>
+                    <li><a href="#DS02" data-spec="DS02-architecture"><span class="spec-id">DS02</span> Architecture</a></li>
+                    <li><a href="#DS03" data-spec="DS03-agent-model"><span class="spec-id">DS03</span> Agent Model</a></li>
+                    <li><a href="#DS04" data-spec="DS04-manifest-schema"><span class="spec-id">DS04</span> Manifest Schema</a></li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Interfaces</h3>
+                <ul>
+                    <li><a href="#DS05" data-spec="DS05-cli-commands"><span class="spec-id">DS05</span> CLI Commands</a></li>
+                    <li><a href="#DS06" data-spec="DS06-web-interfaces"><span class="spec-id">DS06</span> Web Interfaces</a></li>
+                    <li><a href="#DS07" data-spec="DS07-mcp-protocol"><span class="spec-id">DS07</span> MCP Protocol</a></li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Configuration</h3>
+                <ul>
+                    <li><a href="#DS08" data-spec="DS08-profile-system"><span class="spec-id">DS08</span> Profile System</a></li>
+                    <li><a href="#DS09" data-spec="DS09-skills-system"><span class="spec-id">DS09</span> Skills System</a></li>
+                    <li><a href="#DS10" data-spec="DS10-repository-mgmt"><span class="spec-id">DS10</span> Repository Mgmt</a></li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Runtime</h3>
+                <ul>
+                    <li><a href="#DS11" data-spec="DS11-container-runtime"><span class="spec-id">DS11</span> Container Runtime</a></li>
+                    <li><a href="#DS12" data-spec="DS12-dependency-installation"><span class="spec-id">DS12</span> Dependencies</a></li>
+                    <li><a href="#DS13" data-spec="DS13-watchdog-reliability"><span class="spec-id">DS13</span> Watchdog</a></li>
+                </ul>
+            </div>
+
+            <div class="sidebar-section">
+                <h3>Operations</h3>
+                <ul>
+                    <li><a href="#DS14" data-spec="DS14-llm-integration"><span class="spec-id">DS14</span> LLM Integration</a></li>
+                    <li><a href="#DS15" data-spec="DS15-logging-observability"><span class="spec-id">DS15</span> Logging</a></li>
+                    <li><a href="#DS16" data-spec="DS16-testing-infrastructure"><span class="spec-id">DS16</span> Testing</a></li>
+                </ul>
+            </div>
+        </aside>
+
+        <div class="spec-content" id="specContent">
+            <!-- Content loaded dynamically -->
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Theme toggle
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        body.setAttribute('data-theme', savedTheme);
+        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+        });
+
+        // Spec data
+        const specs = [
+            { id: 'DS01', file: 'DS01-vision', title: 'Vision & Goals', group: 'Core' },
+            { id: 'DS02', file: 'DS02-architecture', title: 'System Architecture', group: 'Core' },
+            { id: 'DS03', file: 'DS03-agent-model', title: 'Agent Model', group: 'Core' },
+            { id: 'DS04', file: 'DS04-manifest-schema', title: 'Manifest Schema', group: 'Core' },
+            { id: 'DS05', file: 'DS05-cli-commands', title: 'CLI Commands', group: 'Interfaces' },
+            { id: 'DS06', file: 'DS06-web-interfaces', title: 'Web Interfaces', group: 'Interfaces' },
+            { id: 'DS07', file: 'DS07-mcp-protocol', title: 'MCP Protocol', group: 'Interfaces' },
+            { id: 'DS08', file: 'DS08-profile-system', title: 'Profile System', group: 'Configuration' },
+            { id: 'DS09', file: 'DS09-skills-system', title: 'Skills System', group: 'Configuration' },
+            { id: 'DS10', file: 'DS10-repository-mgmt', title: 'Repository Management', group: 'Configuration' },
+            { id: 'DS11', file: 'DS11-container-runtime', title: 'Container Runtime', group: 'Runtime' },
+            { id: 'DS12', file: 'DS12-dependency-installation', title: 'Dependency Installation', group: 'Runtime' },
+            { id: 'DS13', file: 'DS13-watchdog-reliability', title: 'Watchdog & Reliability', group: 'Runtime' },
+            { id: 'DS14', file: 'DS14-llm-integration', title: 'LLM Integration', group: 'Operations' },
+            { id: 'DS15', file: 'DS15-logging-observability', title: 'Logging & Observability', group: 'Operations' },
+            { id: 'DS16', file: 'DS16-testing-infrastructure', title: 'Testing Infrastructure', group: 'Operations' }
+        ];
+
+        const content = document.getElementById('specContent');
+        const links = document.querySelectorAll('.spec-sidebar a[data-spec]');
+        const cache = {};
+
+        // Show welcome / overview
+        function showWelcome() {
+            let cards = '';
+            specs.forEach(s => {
+                cards += `<a href="#${s.id}" class="spec-card" onclick="loadSpec('${s.file}','${s.id}');return false;"><span class="card-id">${s.id}</span> ${s.title}</a>`;
+            });
+
+            content.innerHTML = `
+                <div class="spec-welcome">
+                    <h2>Design Specifications</h2>
+                    <p>The Ploinky Design Specification (DS) documents define the complete system architecture, from core agent model to runtime operations. Select a spec from the sidebar or click below.</p>
+                </div>
+                <div class="spec-grid">${cards}</div>
+            `;
+        }
+
+        // Load and render a spec
+        async function loadSpec(file, id) {
+            // Update active link
+            links.forEach(l => l.classList.remove('active'));
+            const activeLink = document.querySelector(`a[data-spec="${file}"]`);
+            if (activeLink) activeLink.classList.add('active');
+
+            // Update URL hash without scroll
+            history.replaceState(null, '', '#' + id);
+
+            // Show loading
+            if (!cache[file]) {
+                content.innerHTML = '<div class="spec-loading"><div class="spinner"></div><div>Loading specification...</div></div>';
+            }
+
+            try {
+                // Fetch markdown (with cache)
+                if (!cache[file]) {
+                    const resp = await fetch(`specs/DS/${file}.md`);
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    cache[file] = await resp.text();
+                }
+
+                // Render
+                const html = marked.parse(cache[file]);
+                content.innerHTML = `<div class="md-body">${html}</div>`;
+                content.scrollTop = 0;
+
+                // Rewrite internal DS links to work within the viewer
+                content.querySelectorAll('.md-body a').forEach(a => {
+                    const href = a.getAttribute('href');
+                    if (href && href.match(/^\.\/DS\d{2}/)) {
+                        const match = href.match(/DS(\d{2})/);
+                        if (match) {
+                            const dsNum = 'DS' + match[1];
+                            const spec = specs.find(s => s.id === dsNum);
+                            if (spec) {
+                                a.href = '#' + dsNum;
+                                a.onclick = (e) => {
+                                    e.preventDefault();
+                                    loadSpec(spec.file, spec.id);
+                                };
+                            }
+                        }
+                    }
+                });
+            } catch (err) {
+                content.innerHTML = `<div class="spec-loading"><p>Failed to load specification: ${err.message}</p></div>`;
+            }
+        }
+
+        // Search/filter
+        document.getElementById('specSearch').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            document.querySelectorAll('.spec-sidebar li').forEach(li => {
+                const text = li.textContent.toLowerCase();
+                li.style.display = text.includes(query) ? '' : 'none';
+            });
+            // Show/hide section headers if all children hidden
+            document.querySelectorAll('.sidebar-section').forEach(section => {
+                const visible = section.querySelectorAll('li:not([style*="display: none"])');
+                section.style.display = visible.length > 0 ? '' : 'none';
+            });
+        });
+
+        // Sidebar click handling
+        links.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const file = link.dataset.spec;
+                const id = link.getAttribute('href').slice(1);
+                loadSpec(file, id);
+            });
+        });
+
+        // Handle initial hash or show welcome
+        function handleHash() {
+            const hash = location.hash.slice(1);
+            if (hash) {
+                const spec = specs.find(s => s.id === hash);
+                if (spec) {
+                    loadSpec(spec.file, spec.id);
+                    return;
+                }
+            }
+            showWelcome();
+        }
+
+        window.addEventListener('hashchange', handleHash);
+        handleHash();
+    </script>
+</body>
+</html>

@@ -352,122 +352,33 @@ function parseSecretsFile(filePath) {
 }
 ```
 
-### Lifecycle Hooks
+### Lifecycle Hook Configuration
 
-```javascript
-// cli/services/lifecycleHooks.js
+Profiles define which hooks run at each lifecycle step. The hook execution implementation is documented in [DS03 - Agent Model](./DS03-agent-model.md).
 
-/**
- * Execute host hook (runs on host machine)
- * @param {string} agentName - Agent name
- * @param {string} hookName - Hook name (hosthook_aftercreation, etc.)
- * @param {Object} env - Environment variables
- * @returns {Promise<{exitCode: number, stdout: string, stderr: string}>}
- */
-export async function executeHostHook(agentName, hookName, env = {}) {
-  const config = getProfileConfig(agentName, getActiveProfile());
-  const scriptPath = config[hookName];
+Hooks can be defined per-profile in the manifest:
 
-  if (!scriptPath) {
-    return { exitCode: 0, stdout: '', stderr: '' }; // No hook defined
+```json
+{
+  "profiles": {
+    "dev": {
+      "hosthook_aftercreation": "scripts/dev_aftercreation.sh",
+      "preinstall": "scripts/dev_preinstall.sh",
+      "install": "npm install",
+      "postinstall": "scripts/dev_postinstall.sh",
+      "hosthook_postinstall": "scripts/dev_host_postinstall.sh"
+    }
   }
-
-  const fullPath = resolveScriptPath(agentName, scriptPath);
-
-  if (!fs.existsSync(fullPath)) {
-    console.warn(`Warning: Hook script not found: ${fullPath}`);
-    return { exitCode: 0, stdout: '', stderr: '' };
-  }
-
-  // Execute on host
-  return new Promise((resolve, reject) => {
-    const proc = spawn('sh', [fullPath], {
-      env: {
-        ...process.env,
-        ...env,
-        PLOINKY_PROFILE: getActiveProfile(),
-        PLOINKY_AGENT_NAME: agentName,
-        PLOINKY_CWD: process.cwd()
-      },
-      cwd: path.dirname(fullPath)
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data) => { stdout += data; });
-    proc.stderr.on('data', (data) => { stderr += data; });
-
-    proc.on('close', (exitCode) => {
-      resolve({ exitCode, stdout, stderr });
-    });
-
-    proc.on('error', reject);
-  });
-}
-
-/**
- * Execute container hook (runs inside container)
- * @param {string} containerName - Container name
- * @param {string} agentName - Agent name
- * @param {string} hookName - Hook name (preinstall, install, postinstall)
- * @param {Object} env - Environment variables
- * @returns {Promise<{exitCode: number, stdout: string, stderr: string}>}
- */
-export async function executeContainerHook(containerName, agentName, hookName, env = {}) {
-  const config = getProfileConfig(agentName, getActiveProfile());
-  const script = config[hookName];
-
-  if (!script) {
-    return { exitCode: 0, stdout: '', stderr: '' }; // No hook defined
-  }
-
-  // Build environment flags
-  const envFlags = [];
-  for (const [key, value] of Object.entries(env)) {
-    envFlags.push('-e', `${key}=${value}`);
-  }
-
-  // Execute in container
-  const command = Array.isArray(script) ? script.join(' && ') : script;
-  return execInContainer(containerName, command, envFlags);
-}
-
-/**
- * Run full profile lifecycle
- * @param {string} agentName - Agent name
- * @param {string} containerName - Container name
- * @returns {Promise<void>}
- */
-export async function runProfileLifecycle(agentName, containerName) {
-  const profile = getActiveProfile();
-  const config = getProfileConfig(agentName, profile);
-
-  // Build environment
-  const env = {
-    PLOINKY_PROFILE: profile,
-    PLOINKY_AGENT_NAME: agentName,
-    ...config.env,
-    ...getSecrets(config.secrets || [])
-  };
-
-  // Execute hooks in order
-  console.log(`Running ${profile} profile lifecycle for ${agentName}...`);
-
-  // 1. Host hook after creation
-  await executeHostHook(agentName, 'hosthook_aftercreation', env);
-
-  // 2. Container hooks
-  await executeContainerHook(containerName, agentName, 'preinstall', env);
-  await executeContainerHook(containerName, agentName, 'install', env);
-  await executeContainerHook(containerName, agentName, 'postinstall', env);
-
-  // 3. Host hook after postinstall
-  await executeHostHook(agentName, 'hosthook_postinstall', env);
-
-  console.log(`Profile lifecycle complete for ${agentName}`);
 }
 ```
+
+| Hook | Runs On | Purpose |
+|------|---------|---------|
+| `hosthook_aftercreation` | Host | Setup after container is created |
+| `preinstall` | Container | Preparation before install |
+| `install` | Container | Main installation step |
+| `postinstall` | Container | Post-install configuration |
+| `hosthook_postinstall` | Host | Host-side post-install tasks |
 
 ## Behavioral Specification
 
@@ -663,8 +574,35 @@ Error: Profile 'staging' not found in manifest
 4. Mount modes applied based on profile
 5. Clear error messages for missing secrets
 
+## Secret Variable Aliasing and Wildcards
+
+### Variable Aliasing
+
+Secrets support `$VAR` alias syntax for sharing values across differently-named variables:
+
+```bash
+# .ploinky/.secrets
+MAIN_API_KEY=sk-abc123
+OPENAI_API_KEY=$MAIN_API_KEY     # Resolves to sk-abc123
+ANTHROPIC_API_KEY=$MAIN_API_KEY  # Also resolves to sk-abc123
+```
+
+The `resolveVarValue()` function in `secretVars.js` handles recursive alias resolution.
+
+### Wildcard Environment Expansion
+
+Manifest `env` entries can use wildcard patterns to match multiple environment variables:
+
+| Pattern | Matches |
+|---------|---------|
+| `*_API_KEY` | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc. |
+| `ACHILLES_*` | `ACHILLES_DEBUG`, `ACHILLES_DEFAULT_MODEL`, etc. |
+| `*` | All variables EXCEPT those containing `API_KEY` or `APIKEY` |
+
+The wildcard expansion is handled by `expandEnvWildcard()` in `secretVars.js` and integrated into the environment variable collection flow during container creation. See [DS04 - Manifest Schema](./DS04-manifest-schema.md) for the full wildcard specification.
+
 ## References
 
-- [DS03 - Agent Model](./DS03-agent-model.md)
+- [DS03 - Agent Model](./DS03-agent-model.md) (lifecycle hook execution details)
 - [DS04 - Manifest Schema](./DS04-manifest-schema.md)
-- [DS11 - Container Runtime](./DS11-container-runtime.md)
+- [DS11 - Container Runtime & Dependencies](./DS11-container-runtime.md)

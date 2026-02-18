@@ -403,6 +403,111 @@ async function createAgentContainer(agent) {
 }
 ```
 
+### Lifecycle Hooks
+
+Lifecycle hooks allow agents to run scripts at specific points during startup. Hooks can run on the **host** or inside the **container**, and are configured per-profile in the manifest (see [DS08 - Profile System](./DS08-profile-system.md)).
+
+#### Profile-Aware Lifecycle Sequence
+
+```
+ 1. Workspace Structure Init [HOST]
+    └─> Ensure: .ploinky/, agents/, code/, skills/
+    └─> Create: $CWD/agents/<agentName>/
+
+ 2. Symbolic Links Creation [HOST]
+    └─> code symlink: $CWD/code/<agent> -> .ploinky/repos/.../code/
+    └─> skills symlink: $CWD/skills/<agent> -> .ploinky/repos/.../.AchillesSkills/
+
+ 3. Container Creation
+    └─> docker create with profile-specific mounts
+
+ 4. hosthook_aftercreation [HOST]
+    └─> Execute: scripts/<profile>_aftercreation.sh
+
+ 5. Container Start
+    └─> docker start <container>
+
+ 6. Entrypoint Install [CONTAINER]
+    └─> Install git + build tools if missing
+    └─> npm install --prefix $WORKSPACE_PATH (from merged package.json)
+
+ 7. Manifest Install Hook [CONTAINER]
+    └─> Execute: manifest.install or manifest.profiles.<profile>.install
+
+ 8. preinstall [CONTAINER]
+    └─> Execute: scripts/<profile>_preinstall.sh
+
+ 9. install [CONTAINER]
+    └─> Execute: scripts/<profile>_install.sh
+
+10. postinstall [CONTAINER]
+    └─> Execute: scripts/<profile>_postinstall.sh
+
+11. hosthook_postinstall [HOST]
+    └─> Execute: scripts/<profile>_host_postinstall.sh
+
+12. Agent Ready
+    └─> AgentServer starts accepting requests
+```
+
+#### Hook Execution
+
+```javascript
+// cli/services/lifecycleHooks.js
+
+/**
+ * Execute host hook (runs on host machine, not in container)
+ * @param {string} agentName - Agent name
+ * @param {string} hookName - Hook name (hosthook_aftercreation, hosthook_postinstall)
+ * @param {Object} env - Environment variables
+ * @returns {Promise<{exitCode: number, stdout: string, stderr: string}>}
+ */
+export async function executeHostHook(agentName, hookName, env = {}) {
+  const config = getProfileConfig(agentName, getActiveProfile());
+  const scriptPath = config[hookName];
+
+  if (!scriptPath) return { exitCode: 0, stdout: '', stderr: '' };
+
+  const fullPath = resolveScriptPath(agentName, scriptPath);
+  // Execute on host with profile context in environment
+  return spawn('sh', [fullPath], {
+    env: { ...process.env, ...env, PLOINKY_PROFILE: getActiveProfile(), PLOINKY_AGENT_NAME: agentName }
+  });
+}
+
+/**
+ * Execute container hook (runs inside the container)
+ * @param {string} containerName - Container name
+ * @param {string} agentName - Agent name
+ * @param {string} hookName - Hook name (preinstall, install, postinstall)
+ * @param {Object} env - Environment variables
+ * @returns {Promise<{exitCode: number, stdout: string, stderr: string}>}
+ */
+export async function executeContainerHook(containerName, agentName, hookName, env = {}) {
+  const config = getProfileConfig(agentName, getActiveProfile());
+  const script = config[hookName];
+  if (!script) return { exitCode: 0, stdout: '', stderr: '' };
+
+  const command = Array.isArray(script) ? script.join(' && ') : script;
+  return execInContainer(containerName, command, envFlags);
+}
+
+/**
+ * Run full profile lifecycle (all hooks in order)
+ */
+export async function runProfileLifecycle(agentName, containerName) {
+  const profile = getActiveProfile();
+  const config = getProfileConfig(agentName, profile);
+  const env = { PLOINKY_PROFILE: profile, PLOINKY_AGENT_NAME: agentName, ...config.env, ...getSecrets(config.secrets || []) };
+
+  await executeHostHook(agentName, 'hosthook_aftercreation', env);
+  await executeContainerHook(containerName, agentName, 'preinstall', env);
+  await executeContainerHook(containerName, agentName, 'install', env);
+  await executeContainerHook(containerName, agentName, 'postinstall', env);
+  await executeHostHook(agentName, 'hosthook_postinstall', env);
+}
+```
+
 ### Run Modes
 
 | Mode | Description | Mount Behavior |
@@ -541,4 +646,4 @@ const errorMessages = {
 - [DS04 - Manifest Schema](./DS04-manifest-schema.md)
 - [DS07 - MCP Protocol](./DS07-mcp-protocol.md)
 - [DS08 - Profile System](./DS08-profile-system.md)
-- [DS11 - Container Runtime](./DS11-container-runtime.md)
+- [DS11 - Container Runtime & Dependencies](./DS11-container-runtime.md)
