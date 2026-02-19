@@ -63,7 +63,18 @@ function createAuthService(options = {}) {
         return `${baseUrl.replace(/\/$/, '')}/auth/callback`;
     }
 
-    function resolvePostLogoutUri(baseUrl) {
+    function resolvePostLogoutUri(baseUrl, override) {
+        const overrideValue = typeof override === 'string' ? override.trim() : '';
+        if (overrideValue) {
+            if (/^https?:\/\//i.test(overrideValue)) {
+                return overrideValue;
+            }
+            if (baseUrl && overrideValue.startsWith('/')) {
+                return new URL(overrideValue, `${baseUrl.replace(/\/$/, '')}/`).toString();
+            }
+            return overrideValue;
+        }
+
         const cfg = assertConfigured();
         if (cfg.postLogoutRedirectUri) return cfg.postLogoutRedirectUri;
         if (!baseUrl) return undefined;
@@ -228,21 +239,20 @@ function createAuthService(options = {}) {
         };
     }
 
-    async function logout(sessionId, { baseUrl } = {}) {
+    async function logout(sessionId, { baseUrl, postLogoutRedirectUri } = {}) {
         const cfg = assertConfigured();
         const metadata = await ensureMetadata();
         const session = sessionStore.getSession(sessionId);
+        const resolvedPostLogoutUri = resolvePostLogoutUri(baseUrl, postLogoutRedirectUri);
+        const idTokenHint = session?.tokens?.idToken;
         if (session) {
             sessionStore.deleteSession(sessionId);
         }
-        if (!session) {
-            return { redirect: resolvePostLogoutUri(baseUrl) };
-        }
         const logoutUrl = buildLogoutUrl(metadata, cfg, {
-            idTokenHint: session.tokens.idToken,
-            postLogoutRedirectUri: resolvePostLogoutUri(baseUrl)
+            idTokenHint,
+            postLogoutRedirectUri: resolvedPostLogoutUri
         });
-        return { redirect: logoutUrl || resolvePostLogoutUri(baseUrl) };
+        return { redirect: logoutUrl || resolvedPostLogoutUri };
     }
 
     function revokeSession(sessionId) {

@@ -38,6 +38,7 @@ KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-${SSO_ADMIN_PASSWORD:-admin}
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-${SSO_REALM:-ploinky}}"
 ROUTER_CLIENT_ID="${ROUTER_CLIENT_ID:-${SSO_CLIENT_ID:-ploinky-router}}"
 ROUTER_REDIRECT_URI="${ROUTER_REDIRECT_URI:-http://127.0.0.1:8080/auth/callback}"
+ROUTER_LOGOUT_REDIRECT_URI="${ROUTER_LOGOUT_REDIRECT_URI:-${SSO_LOGOUT_REDIRECT_URI:-${KEYCLOAK_LOGOUT_REDIRECT_URI:-http://127.0.0.1:8080/auth/logged-out}}}"
 
 # Test agent configuration
 TEST_AGENT_CLIENT_ID="${TEST_AGENT_CLIENT_ID:-agent-test-client}"
@@ -290,17 +291,13 @@ get_client_uuid() {
 # Create router client (public, for user authentication)
 create_router_client() {
     local token="$1"
-    log_info "Creating router client '${ROUTER_CLIENT_ID}'..."
-    
-    if client_exists "$token" "$ROUTER_CLIENT_ID"; then
-        log_warn "Client '${ROUTER_CLIENT_ID}' already exists, skipping creation"
-        return 0
-    fi
+    log_info "Ensuring router client '${ROUTER_CLIENT_ID}' is configured..."
     
     local client_data
     client_data=$(jq -n \
         --arg client_id "$ROUTER_CLIENT_ID" \
         --arg redirect_uri "$ROUTER_REDIRECT_URI" \
+        --arg post_logout_redirect_uri "$ROUTER_LOGOUT_REDIRECT_URI" \
         '{
             clientId: $client_id,
             enabled: true,
@@ -309,13 +306,32 @@ create_router_client() {
             directAccessGrantsEnabled: false,
             serviceAccountsEnabled: false,
             implicitFlowEnabled: false,
+            redirectUris: [$redirect_uri, $post_logout_redirect_uri],
             validRedirectUris: [$redirect_uri],
             webOrigins: ["+"],
             protocol: "openid-connect",
             attributes: {
-                "pkce.code.challenge.method": "S256"
+                "pkce.code.challenge.method": "S256",
+                "post.logout.redirect.uris": $post_logout_redirect_uri
             }
         }')
+
+    if client_exists "$token" "$ROUTER_CLIENT_ID"; then
+        local client_uuid
+        client_uuid=$(get_client_uuid "$token" "$ROUTER_CLIENT_ID")
+        if [ -z "$client_uuid" ]; then
+            log_error "Failed to get client UUID for existing router client"
+            return 1
+        fi
+        local update_data
+        update_data=$(echo "$client_data" | jq --arg client_uuid "$client_uuid" '.id = $client_uuid')
+        if ! api_call "PUT" "/admin/realms/${KEYCLOAK_REALM}/clients/${client_uuid}" "$update_data" "$token" >/dev/null; then
+            log_error "Failed to update router client"
+            return 1
+        fi
+        log_success "Router client '${ROUTER_CLIENT_ID}' updated successfully"
+        return 0
+    fi
     
     local response
     response=$(api_call "POST" "/admin/realms/${KEYCLOAK_REALM}/clients" "$client_data" "$token")
@@ -673,6 +689,7 @@ setup_keycloak() {
     log_info "Keycloak URL: ${KEYCLOAK_URL}"
     log_info "Realm: ${KEYCLOAK_REALM}"
     log_info "Router Client: ${ROUTER_CLIENT_ID}"
+    log_info "Logout Redirect URI: ${ROUTER_LOGOUT_REDIRECT_URI}"
     log_info "Agent Client: ${TEST_AGENT_CLIENT_ID}"
     log_info "Test User: ${TEST_USER_USERNAME}"
     
@@ -1182,4 +1199,3 @@ main() {
 
 # Run main function
 main "$@"
-
