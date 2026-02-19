@@ -561,9 +561,36 @@ const defaultConfig = {
 4. Inter-agent communication functions
 5. Task queue handles concurrency properly
 
+## MCP Browser Client
+
+The `Agent/client/MCPBrowserClient.js` provides a browser-side MCP client for web interfaces:
+
+- Exposed via the Router at `/MCPBrowserClient.js`
+- HTTP Fetch-based transport (no WebSocket required)
+- Supports SSE (Server-Sent Events) for streaming responses
+- Built-in task status polling with configurable intervals for async operations
+
+```javascript
+// Browser usage
+const client = new MCPBrowserClient({ baseUrl: '/mcps/agent-name' });
+
+// List available tools
+const tools = await client.listTools();
+
+// Call a tool
+const result = await client.callTool('execute_code', { code: '1 + 1' });
+
+// List and read resources
+const resources = await client.listResources();
+const content = await client.readResource('file:///code/main.js');
+```
+
+Used by the WebChat interface for agent communication from the browser.
+
 ## References
 
 - [MCP Specification](https://modelcontextprotocol.io/spec)
 - [DS02 - Architecture](./DS02-architecture.md)
 - [DS03 - Agent Model](./DS03-agent-model.md)
 - [DS06 - Web Interfaces](./DS06-web-interfaces.md)
+- [DS09 - Skills System](./DS09-skills-system.md)
