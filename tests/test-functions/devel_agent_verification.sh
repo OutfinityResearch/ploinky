@@ -3,10 +3,19 @@ fast_assert_devel_agent_workdir() {
   require_var "TEST_RUN_DIR"
   require_var "TEST_REPO_NAME"
   require_var "$agent_var"
+  require_runtime
 
   local agent_name="${!agent_var}"
 
   local expected_dir="$TEST_RUN_DIR/.ploinky/repos/$TEST_REPO_NAME"
+
+  # The watchdog may still be (re)starting this container.  Wait for it to
+  # reach a stable running state before attempting to exec into it.
+  local cont_name
+  cont_name=$(compute_container_name "$agent_name" "$TEST_REPO_NAME") || true
+  if [[ -n "$cont_name" ]]; then
+    wait_for_container "$cont_name"
+  fi
 
   local raw_output
   if ! raw_output=$( {
