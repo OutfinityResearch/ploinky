@@ -558,16 +558,152 @@ DASHBOARD_TOKEN=jkl012...
 - **CORS**: Restrict to same-origin requests
 - **Input Sanitization**: Escape terminal output to prevent XSS
 
+## WebChat Advanced Features
+
+### Tab Synchronization
+
+WebChat supports multiple browser tabs per agent session. Each tab gets a unique `TAB_ID` tracked via cookies. Tabs share the same session but maintain independent TTY connections. Messages are synchronized across tabs via the shared session.
+
+### Quick Commands
+
+The `commandResolver.js` module resolves CLI commands for webchat sessions:
+- Reads from routing config (`.ploinky/routing.json`)
+- Extracts from manifest: `manifest.cli` or `manifest.commands.cli`, `manifest.run` or `manifest.commands.run`
+- Returns: `{ host: "command", container: "command", source: "manifest|routing" }`
+- Quick command buttons are rendered in the chat interface for one-click execution
+
+### File Upload & Camera
+
+`webchat/upload.js` provides:
+- Drag-and-drop file upload
+- File input selection
+- Camera photo capture (via `getUserMedia`)
+- QR code scanning (via `webLibs/qrLib/`)
+- Image preview before upload
+- Multi-file support with progress tracking
+- Files stored as blobs via the `/blobs/` API
+
+### Speech-to-Text (STT) Strategies
+
+| Strategy | Module | Description |
+|----------|--------|-------------|
+| Browser | `strategies/stt/browser.js` | Web Speech API (`webkitSpeechRecognition`) |
+| OpenAI | `strategies/stt/openai.js` | OpenAI Whisper API (server-side) |
+| OpenAI Realtime | `strategies/stt/openai-realtime.js` | OpenAI Realtime API (streaming) |
+| Noop | `strategies/stt/noop.js` | Disabled (no-op) |
+
+Strategy selection configured per agent via TTS/STT provider settings.
+
+### Text-to-Speech (TTS) Strategies
+
+| Strategy | Module | Description |
+|----------|--------|-------------|
+| Browser | `strategies/tts/browser.js` | Web Speech Synthesis API |
+| OpenAI | `strategies/tts/openai.js` | OpenAI TTS API (server-side) |
+| Noop | `strategies/tts/noop.js` | Disabled (no-op) |
+
+Server-side TTS strategies also exist in `cli/server/handlers/ttsStrategies/`. Voice selection and speech rate are configurable.
+
+### Markdown Rendering
+
+`webchat/markdown.js` (~300 lines) renders markdown to HTML in the chat interface:
+- Code blocks with syntax highlighting
+- Tables, lists, links
+- Side panel links for detailed output
+- View-more handling for long messages (configurable line limit)
+
+### Side Panel
+
+`webchat/sidePanel.js` provides a resizable side panel for viewing detailed output, linked from message content.
+
+## Dashboard Components
+
+The `dashboard/` directory contains modular JavaScript components:
+
+| Module | Description |
+|--------|-------------|
+| `landingPage.js` | Main dashboard landing page and navigation |
+| `configurations.js` | Workspace and agent configuration display |
+| `repositories.js` | Repository management interface |
+| `auth.js` | Authentication and SSO configuration |
+| `observability.js` | System monitoring and metrics |
+| `virtualHosts.js` | Virtual host and routing configuration |
+| `common.js` | Shared utilities and UI components |
+
+## Authentication Subsystem
+
+### Architecture
+
+The authentication system in `cli/server/auth/` supports dual-mode authentication:
+
+| Module | Description |
+|--------|-------------|
+| `config.js` | SSO configuration loading from environment variables |
+| `jwt.js` | JWT token decoding and verification |
+| `jwksCache.js` | JWKS endpoint caching for key rotation |
+| `keycloakClient.js` | Keycloak OAuth2 client integration |
+| `pkce.js` | PKCE (Proof Key for Code Exchange) flow implementation |
+| `service.js` | Auth service orchestration (ties all modules together) |
+| `sessionStore.js` | In-memory session state management |
+| `utils.js` | Authentication utility functions |
+
+### Authentication Modes
+
+**Legacy Token-Based**: Simple 32-byte hex tokens stored in `.ploinky/.secrets`. Each web interface gets its own token (e.g., `WEBTTY_TOKEN`, `WEBCHAT_TOKEN`).
+
+**SSO (Keycloak/OIDC)**: Full OAuth2 with PKCE flow:
+1. Client redirects to Keycloak authorization endpoint with PKCE challenge
+2. User authenticates at Keycloak
+3. Callback receives authorization code
+4. Server exchanges code for tokens using PKCE verifier
+5. JWT validated against JWKS endpoint (cached)
+6. Session created in session store
+
+### Component Token Management
+
+`cli/server/utils/routerEnv.js` manages per-component tokens:
+
+| Function | Description |
+|----------|-------------|
+| `refreshComponentToken(component)` | Generate new token for a web component |
+| `ensureComponentToken(component)` | Ensure token exists, create if needed |
+| `getComponentToken(component)` | Retrieve current token |
+
+Components: `webtty`, `webchat`, `webmeet`, `dashboard`
+
+### Server Manager
+
+`cli/services/serverManager.js` handles port and token allocation for web interfaces:
+
+| Function | Description |
+|----------|-------------|
+| `findAvailablePort(min, max)` | Random port allocation (10000-60000) |
+| `isPortAvailable(port)` | Check if TCP port is free |
+| `ensureServerConfig(name, opts)` | Ensure port + token for a web component |
+| `loadServersConfig()` | Load from `.ploinky/servers.json` |
+| `saveServersConfig(config)` | Persist to `.ploinky/servers.json` |
+| `getAllServerStatuses()` | Check running status of all web servers |
+| `isServerRunning(pidFile)` | Check PID file for running process |
+| `stopServer(pidFile, name)` | Stop server by PID file |
+
+### Workspace File Serving
+
+The Router Server exposes a `/workspace-files/` endpoint that serves files from the workspace directory, enabling web interfaces to access workspace content (e.g., uploaded files, agent output).
+
 ## Success Criteria
 
 1. WebTTY provides responsive terminal experience
-2. WebChat supports markdown rendering and streaming
+2. WebChat supports markdown rendering, streaming, tabs, file upload, STT/TTS
 3. WebMeet enables multi-user collaboration
-4. Dashboard shows real-time system status
-5. All interfaces authenticated via tokens
+4. Dashboard shows real-time system status with modular components
+5. All interfaces authenticated via tokens or SSO
+6. Camera capture and QR scanning functional in WebChat
 
 ## References
 
 - [DS02 - Architecture](./DS02-architecture.md)
 - [DS07 - MCP Protocol](./DS07-mcp-protocol.md)
 - [DS05 - CLI Commands](./DS05-cli-commands.md)
+- [DS08 - Profile System](./DS08-profile-system.md) - Secret injection for tokens
+- [DS13 - Watchdog & Reliability](./DS13-watchdog-reliability.md) - Server process management
+- [DS15 - Logging & Observability](./DS15-logging-observability.md) - Router logging

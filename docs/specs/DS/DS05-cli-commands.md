@@ -818,9 +818,22 @@ const errorMessages = {
 4. Commands work consistently in interactive and scripted mode
 5. Tab completion hints available
 
+## Shell Mode (LLM Integration)
+
+The `ploinky -l` (or `ploinky-shell`, `psh`) command launches an LLM-powered shell mode:
+
+- Provides command recommendations via LLM (not a Ploinky command dispatcher)
+- Detects and executes system commands directly (`cd`, `ls`, `git`, etc.)
+- For non-command input, queries the LLM and optionally executes suggested commands
+- Interactive settings menu for model selection (`/settings`)
+- Requires API keys configured in `.env` or environment variables
+
+When an unknown command is entered in the main interactive CLI, the same LLM suggestion system is used as a fallback (if API keys are available). See [DS14 - LLM Integration](./DS14-llm-integration.md) for full details.
+
 ## References
 
 - [DS01 - Vision](./DS01-vision.md)
 - [DS02 - Architecture](./DS02-architecture.md)
 - [DS03 - Agent Model](./DS03-agent-model.md)
 - [DS06 - Web Interfaces](./DS06-web-interfaces.md)
+- [DS14 - LLM Integration](./DS14-llm-integration.md)

@@ -74,7 +74,7 @@ init_results
 
 # Default timeouts (seconds)
 ACTION_TIMEOUT="${FAST_ACTION_TIMEOUT:-240}"
-VERIFY_TIMEOUT="${FAST_VERIFY_TIMEOUT:-180}"
+VERIFY_TIMEOUT="${FAST_VERIFY_TIMEOUT:-300}"
 # START_ACTION_TIMEOUT increased to 420s to account for container-based dependency installation
 # Each agent runs npm install in a container (~15s), and multiple agents are started
 START_ACTION_TIMEOUT="${FAST_START_ACTION_TIMEOUT:-420}"

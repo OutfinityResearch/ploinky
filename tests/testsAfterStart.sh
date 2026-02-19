@@ -54,6 +54,10 @@ require_var "TEST_GLOBAL_AGENT_CONT_NAME"
 
 cd "$TEST_RUN_DIR"
 
+# The watchdog transition during demo start may briefly restart the testAgent
+# container.  Wait for it to reach a stable running state before asserting.
+wait_for_container "$TEST_AGENT_CONT_NAME"
+
 test_check "Service container is running" assert_container_running "$TEST_AGENT_CONT_NAME"
 test_check "Router port ${TEST_ROUTER_PORT} listening" assert_port_listening "$TEST_ROUTER_PORT"
 test_check "Agent host port ${TEST_AGENT_HOST_PORT} listening" assert_port_listening "$TEST_AGENT_HOST_PORT"

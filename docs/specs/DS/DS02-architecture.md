@@ -308,34 +308,177 @@ interface MCPResponse {
 
 ## Configuration
 
-### Directory Structure
+### Workspace Directory Structure
+
+The workspace is any directory containing a `.ploinky/` subdirectory. Ploinky discovers it by walking up from `process.cwd()` until it finds `.ploinky/`.
 
 ```
-$CWD/
-├── .ploinky/                    # Workspace configuration root
-│   ├── agents                   # JSON: enabled agents registry
-│   ├── enabled_repos.json       # JSON: list of enabled repos
-│   ├── .secrets                 # Key-value secrets (gitignored)
-│   ├── routing.json             # Generated: router config
-│   ├── profile                  # Current active profile
-│   ├── repos/                   # Cloned agent repositories
-│   │   └── <repo>/
-│   │       └── <agent>/
-│   │           └── manifest.json
-│   └── running/
-│       └── router.pid           # Router process ID
+<workspace-root>/
 │
-├── agents/                      # Agent working directories
-│   └── <agent>/
-│       ├── node_modules/        # Isolated dependencies
-│       ├── package.json
-│       └── data/
+├── .ploinky/                        # Ploinky metadata (hidden)
+│   ├── agents                       # JSON file: registered agent records
+│   ├── enabled_repos.json           # JSON file: enabled repository list
+│   ├── routing.json                 # JSON file: container routing table
+│   ├── running/                     # Running container state
+│   │   └── router.pid              # Router process ID
+│   ├── .secrets                     # Secret environment variables (KEY=VALUE)
+│   ├── profile                      # Active profile name (e.g., "dev")
+│   └── repos/                       # Cloned agent repositories
+│       └── <repoName>/
+│           └── <agentName>/
+│               ├── manifest.json    # Agent configuration
+│               ├── code/            # Agent source code (optional subdirectory)
+│               ├── .AchillesSkills/ # Agent skills (optional)
+│               └── package.json     # Agent-specific dependencies (optional)
 │
-├── code/                        # Symlinks to agent code
-│   └── <agent> -> .ploinky/repos/<repo>/<agent>/code/
+├── agents/                          # Working directories (one per agent)
+│   └── <agentName>/
+│       ├── node_modules/            # Installed npm dependencies
+│       ├── package.json             # Merged package.json (global + agent)
+│       └── package-lock.json        # Lock file from npm install
 │
-└── skills/                      # Symlinks to agent skills
-    └── <agent> -> .ploinky/repos/<repo>/<agent>/.AchillesSkills/
+├── code/                            # Symlinks to agent source code
+│   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/code/
+│
+├── skills/                          # Symlinks to agent skills
+│   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/.AchillesSkills/
+│
+└── shared/                          # Shared directory accessible to all agents
+```
+
+**Key source files:**
+- `cli/services/config.js` — Defines all path constants
+- `cli/services/workspaceStructure.js` — Creates directories, symlinks, verifies integrity
+
+#### Path Constants (from `config.js`)
+
+| Constant | Resolves To |
+|---|---|
+| `WORKSPACE_ROOT` | First ancestor directory containing `.ploinky/` |
+| `PLOINKY_DIR` | `<WORKSPACE_ROOT>/.ploinky` |
+| `REPOS_DIR` | `<WORKSPACE_ROOT>/.ploinky/repos` |
+| `AGENTS_FILE` | `<WORKSPACE_ROOT>/.ploinky/agents` |
+| `SECRETS_FILE` | `<WORKSPACE_ROOT>/.ploinky/.secrets` |
+| `AGENTS_WORK_DIR` | `<WORKSPACE_ROOT>/agents` |
+| `CODE_DIR` | `<WORKSPACE_ROOT>/code` |
+| `SKILLS_DIR` | `<WORKSPACE_ROOT>/skills` |
+| `GLOBAL_DEPS_PATH` | `<ploinky-install>/globalDeps` |
+| `TEMPLATES_DIR` | `<ploinky-install>/templates` |
+
+### Symlinks
+
+Symlinks provide convenient top-level access to agent code and skills that live deep inside `.ploinky/repos/`.
+
+| Symlink | Target | Condition |
+|---|---|---|
+| `$CWD/code/<agentName>` | `.ploinky/repos/<repo>/<agent>/code/` | Always (falls back to agent root if no `code/` subdirectory) |
+| `$CWD/skills/<agentName>` | `.ploinky/repos/<repo>/<agent>/.AchillesSkills/` | Only if `.AchillesSkills/` exists |
+
+**Creation logic** (`workspaceStructure.js:createAgentSymlinks()`):
+
+1. Checks if `<agentPath>/code/` exists; if yes, symlinks to that; otherwise symlinks to `<agentPath>/` itself
+2. Removes any existing symlink at the target location
+3. If a **real** file/directory blocks the symlink path, it warns and skips (does not overwrite)
+4. Skills symlink is only created if `.AchillesSkills/` actually exists in the agent repo
+
+**When symlinks are created:**
+- Agent enable (`agents.js:enableAgent()`)
+- Pre-container lifecycle (`lifecycleHooks.js:runPreContainerLifecycle()`)
+
+**Symlink resolution for containers:** Before mounting into containers, symlinks are **resolved to real paths** via `fs.realpathSync()` (in `agentServiceManager.js:resolveSymlinkPath()`) because Docker/Podman volume mounts don't follow host symlinks reliably.
+
+### Module Resolution
+
+The entire codebase uses **ES Modules** (`"type": "module"` in all package.json files).
+
+**On the host (CLI code):** Standard Node.js ESM resolution from ploinky's own `node_modules/`:
+
+```javascript
+import { getPrioritizedModels } from 'achillesAgentLib/utils/LLMClient.mjs';
+import { client as mcpClient } from 'mcp-sdk';
+```
+
+For dynamic loading with cache busting:
+```javascript
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const llmPath = require.resolve('achillesAgentLib/utils/LLMClient.mjs');
+const mod = await import(`${pathToFileURL(llmPath).href}?v=${version}`);
+```
+
+**Inside containers (agent code at `/code/`):** Standard ESM resolution walks up to `/code/node_modules/`.
+
+**Inside containers (AgentServer.mjs at `/Agent/server/`):** Node.js would walk up to `/Agent/node_modules/` which is empty by default. Two mechanisms fix this:
+
+1. **Dual mount** — `$CWD/agents/<agent>/node_modules/` is mounted at both `/code/node_modules` and `/Agent/node_modules`
+2. **NODE_PATH** — Set to `/code/node_modules` as a container environment variable
+
+```javascript
+// In agentServiceManager.js
+args.push('-e', 'NODE_PATH=/code/node_modules');
+```
+
+No custom resolvers, import maps, path aliases, `.npmrc`, or monorepo workspaces are used.
+
+### Entry Point Resolution
+
+The `bin/ploinky` script sets `PLOINKY_ROOT` and launches the CLI:
+
+```bash
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+export PLOINKY_ROOT=$(realpath "$SCRIPT_DIR/..")
+node "$SCRIPT_DIR/../cli/index.js" "$@"
+```
+
+`PLOINKY_ROOT` is used by `dependencyInstaller.js` to locate ploinky's own `node_modules/` for core dependency syncing.
+
+### Ploinky Source Layout (Development)
+
+```
+<ploinky-install>/
+├── bin/                     # CLI executables (ploinky, p-cli, psh, achilles-cli)
+├── cli/                     # Core CLI application
+│   ├── index.js             # Interactive shell & command handler
+│   ├── shell.js             # Shell interaction & TTY handling
+│   ├── commands/            # User command handlers
+│   ├── server/              # HTTP server & web interfaces
+│   │   ├── auth/            # Authentication (JWT, PKCE, Keycloak, SSO)
+│   │   ├── handlers/        # HTTP request handlers
+│   │   ├── webchat/         # Web chat interface
+│   │   ├── webmeet/         # WebRTC meeting interface
+│   │   ├── webtty/          # Web terminal interface
+│   │   ├── mcp-proxy/       # MCP protocol proxy
+│   │   ├── static/          # Static file serving
+│   │   └── utils/           # Server utilities
+│   └── services/            # Business logic
+│       ├── config.js                # Workspace root discovery & path constants
+│       ├── agents.js                # Agent lifecycle management
+│       ├── repos.js                 # Repository management
+│       ├── workspaceStructure.js    # Directory & symlink management
+│       ├── dependencyInstaller.js   # Dependency installation
+│       ├── lifecycleHooks.js        # Lifecycle hook execution
+│       ├── profileService.js        # Profile management
+│       ├── bootstrapManifest.js     # Manifest parsing
+│       ├── secretInjector.js        # Secret env injection
+│       └── docker/                  # Container orchestration
+│           ├── agentServiceManager.js   # Container creation & volume mounts
+│           ├── containerFleet.js        # Multi-container management
+│           ├── common.js               # Shared container utilities
+│           └── healthProbes.js          # Health checking
+├── Agent/                   # Agent runtime framework (mounted ro in containers)
+│   ├── server/
+│   │   ├── AgentServer.mjs  # MCP server (tools, resources, prompts)
+│   │   ├── AgentServer.sh   # Shell wrapper with restart loop
+│   │   └── TaskQueue.mjs    # Async task queue manager
+│   └── client/
+│       ├── AgentMcpClient.mjs    # Agent-to-agent MCP client
+│       └── MCPBrowserClient.js   # Browser-side MCP client
+├── globalDeps/              # Global dependency definitions
+│   └── package.json         # The 4 core deps every agent gets
+├── package.json             # Ploinky's own dependencies
+├── tests/                   # Test suites
+├── webLibs/                 # Browser-side libraries
+└── dashboard/               # Dashboard components
 ```
 
 ### Environment Variables
@@ -422,10 +565,55 @@ $CWD/
 4. Configuration changes take effect without restart (where applicable)
 5. Debug mode provides comprehensive logging
 
+## Bootstrap & First-Time Setup
+
+### Bootstrap Flow (cli/services/ploinkyboot.js)
+
+On first run, Ploinky bootstraps the workspace:
+
+```
+bootstrap():
+├─ ensureDefaultRepo():
+│   ├─ Create .ploinky/repos/ if needed
+│   ├─ Check if .ploinky/repos/basic/ exists
+│   └─ If not: git clone https://github.com/PloinkyRepos/Basic.git
+│
+└─ Ensure 'basic' is in enabled_repos.json
+```
+
+### Server Manager (cli/services/serverManager.js)
+
+Manages port allocation and token generation for web interface servers:
+
+| Function | Description |
+|----------|-------------|
+| `findAvailablePort(min, max)` | Random port in 10000-60000 range, verify TCP availability |
+| `isPortAvailable(port)` | Bind test on 127.0.0.1 |
+| `ensureServerConfig(name, opts)` | Allocate port + generate 32-byte token for web component |
+| `loadServersConfig()` | Load from `.ploinky/servers.json` |
+| `saveServersConfig(config)` | Persist to `.ploinky/servers.json` |
+| `getAllServerStatuses()` | Check PID files for running web servers |
+| `isServerRunning(pidFile)` | Check process by PID file |
+| `stopServer(pidFile, name)` | Send SIGTERM to server process |
+
+Configuration persisted in `.ploinky/servers.json`:
+
+```json
+{
+  "webtty": { "port": 12345, "token": "abc123...", "command": null },
+  "webchat": { "port": 12346, "token": "def456...", "command": null },
+  "webmeet": { "port": 12347, "token": "ghi789...", "agent": null },
+  "dashboard": { "port": 12348, "token": "jkl012..." }
+}
+```
+
 ## References
 
 - [DS01 - Vision](./DS01-vision.md)
 - [DS03 - Agent Model](./DS03-agent-model.md)
 - [DS06 - Web Interfaces](./DS06-web-interfaces.md)
 - [DS07 - MCP Protocol](./DS07-mcp-protocol.md)
-- [DS11 - Container Runtime](./DS11-container-runtime.md)
+- [DS11 - Container Runtime & Dependencies](./DS11-container-runtime.md)
+- [DS13 - Watchdog & Reliability](./DS13-watchdog-reliability.md)
+- [DS14 - LLM Integration](./DS14-llm-integration.md)
+- [DS15 - Logging & Observability](./DS15-logging-observability.md)

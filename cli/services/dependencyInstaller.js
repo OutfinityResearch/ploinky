@@ -1091,13 +1091,10 @@ function prepareAgentPackageJson(agentName) {
  *
  * What it does (in order):
  *  1. Checks the cache marker ($WORKSPACE_PATH/node_modules/mcp-sdk/).
- *     If present, skips the heavy install and jumps straight to the
- *     LLMConfig copy.
+ *     If present, skips the heavy install.
  *  2. Installs git + native build tools (python3, make, g++) via apk or
  *     apt-get — needed for github: deps and node-pty.
  *  3. Runs `npm install` in $WORKSPACE_PATH (the CWD-mounted agent workdir).
- *  4. Copies /code/config/LLMConfig.json into the achillesAgentLib module
- *     directory so the agent can find it at runtime.
  *
  * @param {string} agentName - The agent name (used only for log lines)
  * @returns {string} A POSIX-shell script fragment (no trailing &&)
@@ -1123,11 +1120,6 @@ function buildEntrypointInstallScript(agentName) {
         '    ) 2>/dev/null;',
         // --- npm install -----------------------------------------------------------
         `    npm install --prefix "$WORKSPACE_PATH";`,
-        // --- LLMConfig copy (always, even on cache hit) ----------------------------
-        '  if [ -f /code/config/LLMConfig.json ] && [ -d "$WORKSPACE_PATH/node_modules/achillesAgentLib" ]; then',
-        '    cp /code/config/LLMConfig.json "$WORKSPACE_PATH/node_modules/achillesAgentLib/LLMConfig.json";',
-        `    echo "[deps] ${agentName}: Copied LLMConfig.json";`,
-        '  fi',
         ')',
     ].join('\n');
 
