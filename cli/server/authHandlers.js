@@ -37,6 +37,60 @@ function wantsJsonResponse(req, pathname) {
     return pathname.startsWith('/apis/') || pathname.startsWith('/api/') || pathname.startsWith('/blobs');
 }
 
+function normalizeRelativePath(value, fallback = '/') {
+    const raw = typeof value === 'string' ? value.trim() : '';
+    if (!raw) return fallback;
+    try {
+        const parsed = new URL(raw, 'http://localhost');
+        if (parsed.origin !== 'http://localhost') {
+            return fallback;
+        }
+        const normalized = `${parsed.pathname || '/'}${parsed.search || ''}${parsed.hash || ''}`;
+        return normalized.startsWith('/') ? normalized : fallback;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function escapeHtml(value = '') {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderLoggedOutHtml(nextPath) {
+    const safeNext = normalizeRelativePath(nextPath, '/webchat/');
+    const loginUrl = `/auth/login?returnTo=${encodeURIComponent(safeNext)}&prompt=login`;
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signed Out</title>
+  <style>
+    :root { color-scheme: light; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f3f4f6; color: #111827; display: grid; place-items: center; min-height: 100vh; }
+    .card { width: min(92vw, 460px); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 22px; box-shadow: 0 10px 24px rgba(17,24,39,0.08); }
+    h1 { margin: 0 0 10px; font-size: 20px; }
+    p { margin: 0 0 16px; line-height: 1.5; color: #374151; }
+    a.btn { display: inline-block; background: #111827; color: #fff; text-decoration: none; padding: 10px 14px; border-radius: 8px; font-weight: 600; }
+    .meta { margin-top: 12px; font-size: 12px; color: #6b7280; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Signed out</h1>
+    <p>Your local and SSO session were closed. Click below to sign in again.</p>
+    <a class="btn" href="${escapeHtml(loginUrl)}">Sign in</a>
+    <div class="meta">Next destination: ${escapeHtml(safeNext)}</div>
+  </main>
+</body>
+</html>`;
+}
+
 function respondUnauthenticated(req, res, parsedUrl) {
     const pathname = parsedUrl.pathname || '/';
     const returnTo = parsedUrl.path || pathname || '/';
@@ -186,6 +240,18 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
     const method = (req.method || 'GET').toUpperCase();
     const baseUrl = getRequestBaseUrl(req);
     try {
+        if (pathname === '/auth/logged-out') {
+            if (method !== 'GET') {
+                res.writeHead(405); res.end(); return true;
+            }
+            const nextPath = normalizeRelativePath(parsedUrl.searchParams.get('next') || '/webchat/', '/webchat/');
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-store'
+            });
+            res.end(renderLoggedOutHtml(nextPath));
+            return true;
+        }
         if (pathname === '/auth/login') {
             if (method !== 'GET') {
                 res.writeHead(405); res.end(); return true;
@@ -226,9 +292,13 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             }
             const cookies = parseCookies(req);
             const sessionId = cookies.get(AUTH_COOKIE_NAME) || '';
-            const outcome = await authService.logout(sessionId, { baseUrl });
+            const requestedReturnTo = normalizeRelativePath(parsedUrl.searchParams.get('returnTo') || '/', '/');
+            const outcome = await authService.logout(sessionId, {
+                baseUrl,
+                postLogoutRedirectUri: requestedReturnTo
+            });
             const clearCookie = buildCookie(AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
-            const redirectTarget = parsedUrl.searchParams.get('returnTo') || outcome.redirect;
+            const redirectTarget = outcome.redirect || requestedReturnTo || '/';
             if (method === 'GET' || redirectTarget) {
                 res.writeHead(302, {
                     Location: redirectTarget || '/',

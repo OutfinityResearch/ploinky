@@ -159,8 +159,8 @@ function buildLogoutRedirect(agentQuery) {
 }
 
 function buildSsoLogoutRedirect(agentQuery) {
-    const returnTo = buildLogoutRedirect(agentQuery);
-    return `/auth/logout?returnTo=${encodeURIComponent(returnTo)}`;
+    const loggedOut = '/auth/logged-out';
+    return `/auth/logout?returnTo=${encodeURIComponent(loggedOut)}`;
 }
 
 function handleLogout(req, res, appState, agentQuery) {
