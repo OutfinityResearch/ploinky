@@ -363,6 +363,17 @@ async function handleCommand(args) {
 
                 console.log(`Restarting (stop/start) agent '${agentName}'...`);
 
+                // Sync core dependencies (achillesAgentLib) before restart
+                try {
+                    const { syncCoreDependencies } = await import('../services/dependencyInstaller.js');
+                    const syncResult = syncCoreDependencies(agentName, { force: true });
+                    if (syncResult.synced) {
+                        console.log(`Synced core dependencies: ${syncResult.modules.join(', ')}`);
+                    }
+                } catch (e) {
+                    debugLog(`[restart] Core dependency sync skipped: ${e.message}`);
+                }
+
                 try {
                     execSync(`${runtime} stop ${containerName}`, { stdio: 'inherit' });
                 } catch (e) {
