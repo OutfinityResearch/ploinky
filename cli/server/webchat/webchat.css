@@ -1173,6 +1173,37 @@ body {
     transition: filter 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
 }
 
+.wa-shortcut-actions {
+    margin-top: 8px;
+    display: flex;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wa-shortcut-btn {
+    appearance: none;
+    border: 1px solid var(--wa-border);
+    background: var(--wa-bg-input);
+    color: var(--wa-text-primary);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: filter 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+}
+
+.wa-shortcut-btn:hover:not(:disabled) {
+    filter: brightness(0.97);
+    transform: translateY(-1px);
+}
+
+.wa-shortcut-btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+    transform: none;
+}
+
 .wa-abort-cancel-btn:hover:not(:disabled) {
     filter: brightness(0.97);
     transform: translateY(-1px);
