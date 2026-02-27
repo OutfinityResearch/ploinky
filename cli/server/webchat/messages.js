@@ -153,6 +153,105 @@ export function createMessages({
         };
     }
 
+    function parseShortcutCommands(text) {
+        const safeText = typeof text === 'string' ? text : '';
+        if (!safeText.trim()) {
+            return [];
+        }
+
+        const found = [];
+        const seen = new Set();
+        const allowedSingleWordCommands = new Set([
+            'yes',
+            'no',
+            'cancel',
+            'confirm',
+            'accept',
+            'reject',
+            'proceed',
+            'retry',
+            'help',
+            'exit'
+        ]);
+        const addCandidate = (value) => {
+            const command = String(value || '').trim().replace(/\s+/g, ' ');
+            if (!command || command.length > 80 || command.includes('\n')) {
+                return;
+            }
+            const key = command.toLowerCase();
+            // Avoid noisy shortcuts from help menus (e.g. "area", "job").
+            // Keep all multi-word commands and a strict allowlist for single-word commands.
+            if (!command.includes(' ') && !allowedSingleWordCommands.has(key)) {
+                return;
+            }
+            if (seen.has(key)) {
+                return;
+            }
+            seen.add(key);
+            found.push(command);
+        };
+
+        // Examples:
+        // - You can say "yes" to import
+        // - Type `cancel` to abort
+        // - Reply with 'accept' to apply
+        const quotedByCueRe = /(?:you\s+can|you\s+may|please|just)?\s*(?:say|type|reply(?:\s+with)?)\s+(?:"([^"\n]{1,80})"|'([^'\n]{1,80})'|`([^`\n]{1,80})`|\*\*([^*\n]{1,80})\*\*)/gi;
+        let match = null;
+        while ((match = quotedByCueRe.exec(safeText)) !== null) {
+            addCandidate(match[1] || match[2] || match[3] || match[4]);
+        }
+
+        // Example:
+        // - To execute the wipe, confirm by saying "yes" or "confirm".
+        const cueLineRe = /(?:\bconfirm\s+by\s+(?:say|saying|type|typing|reply(?:\s+with)?)\b|\b(?:you\s+can|you\s+may|please|just)\b.*\b(?:say|saying|type|typing|reply(?:\s+with)?)\b|\b(?:say|saying|reply(?:\s+with)?|type|typing)\s+(?:"|'|`|\*\*|[a-z0-9_-]))/i;
+        const quotedAnyRe = /"([^"\n]{1,80})"|'([^'\n]{1,80})'|`([^`\n]{1,80})`|\*\*([^*\n]{1,80})\*\*/g;
+        const lines = safeText.split(/\r?\n/);
+        for (const line of lines) {
+            if (!cueLineRe.test(line)) {
+                continue;
+            }
+            let quoted = null;
+            while ((quoted = quotedAnyRe.exec(line)) !== null) {
+                addCandidate(quoted[1] || quoted[2] || quoted[3] || quoted[4]);
+            }
+            quotedAnyRe.lastIndex = 0;
+        }
+
+        // Examples:
+        // - type cancel to abort
+        // - reply yes to proceed
+        const simpleByCueRe = /(?:^|\b)(?:type|reply(?:\s+with)?|say)\s+([a-z0-9_-]{2,24})\s+to\b/gi;
+        while ((match = simpleByCueRe.exec(safeText)) !== null) {
+            addCandidate(match[1]);
+        }
+
+        // Example:
+        // - confirm by saying yes or confirm
+        const byCueChoiceRe = /\bby\s+(?:say|saying|type|typing|reply(?:\s+with)?)\s+([a-z0-9_-]{2,24})(?:\s+or\s+([a-z0-9_-]{2,24}))?/gi;
+        while ((match = byCueChoiceRe.exec(safeText)) !== null) {
+            addCandidate(match[1]);
+            if (match[2]) {
+                addCandidate(match[2]);
+            }
+        }
+
+        return found.slice(0, 4);
+    }
+
+    function toShortcutLabel(command) {
+        const value = String(command || '').trim();
+        if (!value) {
+            return '';
+        }
+        if (/^(yes|no|cancel|accept)$/i.test(value)) {
+            return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+        }
+        if (value.length <= 22) {
+            return value;
+        }
+        return `${value.slice(0, 19)}...`;
+    }
+
     function updatePaginationActions(bubble, fullText) {
         if (!bubble) {
             return;
@@ -358,6 +457,78 @@ export function createMessages({
         }
     }
 
+    function updateShortcutActions(bubble, fullText) {
+        if (!bubble) {
+            return;
+        }
+        const existing = bubble.querySelector('.wa-shortcut-actions');
+        const messageNode = bubble.closest('.wa-message');
+        const isIncoming = Boolean(messageNode?.classList?.contains('in'));
+        const hasConfirmationActions = Boolean(parseConfirmationPromptState(fullText));
+        const hasAbortActions = Boolean(parseAbortPromptState(fullText));
+        const shortcuts = parseShortcutCommands(fullText);
+
+        if (!isIncoming || typeof quickCommandHandler !== 'function' || hasConfirmationActions || hasAbortActions || !shortcuts.length) {
+            if (existing) {
+                existing.remove();
+            }
+            return;
+        }
+
+        const holder = existing || document.createElement('div');
+        holder.className = 'wa-shortcut-actions';
+        holder.innerHTML = '';
+
+        const setButtonsEnabled = (enabled) => {
+            const buttons = holder.querySelectorAll('button');
+            buttons.forEach((button) => {
+                button.disabled = !enabled;
+                if (enabled) {
+                    button.removeAttribute('aria-busy');
+                }
+            });
+        };
+
+        const createShortcutButton = (command) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'wa-shortcut-btn';
+            button.textContent = toShortcutLabel(command);
+            button.title = command;
+            button.addEventListener('click', () => {
+                if (button.disabled) {
+                    return;
+                }
+                setButtonsEnabled(false);
+                button.setAttribute('aria-busy', 'true');
+                try {
+                    const accepted = quickCommandHandler(command);
+                    if (accepted !== false) {
+                        holder.remove();
+                    } else {
+                        setButtonsEnabled(true);
+                    }
+                } catch (_) {
+                    setButtonsEnabled(true);
+                }
+            });
+            return button;
+        };
+
+        shortcuts.forEach((command) => {
+            holder.appendChild(createShortcutButton(command));
+        });
+
+        if (!existing) {
+            const timeNode = bubble.querySelector('.wa-message-time');
+            if (timeNode) {
+                bubble.insertBefore(holder, timeNode);
+            } else {
+                bubble.appendChild(holder);
+            }
+        }
+    }
+
     function updateBubbleContent(bubble, fullText) {
         const safeText = typeof fullText === 'string' ? fullText : '';
         bubble.dataset.fullText = safeText;
@@ -397,6 +568,7 @@ export function createMessages({
         updatePaginationActions(bubble, safeText);
         updateConfirmationActions(bubble, safeText);
         updateAbortActions(bubble, safeText);
+        updateShortcutActions(bubble, safeText);
     }
 
     function applyViewMoreSettingToAllBubbles() {

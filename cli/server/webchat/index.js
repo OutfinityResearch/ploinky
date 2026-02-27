@@ -113,13 +113,6 @@ const network = createNetwork({
     markUserInputSent: messages.markUserInputSent
 });
 
-messages.setQuickCommandHandler((command) => {
-    if (!command || typeof command !== 'string') {
-        return false;
-    }
-    return network.sendQuickCommand(command);
-});
-
 const composer = createComposer({
     cmdInput,
     sendBtn
@@ -346,6 +339,15 @@ composer.setSendHandler((cmdText) => {
     }
 
     return false;
+});
+
+messages.setQuickCommandHandler((command) => {
+    if (!command || typeof command !== 'string') {
+        return false;
+    }
+    // Route quick actions through the same path as user typing + Send.
+    composer.setValue(command);
+    return composer.submit();
 });
 
 initSpeechToText({
