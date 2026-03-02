@@ -281,7 +281,7 @@ test('createAgentSymlinks creates code and skills symlinks', () => {
     const agentPath = path.join(tempDir, '.ploinky', 'repos', repoName, agentName);
 
     fs.mkdirSync(path.join(agentPath, 'code'), { recursive: true });
-    fs.mkdirSync(path.join(agentPath, '.AchillesSkills'), { recursive: true });
+    fs.mkdirSync(path.join(agentPath, 'skills'), { recursive: true });
 
     assert.doesNotThrow(() => createAgentSymlinks(agentName, repoName, agentPath));
 
@@ -295,7 +295,7 @@ test('createAgentSymlinks creates code and skills symlinks', () => {
     const skillsTarget = fs.readlinkSync(skillsLink);
 
     assert.strictEqual(path.resolve(codeTarget), path.resolve(path.join(agentPath, 'code')));
-    assert.strictEqual(path.resolve(skillsTarget), path.resolve(path.join(agentPath, '.AchillesSkills')));
+    assert.strictEqual(path.resolve(skillsTarget), path.resolve(path.join(agentPath, 'skills')));
 });
 
 test('createAgentSymlinks skips skills when folder is missing', () => {
@@ -317,7 +317,7 @@ test('removeAgentSymlinks removes created symlinks', () => {
     const agentPath = path.join(tempDir, '.ploinky', 'repos', repoName, agentName);
 
     fs.mkdirSync(path.join(agentPath, 'code'), { recursive: true });
-    fs.mkdirSync(path.join(agentPath, '.AchillesSkills'), { recursive: true });
+    fs.mkdirSync(path.join(agentPath, 'skills'), { recursive: true });
 
     createAgentSymlinks(agentName, repoName, agentPath);
     removeAgentSymlinks(agentName);

@@ -150,7 +150,7 @@ Agent configuration needs to be:
  * Mount configuration for profiles
  * @typedef {Object} MountConfig
  * @property {string} [code] - Mount mode for /code ("rw" or "ro")
- * @property {string} [skills] - Mount mode for /.AchillesSkills ("rw" or "ro")
+ * @property {string} [skills] - Mount mode for /skills ("rw" or "ro")
  */
 ```
 

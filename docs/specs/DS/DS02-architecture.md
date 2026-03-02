@@ -328,7 +328,7 @@ The workspace is any directory containing a `.ploinky/` subdirectory. Ploinky di
 │           └── <agentName>/
 │               ├── manifest.json    # Agent configuration
 │               ├── code/            # Agent source code (optional subdirectory)
-│               ├── .AchillesSkills/ # Agent skills (optional)
+│               ├── skills/ # Agent skills (optional)
 │               └── package.json     # Agent-specific dependencies (optional)
 │
 ├── agents/                          # Working directories (one per agent)
@@ -341,7 +341,7 @@ The workspace is any directory containing a `.ploinky/` subdirectory. Ploinky di
 │   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/code/
 │
 ├── skills/                          # Symlinks to agent skills
-│   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/.AchillesSkills/
+│   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/skills/
 │
 └── shared/                          # Shared directory accessible to all agents
 ```
@@ -372,14 +372,14 @@ Symlinks provide convenient top-level access to agent code and skills that live 
 | Symlink | Target | Condition |
 |---|---|---|
 | `$CWD/code/<agentName>` | `.ploinky/repos/<repo>/<agent>/code/` | Always (falls back to agent root if no `code/` subdirectory) |
-| `$CWD/skills/<agentName>` | `.ploinky/repos/<repo>/<agent>/.AchillesSkills/` | Only if `.AchillesSkills/` exists |
+| `$CWD/skills/<agentName>` | `.ploinky/repos/<repo>/<agent>/skills/` | Only if `skills/` exists |
 
 **Creation logic** (`workspaceStructure.js:createAgentSymlinks()`):
 
 1. Checks if `<agentPath>/code/` exists; if yes, symlinks to that; otherwise symlinks to `<agentPath>/` itself
 2. Removes any existing symlink at the target location
 3. If a **real** file/directory blocks the symlink path, it warns and skips (does not overwrite)
-4. Skills symlink is only created if `.AchillesSkills/` actually exists in the agent repo
+4. Skills symlink is only created if `skills/` actually exists in the agent repo
 
 **When symlinks are created:**
 - Agent enable (`agents.js:enableAgent()`)

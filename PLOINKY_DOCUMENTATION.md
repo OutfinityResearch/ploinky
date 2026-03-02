@@ -641,7 +641,7 @@ Ploinky integrates with AchillesAgentLib for LLM-powered skills.
 
 ### Skill Discovery
 
-Skills are discovered in `.AchillesSkills/` directories throughout the project hierarchy.
+Skills are discovered in `skills/` directories throughout the project hierarchy.
 
 **Important:** Per `CLAUDE.md` instructions, do not edit `.generated.mjs` files directly. Update `tskill.md` and the `.mjs` file will be regenerated.
 

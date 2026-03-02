@@ -45,7 +45,7 @@ Ploinky needs a consistent model for:
 │  │                                                         │ │
 │  │  ┌──────────────────────────────────────────────────┐  │ │
 │  │  │              Volume Mounts                        │  │ │
-│  │  │  /code  /code/node_modules  /code/.AchillesSkills │  │ │
+│  │  │  /code  /code/node_modules  /code/skills │  │ │
 │  │  └──────────────────────────────────────────────────┘  │ │
 │  └────────────────────────────────────────────────────────┘ │
 │                                                              │
@@ -370,7 +370,7 @@ async function createAgentContainer(agent) {
       { source: CWD, target: CWD },  // CWD passthrough for runtime data access
       { source: getAgentCodePath(agent.agentName), target: '/code', ro: isReadOnly(agent.profile) },
       { source: path.join(getAgentWorkDir(agent.agentName), 'node_modules'), target: '/code/node_modules', ro: true },
-      { source: getAgentSkillsPath(agent.agentName), target: '/code/.AchillesSkills', ro: isReadOnly(agent.profile) },
+      { source: getAgentSkillsPath(agent.agentName), target: '/code/skills', ro: isReadOnly(agent.profile) },
       { source: path.join(PLOINKY_ROOT, 'Agent'), target: '/Agent', ro: true }
     ],
     ports: agent.config.ports
@@ -416,7 +416,7 @@ Lifecycle hooks allow agents to run scripts at specific points during startup. H
 
  2. Symbolic Links Creation [HOST]
     └─> code symlink: $CWD/code/<agent> -> .ploinky/repos/.../code/
-    └─> skills symlink: $CWD/skills/<agent> -> .ploinky/repos/.../.AchillesSkills/
+    └─> skills symlink: $CWD/skills/<agent> -> .ploinky/repos/.../skills/
 
  3. Container Creation
     └─> docker create with profile-specific mounts
@@ -562,7 +562,7 @@ const defaultMounts = [
   },
   {
     source: '$CWD/skills/$AGENT',
-    target: '/code/.AchillesSkills',
+    target: '/code/skills',
     mode: 'profile-dependent'  // rw in dev, ro in qa/prod
   },
   {

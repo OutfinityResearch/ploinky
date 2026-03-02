@@ -15,7 +15,7 @@ Agents need extensible capabilities that:
 ## Goals
 
 1. **Skill Types**: Support various skill types (Claude, CodeGen, Interactive, MCP, Orchestrator, DBTable)
-2. **Discovery**: Automatic skill discovery in `.AchillesSkills/` directories
+2. **Discovery**: Automatic skill discovery in `skills/` directories
 3. **Execution**: Reliable skill execution with LLM integration
 4. **Composition**: Enable skill orchestration and chaining
 
@@ -49,7 +49,7 @@ Agents need extensible capabilities that:
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐ │
-│  │              /.AchillesSkills/ (mounted from host)          │ │
+│  │              /skills/ (mounted from host)          │ │
 │  │  ├── myskill.skill.md                                       │ │
 │  │  ├── codegen.cgskill.md                                     │ │
 │  │  ├── interactive.iskill.md                                  │ │
@@ -147,7 +147,7 @@ Output: ...
 
 /**
  * Discover and load skills from directory
- * @param {string} skillsDir - Path to .AchillesSkills directory
+ * @param {string} skillsDir - Path to skills directory
  * @returns {Promise<Map<string, Skill>>} Map of skill name to skill instance
  */
 export async function loadSkills(skillsDir) {
@@ -336,7 +336,7 @@ export function registerSkillsAsMCPTools(mcpServer, skills) {
 
 2. AgentServer initializes
 
-3. Skill loader scans /.AchillesSkills/
+3. Skill loader scans /skills/
 
 4. For each .skill.md, .cgskill.md, etc.:
    a. Parse markdown content
@@ -374,8 +374,8 @@ export function registerSkillsAsMCPTools(mcpServer, skills) {
 ### Skill Directory Location
 
 ```
-$CWD/skills/<agent>/.AchillesSkills/
-  └── (symlink to .ploinky/repos/<repo>/<agent>/.AchillesSkills/)
+$CWD/skills/<agent>/skills/
+  └── (symlink to .ploinky/repos/<repo>/<agent>/skills/)
 ```
 
 ### LLM Configuration

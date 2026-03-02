@@ -547,7 +547,7 @@ export function startHealthMonitoring(containerId, config, onUnhealthy) {
 | `$CWD/agents/<agent>/node_modules/` | `/Agent/node_modules` | `rw` | npm dependencies (for AgentServer.mjs) |
 | `$CWD/shared/` | `/shared` | `rw` | Shared data between agents |
 | `$CWD/agents/<agent>/` | same path | `rw` | CWD passthrough for runtime data |
-| `$CWD/skills/<agent>/` (resolved) | `/code/.AchillesSkills` | `rw` or `ro` (profile) | Skills directory (only if exists) |
+| `$CWD/skills/<agent>/` (resolved) | `/code/skills` | `rw` or `ro` (profile) | Skills directory (only if exists) |
 
 **Mount mode is profile-dependent:**
 - `dev` profile: code=`rw`, skills=`rw`
@@ -572,7 +572,7 @@ Inside a running agent container:
 ├── code/                         # Agent source code (rw or ro per profile)
 │   ├── main.mjs                  # (example agent entry)
 │   ├── package.json              # Agent's own package.json
-│   ├── .AchillesSkills/          # Skills directory (if mounted)
+│   ├── skills/          # Skills directory (if mounted)
 │   └── node_modules/             # --> host: $CWD/agents/<agent>/node_modules/ (rw)
 │
 ├── shared/                       # Shared data between agents (rw)
