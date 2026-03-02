@@ -37,7 +37,7 @@ Agents need to be organized, shared, and versioned:
 │   ├── node-dev/
 │   │   ├── manifest.json
 │   │   ├── code/
-│   │   └── .AchillesSkills/
+│   │   └── skills/
 │   ├── postgres/
 │   │   └── manifest.json
 │   └── ...
@@ -423,7 +423,7 @@ Each repository must follow this structure:
 ├── <agent-1>/
 │   ├── manifest.json      # Required
 │   ├── code/              # Optional: agent source code
-│   ├── .AchillesSkills/   # Optional: agent skills
+│   ├── skills/   # Optional: agent skills
 │   └── scripts/           # Optional: lifecycle scripts
 ├── <agent-2>/
 │   └── manifest.json

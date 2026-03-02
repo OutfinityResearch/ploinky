@@ -39,7 +39,7 @@ Agents need different configurations for different environments:
 
 2. Symbolic Links Creation [HOST]
    └─→ code symlink: $CWD/code/<agent> -> .ploinky/repos/.../code/
-   └─→ skills symlink: $CWD/skills/<agent> -> .ploinky/repos/.../.AchillesSkills/
+   └─→ skills symlink: $CWD/skills/<agent> -> .ploinky/repos/.../skills/
 
 3. Container Creation
    └─→ docker create with profile-specific mounts
@@ -95,13 +95,13 @@ Agents need different configurations for different environments:
 /**
  * @typedef {Object} MountConfig
  * @property {string} code - Mount mode for /code ("rw" | "ro")
- * @property {string} skills - Mount mode for /.AchillesSkills ("rw" | "ro")
+ * @property {string} skills - Mount mode for /skills ("rw" | "ro")
  */
 ```
 
 ### Default Mount Modes by Profile
 
-| Profile | `/code` | `/.AchillesSkills` | Rationale |
+| Profile | `/code` | `/skills` | Rationale |
 |---------|---------|---------------------|-----------|
 | `dev` | **rw** | **rw** | Developers need to edit code and skills |
 | `qa` | **ro** | **ro** | Testing should not modify source |

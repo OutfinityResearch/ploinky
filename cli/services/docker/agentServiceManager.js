@@ -264,7 +264,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     // Mount skills directory if it exists
     if (fs.existsSync(agentSkillsPath)) {
-        args.push('-v', `${agentSkillsPath}:/code/.AchillesSkills${skillsMountMode}`);
+        args.push('-v', `${agentSkillsPath}:/code/skills${skillsMountMode}`);
     }
     if (runtime === 'podman') {
         args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
@@ -413,7 +413,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
                 { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
                 { source: agentCodePath, target: '/code', ro: codeReadOnly },
                 { source: sharedDir, target: '/shared' },
-                ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/.AchillesSkills', ro: skillsReadOnly }] : []),
+                ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/skills', ro: skillsReadOnly }] : []),
                 { source: cwd, target: cwd }
             ],
             env: Array.from(new Set(declaredEnvNames2)).map((name) => ({ name })),
@@ -615,7 +615,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
             binds: [
                 { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
                 { source: agentCodePath, target: '/code', ro: codeReadOnly },
-                ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/.AchillesSkills', ro: skillsReadOnly }] : []),
+                ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/skills', ro: skillsReadOnly }] : []),
                 { source: projPath, target: projPath }
             ],
             env: Array.from(new Set(declaredEnvNames3)).map((name) => ({ name })),

@@ -25,7 +25,7 @@ export function initWorkspaceStructure(workspacePath = WORKSPACE_ROOT) {
 /**
  * Create symlinks for agent code and skills directories.
  * - $CWD/code/<agentName> -> .ploinky/repos/<repo>/<agent>/code/
- * - $CWD/skills/<agentName> -> .ploinky/repos/<repo>/<agent>/.AchillesSkills/
+ * - $CWD/skills/<agentName> -> .ploinky/repos/<repo>/<agent>/skills/
  * @param {string} agentName - The agent name
  * @param {string} repoName - The repository name
  * @param {string} agentPath - The full path to the agent directory in repos
@@ -74,11 +74,11 @@ export function createAgentSymlinks(agentName, repoName, agentPath) {
         }
     }
 
-    // Create symlink for skills: $CWD/skills/<agentName> -> agent .AchillesSkills
+    // Create symlink for skills: $CWD/skills/<agentName> -> agent skills
     const skillsSymlinkPath = path.join(skillsDir, agentName);
-    const skillsTargetPath = path.join(agentPath, '.AchillesSkills');
+    const skillsTargetPath = path.join(agentPath, 'skills');
 
-    // Only create skills symlink if .AchillesSkills folder exists
+    // Only create skills symlink if skills folder exists
     if (fs.existsSync(skillsTargetPath)) {
         // Remove existing symlink if it exists, warn if blocked by real directory
         let skillsBlocked = false;
