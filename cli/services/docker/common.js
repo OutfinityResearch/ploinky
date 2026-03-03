@@ -328,9 +328,23 @@ export {
     syncAgentMcpConfig,
     waitForContainerRunning,
     flagsToArgs,
-    sleepMs
+    sleepMs,
+    getRuntimeForAgent
 };
 
 function getRuntime() {
+    return containerRuntime;
+}
+
+function getRuntimeForAgent(manifest) {
+    if (manifest?.sandbox === true || manifest?.runtime === 'bwrap') {
+        try {
+            execSync('command -v bwrap', { stdio: 'ignore' });
+            return 'bwrap';
+        } catch {
+            console.warn('[bwrap] bwrap not found in PATH, falling back to container runtime');
+            return containerRuntime;
+        }
+    }
     return containerRuntime;
 }
