@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { execSync, spawn } from 'child_process';
 import { debugLog, findAgent } from '../services/utils.js';
 import { isKnownCommand } from '../services/commandRegistry.js';
@@ -14,8 +16,11 @@ import {
     getRuntime,
     isContainerRunning,
     stopConfiguredAgents,
-    destroyWorkspaceContainers
+    destroyWorkspaceContainers,
+    ensureAgentService
 } from '../services/docker/index.js';
+import { getRuntimeForAgent } from '../services/docker/common.js';
+import { isBwrapProcessRunning, stopBwrapProcess } from '../services/bwrap/bwrapFleet.js';
 import * as workspaceSvc from '../services/workspace.js';
 import { handleSystemCommand, handleInvalidCommand, resetLlmInvokerCache } from './llmSystemCommands.js';
 import * as inputState from '../services/inputState.js';
@@ -353,39 +358,96 @@ async function handleCommand(args) {
                     return;
                 }
 
-                const runtime = getRuntime();
+                // Read manifest and determine runtime
+                let manifest;
+                try {
+                    manifest = JSON.parse(fs.readFileSync(resolved.manifestPath, 'utf8'));
+                } catch (err) {
+                    console.error(`Failed to read manifest for '${agentName}': ${err?.message || err}`);
+                    return;
+                }
+
+                const agentRuntime = getRuntimeForAgent(manifest);
                 const containerName = registryRecord?.containerName || getAgentContainerName(resolved.shortAgentName, resolved.repo);
 
-                if (!isContainerRunning(containerName)) {
-                    console.error(`Agent '${agentName}' is not running.`);
-                    return;
-                }
-
-                console.log(`Restarting (stop/start) agent '${agentName}'...`);
-
-                // Sync core dependencies (achillesAgentLib) before restart
-                try {
-                    const { syncCoreDependencies } = await import('../services/dependencyInstaller.js');
-                    const syncResult = syncCoreDependencies(agentName, { force: true });
-                    if (syncResult.synced) {
-                        console.log(`Synced core dependencies: ${syncResult.modules.join(', ')}`);
+                if (agentRuntime === 'bwrap') {
+                    // Bwrap restart: stop process, then re-create via ensureAgentService
+                    const bwrapRunning = isBwrapProcessRunning(resolved.shortAgentName);
+                    const containerAlsoRunning = isContainerRunning(containerName);
+                    if (!bwrapRunning && !containerAlsoRunning) {
+                        console.error(`Agent '${agentName}' is not running.`);
+                        return;
                     }
-                } catch (e) {
-                    debugLog(`[restart] Core dependency sync skipped: ${e.message}`);
-                }
 
-                try {
-                    execSync(`${runtime} stop ${containerName}`, { stdio: 'inherit' });
-                } catch (e) {
-                    console.error(`Failed to stop container ${containerName}: ${e.message}`);
-                    return;
-                }
+                    console.log(`Restarting (bwrap) agent '${agentName}'...`);
 
-                try {
-                    execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' });
-                    console.log('✓ Agent restarted.');
-                } catch (e) {
-                    console.error(`Failed to start container ${containerName}: ${e.message}`);
+                    // Sync core dependencies before restart
+                    try {
+                        const { syncCoreDependencies } = await import('../services/dependencyInstaller.js');
+                        const syncResult = syncCoreDependencies(agentName, { force: true });
+                        if (syncResult.synced) {
+                            console.log(`Synced core dependencies: ${syncResult.modules.join(', ')}`);
+                        }
+                    } catch (e) {
+                        debugLog(`[restart] Core dependency sync skipped: ${e.message}`);
+                    }
+
+                    // Stop existing process (bwrap or container if transitioning)
+                    if (bwrapRunning) {
+                        stopBwrapProcess(resolved.shortAgentName);
+                    }
+                    if (containerAlsoRunning) {
+                        try {
+                            const { stopAndRemove } = await import('../services/docker/containerFleet.js');
+                            stopAndRemove(containerName);
+                        } catch (_) {}
+                    }
+
+                    try {
+                        const agentPath = path.dirname(resolved.manifestPath);
+                        ensureAgentService(resolved.shortAgentName, manifest, agentPath, {
+                            containerName,
+                            alias: registryRecord?.record?.alias,
+                            forceRecreate: true
+                        });
+                        console.log('✓ Agent restarted (bwrap).');
+                    } catch (e) {
+                        console.error(`Failed to restart agent '${agentName}' via bwrap: ${e.message}`);
+                    }
+                } else {
+                    // Container restart: existing podman stop/start logic
+                    if (!isContainerRunning(containerName)) {
+                        console.error(`Agent '${agentName}' is not running.`);
+                        return;
+                    }
+
+                    console.log(`Restarting (stop/start) agent '${agentName}'...`);
+
+                    // Sync core dependencies (achillesAgentLib) before restart
+                    try {
+                        const { syncCoreDependencies } = await import('../services/dependencyInstaller.js');
+                        const syncResult = syncCoreDependencies(agentName, { force: true });
+                        if (syncResult.synced) {
+                            console.log(`Synced core dependencies: ${syncResult.modules.join(', ')}`);
+                        }
+                    } catch (e) {
+                        debugLog(`[restart] Core dependency sync skipped: ${e.message}`);
+                    }
+
+                    const runtime = getRuntime();
+                    try {
+                        execSync(`${runtime} stop ${containerName}`, { stdio: 'inherit' });
+                    } catch (e) {
+                        console.error(`Failed to stop container ${containerName}: ${e.message}`);
+                        return;
+                    }
+
+                    try {
+                        execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' });
+                        console.log('✓ Agent restarted.');
+                    } catch (e) {
+                        console.error(`Failed to start container ${containerName}: ${e.message}`);
+                    }
                 }
             } else {
                 const cfg = workspaceSvc.getConfig();

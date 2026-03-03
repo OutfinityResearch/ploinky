@@ -37,6 +37,8 @@ import {
 } from './agentCommands.js';
 import { WORKSPACE_ROOT } from '../config.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
+import { getRuntimeForAgent } from './common.js';
+import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './shellDetection.js';
 import {
     runPreContainerLifecycle,
@@ -493,6 +495,12 @@ function resolveHostPortFromRuntime(containerName, containerPortCandidates) {
 }
 
 function ensureAgentService(agentName, manifest, agentPath, options = {}) {
+    // Check if this agent should use bwrap sandbox instead of containers
+    const agentRuntime = getRuntimeForAgent(manifest);
+    if (agentRuntime === 'bwrap') {
+        return ensureBwrapService(agentName, manifest, agentPath, options);
+    }
+
     let preferredHostPort;
     let containerOverride;
     let aliasOverride;

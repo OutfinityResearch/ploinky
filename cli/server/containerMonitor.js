@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import * as workspaceSvc from '../services/workspace.js';
 import { REPOS_DIR } from '../services/config.js';
 import { ensureAgentService, isContainerRunning } from '../services/docker/index.js';
+import { isBwrapProcessRunning } from '../services/bwrap/bwrapFleet.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -216,23 +217,27 @@ function syncManagedContainers(monitor) {
             continue;
         }
 
-        const info = { containerName, type, agentName, repoName, manifestPath };
+        const runtime = record.runtime || 'container';
+        const info = { containerName, type, agentName, repoName, manifestPath, runtime };
         desired.set(containerName, info);
 
         let target = monitorRef.targets.get(containerName);
         if (!target) {
             target = createContainerTarget(info, monitorRef);
+            target.runtime = runtime;
             monitorRef.targets.set(containerName, target);
             logEvent(monitorRef, 'info', 'container_watch_added', {
                 container: containerName,
                 agent: agentName,
-                repo: repoName
+                repo: repoName,
+                runtime
             });
         } else {
             target.agentName = agentName;
             target.repoName = repoName;
             target.type = type;
             target.manifestPath = manifestPath;
+            target.runtime = runtime;
         }
     }
 
@@ -387,7 +392,11 @@ function monitorTick(monitor) {
 
         let running = false;
         try {
-            running = isContainerRunning(target.containerName);
+            if (target.runtime === 'bwrap') {
+                running = isBwrapProcessRunning(target.agentName);
+            } else {
+                running = isContainerRunning(target.containerName);
+            }
         } catch (error) {
             logEvent(monitor, 'error', 'container_status_check_failed', {
                 container: target.containerName,
