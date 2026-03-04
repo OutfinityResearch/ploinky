@@ -231,7 +231,7 @@ function buildBwrapArgs(options) {
  * Build the full environment map for a bwrap agent.
  * Mirrors the env construction in startAgentContainer.
  */
-function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile) {
+function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, runtimeName = 'bwrap') {
     // Start with manifest env vars (resolved from secrets)
     const env = buildEnvMap(manifest, profileConfig);
 
@@ -239,7 +239,7 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
     env.PLOINKY_MCP_CONFIG_PATH = CONTAINER_CONFIG_PATH;
     env.AGENT_NAME = agentName;
     env.WORKSPACE_PATH = agentWorkDir;
-    env.PLOINKY_RUNTIME = 'bwrap';
+    env.PLOINKY_RUNTIME = runtimeName;
 
     // Profile env vars
     const profileEnv = profileConfig?.env;

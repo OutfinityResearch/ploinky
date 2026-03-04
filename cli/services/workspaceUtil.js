@@ -6,7 +6,7 @@ import * as utils from './utils.js';
 import * as agentsSvc from './agents.js';
 import * as workspaceSvc from './workspace.js';
 import * as dockerSvc from './docker/index.js';
-import { getRuntimeForAgent } from './docker/common.js';
+import { getRuntimeForAgent, isSandboxRuntime } from './docker/common.js';
 import { isBwrapProcessRunning, stopBwrapProcess } from './bwrap/bwrapFleet.js';
 import { applyManifestDirectives } from './bootstrapManifest.js';
 import { executeHostHook, isInlineCommand } from './lifecycleHooks.js';
@@ -399,12 +399,15 @@ async function runCli(agentName, args) {
     || getAgentContainerName(shortAgentName, repoName);
   const projPath = getConfiguredProjectPath(shortAgentName, repoName, registryRecord?.record?.alias);
 
-  // For bwrap agents, spawn a new bwrap sandbox for the CLI session
+  // For sandbox agents, spawn a new sandbox session for the CLI
   // instead of using podman exec (which fails — no container exists)
   const agentRuntime = getRuntimeForAgent(manifest);
   if (agentRuntime === 'bwrap') {
     const { attachBwrapInteractive } = await import('./bwrap/bwrapServiceManager.js');
     attachBwrapInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
+  } else if (agentRuntime === 'seatbelt') {
+    const { attachSeatbeltInteractive } = await import('./seatbelt/seatbeltServiceManager.js');
+    attachSeatbeltInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
   } else {
     attachInteractive(containerName, projPath, cmd);
   }
@@ -434,13 +437,18 @@ async function runShell(agentName) {
   const cmd = '/bin/sh';
   const projPath = getConfiguredProjectPath(shortAgentName, repoName, registryRecord?.record?.alias);
 
-  // For bwrap agents, spawn a new bwrap sandbox for the shell session
+  // For sandbox agents, spawn a new sandbox for the shell session
   const agentRuntime = getRuntimeForAgent(manifest);
   if (agentRuntime === 'bwrap') {
     console.log(`[shell] bwrap agent: ${shortAgentName}`);
     console.log(`[shell] command: ${cmd}`);
     const { attachBwrapInteractive } = await import('./bwrap/bwrapServiceManager.js');
     attachBwrapInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
+  } else if (agentRuntime === 'seatbelt') {
+    console.log(`[shell] seatbelt agent: ${shortAgentName}`);
+    console.log(`[shell] command: ${cmd}`);
+    const { attachSeatbeltInteractive } = await import('./seatbelt/seatbeltServiceManager.js');
+    attachSeatbeltInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
   } else {
     console.log(`[shell] container: ${containerName}`);
     console.log(`[shell] command: ${cmd}`);
@@ -484,7 +492,7 @@ async function refreshAgent(agentName) {
     }
 
     const agentRuntime = getRuntimeForAgent(manifest);
-    const bwrapRunning = agentRuntime === 'bwrap' && isBwrapProcessRunning(resolved.shortAgentName);
+    const bwrapRunning = isSandboxRuntime(agentRuntime) && isBwrapProcessRunning(resolved.shortAgentName);
 
     if (!isContainerRunning(containerName) && !bwrapRunning) {
         console.error(`Agent '${agentName}' is not running.`);

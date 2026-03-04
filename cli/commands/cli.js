@@ -19,7 +19,7 @@ import {
     destroyWorkspaceContainers,
     ensureAgentService
 } from '../services/docker/index.js';
-import { getRuntimeForAgent } from '../services/docker/common.js';
+import { getRuntimeForAgent, isSandboxRuntime } from '../services/docker/common.js';
 import { isBwrapProcessRunning, stopBwrapProcess } from '../services/bwrap/bwrapFleet.js';
 import * as workspaceSvc from '../services/workspace.js';
 import { handleSystemCommand, handleInvalidCommand, resetLlmInvokerCache } from './llmSystemCommands.js';
@@ -370,8 +370,8 @@ async function handleCommand(args) {
                 const agentRuntime = getRuntimeForAgent(manifest);
                 const containerName = registryRecord?.containerName || getAgentContainerName(resolved.shortAgentName, resolved.repo);
 
-                if (agentRuntime === 'bwrap') {
-                    // Bwrap restart: stop process, then re-create via ensureAgentService
+                if (isSandboxRuntime(agentRuntime)) {
+                    // Sandbox restart: stop process, then re-create via ensureAgentService
                     const bwrapRunning = isBwrapProcessRunning(resolved.shortAgentName);
                     const containerAlsoRunning = isContainerRunning(containerName);
                     if (!bwrapRunning && !containerAlsoRunning) {
@@ -379,7 +379,7 @@ async function handleCommand(args) {
                         return;
                     }
 
-                    console.log(`Restarting (bwrap) agent '${agentName}'...`);
+                    console.log(`Restarting (${agentRuntime}) agent '${agentName}'...`);
 
                     // Sync core dependencies before restart
                     try {
@@ -410,9 +410,9 @@ async function handleCommand(args) {
                             alias: registryRecord?.record?.alias,
                             forceRecreate: true
                         });
-                        console.log('✓ Agent restarted (bwrap).');
+                        console.log(`✓ Agent restarted (${agentRuntime}).`);
                     } catch (e) {
-                        console.error(`Failed to restart agent '${agentName}' via bwrap: ${e.message}`);
+                        console.error(`Failed to restart agent '${agentName}' via ${agentRuntime}: ${e.message}`);
                     }
                 } else {
                     // Container restart: existing podman stop/start logic
