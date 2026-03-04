@@ -31,8 +31,20 @@ fast_check_explorer_dependencies() {
   container=$(compute_container_name "explorer" "fileExplorer") || return 1
 
   # With the new architecture, node_modules is mounted as overlay at /code/node_modules
-  if ! $FAST_CONTAINER_RUNTIME exec "$container" sh -c 'test -d "/code/node_modules/mcp-sdk"'; then
-    echo "Explorer runtime deps missing: /code/node_modules/mcp-sdk not found." >&2
-    return 1
+  if is_bwrap_agent "$container"; then
+    local output
+    if ! output=$( { echo 'test -d "/code/node_modules/mcp-sdk" && echo EXISTS'; echo exit; } | ploinky shell "explorer" 2>&1 ); then
+      echo "Explorer runtime deps check via ploinky shell failed." >&2
+      return 1
+    fi
+    if ! echo "$output" | grep -q "EXISTS"; then
+      echo "Explorer runtime deps missing: /code/node_modules/mcp-sdk not found (via ploinky shell)." >&2
+      return 1
+    fi
+  else
+    if ! $FAST_CONTAINER_RUNTIME exec "$container" sh -c 'test -d "/code/node_modules/mcp-sdk"'; then
+      echo "Explorer runtime deps missing: /code/node_modules/mcp-sdk not found." >&2
+      return 1
+    fi
   fi
 }
