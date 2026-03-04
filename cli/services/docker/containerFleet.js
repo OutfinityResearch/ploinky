@@ -6,6 +6,7 @@ import {
     containerExists,
     getAgentContainerName,
     isContainerRunning,
+    isSandboxRuntime,
     loadAgentsMap
 } from './common.js';
 import { clearLivenessState } from './healthProbes.js';
@@ -86,18 +87,18 @@ function stopConfiguredAgents({ fast = false } = {}) {
     const entries = Object.entries(agents || {})
         .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'));
 
-    // Handle bwrap agents first
+    // Handle sandbox (bwrap/seatbelt) agents first
     const bwrapStopped = [];
     const containerEntries = [];
     for (const [name, rec] of entries) {
-        if (rec?.runtime === 'bwrap') {
+        if (isSandboxRuntime(rec?.runtime)) {
             const agentName = rec.agentName || name;
             if (isBwrapProcessRunning(agentName)) {
                 stopBwrapProcess(agentName);
-                console.log(`[stop] Stopped ${agentName} (bwrap)`);
+                console.log(`[stop] Stopped ${agentName} (${rec.runtime})`);
                 bwrapStopped.push(name);
             } else {
-                console.log(`[stop] ${agentName}: no running bwrap process found.`);
+                console.log(`[stop] ${agentName}: no running ${rec.runtime} process found.`);
             }
         } else {
             containerEntries.push([name, rec]);
@@ -138,13 +139,13 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
 
     const agents = loadAgents();
 
-    // Handle bwrap agents first
+    // Handle sandbox (bwrap/seatbelt) agents first
     const bwrapRemoved = [];
     const containerNames = [];
     for (const agentName of names) {
         if (!agentName) continue;
         const rec = agents ? agents[agentName] : null;
-        if (rec?.runtime === 'bwrap') {
+        if (isSandboxRuntime(rec?.runtime)) {
             const bwrapAgentName = rec.agentName || agentName;
             stopBwrapProcess(bwrapAgentName);
             bwrapRemoved.push(agentName);

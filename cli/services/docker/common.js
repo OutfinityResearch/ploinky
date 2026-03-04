@@ -306,6 +306,10 @@ function waitForContainerRunning(containerName, maxAttempts = 20, delayMs = 250)
     return false;
 }
 
+function isSandboxRuntime(runtime) {
+    return runtime === 'bwrap' || runtime === 'seatbelt';
+}
+
 export {
     CONTAINER_CONFIG_DIR,
     CONTAINER_CONFIG_PATH,
@@ -321,6 +325,7 @@ export {
     getRuntime,
     getSecretsForAgent,
     isContainerRunning,
+    isSandboxRuntime,
     loadAgentsMap,
     parseHostPort,
     parseManifestPorts,
@@ -337,12 +342,43 @@ function getRuntime() {
 }
 
 function getRuntimeForAgent(manifest) {
-    if (manifest?.sandbox === true || manifest?.runtime === 'bwrap') {
+    if (manifest?.['lite-sandbox'] === true || manifest?.runtime === 'bwrap' || manifest?.runtime === 'seatbelt') {
+        // Explicit runtime override
+        if (manifest?.runtime === 'bwrap') {
+            try {
+                execSync('command -v bwrap', { stdio: 'ignore' });
+                return 'bwrap';
+            } catch {
+                console.warn('[bwrap] bwrap not found in PATH, falling back to container runtime');
+                return containerRuntime;
+            }
+        }
+        if (manifest?.runtime === 'seatbelt') {
+            if (process.platform === 'darwin') {
+                try {
+                    execSync('command -v sandbox-exec', { stdio: 'ignore' });
+                    return 'seatbelt';
+                } catch {
+                    console.warn('[seatbelt] sandbox-exec not found, falling back to container runtime');
+                    return containerRuntime;
+                }
+            }
+            console.warn('[seatbelt] seatbelt runtime requires macOS, falling back to container runtime');
+            return containerRuntime;
+        }
+
+        // sandbox: true — auto-detect platform
+        if (process.platform === 'darwin') {
+            try {
+                execSync('command -v sandbox-exec', { stdio: 'ignore' });
+                return 'seatbelt';
+            } catch { /* try bwrap next */ }
+        }
         try {
             execSync('command -v bwrap', { stdio: 'ignore' });
             return 'bwrap';
         } catch {
-            console.warn('[bwrap] bwrap not found in PATH, falling back to container runtime');
+            console.warn('[sandbox] No sandbox runtime found (bwrap/sandbox-exec), falling back to container runtime');
             return containerRuntime;
         }
     }

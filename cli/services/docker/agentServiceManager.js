@@ -37,8 +37,9 @@ import {
 } from './agentCommands.js';
 import { WORKSPACE_ROOT } from '../config.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
-import { getRuntimeForAgent } from './common.js';
+import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
+import { ensureSeatbeltService } from '../seatbelt/seatbeltServiceManager.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './shellDetection.js';
 import {
     runPreContainerLifecycle,
@@ -495,10 +496,13 @@ function resolveHostPortFromRuntime(containerName, containerPortCandidates) {
 }
 
 function ensureAgentService(agentName, manifest, agentPath, options = {}) {
-    // Check if this agent should use bwrap sandbox instead of containers
+    // Check if this agent should use a sandbox runtime instead of containers
     const agentRuntime = getRuntimeForAgent(manifest);
     if (agentRuntime === 'bwrap') {
         return ensureBwrapService(agentName, manifest, agentPath, options);
+    }
+    if (agentRuntime === 'seatbelt') {
+        return ensureSeatbeltService(agentName, manifest, agentPath, options);
     }
 
     let preferredHostPort;

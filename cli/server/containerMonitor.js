@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import * as workspaceSvc from '../services/workspace.js';
 import { REPOS_DIR } from '../services/config.js';
 import { ensureAgentService, isContainerRunning } from '../services/docker/index.js';
+import { isSandboxRuntime } from '../services/docker/common.js';
 import { isBwrapProcessRunning } from '../services/bwrap/bwrapFleet.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -392,7 +393,7 @@ function monitorTick(monitor) {
 
         let running = false;
         try {
-            if (target.runtime === 'bwrap') {
+            if (isSandboxRuntime(target.runtime)) {
                 running = isBwrapProcessRunning(target.agentName);
             } else {
                 running = isContainerRunning(target.containerName);
