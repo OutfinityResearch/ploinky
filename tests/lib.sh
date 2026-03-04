@@ -176,6 +176,7 @@ detect_container_runtime() {
 
 require_runtime() {
   load_state
+  if [[ "${FAST_AGENT_RUNTIME:-}" == "bwrap" ]]; then return 0; fi
   if [[ -z "${FAST_CONTAINER_RUNTIME:-}" ]]; then
     local runtime
     if runtime=$(detect_container_runtime); then
@@ -185,6 +186,47 @@ require_runtime() {
       return 1
     fi
   fi
+}
+
+resolve_agent_name_from_container() {
+  local container_name="$1"
+  load_state
+  require_var "TEST_RUN_DIR" || return 1
+  local registry="$TEST_RUN_DIR/.ploinky/agents"
+  if [[ ! -f "$registry" ]]; then
+    return 1
+  fi
+  FAST_TMP_REGISTRY="$registry" FAST_TMP_CONTAINER="$container_name" node -e '
+    const fs = require("fs");
+    const data = JSON.parse(fs.readFileSync(process.env.FAST_TMP_REGISTRY, "utf8") || "{}");
+    const entry = data[process.env.FAST_TMP_CONTAINER];
+    if (entry && entry.agentName) process.stdout.write(entry.agentName);
+    else process.exit(1);
+  '
+}
+
+resolve_agent_runtime_from_container() {
+  local container_name="$1"
+  load_state
+  require_var "TEST_RUN_DIR" || return 1
+  local registry="$TEST_RUN_DIR/.ploinky/agents"
+  if [[ ! -f "$registry" ]]; then
+    echo "container"
+    return 0
+  fi
+  FAST_TMP_REGISTRY="$registry" FAST_TMP_CONTAINER="$container_name" node -e '
+    const fs = require("fs");
+    const data = JSON.parse(fs.readFileSync(process.env.FAST_TMP_REGISTRY, "utf8") || "{}");
+    const entry = data[process.env.FAST_TMP_CONTAINER];
+    process.stdout.write((entry && entry.runtime) || "container");
+  '
+}
+
+is_bwrap_agent() {
+  local container_name="$1"
+  local rt
+  rt=$(resolve_agent_runtime_from_container "$container_name")
+  [[ "$rt" == "bwrap" || "$rt" == "seatbelt" ]]
 }
 
 compute_container_name() {
@@ -313,71 +355,199 @@ check_router_stop_entry() {
 }
 
 assert_container_running() {
-  require_runtime || return 1
   local container="$1"
-  if ! $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
-    echo "Container '${container}' is not running." >&2
-    return 1
+  if is_bwrap_agent "$container"; then
+    local agent_name
+    agent_name=$(resolve_agent_name_from_container "$container") || { echo "Cannot resolve agent name for '${container}'." >&2; return 1; }
+    local pid_file="$TEST_RUN_DIR/.ploinky/bwrap-pids/${agent_name}.pid"
+    if [[ ! -f "$pid_file" ]]; then
+      echo "Bwrap agent '${agent_name}' PID file missing." >&2
+      return 1
+    fi
+    local pid
+    pid=$(cat "$pid_file")
+    if ! kill -0 "$pid" 2>/dev/null; then
+      echo "Bwrap agent '${agent_name}' (PID ${pid}) is not running." >&2
+      return 1
+    fi
+  else
+    require_runtime || return 1
+    if ! $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
+      echo "Container '${container}' is not running." >&2
+      return 1
+    fi
   fi
 }
 
 assert_container_stopped() {
-  require_runtime || return 1
   local container="$1"
-  if $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
-    echo "Container '${container}' is still running." >&2
-    return 1
+  if is_bwrap_agent "$container"; then
+    local agent_name
+    agent_name=$(resolve_agent_name_from_container "$container") || return 0
+    local pid_file="$TEST_RUN_DIR/.ploinky/bwrap-pids/${agent_name}.pid"
+    if [[ -f "$pid_file" ]]; then
+      local pid
+      pid=$(cat "$pid_file")
+      if kill -0 "$pid" 2>/dev/null; then
+        echo "Bwrap agent '${agent_name}' (PID ${pid}) is still running." >&2
+        return 1
+      fi
+    fi
+  else
+    require_runtime || return 1
+    if $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
+      echo "Container '${container}' is still running." >&2
+      return 1
+    fi
   fi
 }
 
 assert_container_exists() {
-  require_runtime || return 1
   local container="$1"
-  if ! $FAST_CONTAINER_RUNTIME ps -a --format '{{.Names}}' | grep -Fxq "$container"; then
-    echo "Container '${container}' does not exist." >&2
-    return 1
+  if is_bwrap_agent "$container"; then
+    # For bwrap agents, the registry entry survives ploinky stop (removed only by destroy)
+    load_state
+    require_var "TEST_RUN_DIR" || return 1
+    local registry="$TEST_RUN_DIR/.ploinky/agents"
+    if [[ ! -f "$registry" ]]; then
+      echo "Agents registry missing." >&2
+      return 1
+    fi
+    if ! FAST_TMP_REGISTRY="$registry" FAST_TMP_CONTAINER="$container" node -e '
+      const fs = require("fs");
+      const data = JSON.parse(fs.readFileSync(process.env.FAST_TMP_REGISTRY, "utf8") || "{}");
+      if (!data[process.env.FAST_TMP_CONTAINER]) process.exit(1);
+    '; then
+      echo "Bwrap agent '${container}' not found in registry." >&2
+      return 1
+    fi
+  else
+    require_runtime || return 1
+    if ! $FAST_CONTAINER_RUNTIME ps -a --format '{{.Names}}' | grep -Fxq "$container"; then
+      echo "Container '${container}' does not exist." >&2
+      return 1
+    fi
   fi
 }
 
 assert_container_absent() {
-  require_runtime || return 1
   local container="$1"
-  if $FAST_CONTAINER_RUNTIME ps -a --format '{{.Names}}' | grep -Fxq "$container"; then
-    echo "Container '${container}' still exists." >&2
+  if is_bwrap_agent "$container"; then
+    local agent_name
+    agent_name=$(resolve_agent_name_from_container "$container") || return 0
+    local pid_file="$TEST_RUN_DIR/.ploinky/bwrap-pids/${agent_name}.pid"
+    # PID file gone → absent
+    if [[ ! -f "$pid_file" ]]; then
+      return 0
+    fi
+    # PID file exists but process is dead → absent
+    local pid
+    pid=$(cat "$pid_file" 2>/dev/null) || return 0
+    if ! kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    echo "Bwrap agent '${agent_name}' (PID ${pid}) is still running." >&2
     return 1
+  else
+    require_runtime || return 1
+    if $FAST_CONTAINER_RUNTIME ps -a --format '{{.Names}}' | grep -Fxq "$container"; then
+      echo "Container '${container}' still exists." >&2
+      return 1
+    fi
   fi
 }
 
 get_container_pid() {
-  require_runtime || return 1
   local container="$1"
-  $FAST_CONTAINER_RUNTIME inspect --format '{{.State.Pid}}' "$container"
+  if is_bwrap_agent "$container"; then
+    local agent_name
+    agent_name=$(resolve_agent_name_from_container "$container") || { echo "Cannot resolve agent name for '${container}'." >&2; return 1; }
+    local pid_file="$TEST_RUN_DIR/.ploinky/bwrap-pids/${agent_name}.pid"
+    if [[ ! -f "$pid_file" ]]; then
+      echo "Bwrap agent '${agent_name}' PID file missing." >&2
+      return 1
+    fi
+    cat "$pid_file"
+  else
+    require_runtime || return 1
+    $FAST_CONTAINER_RUNTIME inspect --format '{{.State.Pid}}' "$container"
+  fi
+}
+
+_find_bwrap_leaf_pid() {
+  local pid="$1"
+  local child
+  # Walk process tree to find the deepest child (the actual sandboxed process)
+  while true; do
+    child=$(pgrep -P "$pid" 2>/dev/null | head -1)
+    if [[ -z "$child" ]]; then
+      echo "$pid"
+      return 0
+    fi
+    pid="$child"
+  done
 }
 
 assert_container_env() {
-  require_runtime || return 1
   local container="$1"
   local key="$2"
   local expected="$3"
-  local value
-  if ! value=$($FAST_CONTAINER_RUNTIME exec "$container" printenv "$key" 2>/dev/null); then
-    echo "Unable to read env '${key}' from container '${container}'." >&2
-    return 1
-  fi
-  if [[ "$value" != "$expected" ]]; then
-    echo "Container '${container}': expected ${key}='${expected}', got '${value}'." >&2
-    return 1
+  if is_bwrap_agent "$container"; then
+    local bwrap_pid
+    bwrap_pid=$(get_container_pid "$container") || return 1
+    local pid
+    pid=$(_find_bwrap_leaf_pid "$bwrap_pid")
+    local environ="/proc/${pid}/environ"
+    if [[ ! -f "$environ" ]]; then
+      echo "Cannot read /proc/${pid}/environ for bwrap agent." >&2
+      return 1
+    fi
+    local value
+    if ! tr '\0' '\n' < "$environ" | grep -q "^${key}="; then
+      echo "Env '${key}' not found in bwrap agent (PID ${pid})." >&2
+      return 1
+    fi
+    value=$(tr '\0' '\n' < "$environ" | grep "^${key}=" | head -1 | cut -d= -f2-)
+    if [[ "$value" != "$expected" ]]; then
+      echo "Bwrap agent (PID ${pid}): expected ${key}='${expected}', got '${value}'." >&2
+      return 1
+    fi
+  else
+    require_runtime || return 1
+    local value
+    if ! value=$($FAST_CONTAINER_RUNTIME exec "$container" printenv "$key" 2>/dev/null); then
+      echo "Unable to read env '${key}' from container '${container}'." >&2
+      return 1
+    fi
+    if [[ "$value" != "$expected" ]]; then
+      echo "Container '${container}': expected ${key}='${expected}', got '${value}'." >&2
+      return 1
+    fi
   fi
 }
 
 assert_container_env_absent() {
-  require_runtime || return 1
   local container="$1"
   local key="$2"
-  local value
-  if value=$($FAST_CONTAINER_RUNTIME exec "$container" printenv "$key" 2>/dev/null); then
-    echo "Container '${container}' unexpectedly exposes ${key}='${value}'." >&2
-    return 1
+  if is_bwrap_agent "$container"; then
+    local bwrap_pid
+    bwrap_pid=$(get_container_pid "$container") || return 0
+    local pid
+    pid=$(_find_bwrap_leaf_pid "$bwrap_pid")
+    local environ="/proc/${pid}/environ"
+    if [[ -f "$environ" ]] && tr '\0' '\n' < "$environ" | grep -q "^${key}="; then
+      local value
+      value=$(tr '\0' '\n' < "$environ" | grep "^${key}=" | head -1 | cut -d= -f2-)
+      echo "Bwrap agent (PID ${pid}) unexpectedly exposes ${key}='${value}'." >&2
+      return 1
+    fi
+  else
+    require_runtime || return 1
+    local value
+    if value=$($FAST_CONTAINER_RUNTIME exec "$container" printenv "$key" 2>/dev/null); then
+      echo "Container '${container}' unexpectedly exposes ${key}='${value}'." >&2
+      return 1
+    fi
   fi
   return 0
 }
@@ -407,7 +577,6 @@ NODE
 }
 
 assert_port_bound_local() {
-  require_runtime || return 1
   local container="$1"
   local container_port="$2"
   local expected_host_port="${3:-}"
@@ -418,43 +587,53 @@ assert_port_bound_local() {
     return 1
   fi
 
-  local output
-  if ! output=$($FAST_CONTAINER_RUNTIME port "$container" "${container_port}/tcp" 2>/dev/null); then
-    echo "Unable to resolve port mapping for ${container}:${container_port}/tcp." >&2
-    return 1
-  fi
-
-  local found_expected=0
-  local line
-  while IFS= read -r line; do
-    line="${line//[$'\r\n']/}"
-    line=${line# } ; line=${line% }
-    [[ -z "$line" ]] && continue
-
-    local host_part=${line%:*}
-    local host_port=${line##*:}
-    host_part=${host_part#[}
-    host_part=${host_part%]}
-
-    if [[ -n "$expected_host_port" && "$host_port" != "$expected_host_port" ]]; then
-      continue
-    fi
-
-    if [[ "$host_part" == "0.0.0.0" || "$host_part" == "::" ]]; then
-      echo "Port ${container}:${container_port}/tcp is bound to '${host_part}:${host_port}', expected ${expected_ip}." >&2
+  if is_bwrap_agent "$container"; then
+    # Bwrap agents bind ports directly on the host (no port mapping layer).
+    # Just verify the port is listening — bind address enforcement isn't
+    # possible without network namespace isolation.
+    local check_port="${expected_host_port:-$container_port}"
+    assert_port_listening "$check_port"
+    return $?
+  else
+    require_runtime || return 1
+    local output
+    if ! output=$($FAST_CONTAINER_RUNTIME port "$container" "${container_port}/tcp" 2>/dev/null); then
+      echo "Unable to resolve port mapping for ${container}:${container_port}/tcp." >&2
       return 1
     fi
 
-    if [[ "$host_part" == "$expected_ip" ]]; then
-      found_expected=1
-    elif [[ "$host_part" == "::1" && "$expected_ip" == "127.0.0.1" ]]; then
-      found_expected=1
-    fi
-  done <<< "$output"
+    local found_expected=0
+    local line
+    while IFS= read -r line; do
+      line="${line//[$'\r\n']/}"
+      line=${line# } ; line=${line% }
+      [[ -z "$line" ]] && continue
 
-  if [[ $found_expected -eq 0 ]]; then
-    echo "No binding found on ${expected_ip} for ${container}:${container_port}/tcp (docker port output: ${output})." >&2
-    return 1
+      local host_part=${line%:*}
+      local host_port=${line##*:}
+      host_part=${host_part#[}
+      host_part=${host_part%]}
+
+      if [[ -n "$expected_host_port" && "$host_port" != "$expected_host_port" ]]; then
+        continue
+      fi
+
+      if [[ "$host_part" == "0.0.0.0" || "$host_part" == "::" ]]; then
+        echo "Port ${container}:${container_port}/tcp is bound to '${host_part}:${host_port}', expected ${expected_ip}." >&2
+        return 1
+      fi
+
+      if [[ "$host_part" == "$expected_ip" ]]; then
+        found_expected=1
+      elif [[ "$host_part" == "::1" && "$expected_ip" == "127.0.0.1" ]]; then
+        found_expected=1
+      fi
+    done <<< "$output"
+
+    if [[ $found_expected -eq 0 ]]; then
+      echo "No binding found on ${expected_ip} for ${container}:${container_port}/tcp (docker port output: ${output})." >&2
+      return 1
+    fi
   fi
 }
 
@@ -505,19 +684,37 @@ assert_routing_server_stopped() {
 }
 
 wait_for_container() {
-  require_runtime || return 1
   local container="$1"
   local attempts=120
   local delay=0.5
   local i
-  for (( i=0; i<attempts; i++ )); do
-    if $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
-      return 0
-    fi
-    sleep "$delay"
-  done
-  echo "Container '${container}' did not reach running state." >&2
-  return 1
+  if is_bwrap_agent "$container"; then
+    local agent_name
+    agent_name=$(resolve_agent_name_from_container "$container") || { echo "Cannot resolve agent name for '${container}'." >&2; return 1; }
+    local pid_file="$TEST_RUN_DIR/.ploinky/bwrap-pids/${agent_name}.pid"
+    for (( i=0; i<attempts; i++ )); do
+      if [[ -f "$pid_file" ]]; then
+        local pid
+        pid=$(cat "$pid_file")
+        if kill -0 "$pid" 2>/dev/null; then
+          return 0
+        fi
+      fi
+      sleep "$delay"
+    done
+    echo "Bwrap agent '${agent_name}' did not reach running state." >&2
+    return 1
+  else
+    require_runtime || return 1
+    for (( i=0; i<attempts; i++ )); do
+      if $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
+        return 0
+      fi
+      sleep "$delay"
+    done
+    echo "Container '${container}' did not reach running state." >&2
+    return 1
+  fi
 }
 
 wait_for_agent_log_message() {
@@ -548,19 +745,38 @@ wait_for_agent_log_message() {
 }
 
 wait_for_container_stop() {
-  require_runtime || return 1
   local container="$1"
   local attempts=120
   local delay=0.5
   local i
-  for (( i=0; i<attempts; i++ )); do
-    if ! $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
-      return 0
-    fi
-    sleep "$delay"
-  done
-  echo "Container '${container}' did not stop in time." >&2
-  return 1
+  if is_bwrap_agent "$container"; then
+    local agent_name
+    agent_name=$(resolve_agent_name_from_container "$container") || return 0
+    local pid_file="$TEST_RUN_DIR/.ploinky/bwrap-pids/${agent_name}.pid"
+    for (( i=0; i<attempts; i++ )); do
+      if [[ ! -f "$pid_file" ]]; then
+        return 0
+      fi
+      local pid
+      pid=$(cat "$pid_file" 2>/dev/null) || { return 0; }
+      if ! kill -0 "$pid" 2>/dev/null; then
+        return 0
+      fi
+      sleep "$delay"
+    done
+    echo "Bwrap agent '${agent_name}' did not stop in time." >&2
+    return 1
+  else
+    require_runtime || return 1
+    for (( i=0; i<attempts; i++ )); do
+      if ! $FAST_CONTAINER_RUNTIME ps --format '{{.Names}}' | grep -Fxq "$container"; then
+        return 0
+      fi
+      sleep "$delay"
+    done
+    echo "Container '${container}' did not stop in time." >&2
+    return 1
+  fi
 }
 
 wait_for_router() {

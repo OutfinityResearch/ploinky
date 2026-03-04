@@ -38,6 +38,14 @@ test_info "Workspace root: $TEST_RUN_DIR"
 
 cd "$TEST_RUN_DIR"
 
+if command -v bwrap >/dev/null 2>&1; then
+  FAST_AGENT_RUNTIME="bwrap"
+else
+  FAST_AGENT_RUNTIME="container"
+fi
+write_state_var "FAST_AGENT_RUNTIME" "$FAST_AGENT_RUNTIME"
+test_info "Agent runtime: $FAST_AGENT_RUNTIME"
+
 if [[ -z "${FAST_CONTAINER_RUNTIME:-}" ]]; then
   runtime=$(detect_container_runtime)
   write_state_var "FAST_CONTAINER_RUNTIME" "$runtime"
@@ -87,6 +95,7 @@ mkdir -p "$disable_agent_root"
 
 cat >"${disable_agent_root}/manifest.json" <<'EOF'
 {
+  "lite-sandbox": true,
   "container": "node:20-bullseye",
   "agent": "node -e \"setInterval(()=>{}, 1_000_000)\""
 }
@@ -98,6 +107,7 @@ write_state_var "TEST_HEALTH_AGENT_REPO_PATH" "$health_agent_root"
 
 cat >"${health_agent_root}/manifest.json" <<'EOF'
 {
+  "lite-sandbox": true,
   "container": "node:20-bullseye",
   "agent": "node -e \"setInterval(()=>{}, 1_000_000)\"",
   "health": {
@@ -136,6 +146,7 @@ mkdir -p "$dep_agent_root"
 
 cat >"${dep_agent_root}/manifest.json" <<'EOF'
 {
+  "lite-sandbox": true,
   "container": "node:20-bullseye",
   "profiles": {
     "default": {
@@ -151,6 +162,7 @@ mkdir -p "$dep_devel_root"
 
 cat >"${dep_devel_root}/manifest.json" <<'EOF'
 {
+  "lite-sandbox": true,
   "container": "node:20-bullseye",
   "agent": "node -e \"setInterval(()=>{}, 1_000_000)\""
 }
@@ -162,6 +174,7 @@ mkdir -p "$enable_alias_agent_root"
 
 cat >"${enable_alias_agent_root}/manifest.json" <<'EOF'
 {
+  "lite-sandbox": true,
   "container": "node:20-bullseye"
 }
 EOF
@@ -207,6 +220,7 @@ write_state_var "TEST_GLOBAL_AGENT_CONTAINER_PORT" "$global_agent_internal_port"
 
 cat >"${global_agent_root}/manifest.json" <<EOF
 {
+  "lite-sandbox": true,
   "container": "node:18-alpine",
   "profiles": {
     "default": {
@@ -236,6 +250,7 @@ mkdir -p "$global_alias_agent_root"
 
 cat >"${global_alias_agent_root}/manifest.json" <<'EOF'
 {
+  "lite-sandbox": true,
   "container": "node:20-bullseye"
 }
 EOF
@@ -249,6 +264,7 @@ mkdir -p "$devel_agent_root"
 
 cat >"${devel_agent_root}/manifest.json" <<'EOF'
 {
+  "lite-sandbox": true,
   "container": "node:20-bullseye"
 }
 EOF

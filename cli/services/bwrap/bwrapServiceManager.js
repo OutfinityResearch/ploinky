@@ -322,8 +322,14 @@ function buildBwrapEntryCommand(agentName, manifest, profileConfig, needsCoreDep
     const combinedInstallCmd = [installSnippet, manifestInstallCmd].filter(Boolean).join(' && ');
 
     let entryCmd;
-    if (useStartEntry) {
-        // manifest.start is set — run the start command (which may launch sidecars internally)
+    if (useStartEntry && explicitAgentCmd) {
+        // Both start and agent defined — mirror docker's sidecar pattern:
+        // background the start command, run agent in the foreground.
+        entryCmd = combinedInstallCmd
+            ? `cd /code && ${combinedInstallCmd} && (${startCmd} &) && exec ${explicitAgentCmd}`
+            : `cd /code && (${startCmd} &) && exec ${explicitAgentCmd}`;
+    } else if (useStartEntry) {
+        // manifest.start only — run the start command as the main process
         entryCmd = combinedInstallCmd
             ? `cd /code && ${combinedInstallCmd} && ${startCmd}`
             : `cd /code && ${startCmd}`;

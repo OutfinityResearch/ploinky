@@ -28,7 +28,8 @@ fast_assert_devel_agent_workdir() {
   fi
 
   local actual_dir
-  actual_dir=$(echo "$raw_output" | sed -n 's/^# \(\/.*\)/\1/p' | tr -d '\r')
+  # Docker shell prefixes output with "# " (root prompt), bwrap does not
+  actual_dir=$(echo "$raw_output" | tr -d '\r' | sed -n 's/^#\{0,1\} *\(\/.*\)/\1/p' | head -1)
   if [[ "$actual_dir" != "$expected_dir" ]]; then
     echo "Devel agent working directory mismatch for ${agent_name}." >&2
     echo "Expected: '$expected_dir'" >&2
@@ -40,7 +41,7 @@ fast_assert_devel_agent_workdir() {
   fi
 
   local perm_status
-  perm_status=$(echo "$raw_output" | tr -d '\r' | sed -n 's/^# \(PERM_[A-Z0-9]\+\)$/\1/p' | tail -n 1)
+  perm_status=$(echo "$raw_output" | tr -d '\r' | sed -n 's/^#\{0,1\} *\(PERM_[A-Z0-9]\+\)$/\1/p' | tail -n 1)
   if [[ "$perm_status" != "PERM_OK" ]]; then
     echo "Devel agent workspace lacks read/write permissions for ${agent_name}." >&2
     echo "Expected PERM_OK marker but saw: '${perm_status}'" >&2
