@@ -31,15 +31,20 @@ if [[ -n "${PLOINKY_BRANCH:-}" ]]; then
   if [[ "$PLOINKY_BRANCH" == "$current_branch" ]]; then
     echo "[test] PLOINKY_BRANCH='${PLOINKY_BRANCH}' matches current branch — using working copy."
   else
+    # Prune stale worktrees (e.g. from interrupted previous runs)
+    git -C "$PLOINKY_REPO_ROOT" worktree prune 2>/dev/null || true
     PLOINKY_WORKTREE=$(mktemp -d "${TMPDIR:-/tmp}/ploinky-test-worktree-XXXXXX")
     echo "[test] Creating worktree for ploinky branch '${PLOINKY_BRANCH}' at ${PLOINKY_WORKTREE}..."
     git -C "$PLOINKY_REPO_ROOT" worktree add "$PLOINKY_WORKTREE" "$PLOINKY_BRANCH" 2>&1 | sed 's/^/  /'
 
-    # Install dependencies in the worktree
+    # Install dependencies in the worktree (including postinstall which clones achillesAgentLib)
     if [[ -f "$PLOINKY_WORKTREE/package.json" ]]; then
       echo "[test] Installing dependencies in worktree..."
-      (cd "$PLOINKY_WORKTREE" && npm install --ignore-scripts --no-audit --no-fund 2>&1 | tail -1 | sed 's/^/  /')
+      (cd "$PLOINKY_WORKTREE" && npm install --no-audit --no-fund 2>&1 | tail -3 | sed 's/^/  /')
     fi
+
+    # Ensure Agent/node_modules exists (bwrap needs this mount point; not tracked in git)
+    mkdir -p "$PLOINKY_WORKTREE/Agent/node_modules"
 
     # Override TESTS_DIR to use the worktree's tests (they match the branch)
     TESTS_DIR="$PLOINKY_WORKTREE/tests"
