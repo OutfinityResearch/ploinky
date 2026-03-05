@@ -5,44 +5,46 @@ check_preinstall_run() {
 
   local log_path="$TEST_START_LOG"
 
-  # Primary check: look for lifecycle hook log entries in the start log.
-  # The [install] explorer: entry appears when the container is first created
-  # during `ploinky start`. However, the watchdog may create the container
-  # before the demo start runs, so the entry may appear in a different log.
-  if [[ -f "$log_path" ]] && grep -Eq "\[(preinstall|install)\] explorer:" "$log_path"; then
-    return 0
-  fi
-
-  # Also check the testAgent start log — the watchdog launched during the
-  # first start may have created the explorer container there.
-  local agent_log="${TEST_AGENT_START_LOG:-}"
-  if [[ -n "$agent_log" && -f "$agent_log" ]] && grep -Eq "\[(preinstall|install)\] explorer:" "$agent_log"; then
-    return 0
-  fi
-
-  # Fallback: verify the install hook actually ran inside the container by
-  # checking the container logs for output from the explorer's install.sh
-  # (which prints "Installing explorer dependencies...").
-  local explorer_container
-  explorer_container=$(compute_container_name "explorer" "fileExplorer") || true
-  if [[ -n "$explorer_container" ]]; then
-    local container_logs
-    if is_bwrap_agent "$explorer_container"; then
-      # Log file is named explorer-bwrap.log (Linux) or explorer-seatbelt.log (macOS)
-      local sandbox_log
-      for sandbox_log in "$TEST_RUN_DIR/logs/explorer-bwrap.log" "$TEST_RUN_DIR/logs/explorer-seatbelt.log"; do
-        [[ -f "$sandbox_log" ]] && break
-      done
-      container_logs=$(cat "$sandbox_log" 2>&1) || true
-    else
-      container_logs=$($FAST_CONTAINER_RUNTIME logs "$explorer_container" 2>&1) || true
-    fi
-    if echo "$container_logs" | grep -q "Installing explorer dependencies"; then
+  # Retry up to 30s — the explorer's install hooks may still be running
+  local attempts=30
+  local i
+  for (( i=0; i<attempts; i++ )); do
+    # Primary check: look for lifecycle hook log entries in the start log.
+    if [[ -f "$log_path" ]] && grep -Eq "\[(preinstall|install)\] explorer:" "$log_path"; then
       return 0
     fi
-  fi
 
-  echo "No preinstall/install evidence for explorer found." >&2
+    # Also check the testAgent start log — the watchdog launched during the
+    # first start may have created the explorer container there.
+    local agent_log="${TEST_AGENT_START_LOG:-}"
+    if [[ -n "$agent_log" && -f "$agent_log" ]] && grep -Eq "\[(preinstall|install)\] explorer:" "$agent_log"; then
+      return 0
+    fi
+
+    # Fallback: verify the install hook actually ran inside the container by
+    # checking the container logs for output from the explorer's install.sh
+    local explorer_container
+    explorer_container=$(compute_container_name "explorer" "fileExplorer") || true
+    if [[ -n "$explorer_container" ]]; then
+      local container_logs=""
+      if is_bwrap_agent "$explorer_container"; then
+        local sandbox_log
+        for sandbox_log in "$TEST_RUN_DIR/logs/explorer-bwrap.log" "$TEST_RUN_DIR/logs/explorer-seatbelt.log"; do
+          [[ -f "$sandbox_log" ]] && break
+        done
+        container_logs=$(cat "$sandbox_log" 2>&1) || true
+      else
+        container_logs=$($FAST_CONTAINER_RUNTIME logs "$explorer_container" 2>&1) || true
+      fi
+      if echo "$container_logs" | grep -q "Installing explorer dependencies"; then
+        return 0
+      fi
+    fi
+
+    sleep 1
+  done
+
+  echo "No preinstall/install evidence for explorer found after ${attempts}s." >&2
   echo "Checked: start-demo.log, testAgent_start_log, and container logs." >&2
   if [[ -f "$log_path" ]]; then
     echo "--- start log tail ---" >&2
