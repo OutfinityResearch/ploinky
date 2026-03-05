@@ -1,14 +1,22 @@
 #!/bin/bash
-# Branch configuration for testing profile_implementation changes
-# Uncomment the relevant lines to test against feature branches
+# Branch configuration for testing against feature branches.
 #
 # Usage:
-#   export PLOINKY_BASIC_BRANCH="profile_implementation"
+#   export PLOINKY_BRANCH="bwrap-integration"   # test a ploinky branch
+#   export PLOINKY_BASIC_BRANCH="some-feature"  # test a repo branch
 #   ./test_all.sh
 #
 # Or source this file after uncommenting the desired branches.
 
-# Predefined repo branch overrides
+# --- Ploinky branch override ---
+# When set, the test suite creates a git worktree at this branch and runs
+# the entire suite using that version of ploinky (bin, CLI, and tests).
+# Unset or empty = use the current working copy.
+#
+# export PLOINKY_BRANCH="bwrap-integration"
+# export PLOINKY_BRANCH="main"
+
+# --- Repo branch overrides ---
 # When set, enable_repo_with_branch will clone the repo at this branch
 
 # export PLOINKY_BASIC_BRANCH="profile_implementation"
