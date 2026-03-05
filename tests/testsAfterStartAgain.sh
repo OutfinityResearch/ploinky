@@ -13,14 +13,14 @@ require_var "TEST_ENABLE_ALIAS_AGENT_DEVEL_ALIAS"
 cd "$TEST_RUN_DIR"
 
 stage_header "Devel Alias Agent Verification"
-# Bwrap alias+devel mode combination has a registration issue (ploinky shell can't find it)
-if [[ "${FAST_AGENT_RUNTIME:-container}" != "bwrap" ]]; then
+# Sandbox alias+devel mode combination has a registration issue (ploinky shell can't find it)
+if ! is_sandbox_runtime; then
   test_check "Alias devel agent uses repo workspace" fast_assert_devel_agent_workdir "TEST_ENABLE_ALIAS_AGENT_DEVEL_ALIAS"
 fi
 
 stage_header "Health Probes Failure Verification"
-# Health probe scripts use 'docker exec' which is not available for bwrap agents
-if [[ "${FAST_AGENT_RUNTIME:-container}" != "bwrap" ]]; then
+# Health probe scripts use 'docker exec' which is not available for sandbox agents
+if ! is_sandbox_runtime; then
   test_check "Health probes retry and fail as expected" health_probes_wait_for_failure_logs
 fi
 test_info "Switching probes back to success"

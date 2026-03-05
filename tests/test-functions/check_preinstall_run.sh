@@ -28,7 +28,12 @@ check_preinstall_run() {
   if [[ -n "$explorer_container" ]]; then
     local container_logs
     if is_bwrap_agent "$explorer_container"; then
-      container_logs=$(cat "$TEST_RUN_DIR/logs/explorer-bwrap.log" 2>&1) || true
+      # Log file is named explorer-bwrap.log (Linux) or explorer-seatbelt.log (macOS)
+      local sandbox_log
+      for sandbox_log in "$TEST_RUN_DIR/logs/explorer-bwrap.log" "$TEST_RUN_DIR/logs/explorer-seatbelt.log"; do
+        [[ -f "$sandbox_log" ]] && break
+      done
+      container_logs=$(cat "$sandbox_log" 2>&1) || true
     else
       container_logs=$($FAST_CONTAINER_RUNTIME logs "$explorer_container" 2>&1) || true
     fi

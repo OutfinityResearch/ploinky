@@ -176,7 +176,7 @@ detect_container_runtime() {
 
 require_runtime() {
   load_state
-  if [[ "${FAST_AGENT_RUNTIME:-}" == "bwrap" ]]; then return 0; fi
+  if [[ "${FAST_AGENT_RUNTIME:-}" == "bwrap" || "${FAST_AGENT_RUNTIME:-}" == "seatbelt" ]]; then return 0; fi
   if [[ -z "${FAST_CONTAINER_RUNTIME:-}" ]]; then
     local runtime
     if runtime=$(detect_container_runtime); then
@@ -227,6 +227,11 @@ is_bwrap_agent() {
   local rt
   rt=$(resolve_agent_runtime_from_container "$container_name")
   [[ "$rt" == "bwrap" || "$rt" == "seatbelt" ]]
+}
+
+# Returns true when the detected agent runtime is a sandbox (bwrap or seatbelt)
+is_sandbox_runtime() {
+  [[ "${FAST_AGENT_RUNTIME:-container}" == "bwrap" || "${FAST_AGENT_RUNTIME:-container}" == "seatbelt" ]]
 }
 
 compute_container_name() {
@@ -497,19 +502,29 @@ assert_container_env() {
     bwrap_pid=$(get_container_pid "$container") || return 1
     local pid
     pid=$(_find_bwrap_leaf_pid "$bwrap_pid")
-    local environ="/proc/${pid}/environ"
-    if [[ ! -f "$environ" ]]; then
-      echo "Cannot read /proc/${pid}/environ for bwrap agent." >&2
-      return 1
-    fi
     local value
-    if ! tr '\0' '\n' < "$environ" | grep -q "^${key}="; then
-      echo "Env '${key}' not found in bwrap agent (PID ${pid})." >&2
+    if [[ -f "/proc/${pid}/environ" ]]; then
+      # Linux: read from /proc
+      if ! tr '\0' '\n' < "/proc/${pid}/environ" | grep -q "^${key}="; then
+        echo "Env '${key}' not found in sandbox agent (PID ${pid})." >&2
+        return 1
+      fi
+      value=$(tr '\0' '\n' < "/proc/${pid}/environ" | grep "^${key}=" | head -1 | cut -d= -f2-)
+    elif command -v ps >/dev/null 2>&1; then
+      # macOS: use ps to read environment (requires same user)
+      local env_output
+      env_output=$(ps -p "$pid" -wwwE -o command= 2>/dev/null) || { echo "Cannot read env for sandbox agent (PID ${pid})." >&2; return 1; }
+      if ! echo "$env_output" | tr ' ' '\n' | grep -q "^${key}="; then
+        echo "Env '${key}' not found in sandbox agent (PID ${pid})." >&2
+        return 1
+      fi
+      value=$(echo "$env_output" | tr ' ' '\n' | grep "^${key}=" | head -1 | cut -d= -f2-)
+    else
+      echo "Cannot read environment for sandbox agent (PID ${pid}): no /proc and no ps." >&2
       return 1
     fi
-    value=$(tr '\0' '\n' < "$environ" | grep "^${key}=" | head -1 | cut -d= -f2-)
     if [[ "$value" != "$expected" ]]; then
-      echo "Bwrap agent (PID ${pid}): expected ${key}='${expected}', got '${value}'." >&2
+      echo "Sandbox agent (PID ${pid}): expected ${key}='${expected}', got '${value}'." >&2
       return 1
     fi
   else
@@ -534,11 +549,23 @@ assert_container_env_absent() {
     bwrap_pid=$(get_container_pid "$container") || return 0
     local pid
     pid=$(_find_bwrap_leaf_pid "$bwrap_pid")
-    local environ="/proc/${pid}/environ"
-    if [[ -f "$environ" ]] && tr '\0' '\n' < "$environ" | grep -q "^${key}="; then
-      local value
-      value=$(tr '\0' '\n' < "$environ" | grep "^${key}=" | head -1 | cut -d= -f2-)
-      echo "Bwrap agent (PID ${pid}) unexpectedly exposes ${key}='${value}'." >&2
+    local value=""
+    local found=0
+    if [[ -f "/proc/${pid}/environ" ]]; then
+      if tr '\0' '\n' < "/proc/${pid}/environ" | grep -q "^${key}="; then
+        value=$(tr '\0' '\n' < "/proc/${pid}/environ" | grep "^${key}=" | head -1 | cut -d= -f2-)
+        found=1
+      fi
+    elif command -v ps >/dev/null 2>&1; then
+      local env_output
+      env_output=$(ps -p "$pid" -wwwE -o command= 2>/dev/null) || true
+      if [[ -n "$env_output" ]] && echo "$env_output" | tr ' ' '\n' | grep -q "^${key}="; then
+        value=$(echo "$env_output" | tr ' ' '\n' | grep "^${key}=" | head -1 | cut -d= -f2-)
+        found=1
+      fi
+    fi
+    if [[ "$found" -eq 1 ]]; then
+      echo "Sandbox agent (PID ${pid}) unexpectedly exposes ${key}='${value}'." >&2
       return 1
     fi
   else
@@ -888,9 +915,22 @@ allocate_port() {
   local port
   for ((i=0; i<attempts; i++)); do
     port=$(( (RANDOM % 20000) + 20000 ))
-    if ! ss -tulwn | awk '{print $5}' | grep -Eq "(:|^).*:${port}$"; then
-      echo "$port"
-      return 0
+    if command -v ss >/dev/null 2>&1; then
+      if ! ss -tulwn | awk '{print $5}' | grep -Eq "(:|^).*:${port}$"; then
+        echo "$port"
+        return 0
+      fi
+    elif command -v lsof >/dev/null 2>&1; then
+      if ! lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+        echo "$port"
+        return 0
+      fi
+    else
+      # Fallback: try to bind
+      if node -e "const s=require('net').createServer();s.listen($port,'127.0.0.1',()=>{s.close();process.exit(0)});s.on('error',()=>process.exit(1))"; then
+        echo "$port"
+        return 0
+      fi
     fi
   done
   echo "Unable to locate a free TCP port after ${attempts} attempts." >&2
