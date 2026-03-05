@@ -28,14 +28,23 @@ fast_mcp_run_simulation() {
 }
 
 fast_mcp_demo_async_task() {
-  local output
-  output=$(ploinky client tool demo_async_task 2>&1)
-  if ! echo "$output" | jq -e '.metadata.taskId' >/dev/null; then
-    echo "demo_async_task did not return task metadata. Output: $output" >&2
-    return 1
-  fi
-  if ! echo "$output" | jq -e '.content[0].text | contains("Task completed")' >/dev/null; then
-    echo "demo_async_task result is missing completion text. Output: $output" >&2
-    return 1
-  fi
+  # Retry up to 15s — after restart the demo agent's MCP tools may not be
+  # registered with the router yet (AgentServer still initialising).
+  local attempts=15
+  local i output
+  for (( i=0; i<attempts; i++ )); do
+    output=$(ploinky client tool demo_async_task 2>&1)
+    if echo "$output" | jq -e '.metadata.taskId' >/dev/null 2>&1; then
+      if echo "$output" | jq -e '.content[0].text | contains("Task completed")' >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+    # Only retry if the tool was "not found" (agent not ready yet)
+    if ! echo "$output" | grep -q "not found"; then
+      break
+    fi
+    sleep 1
+  done
+  echo "demo_async_task failed after ${attempts}s. Output: $output" >&2
+  return 1
 }
