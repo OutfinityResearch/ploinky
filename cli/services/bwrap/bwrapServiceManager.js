@@ -150,7 +150,7 @@ function buildBwrapArgs(options) {
         if (fs.existsSync(f)) args.push('--ro-bind', f, f);
     }
     // SSL/TLS certificates and other /etc directories
-    const etcDirs = ['/etc/ssl', '/etc/ca-certificates', '/etc/pki', '/etc/alternatives'];
+    const etcDirs = ['/etc/ssl', '/etc/ca-certificates', '/etc/pki', '/etc/alternatives', '/etc/crypto-policies'];
     for (const d of etcDirs) {
         if (fs.existsSync(d)) args.push('--ro-bind', d, d);
     }
