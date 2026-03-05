@@ -40,6 +40,8 @@ cd "$TEST_RUN_DIR"
 
 if command -v bwrap >/dev/null 2>&1; then
   FAST_AGENT_RUNTIME="bwrap"
+elif [[ "$(uname -s)" == "Darwin" ]] && command -v sandbox-exec >/dev/null 2>&1; then
+  FAST_AGENT_RUNTIME="seatbelt"
 else
   FAST_AGENT_RUNTIME="container"
 fi

@@ -93,8 +93,8 @@ test_check "Status lists repos section" fast_assert_status_contains "- Repos:"
 test_check "Status lists demo repo" fast_assert_status_contains "  - demo"
 test_check "Status lists testRepo repo" fast_assert_status_contains "  - testRepo"
 test_check "Status lists active containers for demo" fast_assert_status_contains "agent: demo"
-# Bwrap agents are not listed in 'ploinky status' (it queries container runtime only)
-if [[ "${FAST_AGENT_RUNTIME:-container}" != "bwrap" ]]; then
+# Sandbox agents are not listed in 'ploinky status' (it queries container runtime only)
+if ! is_sandbox_runtime; then
   test_check "Status lists active containers for testAgent" fast_assert_status_contains "agent: testAgent"
 fi
 
@@ -161,8 +161,8 @@ stage_header "Install Command Verification"
 test_check "Install command creates marker file (verified via shell)" fast_check_install_marker_via_shell
 
 stage_header "Postinstall Verification"
-# Postinstall hooks use 'docker exec' which is not available for bwrap agents
-if [[ "${FAST_AGENT_RUNTIME:-container}" != "bwrap" ]]; then
+# Postinstall hooks use 'docker exec' which is not available for sandbox agents
+if ! is_sandbox_runtime; then
   test_check "Postinstall command creates marker file" check_postinstall_marker
 fi
 
