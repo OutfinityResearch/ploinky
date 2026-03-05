@@ -27,7 +27,11 @@ check_preinstall_run() {
   explorer_container=$(compute_container_name "explorer" "fileExplorer") || true
   if [[ -n "$explorer_container" ]]; then
     local container_logs
-    container_logs=$($FAST_CONTAINER_RUNTIME logs "$explorer_container" 2>&1) || true
+    if is_bwrap_agent "$explorer_container"; then
+      container_logs=$(cat "$TEST_RUN_DIR/logs/explorer-bwrap.log" 2>&1) || true
+    else
+      container_logs=$($FAST_CONTAINER_RUNTIME logs "$explorer_container" 2>&1) || true
+    fi
     if echo "$container_logs" | grep -q "Installing explorer dependencies"; then
       return 0
     fi

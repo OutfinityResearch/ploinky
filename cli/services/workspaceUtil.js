@@ -6,6 +6,8 @@ import * as utils from './utils.js';
 import * as agentsSvc from './agents.js';
 import * as workspaceSvc from './workspace.js';
 import * as dockerSvc from './docker/index.js';
+import { getRuntimeForAgent, isSandboxRuntime } from './docker/common.js';
+import { isBwrapProcessRunning, stopBwrapProcess } from './bwrap/bwrapFleet.js';
 import { applyManifestDirectives } from './bootstrapManifest.js';
 import { executeHostHook, isInlineCommand } from './lifecycleHooks.js';
 import { getActiveProfile, getProfileConfig, getProfileEnvVars } from './profileService.js';
@@ -396,7 +398,19 @@ async function runCli(agentName, args) {
     || registryRecord?.containerName
     || getAgentContainerName(shortAgentName, repoName);
   const projPath = getConfiguredProjectPath(shortAgentName, repoName, registryRecord?.record?.alias);
-  attachInteractive(containerName, projPath, cmd);
+
+  // For sandbox agents, spawn a new sandbox session for the CLI
+  // instead of using podman exec (which fails — no container exists)
+  const agentRuntime = getRuntimeForAgent(manifest);
+  if (agentRuntime === 'bwrap') {
+    const { attachBwrapInteractive } = await import('./bwrap/bwrapServiceManager.js');
+    attachBwrapInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
+  } else if (agentRuntime === 'seatbelt') {
+    const { attachSeatbeltInteractive } = await import('./seatbelt/seatbeltServiceManager.js');
+    attachSeatbeltInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
+  } else {
+    attachInteractive(containerName, projPath, cmd);
+  }
 }
 
 async function runShell(agentName) {
@@ -421,11 +435,26 @@ async function runShell(agentName) {
     || registryRecord?.containerName
     || getAgentContainerName(shortAgentName, repoName);
   const cmd = '/bin/sh';
-  console.log(`[shell] container: ${containerName}`);
-  console.log(`[shell] command: ${cmd}`);
-  console.log(`[shell] agent: ${shortAgentName}`);
   const projPath = getConfiguredProjectPath(shortAgentName, repoName, registryRecord?.record?.alias);
-  attachInteractive(containerName, projPath, cmd);
+
+  // For sandbox agents, spawn a new sandbox for the shell session
+  const agentRuntime = getRuntimeForAgent(manifest);
+  if (agentRuntime === 'bwrap') {
+    console.log(`[shell] bwrap agent: ${shortAgentName}`);
+    console.log(`[shell] command: ${cmd}`);
+    const { attachBwrapInteractive } = await import('./bwrap/bwrapServiceManager.js');
+    attachBwrapInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
+  } else if (agentRuntime === 'seatbelt') {
+    console.log(`[shell] seatbelt agent: ${shortAgentName}`);
+    console.log(`[shell] command: ${cmd}`);
+    const { attachSeatbeltInteractive } = await import('./seatbelt/seatbeltServiceManager.js');
+    attachSeatbeltInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
+  } else {
+    console.log(`[shell] container: ${containerName}`);
+    console.log(`[shell] command: ${cmd}`);
+    console.log(`[shell] agent: ${shortAgentName}`);
+    attachInteractive(containerName, projPath, cmd);
+  }
 }
 
 async function refreshAgent(agentName) {
@@ -453,7 +482,19 @@ async function refreshAgent(agentName) {
 
     const containerName = registryRecord?.containerName || getAgentContainerName(resolved.shortAgentName, resolved.repo);
 
-    if (!isContainerRunning(containerName)) {
+    // Read manifest early to determine runtime
+    let manifest;
+    try {
+        manifest = JSON.parse(fs.readFileSync(resolved.manifestPath, 'utf8'));
+    } catch (err) {
+        console.error(`Failed to read manifest for '${agentName}': ${err?.message || err}`);
+        return;
+    }
+
+    const agentRuntime = getRuntimeForAgent(manifest);
+    const bwrapRunning = isSandboxRuntime(agentRuntime) && isBwrapProcessRunning(resolved.shortAgentName);
+
+    if (!isContainerRunning(containerName) && !bwrapRunning) {
         console.error(`Agent '${agentName}' is not running.`);
         return;
     }
@@ -462,9 +503,12 @@ async function refreshAgent(agentName) {
 
     try {
         const short = resolved.shortAgentName;
-        const manifest = JSON.parse(fs.readFileSync(resolved.manifestPath, 'utf8'));
         const agentPath = path.dirname(resolved.manifestPath);
-        
+
+        // Stop existing process (bwrap or container)
+        if (bwrapRunning) {
+            stopBwrapProcess(short);
+        }
         stopAndRemove(containerName);
         
         const { containerName: newContainerName, hostPort } = await ensureAgentService(short, manifest, agentPath, {

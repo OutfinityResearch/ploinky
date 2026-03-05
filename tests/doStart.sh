@@ -103,4 +103,6 @@ if ! wait_for_router; then
   exit 1
 fi
 
+ls -la "$TEST_RUN_DIR/.ploinky/bwrap-pids/" 2>/dev/null || true
+
 test_info "Start procedure completed."

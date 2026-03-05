@@ -33,7 +33,7 @@ function resolveConfigPaths() {
     const defaults = [
         process.env.PLOINKY_MCP_CONFIG_PATH,
         '/tmp/ploinky/mcp-config.json',
-        '/code/mcp-config.json',
+        `${process.env.PLOINKY_CODE_DIR || '/code'}/mcp-config.json`,
         path.join(process.cwd(), 'mcp-config.json')
     ];
     return [...explicit, ...defaults];
@@ -280,7 +280,7 @@ function extractTemplateParams(template) {
 async function registerFromConfig(server, config, helpers) {
     if (!config || typeof config !== 'object') return;
     const { ResourceTemplate, McpError, ErrorCode } = helpers;
-    const defaultCwd = '/code';
+    const defaultCwd = process.env.PLOINKY_CODE_DIR || '/code';
 
     if (Array.isArray(config.tools)) {
         for (const tool of config.tools) {

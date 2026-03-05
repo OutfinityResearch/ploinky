@@ -13,7 +13,7 @@ else
 fi
 
 while :; do
-  node /Agent/server/AgentServer.mjs
+  node ${PLOINKY_AGENT_LIB_DIR:-/Agent}/server/AgentServer.mjs
   code=$?
   echo "[AgentServer.sh] AgentServer.mjs exited with code $code. Restarting in 60s..."
   sleep 60

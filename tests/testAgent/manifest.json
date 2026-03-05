@@ -1,4 +1,5 @@
 {
+  "lite-sandbox": true,
   "container": "node:20-bullseye",
   "start": "/code/start_script.sh",
   "agent": "node /code/server.js",

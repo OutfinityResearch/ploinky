@@ -6,9 +6,11 @@ import {
     containerExists,
     getAgentContainerName,
     isContainerRunning,
+    isSandboxRuntime,
     loadAgentsMap
 } from './common.js';
 import { clearLivenessState } from './healthProbes.js';
+import { stopBwrapProcess, stopAllBwrapProcesses, isBwrapProcessRunning } from '../bwrap/bwrapFleet.js';
 
 function chunkArray(list, size = 8) {
     const chunks = [];
@@ -84,8 +86,28 @@ function stopConfiguredAgents({ fast = false } = {}) {
     const agents = loadAgents();
     const entries = Object.entries(agents || {})
         .filter(([name, rec]) => rec && (rec.type === 'agent' || rec.type === 'agentCore') && typeof name === 'string' && !name.startsWith('_'));
-    const candidateSet = new Set();
+
+    // Handle sandbox (bwrap/seatbelt) agents first
+    const bwrapStopped = [];
+    const containerEntries = [];
     for (const [name, rec] of entries) {
+        if (isSandboxRuntime(rec?.runtime)) {
+            const agentName = rec.agentName || name;
+            if (isBwrapProcessRunning(agentName)) {
+                stopBwrapProcess(agentName);
+                console.log(`[stop] Stopped ${agentName} (${rec.runtime})`);
+                bwrapStopped.push(name);
+            } else {
+                console.log(`[stop] ${agentName}: no running ${rec.runtime} process found.`);
+            }
+        } else {
+            containerEntries.push([name, rec]);
+        }
+    }
+
+    // Handle container agents
+    const candidateSet = new Set();
+    for (const [name, rec] of containerEntries) {
         const candidates = getContainerCandidates(name, rec).filter((candidate) => candidate && containerExists(candidate));
         if (!candidates.length) {
             const label = rec?.agentName ? `${rec.agentName}` : name;
@@ -95,31 +117,47 @@ function stopConfiguredAgents({ fast = false } = {}) {
     }
 
     const allCandidates = Array.from(candidateSet);
-    if (!allCandidates.length) return [];
-
-    allCandidates.forEach((name) => gracefulStopContainer(name, { prefix: '[stop]' }));
-    const remaining = waitForContainers(allCandidates, 5);
-    if (remaining.length) {
-        forceStopContainers(remaining, { prefix: '[stop]' });
-        waitForContainers(remaining, 2);
+    if (allCandidates.length) {
+        allCandidates.forEach((name) => gracefulStopContainer(name, { prefix: '[stop]' }));
+        const remaining = waitForContainers(allCandidates, 5);
+        if (remaining.length) {
+            forceStopContainers(remaining, { prefix: '[stop]' });
+            waitForContainers(remaining, 2);
+        }
     }
 
-    const stopped = allCandidates.filter((name) => !isContainerRunning(name));
-    stopped.forEach((name) => {
+    const stoppedContainers = allCandidates.filter((name) => !isContainerRunning(name));
+    stoppedContainers.forEach((name) => {
         console.log(`[stop] Stopped ${name}`);
         clearLivenessState(name);
     });
-    return stopped;
+    return [...bwrapStopped, ...stoppedContainers];
 }
 
 function stopAndRemoveMany(names, { fast = false } = {}) {
     if (!Array.isArray(names) || !names.length) return [];
 
     const agents = loadAgents();
+
+    // Handle sandbox (bwrap/seatbelt) agents first
+    const bwrapRemoved = [];
+    const containerNames = [];
+    for (const agentName of names) {
+        if (!agentName) continue;
+        const rec = agents ? agents[agentName] : null;
+        if (isSandboxRuntime(rec?.runtime)) {
+            const bwrapAgentName = rec.agentName || agentName;
+            stopBwrapProcess(bwrapAgentName);
+            bwrapRemoved.push(agentName);
+            continue;
+        }
+        containerNames.push(agentName);
+    }
+
     const removalSet = new Set();
     const runningSet = new Set();
 
-    for (const agentName of names) {
+    for (const agentName of containerNames) {
         if (!agentName) continue;
         const rec = agents ? agents[agentName] : null;
         const candidates = getContainerCandidates(agentName, rec);
@@ -132,7 +170,7 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
         }
     }
 
-    if (!removalSet.size) return [];
+    if (!removalSet.size) return bwrapRemoved;
 
     const prefix = fast ? '[destroy-fast]' : '[destroy]';
     const runningList = Array.from(runningSet);
@@ -183,7 +221,7 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
         }
     }
 
-    return removed;
+    return [...bwrapRemoved, ...removed];
 }
 
 function stopAndRemove(name, fast = false) {
@@ -216,6 +254,7 @@ function destroyWorkspaceContainers({ fast = false } = {}) {
             names.push(name);
         }
     }
+    // stopAndRemoveMany now handles bwrap agents internally
     return stopAndRemoveMany(names, { fast });
 }
 
