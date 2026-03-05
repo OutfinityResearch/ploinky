@@ -31,8 +31,14 @@ if [[ -n "${PLOINKY_BRANCH:-}" ]]; then
   if [[ "$PLOINKY_BRANCH" == "$current_branch" ]]; then
     echo "[test] PLOINKY_BRANCH='${PLOINKY_BRANCH}' matches current branch — using working copy."
   else
-    # Prune stale worktrees (e.g. from interrupted previous runs)
+    # Remove any existing worktree for this branch (e.g. from interrupted previous runs)
+    _existing_wt=$(git -C "$PLOINKY_REPO_ROOT" worktree list --porcelain 2>/dev/null | awk -v b="$PLOINKY_BRANCH" '/^worktree /{wt=$2} /^branch /{if($2=="refs/heads/"b) print wt}')
+    if [[ -n "$_existing_wt" ]]; then
+      echo "[test] Removing stale worktree at ${_existing_wt}..."
+      git -C "$PLOINKY_REPO_ROOT" worktree remove --force "$_existing_wt" 2>/dev/null || rm -rf "$_existing_wt"
+    fi
     git -C "$PLOINKY_REPO_ROOT" worktree prune 2>/dev/null || true
+    unset _existing_wt
     PLOINKY_WORKTREE=$(mktemp -d "${TMPDIR:-/tmp}/ploinky-test-worktree-XXXXXX")
     echo "[test] Creating worktree for ploinky branch '${PLOINKY_BRANCH}' at ${PLOINKY_WORKTREE}..."
     git -C "$PLOINKY_REPO_ROOT" worktree add "$PLOINKY_WORKTREE" "$PLOINKY_BRANCH" 2>&1 | sed 's/^/  /'
@@ -46,12 +52,15 @@ if [[ -n "${PLOINKY_BRANCH:-}" ]]; then
     # Ensure Agent/node_modules exists (bwrap needs this mount point; not tracked in git)
     mkdir -p "$PLOINKY_WORKTREE/Agent/node_modules"
 
-    # Source .env from the original repo tree (worktree is in /tmp, has no .env ancestors)
+    # Find .env from the original repo tree and make it available in the worktree.
+    # The LLM suggestion tests walk up from TESTS_DIR to find .env, but the worktree
+    # is in /tmp (no .env ancestors). Symlink it into the worktree root so tests find it.
     _orig_dir="$PLOINKY_REPO_ROOT"
     while [[ "$_orig_dir" != "/" ]]; do
       if [[ -f "$_orig_dir/.env" ]]; then
         echo "[test] Loading API keys from ${_orig_dir}/.env"
         set -a; source "$_orig_dir/.env"; set +a
+        ln -sf "$_orig_dir/.env" "$PLOINKY_WORKTREE/.env"
         break
       fi
       _orig_dir=$(dirname "$_orig_dir")
