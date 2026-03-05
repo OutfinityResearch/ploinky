@@ -10,11 +10,45 @@
 set -euo pipefail
 
 TESTS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PLOINKY_REPO_ROOT=$(cd -- "$TESTS_DIR/.." && pwd)
 
 # Load branch configuration if present
 if [[ -f "$TESTS_DIR/branch_config.sh" ]]; then
     source "$TESTS_DIR/branch_config.sh"
 fi
+
+# --- Ploinky branch selection ---
+# When PLOINKY_BRANCH is set, create a git worktree at that branch and use it
+# instead of the current working copy. This allows testing any ploinky branch.
+#
+# Usage:
+#   PLOINKY_BRANCH=bwrap-integration ./tests/run-all.sh
+#   PLOINKY_BRANCH=main ./tests/run-all.sh
+#
+PLOINKY_WORKTREE=""
+if [[ -n "${PLOINKY_BRANCH:-}" ]]; then
+  current_branch=$(git -C "$PLOINKY_REPO_ROOT" branch --show-current 2>/dev/null || echo "")
+  if [[ "$PLOINKY_BRANCH" == "$current_branch" ]]; then
+    echo "[test] PLOINKY_BRANCH='${PLOINKY_BRANCH}' matches current branch — using working copy."
+  else
+    PLOINKY_WORKTREE=$(mktemp -d "${TMPDIR:-/tmp}/ploinky-test-worktree-XXXXXX")
+    echo "[test] Creating worktree for ploinky branch '${PLOINKY_BRANCH}' at ${PLOINKY_WORKTREE}..."
+    git -C "$PLOINKY_REPO_ROOT" worktree add "$PLOINKY_WORKTREE" "$PLOINKY_BRANCH" 2>&1 | sed 's/^/  /'
+
+    # Install dependencies in the worktree
+    if [[ -f "$PLOINKY_WORKTREE/package.json" ]]; then
+      echo "[test] Installing dependencies in worktree..."
+      (cd "$PLOINKY_WORKTREE" && npm install --ignore-scripts --no-audit --no-fund 2>&1 | tail -1 | sed 's/^/  /')
+    fi
+
+    # Override TESTS_DIR to use the worktree's tests (they match the branch)
+    TESTS_DIR="$PLOINKY_WORKTREE/tests"
+    # Prepend worktree bin to PATH so 'ploinky' resolves to the branch under test
+    export PATH="$PLOINKY_WORKTREE/bin:$PATH"
+    echo "[test] Using ploinky from: $(which ploinky)"
+  fi
+fi
+export PLOINKY_BRANCH="${PLOINKY_BRANCH:-}"
 
 # State file for sharing variables between scripts
 FAST_STATE_FILE=$(mktemp "${TMPDIR:-/tmp}/fast-suite-state-XXXXXX.env")
@@ -32,6 +66,11 @@ ABORTED=0
 cleanup() {
   # The state file is temporary and should be removed.
   rm -f "$FAST_STATE_FILE"
+  # Clean up ploinky worktree if one was created
+  if [[ -n "$PLOINKY_WORKTREE" && -d "$PLOINKY_WORKTREE" ]]; then
+    echo "[test] Removing ploinky worktree at ${PLOINKY_WORKTREE}..."
+    git -C "$PLOINKY_REPO_ROOT" worktree remove --force "$PLOINKY_WORKTREE" 2>/dev/null || rm -rf "$PLOINKY_WORKTREE"
+  fi
   # The results file is an intended artifact and is not removed.
 }
 trap cleanup EXIT
@@ -53,6 +92,9 @@ abort_suite() {
   fi
   if [[ -n "${TEST_RUN_DIR:-}" && -d "$TEST_RUN_DIR" ]]; then
     rm -rf "$TEST_RUN_DIR"
+  fi
+  if [[ -n "${PLOINKY_WORKTREE:-}" && -d "$PLOINKY_WORKTREE" ]]; then
+    git -C "$PLOINKY_REPO_ROOT" worktree remove --force "$PLOINKY_WORKTREE" 2>/dev/null || rm -rf "$PLOINKY_WORKTREE"
   fi
   cd "$TESTS_DIR"
   exit 130
