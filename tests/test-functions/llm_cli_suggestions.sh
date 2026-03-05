@@ -16,6 +16,10 @@ _resolve_llm_env() {
 # Source the .env so API keys are exported into the current shell
 # and inherited by ploinky subprocesses via process.env.
 _load_llm_keys() {
+  # If keys are already exported (e.g. worktree mode pre-loads them), skip file search
+  if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
+    return 0
+  fi
   local env_file
   if env_file=$(_resolve_llm_env); then
     set -a

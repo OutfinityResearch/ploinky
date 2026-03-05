@@ -46,6 +46,18 @@ if [[ -n "${PLOINKY_BRANCH:-}" ]]; then
     # Ensure Agent/node_modules exists (bwrap needs this mount point; not tracked in git)
     mkdir -p "$PLOINKY_WORKTREE/Agent/node_modules"
 
+    # Source .env from the original repo tree (worktree is in /tmp, has no .env ancestors)
+    _orig_dir="$PLOINKY_REPO_ROOT"
+    while [[ "$_orig_dir" != "/" ]]; do
+      if [[ -f "$_orig_dir/.env" ]]; then
+        echo "[test] Loading API keys from ${_orig_dir}/.env"
+        set -a; source "$_orig_dir/.env"; set +a
+        break
+      fi
+      _orig_dir=$(dirname "$_orig_dir")
+    done
+    unset _orig_dir
+
     # Override TESTS_DIR to use the worktree's tests (they match the branch)
     TESTS_DIR="$PLOINKY_WORKTREE/tests"
     # Prepend worktree bin to PATH so 'ploinky' resolves to the branch under test
