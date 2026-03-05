@@ -45,9 +45,22 @@ watchdog_restart_services() {
   fi
 
   test_info "Sending SIGKILL to agent container ${TEST_AGENT_CONT_NAME}."
-  if ! $FAST_CONTAINER_RUNTIME kill --signal SIGKILL "$TEST_AGENT_CONT_NAME" >/dev/null 2>&1; then
-    echo "Failed to send SIGKILL to container '${TEST_AGENT_CONT_NAME}'." >&2
-    return 1
+  if is_bwrap_agent "$TEST_AGENT_CONT_NAME"; then
+    local agent_name
+    agent_name=$(resolve_agent_name_from_container "$TEST_AGENT_CONT_NAME")
+    local pid
+    pid=$(cat "$TEST_RUN_DIR/.ploinky/bwrap-pids/${agent_name}.pid")
+    # Kill the entire process group (bwrap + sandboxed children) so the
+    # port is freed and the watchdog can restart cleanly.
+    if ! kill -9 -- -"$pid" 2>/dev/null; then
+      # Fallback: kill just the PID if process group kill fails
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  else
+    if ! $FAST_CONTAINER_RUNTIME kill --signal SIGKILL "$TEST_AGENT_CONT_NAME" >/dev/null 2>&1; then
+      echo "Failed to send SIGKILL to container '${TEST_AGENT_CONT_NAME}'." >&2
+      return 1
+    fi
   fi
 
   test_info "Waiting for watchdog to restore services."
