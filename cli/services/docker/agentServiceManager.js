@@ -499,10 +499,18 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     // Check if this agent should use a sandbox runtime instead of containers
     const agentRuntime = getRuntimeForAgent(manifest);
     if (agentRuntime === 'bwrap') {
-        return ensureBwrapService(agentName, manifest, agentPath, options);
+        try {
+            return ensureBwrapService(agentName, manifest, agentPath, options);
+        } catch (err) {
+            console.warn(`[bwrap] ${agentName}: sandbox failed (${err.message}), falling back to container`);
+        }
     }
     if (agentRuntime === 'seatbelt') {
-        return ensureSeatbeltService(agentName, manifest, agentPath, options);
+        try {
+            return ensureSeatbeltService(agentName, manifest, agentPath, options);
+        } catch (err) {
+            console.warn(`[seatbelt] ${agentName}: sandbox failed (${err.message}), falling back to container`);
+        }
     }
 
     let preferredHostPort;
