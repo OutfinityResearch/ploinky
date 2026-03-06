@@ -304,6 +304,31 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
         throw new Error(`[seatbelt] ${agentName}: failed to spawn sandbox-exec process`);
     }
 
+    // Wait briefly then verify the process is actually alive (not a zombie or already exited)
+    spawnSync('sleep', ['0.5']);
+    let processAlive = false;
+    try {
+        // macOS: use ps to check process state (no /proc filesystem)
+        const psResult = spawnSync('ps', ['-p', String(child.pid), '-o', 'state='], { stdio: 'pipe' });
+        if (psResult.status === 0) {
+            const state = (psResult.stdout || '').toString().trim();
+            // 'Z' = zombie on macOS/BSD
+            processAlive = state.length > 0 && !state.startsWith('Z');
+        }
+    } catch {
+        processAlive = false;
+    }
+    if (!processAlive) {
+        let reason = 'unknown error';
+        try {
+            const logContent = fs.readFileSync(logFile, 'utf8').trim();
+            const lastLine = logContent.split('\n').pop();
+            if (lastLine) reason = lastLine;
+        } catch { /* ignore */ }
+        clearBwrapPid(agentName);
+        throw new Error(`seatbelt process exited immediately: ${reason}`);
+    }
+
     // Save PID (reuse bwrap PID management)
     saveBwrapPid(agentName, child.pid);
     console.log(`[seatbelt] ${agentName}: started with PID ${child.pid}`);
