@@ -466,6 +466,30 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
         throw new Error(`[bwrap] ${agentName}: failed to spawn bwrap process`);
     }
 
+    // Wait briefly and verify the process didn't crash immediately
+    // (e.g. AppArmor blocking user namespaces, missing dependencies)
+    // Detached+unref'd processes become zombies when they die, so kill -0
+    // still returns true. Check /proc/PID/status for zombie state instead.
+    spawnSync('sleep', ['0.5']);
+    let processAlive = false;
+    try {
+        const statusContent = fs.readFileSync(`/proc/${child.pid}/status`, 'utf8');
+        const stateLine = statusContent.split('\n').find(l => l.startsWith('State:')) || '';
+        processAlive = !stateLine.includes('Z (zombie)');
+    } catch {
+        processAlive = false;  // /proc/PID gone = process fully reaped
+    }
+    if (!processAlive) {
+        // Process died — read the log for the error message
+        let reason = 'unknown error';
+        try {
+            const logContent = fs.readFileSync(logFile, 'utf8').trim();
+            const lastLine = logContent.split('\n').pop();
+            if (lastLine) reason = lastLine;
+        } catch {}
+        throw new Error(`bwrap process exited immediately: ${reason}`);
+    }
+
     // Save PID
     saveBwrapPid(agentName, child.pid);
     console.log(`[bwrap] ${agentName}: started with PID ${child.pid}`);
