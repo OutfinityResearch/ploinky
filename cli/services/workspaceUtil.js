@@ -6,7 +6,7 @@ import * as utils from './utils.js';
 import * as agentsSvc from './agents.js';
 import * as workspaceSvc from './workspace.js';
 import * as dockerSvc from './docker/index.js';
-import { getRuntimeForAgent, isSandboxRuntime } from './docker/common.js';
+import { getRuntimeForAgent, isSandboxRuntime, loadAgentsMap } from './docker/common.js';
 import { isBwrapProcessRunning, stopBwrapProcess } from './bwrap/bwrapFleet.js';
 import { applyManifestDirectives } from './bootstrapManifest.js';
 import { executeHostHook, isInlineCommand } from './lifecycleHooks.js';
@@ -399,13 +399,16 @@ async function runCli(agentName, args) {
     || getAgentContainerName(shortAgentName, repoName);
   const projPath = getConfiguredProjectPath(shortAgentName, repoName, registryRecord?.record?.alias);
 
-  // For sandbox agents, spawn a new sandbox session for the CLI
-  // instead of using podman exec (which fails — no container exists)
-  const agentRuntime = getRuntimeForAgent(manifest);
-  if (agentRuntime === 'bwrap') {
+  // Determine actual runtime from registry (may differ from manifest if sandbox
+  // failed and fell back to container during ensureAgentService)
+  const agents = loadAgentsMap();
+  const registryEntry = agents[containerName] || {};
+  const actualRuntime = registryEntry.runtime;
+
+  if (actualRuntime === 'bwrap') {
     const { attachBwrapInteractive } = await import('./bwrap/bwrapServiceManager.js');
     attachBwrapInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
-  } else if (agentRuntime === 'seatbelt') {
+  } else if (actualRuntime === 'seatbelt') {
     const { attachSeatbeltInteractive } = await import('./seatbelt/seatbeltServiceManager.js');
     attachSeatbeltInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
   } else {
@@ -437,14 +440,18 @@ async function runShell(agentName) {
   const cmd = '/bin/sh';
   const projPath = getConfiguredProjectPath(shortAgentName, repoName, registryRecord?.record?.alias);
 
-  // For sandbox agents, spawn a new sandbox for the shell session
-  const agentRuntime = getRuntimeForAgent(manifest);
-  if (agentRuntime === 'bwrap') {
+  // Determine actual runtime from registry (may differ from manifest if sandbox
+  // failed and fell back to container during ensureAgentService)
+  const agents = loadAgentsMap();
+  const registryEntry = agents[containerName] || {};
+  const actualRuntime = registryEntry.runtime;
+
+  if (actualRuntime === 'bwrap') {
     console.log(`[shell] bwrap agent: ${shortAgentName}`);
     console.log(`[shell] command: ${cmd}`);
     const { attachBwrapInteractive } = await import('./bwrap/bwrapServiceManager.js');
     attachBwrapInteractive(shortAgentName, manifest, agentDir, projPath, cmd);
-  } else if (agentRuntime === 'seatbelt') {
+  } else if (actualRuntime === 'seatbelt') {
     console.log(`[shell] seatbelt agent: ${shortAgentName}`);
     console.log(`[shell] command: ${cmd}`);
     const { attachSeatbeltInteractive } = await import('./seatbelt/seatbeltServiceManager.js');
