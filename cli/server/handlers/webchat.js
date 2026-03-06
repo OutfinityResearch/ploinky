@@ -644,8 +644,11 @@ function handleWebChat(req, res, appConfig, appState) {
                 });
 
             } catch (e) {
-                res.writeHead(500);
-                res.end('Failed to create chat session: ' + (e?.message || e));
+                console.error(`[webchat] Failed to create chat session: ${e?.message || e}`);
+                if (!res.headersSent) {
+                    res.writeHead(500);
+                }
+                try { res.end('Failed to create chat session: ' + (e?.message || e)); } catch (_) { }
                 return;
             }
         } else {
