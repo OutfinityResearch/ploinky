@@ -823,7 +823,7 @@ body {
 .wa-message-text {
     white-space: normal;
     margin: 0;
-    padding-right: 90px;
+    padding-right: 5px;
     min-height: 19px;
 }
 
