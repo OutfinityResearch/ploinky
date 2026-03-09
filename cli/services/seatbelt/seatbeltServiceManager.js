@@ -222,6 +222,27 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
         fs.mkdirSync(nodeModulesDir, { recursive: true });
     }
 
+    // Symlink node_modules into the code path so that CLI/webchat processes
+    // (spawned without NODE_PATH) can resolve packages like achillesAgentLib.
+    const codeNodeModules = path.join(agentCodePath, 'node_modules');
+    try {
+        const stat = fs.lstatSync(codeNodeModules);
+        if (stat.isSymbolicLink()) {
+            const target = fs.readlinkSync(codeNodeModules);
+            if (target !== nodeModulesDir) {
+                fs.unlinkSync(codeNodeModules);
+                fs.symlinkSync(nodeModulesDir, codeNodeModules);
+            }
+        }
+    } catch {
+        // Doesn't exist yet — create symlink
+        try {
+            fs.symlinkSync(nodeModulesDir, codeNodeModules);
+        } catch (err) {
+            debugLog(`[seatbelt] ${agentName}: could not symlink node_modules into code path: ${err.message}`);
+        }
+    }
+
     // Port resolution — with shared host network, hostPort === containerPort
     const { portMappings } = parseManifestPorts(manifest, profileConfig);
     let allPortMappings = [...portMappings];
@@ -249,7 +270,7 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     // NODE_PATH for module resolution
     envMap.NODE_PATH = nodeModulesDir;
     envMap.HOME = '/tmp';
-    envMap.PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+    envMap.PATH = process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
     // Rewrite mcp-config.json for real paths
     const rewrittenMcpConfig = rewriteMcpConfig(agentName, agentCodePath, agentWorkDir);
@@ -295,7 +316,8 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     const child = spawn('sandbox-exec', ['-f', profilePath, 'sh', '-c', entryCmd], {
         detached: true,
         stdio: ['ignore', logFd, logFd],
-        env: envMap
+        env: envMap,
+        cwd: agentWorkDir
     });
     child.unref();
     fs.closeSync(logFd);
@@ -479,7 +501,7 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
     envMap.PLOINKY_CODE_DIR = agentCodePath;
     envMap.NODE_PATH = nodeModulesDir;
     envMap.HOME = '/tmp';
-    envMap.PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+    envMap.PATH = process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
     // Rewrite mcp-config
     const rewrittenMcpConfig = rewriteMcpConfig(agentName, agentCodePath, agentWorkDir);

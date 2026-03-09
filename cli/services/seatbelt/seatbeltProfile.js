@@ -31,6 +31,7 @@ function buildSeatbeltProfile(options) {
 
     // System read access (macOS paths)
     lines.push('; System read access');
+    lines.push('(allow file-read* (literal "/"))');
     lines.push('(allow file-read*');
     lines.push('    (subpath "/usr")');
     lines.push('    (subpath "/System")');
@@ -43,12 +44,13 @@ function buildSeatbeltProfile(options) {
     lines.push('    (subpath "/tmp")');
     lines.push('    (subpath "/bin")');
     lines.push('    (subpath "/sbin")');
+    lines.push('    (subpath "/opt")');
     lines.push(')');
     lines.push('');
 
-    // Temp write access (HOME=/tmp for agents)
-    lines.push('; Temp write access');
-    lines.push('(allow file-write* (subpath "/tmp") (subpath "/private/tmp"))');
+    // Temp and device write access (HOME=/tmp for agents)
+    lines.push('; Temp and device write access');
+    lines.push('(allow file-write* (subpath "/tmp") (subpath "/private/tmp") (subpath "/dev"))');
     lines.push('');
 
     // Full network (agents use host network)
@@ -58,7 +60,7 @@ function buildSeatbeltProfile(options) {
 
     // Process operations + Mach IPC (required on macOS)
     lines.push('; Process and IPC');
-    lines.push('(allow process-fork process-exec process-exec*)');
+    lines.push('(allow process-fork process-exec*)');
     lines.push('(allow mach-lookup mach-register)');
     lines.push('(allow ipc-posix* signal sysctl-read)');
     lines.push('');
@@ -114,6 +116,26 @@ function buildSeatbeltProfile(options) {
             }
             lines.push('');
         }
+    }
+
+    // Parent directory traversal — macOS sandbox requires read access to every
+    // ancestor directory in order to stat/traverse into allowed subpaths.
+    const allPaths = [agentCodePath, agentLibPath, nodeModulesDir, sharedDir, cwd, skillsPath].filter(Boolean);
+    const parentLiterals = new Set();
+    for (const p of allPaths) {
+        let dir = path.dirname(p);
+        while (dir && dir !== '/' && dir !== '.') {
+            parentLiterals.add(dir);
+            dir = path.dirname(dir);
+        }
+    }
+    if (parentLiterals.size) {
+        lines.push('; Parent directory traversal');
+        const sorted = [...parentLiterals].sort();
+        for (const dir of sorted) {
+            lines.push(`(allow file-read* (literal ${sbplQuote(dir)}))`);
+        }
+        lines.push('');
     }
 
     return lines.join('\n') + '\n';
