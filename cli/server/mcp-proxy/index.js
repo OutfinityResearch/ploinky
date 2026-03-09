@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { sendJson } from '../authHandlers.js';
+import { sendJson, ensureAuthenticated } from '../authHandlers.js';
 import { createAgentClient } from '../AgentClient.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
@@ -112,8 +112,32 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                 }
                 const argPayload = params && typeof params === 'object' ? params['arguments'] : null;
                 const args = argPayload && typeof argPayload === 'object' && !Array.isArray(argPayload)
-                    ? argPayload
+                    ? { ...argPayload }
                     : {};
+                if (req.user && typeof req.user === 'object') {
+                    const authMeta = {
+                        user: {
+                            id: req.user.id || '',
+                            username: req.user.username || req.user.name || req.user.email || '',
+                            email: req.user.email || '',
+                            roles: Array.isArray(req.user.roles) ? [...req.user.roles] : [],
+                        },
+                        sessionId: req.sessionId || '',
+                    };
+                    const nextMeta = args._meta && typeof args._meta === 'object' ? { ...args._meta } : {};
+                    nextMeta.auth = authMeta;
+                    args._meta = nextMeta;
+
+                    const nextParams = args.params && typeof args.params === 'object' && !Array.isArray(args.params)
+                        ? { ...args.params }
+                        : {};
+                    const nextParamsMeta = nextParams._meta && typeof nextParams._meta === 'object'
+                        ? { ...nextParams._meta }
+                        : {};
+                    nextParamsMeta.auth = authMeta;
+                    nextParams._meta = nextParamsMeta;
+                    args.params = nextParams;
+                }
                 const result = await agentClient.callTool(name, args);
                 sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
                 break;
@@ -148,8 +172,18 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
 /**
  * Handle HTTP requests to agent MCP endpoints
  */
-function handleAgentMcpRequest(req, res, route, agentName) {
+async function handleAgentMcpRequest(req, res, route, agentName) {
     const method = (req.method || 'GET').toUpperCase();
+
+    // Defensive auth attach for browser MCP calls. The router should already do this,
+    // but the proxy must not rely on auth context being pre-populated if cookies exist.
+    if (!req.agent && !req.user) {
+        const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+        const authResult = await ensureAuthenticated(req, res, parsedUrl);
+        if (!authResult.ok) {
+            return;
+        }
+    }
 
     // Check agent authorization if agent authentication was used
     if (req.agent) {
