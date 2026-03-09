@@ -114,19 +114,6 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                 const args = argPayload && typeof argPayload === 'object' && !Array.isArray(argPayload)
                     ? { ...argPayload }
                     : {};
-                console.error('[mcp-proxy-debug]', {
-                    host: req.headers.host,
-                    url: req.url,
-                    hasCookie: Boolean(req.headers.cookie),
-                    hasUser: Boolean(req.user),
-                    user: req.user ? {
-                        id: req.user.id,
-                        username: req.user.username,
-                        roles: req.user.roles,
-                    } : null,
-                    sessionId: req.sessionId || null,
-                    tool: name,
-                });
                 if (req.user && typeof req.user === 'object') {
                     const authMeta = {
                         user: {
@@ -150,7 +137,6 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                     nextParamsMeta.auth = authMeta;
                     nextParams._meta = nextParamsMeta;
                     args.params = nextParams;
-                    console.error('[mcp-proxy-debug-auth]', args.params?._meta?.auth || args._meta?.auth || null);
                 }
                 const result = await agentClient.callTool(name, args);
                 sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
