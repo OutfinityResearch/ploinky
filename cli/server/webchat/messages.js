@@ -148,8 +148,11 @@ export function createMessages({
 
             if (!isScrollable) {
                 tableShell.classList.remove('wa-md-table-can-scroll-left', 'wa-md-table-can-scroll-right');
+                tableShell.querySelectorAll('.wa-md-scroll-btn').forEach((button) => button.remove());
                 return;
             }
+
+            ensureTableScrollButtons(tableWrap, tableShell);
 
             const canScrollLeft = tableWrap.scrollLeft > 6;
             const canScrollRight = tableWrap.scrollLeft < maxScrollLeft - 6;
@@ -161,8 +164,6 @@ export function createMessages({
             if (!(tableWrap instanceof HTMLElement) || !(tableShell instanceof HTMLElement)) {
                 return;
             }
-            ensureTableScrollButtons(tableWrap, tableShell);
-
             let binding = tableScrollHintBindings.get(tableWrap);
             if (!binding) {
                 const update = () => refreshTableScrollHint(tableWrap, tableShell);
