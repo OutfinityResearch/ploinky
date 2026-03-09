@@ -26,6 +26,7 @@ export function createMessages({
     let serverSpeechHandler = typeof onServerOutput === 'function' ? onServerOutput : null;
     let quickCommandHandler = typeof onQuickCommand === 'function' ? onQuickCommand : null;
     let speechDebounceTimer = null;
+    const tableScrollHintBindings = new WeakMap();
 
     function appendMessageEl(node) {
         if (!node || !chatList) {
@@ -87,6 +88,235 @@ export function createMessages({
             }
         }
         return text;
+    }
+
+    function enhanceMarkdownTables(container) {
+        if (!(container instanceof Element)) {
+            return;
+        }
+
+        const normalizeHeader = (value) => String(value || '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        const ensureTableScrollButtons = (tableWrap, tableShell) => {
+            if (!(tableWrap instanceof HTMLElement) || !(tableShell instanceof HTMLElement)) {
+                return;
+            }
+            let leftButton = tableShell.querySelector('.wa-md-scroll-btn--left');
+            let rightButton = tableShell.querySelector('.wa-md-scroll-btn--right');
+            if (leftButton instanceof HTMLButtonElement && rightButton instanceof HTMLButtonElement) {
+                return;
+            }
+
+            const makeScrollButton = (direction, label) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `wa-md-scroll-btn wa-md-scroll-btn--${direction}`;
+                button.setAttribute('aria-label', label);
+                button.innerHTML = direction === 'left' ? '‹' : '›';
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const delta = Math.max(180, Math.round(tableWrap.clientWidth * 0.7));
+                    tableWrap.scrollBy({
+                        left: direction === 'left' ? -delta : delta,
+                        behavior: 'smooth',
+                    });
+                });
+                return button;
+            };
+
+            if (!(leftButton instanceof HTMLButtonElement)) {
+                leftButton = makeScrollButton('left', 'Scroll table left');
+                tableShell.appendChild(leftButton);
+            }
+            if (!(rightButton instanceof HTMLButtonElement)) {
+                rightButton = makeScrollButton('right', 'Scroll table right');
+                tableShell.appendChild(rightButton);
+            }
+        };
+
+        const refreshTableScrollHint = (tableWrap, tableShell) => {
+            if (!(tableWrap instanceof HTMLElement) || !(tableShell instanceof HTMLElement)) {
+                return;
+            }
+            const maxScrollLeft = Math.max(0, tableWrap.scrollWidth - tableWrap.clientWidth);
+            const isScrollable = maxScrollLeft > 6;
+            tableShell.classList.toggle('wa-md-table-scrollable', isScrollable);
+
+            if (!isScrollable) {
+                tableShell.classList.remove('wa-md-table-can-scroll-left', 'wa-md-table-can-scroll-right');
+                return;
+            }
+
+            const canScrollLeft = tableWrap.scrollLeft > 6;
+            const canScrollRight = tableWrap.scrollLeft < maxScrollLeft - 6;
+            tableShell.classList.toggle('wa-md-table-can-scroll-left', canScrollLeft);
+            tableShell.classList.toggle('wa-md-table-can-scroll-right', canScrollRight);
+        };
+
+        const bindTableScrollHint = (table, tableWrap, tableShell) => {
+            if (!(tableWrap instanceof HTMLElement) || !(tableShell instanceof HTMLElement)) {
+                return;
+            }
+            ensureTableScrollButtons(tableWrap, tableShell);
+
+            let binding = tableScrollHintBindings.get(tableWrap);
+            if (!binding) {
+                const update = () => refreshTableScrollHint(tableWrap, tableShell);
+                binding = { update, resizeObserver: null, usesWindowResize: false };
+                tableScrollHintBindings.set(tableWrap, binding);
+
+                tableWrap.addEventListener('scroll', update, { passive: true });
+
+                if (typeof ResizeObserver === 'function') {
+                    const resizeObserver = new ResizeObserver(update);
+                    resizeObserver.observe(tableWrap);
+                    binding.resizeObserver = resizeObserver;
+                } else {
+                    window.addEventListener('resize', update);
+                    binding.usesWindowResize = true;
+                }
+            }
+
+            if (binding.resizeObserver && table instanceof Element) {
+                binding.resizeObserver.observe(table);
+            }
+
+            binding.update();
+            if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(binding.update);
+            }
+        };
+
+        const tables = container.querySelectorAll('.wa-md-table-wrap table.wa-md-table');
+        tables.forEach((table) => {
+            table.classList.add('wa-md-table--adaptive');
+            const tableWrap = table.closest('.wa-md-table-wrap');
+            if (!(tableWrap instanceof HTMLElement)) {
+                return;
+            }
+
+            let tableShell = tableWrap.parentElement;
+            if (!(tableShell instanceof HTMLElement) || !tableShell.classList.contains('wa-md-table-shell')) {
+                tableShell = document.createElement('div');
+                tableShell.className = 'wa-md-table-shell';
+                tableWrap.parentNode?.insertBefore(tableShell, tableWrap);
+                tableShell.appendChild(tableWrap);
+            }
+            bindTableScrollHint(table, tableWrap, tableShell);
+
+            const headerLabels = Array.from(table.querySelectorAll('thead th'))
+                .map((cell) => (cell.textContent || '').replace(/\s+/g, ' ').trim());
+            const normalizedHeaders = headerLabels.map(normalizeHeader);
+
+            const priorityIndices = [];
+            const used = new Set();
+            const addPriority = (predicate) => {
+                for (let index = 0; index < normalizedHeaders.length; index += 1) {
+                    if (used.has(index)) {
+                        continue;
+                    }
+                    if (!predicate(normalizedHeaders[index])) {
+                        continue;
+                    }
+                    used.add(index);
+                    priorityIndices.push(index);
+                    return;
+                }
+            };
+
+            addPriority((header) => /\bid\b/.test(header));
+            addPriority((header) => /\bname\b/.test(header) || /\bdescription\b/.test(header));
+            addPriority((header) => /\bqty\b/.test(header) || /\bquantity\b/.test(header) || /\brequired\b/.test(header));
+            addPriority((header) => /\bunit\b/.test(header));
+
+            const minimumKeyColumns = Math.min(3, headerLabels.length);
+            for (let index = 0; priorityIndices.length < minimumKeyColumns && index < headerLabels.length; index += 1) {
+                if (used.has(index)) {
+                    continue;
+                }
+                used.add(index);
+                priorityIndices.push(index);
+            }
+
+            if (!priorityIndices.length) {
+                for (let index = 0; index < Math.min(4, headerLabels.length); index += 1) {
+                    priorityIndices.push(index);
+                }
+            }
+
+            const priorityIndexSet = new Set(priorityIndices);
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach((row) => {
+                row.classList.remove('wa-md-row-has-extra', 'wa-md-row-expanded');
+                const previousToggleCell = row.querySelector('.wa-md-row-toggle-cell');
+                if (previousToggleCell) {
+                    previousToggleCell.remove();
+                }
+                const previousToggle = row.querySelector('.wa-md-row-toggle');
+                if (previousToggle) {
+                    previousToggle.remove();
+                }
+
+                const cells = Array.from(row.querySelectorAll('th, td'));
+                const extraCells = [];
+
+                cells.forEach((cell, index) => {
+                    const label = headerLabels[index] || 'Column ' + (index + 1);
+                    cell.setAttribute('data-label', label);
+                    cell.classList.remove('wa-md-mobile-key', 'wa-md-mobile-extra');
+
+                    const isKeyCell = priorityIndexSet.has(index) || headerLabels.length <= 4;
+                    const priorityOrder = priorityIndices.indexOf(index);
+                    const mobileOrder = isKeyCell
+                        ? (priorityOrder >= 0 ? priorityOrder + 1 : 20 + index)
+                        : 100 + index;
+                    cell.style.setProperty('--wa-mobile-order', String(mobileOrder));
+
+                    if (isKeyCell) {
+                        cell.classList.add('wa-md-mobile-key');
+                    } else {
+                        cell.classList.add('wa-md-mobile-extra');
+                        extraCells.push(cell);
+                    }
+                });
+
+                if (!extraCells.length) {
+                    return;
+                }
+
+                row.classList.add('wa-md-row-has-extra');
+                const toggleCell = document.createElement('td');
+                toggleCell.className = 'wa-md-row-toggle-cell';
+                toggleCell.colSpan = String(Math.max(1, cells.length));
+                toggleCell.setAttribute('data-label', '');
+                toggleCell.style.setProperty('--wa-mobile-order', '10000');
+
+                const toggleButton = document.createElement('button');
+                toggleButton.type = 'button';
+                toggleButton.className = 'wa-md-row-toggle';
+
+                const syncToggleLabel = () => {
+                    const expanded = row.classList.contains('wa-md-row-expanded');
+                    toggleButton.textContent = expanded ? 'Hide details' : 'Show details';
+                    toggleButton.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                };
+
+                toggleButton.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    row.classList.toggle('wa-md-row-expanded');
+                    syncToggleLabel();
+                });
+
+                syncToggleLabel();
+                toggleCell.appendChild(toggleButton);
+                row.appendChild(toggleCell);
+            });
+        });
     }
 
     function updatePanelIfActive(bubble, text) {
@@ -542,6 +772,7 @@ export function createMessages({
         const moreNode = bubble.querySelector('.wa-message-more');
         if (textContainer) {
             textContainer.innerHTML = renderMarkdown(displayText);
+            enhanceMarkdownTables(textContainer);
             sidePanel.bindLinkDelegation(textContainer);
         }
 
@@ -629,6 +860,7 @@ export function createMessages({
         const bubble = wrapper.querySelector('.wa-message-bubble');
         if (textDiv) {
             textDiv.innerHTML = renderMarkdown(text);
+            enhanceMarkdownTables(textDiv);
             sidePanel.bindLinkDelegation(textDiv);
         }
         if (bubble) {
@@ -725,6 +957,7 @@ export function createMessages({
             const captionNode = document.createElement('div');
             captionNode.className = 'wa-attachment-caption';
             captionNode.innerHTML = renderMarkdown(caption);
+            enhanceMarkdownTables(captionNode);
             sidePanel.bindLinkDelegation(captionNode);
             bubble.appendChild(captionNode);
         }

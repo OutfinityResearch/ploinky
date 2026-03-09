@@ -231,32 +231,169 @@ function initMessageToolbar() {
         }
     };
 
+    const LONG_PRESS_DURATION_MS = 430;
+    const LONG_PRESS_MOVE_TOLERANCE = 10;
+    let longPressTimerId = null;
+    let longPressBubble = null;
+    let longPressStartX = 0;
+    let longPressStartY = 0;
+    let suppressNextBubbleClick = false;
+    let visibleMenuBubble = null;
+
+    const clearLongPressTimer = () => {
+        if (longPressTimerId) {
+            window.clearTimeout(longPressTimerId);
+            longPressTimerId = null;
+        }
+        longPressBubble = null;
+    };
+
+    const hideVisibleMenu = () => {
+        if (!visibleMenuBubble) {
+            return;
+        }
+        visibleMenuBubble.classList.remove('wa-context-menu-visible');
+        visibleMenuBubble = null;
+    };
+
+    const showMenuForBubble = (bubble) => {
+        if (!bubble) {
+            return;
+        }
+        if (visibleMenuBubble && visibleMenuBubble !== bubble) {
+            visibleMenuBubble.classList.remove('wa-context-menu-visible');
+        }
+        bubble.classList.add('wa-context-menu-visible');
+        visibleMenuBubble = bubble;
+    };
+
+    const bindLongPressMenu = (bubble) => {
+        if (!bubble || bubble.dataset.longPressMenuBound === 'true') {
+            return;
+        }
+        bubble.dataset.longPressMenuBound = 'true';
+
+        bubble.addEventListener('pointerdown', (event) => {
+            if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
+                return;
+            }
+            if (event.button !== 0) {
+                return;
+            }
+            if (event.target?.closest('.wa-context-menu')) {
+                return;
+            }
+
+            clearLongPressTimer();
+            longPressBubble = bubble;
+            longPressStartX = Number.isFinite(event.clientX) ? event.clientX : 0;
+            longPressStartY = Number.isFinite(event.clientY) ? event.clientY : 0;
+
+            longPressTimerId = window.setTimeout(() => {
+                longPressTimerId = null;
+                suppressNextBubbleClick = true;
+                showMenuForBubble(bubble);
+            }, LONG_PRESS_DURATION_MS);
+        });
+
+        bubble.addEventListener('pointermove', (event) => {
+            if (!longPressTimerId || longPressBubble !== bubble) {
+                return;
+            }
+            const currentX = Number.isFinite(event.clientX) ? event.clientX : 0;
+            const currentY = Number.isFinite(event.clientY) ? event.clientY : 0;
+            const movedX = Math.abs(currentX - longPressStartX);
+            const movedY = Math.abs(currentY - longPressStartY);
+            if (movedX > LONG_PRESS_MOVE_TOLERANCE || movedY > LONG_PRESS_MOVE_TOLERANCE) {
+                clearLongPressTimer();
+            }
+        });
+
+        bubble.addEventListener('pointerup', () => {
+            clearLongPressTimer();
+        });
+
+        bubble.addEventListener('pointercancel', () => {
+            clearLongPressTimer();
+        });
+
+        bubble.addEventListener('contextmenu', (event) => {
+            if (window.matchMedia('(hover: none), (pointer: coarse)').matches) {
+                event.preventDefault();
+            }
+        });
+
+        bubble.addEventListener('click', (event) => {
+            if (!suppressNextBubbleClick) {
+                return;
+            }
+            suppressNextBubbleClick = false;
+            event.preventDefault();
+            event.stopPropagation();
+        });
+    };
+
     const attachMenuToBubble = (bubble) => {
-        if (!bubble || bubble.querySelector('.wa-context-menu')) {
+        if (!bubble) {
             return;
         }
         const message = bubble.closest('.wa-message');
         if (message && message.classList.contains('wa-typing')) {
             return;
         }
-        const menu = document.createElement('div');
-        menu.className = 'wa-context-menu';
-        menu.innerHTML = `
-            <button type="button" data-action="copy" title="Copy">Copy</button>
-            <button type="button" data-action="insert" title="Insert into prompt">Insert</button>
-            <button type="button" data-action="thumb-up" title="Thumb up">👍</button>
-            <button type="button" data-action="thumb-down" title="Thumb down">👎</button>
-        `;
-        menu.addEventListener('click', (event) => {
-            const btn = event.target?.closest('button[data-action]');
-            if (!btn) {
-                return;
-            }
-            const action = btn.dataset.action;
-            handleAction(action, bubble);
-        });
-        bubble.appendChild(menu);
+
+        let menu = bubble.querySelector('.wa-context-menu');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.className = 'wa-context-menu';
+            menu.innerHTML = `
+                <button type="button" data-action="copy" title="Copy">Copy</button>
+                <button type="button" data-action="insert" title="Insert into prompt">Insert</button>
+                <button type="button" data-action="thumb-up" title="Thumb up">👍</button>
+                <button type="button" data-action="thumb-down" title="Thumb down">👎</button>
+            `;
+            menu.addEventListener('click', (event) => {
+                const btn = event.target?.closest('button[data-action]');
+                if (!btn) {
+                    return;
+                }
+                const action = btn.dataset.action;
+                handleAction(action, bubble);
+                hideVisibleMenu();
+            });
+            bubble.appendChild(menu);
+        }
+
+        bindLongPressMenu(bubble);
     };
+
+    document.addEventListener('pointerdown', (event) => {
+        if (!visibleMenuBubble) {
+            return;
+        }
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            hideVisibleMenu();
+            return;
+        }
+        if (target.closest('.wa-context-menu')) {
+            return;
+        }
+        if (target.closest('.wa-message-bubble') === visibleMenuBubble) {
+            return;
+        }
+        hideVisibleMenu();
+    }, true);
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            hideVisibleMenu();
+        }
+    });
+
+    chatList.addEventListener('scroll', () => {
+        hideVisibleMenu();
+    }, { passive: true });
 
     const attachToExisting = () => {
         const bubbles = chatList.querySelectorAll('.wa-message-bubble');
