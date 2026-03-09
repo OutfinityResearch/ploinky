@@ -806,6 +806,9 @@ body {
     border-radius: 7.5px;
     box-shadow: var(--wa-shadow-sm);
     word-wrap: break-word;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .wa-message.out .wa-message-bubble {
@@ -823,7 +826,7 @@ body {
 .wa-message-text {
     white-space: normal;
     margin: 0;
-    padding-right: 5px;
+    padding-right: 0;
     min-height: 19px;
 }
 
@@ -1059,14 +1062,16 @@ body {
 }
 
 .wa-message-time {
-    position: absolute;
-    bottom: 4px;
-    right: 7px;
+    position: static;
+    align-self: flex-end;
+    margin-top: 2px;
     font-size: 11px;
     color: var(--wa-text-muted);
     display: flex;
     align-items: center;
     gap: 3px;
+    line-height: 1;
+    white-space: nowrap;
 }
 
 .wa-message-more {
@@ -1358,13 +1363,7 @@ body {
         max-width: 90%;
     }
 
-    .wa-message-text {
-        padding-right: 48px;
-    }
-
     .wa-message-time {
-        right: 5px;
-        bottom: 3px;
         font-size: 10px;
     }
 }
