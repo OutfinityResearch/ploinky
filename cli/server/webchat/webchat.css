@@ -469,6 +469,7 @@ body {
         left: 0;
         width: 100vw;
         height: 100vh;
+        height: 100dvh;
         background: rgba(0, 0, 0, 0.6);
         z-index: 900;
     }
@@ -479,6 +480,7 @@ body {
         left: 0;
         width: 100vw !important;
         height: 100vh !important;
+        height: 100dvh !important;
         flex: none !important;
         max-width: none !important;
         border-radius: 0 !important;
@@ -916,28 +918,71 @@ body {
     cursor: pointer;
 }
 
-.wa-message-text .wa-md-table-wrap {
-    overflow-x: auto;
+.wa-message:has(.wa-md-table-wrap) {
+    max-width: min(96%, 1200px);
+}
+
+.wa-message-text .wa-md-table-shell {
+    position: relative;
     margin: 8px 0;
 }
 
+.wa-message-text .wa-md-table-wrap {
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin: 0;
+    max-width: 100%;
+    border: 1px solid var(--wa-border);
+    border-radius: 8px;
+    background: var(--wa-bg-panel);
+    -webkit-overflow-scrolling: touch;
+}
+
 .wa-message-text table.wa-md-table {
-    border-collapse: collapse;
-    width: 100%;
-    min-width: 240px;
+    border-collapse: separate;
+    border-spacing: 0;
+    width: max-content;
+    min-width: 100%;
     background: transparent;
 }
 
 .wa-message-text table.wa-md-table th,
 .wa-message-text table.wa-md-table td {
-    border: 1px solid var(--wa-border);
-    padding: 6px 8px;
+    border-right: 1px solid var(--wa-border);
+    border-bottom: 1px solid var(--wa-border);
+    padding: 7px 9px;
     text-align: left;
+    vertical-align: top;
+    min-width: 120px;
+    max-width: 280px;
+    overflow-wrap: anywhere;
 }
 
-.wa-message-text table.wa-md-table th {
+.wa-message-text table.wa-md-table th:last-child,
+.wa-message-text table.wa-md-table td:last-child {
+    border-right: none;
+}
+
+.wa-message-text table.wa-md-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
     background: var(--wa-table-header-bg);
     color: var(--wa-text-primary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.wa-message-text table.wa-md-table th:first-child {
+    left: 0;
+    z-index: 6;
+}
+
+.wa-message-text table.wa-md-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 3;
     font-weight: 600;
 }
 
@@ -947,6 +992,217 @@ body {
 
 .wa-message-text table.wa-md-table tbody tr:nth-child(even) td {
     background: var(--wa-table-row-even-bg);
+}
+
+.wa-message-text table.wa-md-table tbody tr:nth-child(odd) td:first-child {
+    background: var(--wa-table-row-odd-bg);
+}
+
+.wa-message-text table.wa-md-table tbody tr:nth-child(even) td:first-child {
+    background: var(--wa-table-row-even-bg);
+}
+
+.wa-message-text .wa-md-row-toggle,
+.wa-message-text .wa-md-row-toggle-cell {
+    display: none;
+}
+
+.wa-message-text .wa-md-scroll-btn {
+    display: none;
+}
+
+@media (min-width: 641px) {
+    .wa-message-text .wa-md-scroll-btn {
+        position: absolute;
+        top: 50%;
+        width: 44px;
+        height: 44px;
+        border-radius: 999px;
+        border: 1px solid var(--wa-border);
+        background: var(--wa-bg-panel);
+        color: var(--wa-icon-color-active);
+        font-size: 28px;
+        font-weight: 800;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--wa-shadow-md);
+        opacity: 0;
+        pointer-events: none;
+        z-index: 26;
+        transition: opacity 0.18s ease, transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+        cursor: pointer;
+    }
+
+    .wa-message-text .wa-md-scroll-btn:focus-visible {
+        outline: 2px solid var(--wa-accent);
+        outline-offset: 2px;
+    }
+
+    .wa-message-text .wa-md-scroll-btn--left {
+        left: -22px;
+        transform: translateY(-50%) translateX(-6px);
+    }
+
+    .wa-message-text .wa-md-scroll-btn--right {
+        right: -22px;
+        transform: translateY(-50%) translateX(6px);
+    }
+
+    .wa-message-text .wa-md-table-shell.wa-md-table-scrollable .wa-md-scroll-btn {
+        opacity: 0.92;
+    }
+
+    .wa-message-text .wa-md-table-shell.wa-md-table-can-scroll-left .wa-md-scroll-btn--left,
+    .wa-message-text .wa-md-table-shell.wa-md-table-can-scroll-right .wa-md-scroll-btn--right {
+        position: absolute;
+        pointer-events: auto;
+        opacity: 1;
+    }
+
+    .wa-message-text .wa-md-table-shell.wa-md-table-scrollable .wa-md-scroll-btn:hover {
+        background: var(--wa-bg-hover);
+        border-color: var(--wa-accent);
+        color: var(--wa-accent);
+    }
+
+    .wa-message-text .wa-md-table-shell.wa-md-table-can-scroll-left .wa-md-scroll-btn--left {
+        transform: translateY(-50%) translateX(0);
+    }
+
+    .wa-message-text .wa-md-table-shell.wa-md-table-can-scroll-right .wa-md-scroll-btn--right {
+        transform: translateY(-50%) translateX(0);
+    }
+
+    .wa-message-text .wa-md-table-shell:not(.wa-md-table-can-scroll-left) .wa-md-scroll-btn--left,
+    .wa-message-text .wa-md-table-shell:not(.wa-md-table-can-scroll-right) .wa-md-scroll-btn--right {
+        opacity: 0.2;
+        pointer-events: none;
+    }
+}
+
+@media (max-width: 640px) {
+    .wa-message:has(.wa-md-table-wrap) {
+        max-width: 100%;
+    }
+
+    .wa-message-text .wa-md-table-shell {
+        margin: 6px 0;
+    }
+
+    .wa-message-text .wa-md-scroll-btn {
+        display: none !important;
+    }
+
+    .wa-message-text .wa-md-table-wrap {
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        overflow: visible;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive {
+        width: 100%;
+        min-width: 0;
+        border-spacing: 0;
+        border-collapse: separate;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive thead {
+        display: none;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody {
+        display: grid;
+        gap: 8px;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr {
+        display: block;
+        border: 1px solid var(--wa-border);
+        border-radius: 8px;
+        background: var(--wa-bg-panel);
+        box-shadow: var(--wa-shadow-sm);
+        overflow: hidden;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr td {
+        display: grid;
+        grid-template-columns: minmax(88px, 40%) 1fr;
+        gap: 8px;
+        align-items: start;
+        min-width: 0;
+        max-width: none;
+        border-right: none;
+        border-bottom: 1px solid var(--wa-border-light);
+        padding: 7px 10px;
+        font-size: 12px;
+        background: transparent;
+        order: var(--wa-mobile-order, 999);
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr td.wa-md-row-toggle-cell {
+        display: block;
+        border-right: none;
+        border-bottom: none;
+        padding: 8px 10px 10px;
+        background: transparent;
+        order: 10000;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr td.wa-md-row-toggle-cell::before {
+        content: none;
+        display: none;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--wa-text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr.wa-md-row-has-extra td.wa-md-mobile-extra {
+        display: none;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr.wa-md-row-expanded td.wa-md-mobile-extra {
+        display: grid;
+    }
+
+    .wa-message-text .wa-md-row-toggle {
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--wa-border);
+        background: var(--wa-bg-input);
+        color: var(--wa-text-primary);
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .wa-message-text .wa-md-row-toggle:active {
+        transform: translateY(1px);
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr td:last-child {
+        border-bottom: none;
+    }
+
+    .wa-message-text table.wa-md-table--adaptive tbody tr td:first-child {
+        position: static;
+        left: auto;
+        z-index: auto;
+        font-weight: inherit;
+    }
 }
 
 .wa-message-attachment .wa-message-bubble {
@@ -1336,19 +1592,41 @@ body {
 @media (max-width: 640px) {
     .wa-composer {
         align-items: center;
-        padding: 10px 12px;
+        padding: 4px 8px;
+    }
+
+    .wa-composer-main {
+        align-items: center;
+        padding: 6px 0;
+        gap: 8px;
+    }
+
+    .wa-attachment-container .wa-icon-btn,
+    .wa-voice-control .wa-icon-btn,
+    .wa-send-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .wa-composer-input-wrapper {
+        min-height: 40px;
+        padding: 6px 10px;
+    }
+
+    .wa-composer-input {
+        font-size: 16px;
+        line-height: 20px;
     }
 
     .wa-voice-control {
         flex-direction: column;
         align-items: center;
-        gap: 4px;
-        min-width: 48px;
+        gap: 0;
+        min-width: 44px;
     }
 
     .wa-voice-status {
-        font-size: 12px;
-        text-align: center;
+        display: none;
     }
 
     .wa-send-btn {
@@ -1360,7 +1638,7 @@ body {
     }
 
     .wa-message {
-        max-width: 90%;
+        max-width: 99%;
     }
 
     .wa-message-time {
@@ -1833,6 +2111,12 @@ body {
     transform: translateY(0);
 }
 
+.wa-message-bubble.wa-context-menu-visible .wa-context-menu {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
 .wa-context-menu button {
     all: unset;
     padding: 6px 8px;
@@ -1849,4 +2133,19 @@ body {
 .wa-context-menu button[data-active="true"] {
     background: var(--wa-bg-hover);
     color: var(--wa-icon-color-active);
+}
+
+@media (hover: none), (pointer: coarse) {
+    .wa-message:hover .wa-context-menu,
+    .wa-message:focus-within .wa-context-menu {
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+    }
+
+    .wa-message-bubble.wa-context-menu-visible .wa-context-menu {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+    }
 }
