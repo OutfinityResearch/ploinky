@@ -2157,7 +2157,7 @@ body {
     pointer-events: none;
     transform: translateY(-4px);
     transition: opacity 0.15s ease, transform 0.15s ease;
-    min-width: 190px;
+    min-width: 200px;
 }
 
 .wa-message:hover .wa-context-menu,
