@@ -523,6 +523,10 @@ async function refreshAgent(agentName) {
             alias: registryRecord?.record?.alias,
             forceRecreate: true
         });
+
+        if (!hostPort) {
+            throw new Error(`Failed to resolve host port for restarted agent '${short}'.`);
+        }
         console.log(`[refresh] refreshed '${short}' [container: ${newContainerName}]`);
 
         // Routing update logic from original restart command
@@ -539,7 +543,7 @@ async function refreshAgent(agentName) {
             cfg.routes[routeKey].repo = repoName;
             cfg.routes[routeKey].agent = short;
             if (registryRecord?.record.alias) cfg.routes[routeKey].alias = registryRecord.record.alias;
-            if (hostPort) cfg.routes[routeKey].hostPort = hostPort;
+            cfg.routes[routeKey].hostPort = hostPort;
 
             const savedCfg = workspaceSvc.getConfig();
             if (!cfg.static && savedCfg?.static?.agent) {

@@ -405,11 +405,48 @@ async function handleCommand(args) {
 
                     try {
                         const agentPath = path.dirname(resolved.manifestPath);
-                        ensureAgentService(resolved.shortAgentName, manifest, agentPath, {
+                        const { containerName: newContainerName, hostPort } = ensureAgentService(resolved.shortAgentName, manifest, agentPath, {
                             containerName,
                             alias: registryRecord?.record?.alias,
                             forceRecreate: true
                         });
+
+                        if (!hostPort) {
+                            throw new Error(`Failed to resolve host port for restarted agent '${resolved.shortAgentName}'.`);
+                        }
+
+                        try {
+                            const routingFile = path.resolve('.ploinky/routing.json');
+                            let cfg = { routes: {} };
+                            try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch (_) {}
+                            cfg.routes = cfg.routes || {};
+                            const repoName = registryRecord?.record?.repoName || resolved.repo;
+                            const routeKey = registryRecord?.record?.alias || resolved.shortAgentName;
+                            cfg.routes[routeKey] = cfg.routes[routeKey] || {};
+                            cfg.routes[routeKey].container = newContainerName;
+                            cfg.routes[routeKey].hostPath = agentPath;
+                            cfg.routes[routeKey].repo = repoName;
+                            cfg.routes[routeKey].agent = resolved.shortAgentName;
+                            if (registryRecord?.record?.alias) cfg.routes[routeKey].alias = registryRecord.record.alias;
+                            cfg.routes[routeKey].hostPort = hostPort;
+
+                            const staticAgent = String(cfg.static?.agent || '').trim();
+                            if (staticAgent) {
+                                const matches = new Set([resolved.shortAgentName, `${repoName}/${resolved.shortAgentName}`, `${repoName}:${resolved.shortAgentName}`]);
+                                if (registryRecord?.record?.alias) {
+                                    matches.add(registryRecord.record.alias);
+                                }
+                                if (matches.has(staticAgent)) {
+                                    cfg.static.container = newContainerName;
+                                    cfg.static.hostPath = agentPath;
+                                }
+                            }
+
+                            fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+                        } catch (routingError) {
+                            throw new Error(`routing update failed: ${routingError?.message || routingError}`);
+                        }
+
                         console.log(`✓ Agent restarted (${agentRuntime}).`);
                     } catch (e) {
                         console.error(`Failed to restart agent '${agentName}' via ${agentRuntime}: ${e.message}`);
