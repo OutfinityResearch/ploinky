@@ -19,6 +19,21 @@ const TASK_POLL_INTERVAL_MS = (() => {
     return DEFAULT_TASK_POLL_INTERVAL_MS;
 })();
 
+
+const RECOVERABLE_ERROR_PATTERNS = [
+    'Missing or invalid MCP session',
+    'Request timed out',
+    'fetch failed'
+];
+
+function isRecoverableMcpError(error) {
+    const message = error?.message || error?.toString?.() || '';
+    if (typeof message !== 'string') {
+        return false;
+    }
+    return RECOVERABLE_ERROR_PATTERNS.some((pattern) => message.includes(pattern));
+}
+
 function resolveBaseUrl(baseUrl) {
     try {
         if (typeof window !== 'undefined' && window.location) {
@@ -458,25 +473,76 @@ function createAgentClient(baseUrl) {
         connected = true;
     }
 
-    async function listTools() {
-        await connect();
-        const result = await sendRequest('tools/list', {});
-        return result?.tools ?? [];
+    async function resetConnectionState() {
+        if (abortController) {
+            abortController.abort();
+        }
+        streamTask = null;
+        abortController = null;
+        streamUnsupported = false;
+
+        for (const { reject } of pending.values()) {
+            reject(new Error('MCP client reset'));
+        }
+        pending.clear();
+
+        stopAllTaskPollers();
+
+        connected = false;
+        sessionId = null;
+        protocolVersion = null;
+        serverCapabilities = null;
+        serverInfo = null;
+        instructions = null;
     }
 
-    async function callTool(name, args) {
-        await connect();
-        const params = {
-            name,
-            arguments: args ?? {}
-        };
-        const result = await sendRequest('tools/call', params);
+    async function withReconnectRetry(operation) {
+        try {
+            return await operation();
+        } catch (error) {
+            if (!isRecoverableMcpError(error)) {
+                throw error;
+            }
+            await resetConnectionState();
+            return await operation();
+        }
+    }
+
+    async function listTools() {
+        return await withReconnectRetry(async () => {
+            await connect();
+            const result = await sendRequest('tools/list', {});
+            return result?.tools ?? [];
+        });
+    }
+
+    async function callTool(name, args, options = {}) {
+        return await withReconnectRetry(async () => {
+            await connect();
+            const params = {
+                name,
+                arguments: args ?? {}
+            };
+            const result = await sendRequest('tools/call', params);
         const taskMetadata = result?.metadata && typeof result.metadata === 'object' ? result.metadata : null;
         const taskId = typeof taskMetadata?.taskId === 'string' && taskMetadata.taskId.trim().length
             ? taskMetadata.taskId.trim()
             : null;
         if (!taskId) {
             return result;
+        }
+        if (typeof options.onTaskUpdate === 'function') {
+            try {
+                options.onTaskUpdate({
+                    id: taskId,
+                    status: typeof taskMetadata?.status === 'string' ? taskMetadata.status : 'queued',
+                    createdAt: taskMetadata?.createdAt,
+                    updatedAt: taskMetadata?.updatedAt,
+                    toolName: taskMetadata?.toolName || name
+                });
+            } catch (error) {
+                console.warn('[MCPBrowserClient] onTaskUpdate callback failed', error);
+            }
         }
         const statusAgent = typeof taskMetadata?.agent === 'string' && taskMetadata.agent.trim().length
             ? taskMetadata.agent.trim()
@@ -486,6 +552,13 @@ function createAgentClient(baseUrl) {
             startTaskPolling(taskId, (task) => {
                 if (!task) {
                     return;
+                }
+                if (typeof options.onTaskUpdate === 'function') {
+                    try {
+                        options.onTaskUpdate(task);
+                    } catch (error) {
+                        console.warn('[MCPBrowserClient] onTaskUpdate callback failed', error);
+                    }
                 }
                 const status = typeof task.status === 'string' ? task.status.toLowerCase() : '';
                 if (status === 'completed') {
@@ -498,40 +571,48 @@ function createAgentClient(baseUrl) {
             }, { statusPath: statusAgent ? `/mcps/${statusAgent}/task` : undefined });
         });
 
-        const metadata = {
-            ...finalTask.result.metadata,
-            taskId: finalTask.id,
-            toolName: finalTask.toolName,
-            status: finalTask.status,
-            createdAt: finalTask.createdAt,
-            updatedAt: finalTask.updatedAt
-        };
-        return { content: finalTask.result.content, metadata };
+            const metadata = {
+                ...finalTask.result.metadata,
+                taskId: finalTask.id,
+                toolName: finalTask.toolName,
+                status: finalTask.status,
+                createdAt: finalTask.createdAt,
+                updatedAt: finalTask.updatedAt
+            };
+            return { content: finalTask.result.content, metadata };
+        });
     }
 
     async function listResources() {
-        await connect();
-        const result = await sendRequest('resources/list', {});
-        return result?.resources ?? [];
+        return await withReconnectRetry(async () => {
+            await connect();
+            const result = await sendRequest('resources/list', {});
+            return result?.resources ?? [];
+        });
     }
 
     async function readResource(uri, meta) {
-        await connect();
-        const params = { uri };
-        if (meta && typeof meta === 'object') {
-            params._meta = meta;
-        }
-        const result = await sendRequest('resources/read', params);
-        return result?.resource ?? result;
+        return await withReconnectRetry(async () => {
+            await connect();
+            const params = { uri };
+            if (meta && typeof meta === 'object') {
+                params._meta = meta;
+            }
+            const result = await sendRequest('resources/read', params);
+            return result?.resource ?? result;
+        });
     }
 
     async function ping(meta) {
-        await connect();
-        const params = meta && typeof meta === 'object' ? { _meta: meta } : undefined;
-        return await sendRequest('ping', params);
+        return await withReconnectRetry(async () => {
+            await connect();
+            const params = meta && typeof meta === 'object' ? { _meta: meta } : undefined;
+            return await sendRequest('ping', params);
+        });
     }
 
     async function close() {
+        const currentSessionId = sessionId;
         if (abortController) {
             abortController.abort();
         }
@@ -540,10 +621,16 @@ function createAgentClient(baseUrl) {
         streamUnsupported = false;
 
         try {
-            if (sessionId) {
+            if (currentSessionId) {
+                const headers = new Headers();
+                headers.set('accept', 'application/json, text/event-stream');
+                headers.set('mcp-session-id', currentSessionId);
+                if (protocolVersion) {
+                    headers.set('mcp-protocol-version', protocolVersion);
+                }
                 await fetch(endpoint, {
                     method: 'DELETE',
-                    headers: buildHeaders(),
+                    headers,
                     credentials: 'include'
                 });
             }
@@ -561,6 +648,9 @@ function createAgentClient(baseUrl) {
         connected = false;
         sessionId = null;
         protocolVersion = null;
+        serverCapabilities = null;
+        serverInfo = null;
+        instructions = null;
     }
 
     return {
