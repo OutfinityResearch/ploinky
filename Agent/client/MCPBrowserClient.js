@@ -56,6 +56,7 @@ function createAgentClient(baseUrl) {
     let streamTask = null;
     let streamUnsupported = false;
     let messageId = 0;
+    const requestControllers = new Set();
 
     const pending = new Map();
     const taskPollers = new Map();
@@ -376,47 +377,54 @@ function createAgentClient(baseUrl) {
     }
 
     async function sendMessage(message) {
+        const requestController = new AbortController();
+        requestControllers.add(requestController);
         const optimisticallyAccepted = message.id === undefined;
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: buildHeaders({ includeContentType: true }),
-            body: JSON.stringify(message),
-            credentials: 'include'
-        });
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: buildHeaders({ includeContentType: true }),
+                body: JSON.stringify(message),
+                credentials: 'include',
+                signal: requestController.signal
+            });
 
-        const receivedSession = response.headers.get('mcp-session-id');
-        if (receivedSession) {
-            sessionId = receivedSession;
-        }
+            const receivedSession = response.headers.get('mcp-session-id');
+            if (receivedSession) {
+                sessionId = receivedSession;
+            }
 
-        const receivedProtocol = response.headers.get('mcp-protocol-version');
-        if (receivedProtocol) {
-            protocolVersion = receivedProtocol;
-        }
+            const receivedProtocol = response.headers.get('mcp-protocol-version');
+            if (receivedProtocol) {
+                protocolVersion = receivedProtocol;
+            }
 
-        if (response.status === 202 || response.status === 204) {
-            // Asynchronous response via SSE; nothing else to do here.
-            return;
-        }
+            if (response.status === 202 || response.status === 204) {
+                // Asynchronous response via SSE; nothing else to do here.
+                return;
+            }
 
-        if (!response.ok) {
-            const text = await response.text().catch(() => '');
-            throw new Error(`MCP request failed: HTTP ${response.status}${text ? ` - ${text}` : ''}`);
-        }
+            if (!response.ok) {
+                const text = await response.text().catch(() => '');
+                throw new Error(`MCP request failed: HTTP ${response.status}${text ? ` - ${text}` : ''}`);
+            }
 
-        const contentType = response.headers.get('content-type') ?? '';
-        if (contentType.includes('application/json')) {
-            await parseJsonResponse(response);
-            return;
-        }
+            const contentType = response.headers.get('content-type') ?? '';
+            if (contentType.includes('application/json')) {
+                await parseJsonResponse(response);
+                return;
+            }
 
-        if (contentType.includes('text/event-stream')) {
-            await parseSseStream(response.body);
-            return;
-        }
+            if (contentType.includes('text/event-stream')) {
+                await parseSseStream(response.body);
+                return;
+            }
 
-        if (!optimisticallyAccepted) {
-            throw new Error(`Unsupported MCP response content type: ${contentType || '<none>'}`);
+            if (!optimisticallyAccepted) {
+                throw new Error(`Unsupported MCP response content type: ${contentType || '<none>'}`);
+            }
+        } finally {
+            requestControllers.delete(requestController);
         }
     }
 
@@ -477,6 +485,14 @@ function createAgentClient(baseUrl) {
         if (abortController) {
             abortController.abort();
         }
+        for (const controller of requestControllers) {
+            try {
+                controller.abort();
+            } catch {
+                // ignore abort failures
+            }
+        }
+        requestControllers.clear();
         streamTask = null;
         abortController = null;
         streamUnsupported = false;
