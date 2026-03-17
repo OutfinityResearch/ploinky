@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { loadAgents, saveAgents } from './workspace.js';
+import { setEnvVar } from './secretVars.js';
 import {
     getAgentContainerName,
     parseManifestPorts,
@@ -24,6 +26,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const RESERVED_AGENT_KEYS = new Set(['_config']);
 const ALIAS_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+const AUTH_MODES = new Set(['none', 'local', 'pwd', 'sso']);
 
 function isPathUnderRoot(candidate) {
     if (!candidate) return false;
@@ -59,6 +62,67 @@ function normalizeAlias(aliasInput) {
         throw new Error(`Alias '${alias}' is reserved. Choose a different alias.`);
     }
     return alias;
+}
+
+function normalizeAuthMode(authMode) {
+    const normalized = String(authMode || 'none').trim().toLowerCase();
+    if (!AUTH_MODES.has(normalized)) {
+        throw new Error(`Unknown auth mode '${authMode}'. Allowed: none | pwd | sso`);
+    }
+    return normalized === 'pwd' ? 'local' : normalized;
+}
+
+function buildDefaultLocalAuthVars(routeKey) {
+    const suffix = String(routeKey || 'agent')
+        .trim()
+        .replace(/[^a-zA-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .toUpperCase() || 'AGENT';
+    return {
+        userVar: `PLOINKY_AUTH_${suffix}_USER`,
+        passwordHashVar: `PLOINKY_AUTH_${suffix}_PASSWORD_HASH`
+    };
+}
+
+function parsePloinkyDirectives(rawValue) {
+    if (Array.isArray(rawValue)) {
+        return rawValue.flatMap((item) => parsePloinkyDirectives(item)).filter(Boolean);
+    }
+    if (typeof rawValue !== 'string') {
+        return [];
+    }
+    return rawValue
+        .split(/[,\n;]+/)
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean);
+}
+
+function hashPassword(password) {
+    return `sha256:${crypto.createHash('sha256').update(String(password), 'utf8').digest('hex')}`;
+}
+
+function resolveManifestPwdDefaults(manifest) {
+    const user = String(
+        manifest?.pwd?.user ??
+        manifest?.pwd?.username ??
+        ''
+    ).trim();
+    const password = String(
+        manifest?.pwd?.password ??
+        ''
+    );
+    return { user, password };
+}
+
+function resolveManifestAuthMode(manifest) {
+    const ploinkyDirectives = parsePloinkyDirectives(manifest?.ploinky);
+    if (ploinkyDirectives.includes('pwd enable')) {
+        return 'local';
+    }
+    if (ploinkyDirectives.includes('sso enable')) {
+        return 'sso';
+    }
+    return 'none';
 }
 
 function normalizeEnableArgs(agentName, mode, repoNameParam) {
@@ -125,7 +189,7 @@ function normalizeEnableArgs(agentName, mode, repoNameParam) {
     };
 }
 
-export function enableAgent(agentName, mode, repoNameParam, aliasParam) {
+export function enableAgent(agentName, mode, repoNameParam, aliasParam, authModeParam, authOptions = {}) {
     const normalized = normalizeEnableArgs(agentName, mode, repoNameParam);
     const { manifestPath, repo: repoName, shortAgentName } = findAgent(normalized.agentName);
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
@@ -143,6 +207,23 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam) {
     }
     const containerBaseName = alias || shortAgentName;
     const containerName = getAgentContainerName(containerBaseName, repoName);
+    const routeKey = alias || shortAgentName;
+    const authMode = authModeParam === undefined || authModeParam === null || String(authModeParam).trim() === ''
+        ? resolveManifestAuthMode(manifest)
+        : normalizeAuthMode(authModeParam);
+    const manifestPwdDefaults = resolveManifestPwdDefaults(manifest);
+    const username = typeof authOptions?.username === 'string' && authOptions.username.trim()
+        ? authOptions.username.trim()
+        : manifestPwdDefaults.user;
+    const password = typeof authOptions?.password === 'string' && authOptions.password.length
+        ? authOptions.password
+        : manifestPwdDefaults.password;
+    if ((username || password) && authMode !== 'local') {
+        throw new Error('The --user and --password options are only valid with --auth pwd.');
+    }
+    if ((username && !password) || (!username && password)) {
+        throw new Error('Use --user and --password together.');
+    }
 
     const normalizedMode = (normalized.mode || '').toLowerCase();
     let runMode = 'isolated';
@@ -210,6 +291,18 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam) {
             ports
         }
     };
+    if (authMode === 'local') {
+        record.auth = {
+            mode: authMode,
+            ...buildDefaultLocalAuthVars(routeKey)
+        };
+        if (username && password) {
+            setEnvVar(record.auth.userVar, username);
+            setEnvVar(record.auth.passwordHashVar, hashPassword(password));
+        }
+    } else {
+        record.auth = { mode: authMode };
+    }
     if (alias) {
         record.alias = alias;
     }
@@ -240,7 +333,7 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam) {
         console.error(`Warning: Failed to create workspace structure for ${shortAgentName}: ${err.message}`);
     }
 
-    return { containerName, repoName, shortAgentName, alias: alias || undefined };
+    return { containerName, repoName, shortAgentName, alias: alias || undefined, auth: record.auth };
 }
 
 export function disableAgent(agentRef) {

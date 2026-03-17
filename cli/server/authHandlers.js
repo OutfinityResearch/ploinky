@@ -1,13 +1,20 @@
+import fs from 'fs';
+import path from 'path';
+
 import { appendLog } from './utils/logger.js';
 import { parseCookies, buildCookie, readJsonBody, appendSetCookie } from './handlers/common.js';
 import { resolveVarValue } from '../services/secretVars.js';
+import { resolveEnabledAgentRecord } from '../services/agents.js';
 import { createAuthService } from './auth/service.js';
 import { decodeJwt, verifySignature, validateClaims } from './auth/jwt.js';
 import { createJwksCache } from './auth/jwksCache.js';
 import { loadAuthConfig } from './auth/config.js';
 import { createMetadataCache } from './auth/keycloakClient.js';
+import { authenticateLocalUser, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, resolveLocalAuthConfig, revokeSession as revokeLocalSession } from './auth/localService.js';
 
-const AUTH_COOKIE_NAME = 'ploinky_sso';
+const SSO_AUTH_COOKIE_NAME = 'ploinky_sso';
+const LOCAL_AUTH_COOKIE_NAME = 'ploinky_local';
+const ROUTING_FILE = path.resolve('.ploinky/routing.json');
 const authService = createAuthService();
 const jwksCache = createJwksCache();
 const agentMetadataCache = createMetadataCache();
@@ -71,31 +78,337 @@ function renderLoggedOutHtml(nextPath) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Signed Out</title>
   <style>
-    :root { color-scheme: light; }
-    body { margin: 0; font-family: Arial, sans-serif; background: #f3f4f6; color: #111827; display: grid; place-items: center; min-height: 100vh; }
-    .card { width: min(92vw, 460px); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 22px; box-shadow: 0 10px 24px rgba(17,24,39,0.08); }
-    h1 { margin: 0 0 10px; font-size: 20px; }
-    p { margin: 0 0 16px; line-height: 1.5; color: #374151; }
-    a.btn { display: inline-block; background: #111827; color: #fff; text-decoration: none; padding: 10px 14px; border-radius: 8px; font-weight: 600; }
-    .meta { margin-top: 12px; font-size: 12px; color: #6b7280; word-break: break-all; }
+    ${getAuthPageStyles()}
   </style>
 </head>
 <body>
-  <main class="card">
-    <h1>Signed out</h1>
-    <p>Your local and SSO session were closed. Click below to sign in again.</p>
-    <a class="btn" href="${escapeHtml(loginUrl)}">Sign in</a>
-    <div class="meta">Next destination: ${escapeHtml(safeNext)}</div>
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="auth-kicker">Workspace Access</div>
+      <h1>Signed out</h1>
+      <p>Your session was closed. Sign in again to return to the workspace.</p>
+      <a class="auth-btn" href="${escapeHtml(loginUrl)}">Sign in</a>
+      <div class="auth-meta">Next destination: ${escapeHtml(safeNext)}</div>
+    </section>
+    <aside class="auth-side">
+      <div class="auth-side-label">Workspace</div>
+      <div class="auth-side-title">Shared authentication across workspace tools</div>
+      <p>Authentication is managed centrally so the app surface, MCP endpoints, and routed services stay under one access policy.</p>
+    </aside>
   </main>
 </body>
 </html>`;
 }
 
-function respondUnauthenticated(req, res, parsedUrl) {
+function getAuthPageStyles() {
+    return `
+    :root {
+      color-scheme: light;
+      --auth-ink: #1f2933;
+      --auth-ink-soft: #4b5563;
+      --auth-line: rgba(31, 41, 51, 0.12);
+      --auth-paper: rgba(255,255,255,0.94);
+      --auth-accent: #2563eb;
+      --auth-accent-strong: #1d4ed8;
+      --auth-bg-a: #f4f5f7;
+      --auth-bg-b: #dbeafe;
+      --auth-shadow: 0 24px 80px rgba(15, 23, 42, 0.14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      color: var(--auth-ink);
+      background:
+        radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(147,197,253,0.28), transparent 32%),
+        linear-gradient(135deg, var(--auth-bg-a), var(--auth-bg-b));
+    }
+    .auth-shell {
+      min-height: 100vh;
+      display: grid;
+      gap: 28px;
+      align-content: center;
+      justify-content: center;
+      padding: 32px;
+    }
+    .auth-card, .auth-side {
+      border: 1px solid var(--auth-line);
+      border-radius: 24px;
+      backdrop-filter: blur(12px);
+      background: var(--auth-paper);
+      box-shadow: var(--auth-shadow);
+    }
+    .auth-card {
+      padding: 32px;
+    }
+    .auth-side {
+      padding: 28px;
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.94)),
+        linear-gradient(135deg, rgba(37,99,235,0.14), rgba(147,197,253,0.18));
+    }
+    .auth-kicker, .auth-side-label {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 11px;
+      color: var(--auth-ink-soft);
+      margin-bottom: 10px;
+    }
+    h1, .auth-side-title {
+      margin: 0;
+      line-height: 1.05;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+    }
+    h1 {
+      font-size: clamp(30px, 4vw, 40px);
+      margin-bottom: 12px;
+    }
+    .auth-side-title {
+      font-size: clamp(24px, 3vw, 32px);
+      margin-bottom: 14px;
+    }
+    p {
+      margin: 0 0 18px;
+      color: var(--auth-ink-soft);
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    label {
+      display: block;
+      margin: 14px 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--auth-ink-soft);
+    }
+    input {
+      width: 100%;
+      border: 1px solid rgba(31, 41, 51, 0.14);
+      border-radius: 14px;
+      padding: 13px 14px;
+      font: inherit;
+      color: var(--auth-ink);
+      background: rgba(255,255,255,0.88);
+      outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+    input:focus {
+      border-color: rgba(37, 99, 235, 0.5);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+      transform: translateY(-1px);
+    }
+    .auth-btn {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      margin-top: 20px;
+      padding: 13px 16px;
+      border: 0;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--auth-accent), var(--auth-accent-strong));
+      color: white;
+      text-decoration: none;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 18px 38px rgba(37, 99, 235, 0.26);
+    }
+    .auth-btn.secondary {
+      background: transparent;
+      color: var(--auth-ink);
+      box-shadow: none;
+      border: 1px solid var(--auth-line);
+    }
+    .auth-error {
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(198, 40, 40, 0.08);
+      color: #b3261e;
+      font-size: 14px;
+    }
+    .auth-meta {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--auth-ink-soft);
+      word-break: break-word;
+    }
+    .auth-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .auth-actions .auth-btn {
+      margin-top: 0;
+    }
+    @media (max-width: 900px) {
+      .auth-shell {
+        grid-template-columns: 1fr;
+        padding: 20px;
+      }
+      .auth-side {
+        order: -1;
+      }
+    }`;
+}
+
+function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', userVar = '', passwordHashVar = '' } = {}) {
+    const safeAgent = escapeHtml(agentName || 'application');
+    const safeReturnTo = escapeHtml(normalizeRelativePath(returnTo, '/'));
+    const safeError = escapeHtml(error || '');
+    const safeUserVar = escapeHtml(userVar || '');
+    const safePasswordVar = escapeHtml(passwordHashVar || '');
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in</title>
+  <style>
+    ${getAuthPageStyles()}
+  </style>
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="auth-kicker">Workspace Access</div>
+      <h1>Sign in</h1>
+      <p>Local authentication is enabled for ${safeAgent}.</p>
+      ${safeError ? `<div class="auth-error">${safeError}</div>` : ''}
+      <form method="post" action="/auth/login">
+        <input type="hidden" name="agent" value="${safeAgent}" />
+        <input type="hidden" name="returnTo" value="${safeReturnTo}" />
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" required />
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <button class="auth-btn" type="submit">Sign in</button>
+      </form>
+      ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">To change these credentials, update the workspace variables below.</div><div class="auth-meta">Expected vars: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function renderSsoLoginHtml({ agentName, returnTo = '/', redirectUrl = '' } = {}) {
+    const safeAgent = escapeHtml(agentName || 'application');
+    const safeReturnTo = escapeHtml(normalizeRelativePath(returnTo, '/'));
+    const safeRedirectUrl = escapeHtml(redirectUrl || '#');
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in</title>
+  <style>
+    ${getAuthPageStyles()}
+  </style>
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="auth-kicker">Workspace Access</div>
+      <h1>Continue with Single Sign-On</h1>
+      <p>You are signing in to ${safeAgent}. Redirecting to the identity provider now.</p>
+      <div class="auth-actions">
+        <a class="auth-btn" href="${safeRedirectUrl}">Continue</a>
+        <a class="auth-btn secondary" href="${safeReturnTo}">Back</a>
+      </div>
+      <div class="auth-meta">If nothing happens, use Continue to open the sign-in page.</div>
+    </section>
+    <aside class="auth-side">
+      <div class="auth-side-label">Workspace</div>
+      <div class="auth-side-title">Centralized identity for workspace apps</div>
+      <p>Single Sign-On protects routed applications and MCP endpoints under the same workspace policy.</p>
+    </aside>
+  </main>
+  <script>
+    window.setTimeout(function () {
+      window.location.replace(${JSON.stringify(redirectUrl || '/')});
+    }, 120);
+  </script>
+</body>
+</html>`;
+}
+
+function readRouting() {
+    try {
+        return JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')) || {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function resolveAuthRouteKey(parsedUrl) {
+    const pathname = parsedUrl.pathname || '/';
+    const parts = pathname.split('/').filter(Boolean);
+    const routing = readRouting();
+    const routes = routing.routes || {};
+    if ((pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/')) && parts.length >= 2) {
+        return parts[1];
+    }
+    if (parts.length >= 1 && routes[parts[0]]) {
+        return parts[0];
+    }
+    const explicit = String(parsedUrl.searchParams.get('agent') || '').trim();
+    if (explicit) return explicit;
+    const staticAgent = String(routing.static?.agent || '').trim();
+    return staticAgent || null;
+}
+
+function resolveAuthContext(parsedUrl) {
+    const routeKey = resolveAuthRouteKey(parsedUrl);
+    if (!routeKey) {
+        return { routeKey: null, mode: 'none', policy: { mode: 'none' }, record: null };
+    }
+    const resolved = resolveEnabledAgentRecord(routeKey);
+    const record = resolved?.record || null;
+    const policy = record?.auth || { mode: 'none' };
+    const mode = String(policy.mode || 'none').trim().toLowerCase() || 'none';
+    return { routeKey, mode, policy, record };
+}
+
+function readTextBody(req) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on('data', chunk => chunks.push(chunk));
+        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        req.on('error', reject);
+    });
+}
+
+async function readLoginBody(req) {
+    const contentType = String(req.headers?.['content-type'] || '').toLowerCase();
+    if (contentType.includes('application/json')) {
+        return readJsonBody(req);
+    }
+    const raw = await readTextBody(req);
+    const params = new URLSearchParams(raw);
+    return Object.fromEntries(params.entries());
+}
+
+function getCookieNameForMode(mode) {
+    return mode === 'local' ? LOCAL_AUTH_COOKIE_NAME : SSO_AUTH_COOKIE_NAME;
+}
+
+function respondUnauthenticated(req, res, parsedUrl, authContext = resolveAuthContext(parsedUrl)) {
     const pathname = parsedUrl.pathname || '/';
     const returnTo = parsedUrl.path || pathname || '/';
-    const loginUrl = `/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
-    const clearCookie = buildCookie(AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
+    const query = new URLSearchParams({ returnTo });
+    if (authContext?.routeKey) query.set('agent', authContext.routeKey);
+    const loginUrl = `/auth/login?${query.toString()}`;
+    const cookieName = getCookieNameForMode(authContext?.mode);
+    const clearCookie = buildCookie(cookieName, '', req, '/', { maxAge: 0 });
     const method = (req.method || 'GET').toUpperCase();
     const wantsJson = wantsJsonResponse(req, pathname) || method !== 'GET';
     if (wantsJson) {
@@ -196,17 +509,25 @@ export async function ensureAgentAuthenticated(req, res, parsedUrl) {
 }
 
 export async function ensureAuthenticated(req, res, parsedUrl) {
-    if (!authService.isConfigured()) {
+    const authContext = resolveAuthContext(parsedUrl);
+    if (authContext.mode === 'none') {
         return { ok: true };
     }
+    if (authContext.mode === 'sso' && !authService.isConfigured()) {
+        sendJson(res, 503, { ok: false, error: 'sso_not_configured' });
+        return { ok: false, error: 'sso_not_configured' };
+    }
     const cookies = parseCookies(req);
-    const sessionId = cookies.get(AUTH_COOKIE_NAME);
+    const cookieName = getCookieNameForMode(authContext.mode);
+    const sessionId = cookies.get(cookieName);
     if (!sessionId) {
         appendLog('auth_missing_cookie', { path: parsedUrl.pathname });
-        return respondUnauthenticated(req, res, parsedUrl);
+        return respondUnauthenticated(req, res, parsedUrl, authContext);
     }
-    let session = authService.getSession(sessionId);
-    if (!session || (session.expiresAt && Date.now() > session.expiresAt)) {
+    let session = authContext.mode === 'local'
+        ? getLocalSession(sessionId)
+        : authService.getSession(sessionId);
+    if (authContext.mode === 'sso' && (!session || (session.expiresAt && Date.now() > session.expiresAt))) {
         try {
             await authService.refreshSession(sessionId);
         } catch (err) {
@@ -215,15 +536,18 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
         session = authService.getSession(sessionId);
     }
     if (!session) {
-        appendLog('auth_session_invalid', { sessionId: '[redacted]' });
-        return respondUnauthenticated(req, res, parsedUrl);
+        appendLog('auth_session_invalid', { sessionId: '[redacted]', mode: authContext.mode });
+        return respondUnauthenticated(req, res, parsedUrl, authContext);
     }
     req.user = session.user;
     req.session = session;
     req.sessionId = sessionId;
+    req.authMode = authContext.mode;
     try {
-        const cookie = buildCookie(AUTH_COOKIE_NAME, sessionId, req, '/', {
-            maxAge: authService.getSessionCookieMaxAge()
+        const cookie = buildCookie(cookieName, sessionId, req, '/', {
+            maxAge: authContext.mode === 'local'
+                ? getLocalSessionCookieMaxAge()
+                : authService.getSessionCookieMaxAge()
         });
         appendSetCookie(res, cookie);
     } catch (_) { }
@@ -233,12 +557,9 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
 export async function handleAuthRoutes(req, res, parsedUrl) {
     const pathname = parsedUrl.pathname || '/';
     if (!pathname.startsWith('/auth/')) return false;
-    if (!authService.isConfigured()) {
-        sendJson(res, 503, { ok: false, error: 'sso_disabled' });
-        return true;
-    }
     const method = (req.method || 'GET').toUpperCase();
     const baseUrl = getRequestBaseUrl(req);
+    const authContext = resolveAuthContext(parsedUrl);
     try {
         if (pathname === '/auth/logged-out') {
             if (method !== 'GET') {
@@ -253,18 +574,92 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             return true;
         }
         if (pathname === '/auth/login') {
+            if (authContext.mode === 'none') {
+                sendJson(res, 404, { ok: false, error: 'auth_disabled' });
+                return true;
+            }
+            if (authContext.mode === 'local') {
+                if (method === 'GET') {
+                    const returnTo = parsedUrl.searchParams.get('returnTo') || '/';
+                    const localCfg = resolveLocalAuthConfig(authContext.policy);
+                    res.writeHead(200, {
+                        'Content-Type': 'text/html; charset=utf-8',
+                        'Cache-Control': 'no-store'
+                    });
+                    res.end(renderLocalLoginHtml({
+                        agentName: authContext.routeKey,
+                        returnTo,
+                        error: parsedUrl.searchParams.get('error') || '',
+                        userVar: localCfg.usernameVar,
+                        passwordHashVar: localCfg.passwordHashVar
+                    }));
+                    return true;
+                }
+                if (method !== 'POST') {
+                    res.writeHead(405); res.end(); return true;
+                }
+                const body = await readLoginBody(req);
+                const username = String(body?.username || '').trim();
+                const password = String(body?.password || '');
+                const returnTo = normalizeRelativePath(body?.returnTo || '/', '/');
+                const agent = String(body?.agent || authContext.routeKey || '').trim();
+                try {
+                    const result = authenticateLocalUser({ username, password, policy: authContext.policy });
+                    const cookie = buildCookie(LOCAL_AUTH_COOKIE_NAME, result.sessionId, req, '/', {
+                        maxAge: getLocalSessionCookieMaxAge()
+                    });
+                    res.writeHead(302, {
+                        Location: returnTo,
+                        'Set-Cookie': cookie
+                    });
+                    res.end('Login successful');
+                    appendLog('auth_local_login_success', { user: result.user?.username, agent });
+                    return true;
+                } catch (err) {
+                    appendLog('auth_local_login_failure', { error: err?.message || String(err), agent });
+                    const params = new URLSearchParams({
+                        agent,
+                        returnTo,
+                        error: err?.message === 'local_auth_not_configured'
+                            ? 'Local auth is not configured for this agent.'
+                            : 'Invalid username or password.'
+                    });
+                    res.writeHead(302, { Location: `/auth/login?${params.toString()}` });
+                    res.end('Login failed');
+                    return true;
+                }
+            }
+            if (!authService.isConfigured()) {
+                sendJson(res, 503, { ok: false, error: 'sso_disabled' });
+                return true;
+            }
             if (method !== 'GET') {
                 res.writeHead(405); res.end(); return true;
             }
             const returnTo = parsedUrl.searchParams.get('returnTo') || '/';
             const prompt = parsedUrl.searchParams.get('prompt') || undefined;
             const { redirectUrl } = await authService.beginLogin({ baseUrl, returnTo, prompt });
-            res.writeHead(302, { Location: redirectUrl });
-            res.end('Redirecting to identity provider...');
+            res.writeHead(200, {
+                'Content-Type': 'text/html; charset=utf-8',
+                'Cache-Control': 'no-store'
+            });
+            res.end(renderSsoLoginHtml({
+                agentName: authContext.routeKey,
+                returnTo,
+                redirectUrl
+            }));
             appendLog('auth_login_redirect', { returnTo });
             return true;
         }
         if (pathname === '/auth/callback') {
+            if (authContext.mode !== 'sso') {
+                sendJson(res, 404, { ok: false, error: 'callback_not_supported' });
+                return true;
+            }
+            if (!authService.isConfigured()) {
+                sendJson(res, 503, { ok: false, error: 'sso_disabled' });
+                return true;
+            }
             if (method !== 'GET') {
                 res.writeHead(405); res.end(); return true;
             }
@@ -275,7 +670,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 return true;
             }
             const result = await authService.handleCallback({ code, state, baseUrl });
-            const cookie = buildCookie(AUTH_COOKIE_NAME, result.sessionId, req, '/', {
+            const cookie = buildCookie(SSO_AUTH_COOKIE_NAME, result.sessionId, req, '/', {
                 maxAge: authService.getSessionCookieMaxAge()
             });
             res.writeHead(302, {
@@ -291,13 +686,16 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 res.writeHead(405); res.end(); return true;
             }
             const cookies = parseCookies(req);
-            const sessionId = cookies.get(AUTH_COOKIE_NAME) || '';
+            const cookieName = getCookieNameForMode(authContext.mode);
+            const sessionId = cookies.get(cookieName) || '';
             const requestedReturnTo = normalizeRelativePath(parsedUrl.searchParams.get('returnTo') || '/', '/');
-            const outcome = await authService.logout(sessionId, {
-                baseUrl,
-                postLogoutRedirectUri: requestedReturnTo
-            });
-            const clearCookie = buildCookie(AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
+            const outcome = authContext.mode === 'local'
+                ? (revokeLocalSession(sessionId), { redirect: requestedReturnTo || '/' })
+                : await authService.logout(sessionId, {
+                    baseUrl,
+                    postLogoutRedirectUri: requestedReturnTo
+                });
+            const clearCookie = buildCookie(cookieName, '', req, '/', { maxAge: 0 });
             const redirectTarget = outcome.redirect || requestedReturnTo || '/';
             if (method === 'GET' || redirectTarget) {
                 res.writeHead(302, {
@@ -316,18 +714,25 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             return true;
         }
         if (pathname === '/auth/token') {
+            if (authContext.mode === 'none') {
+                sendJson(res, 404, { ok: false, error: 'auth_disabled' });
+                return true;
+            }
             if (method !== 'GET' && method !== 'POST') {
                 res.writeHead(405); res.end(); return true;
             }
             const cookies = parseCookies(req);
-            const sessionId = cookies.get(AUTH_COOKIE_NAME);
+            const cookieName = getCookieNameForMode(authContext.mode);
+            const sessionId = cookies.get(cookieName);
             if (!sessionId) {
                 sendJson(res, 401, { ok: false, error: 'not_authenticated' });
                 return true;
             }
-            const session = authService.getSession(sessionId);
+            const session = authContext.mode === 'local'
+                ? getLocalSession(sessionId)
+                : authService.getSession(sessionId);
             if (!session) {
-                const clearCookie = buildCookie(AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
+                const clearCookie = buildCookie(cookieName, '', req, '/', { maxAge: 0 });
                 res.writeHead(401, {
                     'Content-Type': 'application/json',
                     'Set-Cookie': clearCookie
@@ -343,18 +748,20 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 } catch (_) { }
             }
             let tokenInfo;
-            if (refreshRequested) {
+            if (authContext.mode === 'sso' && refreshRequested) {
                 tokenInfo = await authService.refreshSession(sessionId);
             } else {
                 tokenInfo = {
-                    accessToken: session.tokens.accessToken,
+                    accessToken: session.tokens?.accessToken || null,
                     expiresAt: session.expiresAt,
-                    scope: session.tokens.scope,
-                    tokenType: session.tokens.tokenType
+                    scope: session.tokens?.scope || null,
+                    tokenType: session.tokens?.tokenType || null
                 };
             }
-            const cookie = buildCookie(AUTH_COOKIE_NAME, sessionId, req, '/', {
-                maxAge: authService.getSessionCookieMaxAge()
+            const cookie = buildCookie(cookieName, sessionId, req, '/', {
+                maxAge: authContext.mode === 'local'
+                    ? getLocalSessionCookieMaxAge()
+                    : authService.getSessionCookieMaxAge()
             });
             res.writeHead(200, {
                 'Content-Type': 'application/json',
@@ -414,4 +821,4 @@ export function getAppName() {
     return trimmed.length ? trimmed : null;
 }
 
-export { AUTH_COOKIE_NAME, authService };
+export { SSO_AUTH_COOKIE_NAME as AUTH_COOKIE_NAME, SSO_AUTH_COOKIE_NAME, LOCAL_AUTH_COOKIE_NAME, authService };
