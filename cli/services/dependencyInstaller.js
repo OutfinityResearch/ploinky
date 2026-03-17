@@ -1109,17 +1109,23 @@ function buildEntrypointInstallScript(agentName) {
     //  - We redirect most tool-install noise to /dev/null to keep logs clean.
     //  - The mcp-sdk marker check mirrors what installDependenciesInContainer
     //    used to do on the host.
+    //  - We guard the entire block with a `command -v npm` check so that
+    //    non-Node containers (e.g. Go, Python, Rust) skip gracefully.
     const snippet = [
         '(',
-        `    echo "[deps] ${agentName}: Installing dependencies...";`,
+        '    if command -v npm >/dev/null 2>&1; then',
+        `        echo "[deps] ${agentName}: Installing dependencies...";`,
         // --- install git + build tools (apk first, then apt-get) -------------------
-        '    (',
-        '      command -v git >/dev/null 2>&1 ||',
-        '      (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
-        '      (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
-        '    ) 2>/dev/null;',
+        '        (',
+        '          command -v git >/dev/null 2>&1 ||',
+        '          (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
+        '          (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
+        '        ) 2>/dev/null;',
         // --- npm install -----------------------------------------------------------
-        `    npm install --prefix "$WORKSPACE_PATH";`,
+        `        npm install --prefix "$WORKSPACE_PATH";`,
+        '    else',
+        `        echo "[deps] ${agentName}: npm not found, skipping Node.js dependency install";`,
+        '    fi',
         ')',
     ].join('\n');
 
