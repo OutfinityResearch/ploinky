@@ -64,6 +64,9 @@ function parseEnableAgentArgs(rawOptions = []) {
     }
 
     let alias;
+    let authMode;
+    let username;
+    let password;
     let aliasIndex = -1;
     for (let i = 0; i < tokens.length; i += 1) {
         const token = tokens[i];
@@ -81,11 +84,47 @@ function parseEnableAgentArgs(rawOptions = []) {
         }
     }
 
+    for (let i = 0; i < tokens.length; i += 1) {
+        const token = tokens[i];
+        if (typeof token === 'string' && token.toLowerCase() === '--auth') {
+            const next = tokens[i + 1];
+            if (!next || typeof next !== 'string') {
+                throw new Error("Usage: enable agent <name|repo/name> [global|devel [repoName]] [--auth none|pwd|sso] [--user <name> --password <value>] [as <alias>]");
+            }
+            authMode = next.trim().toLowerCase();
+            tokens.splice(i, 2);
+            i -= 1;
+            continue;
+        }
+        if (typeof token === 'string' && token.toLowerCase() === '--user') {
+            const next = tokens[i + 1];
+            if (!next || typeof next !== 'string') {
+                throw new Error("Usage: enable agent <name|repo/name> [global|devel [repoName]] [--auth none|pwd|sso] [--user <name> --password <value>] [as <alias>]");
+            }
+            username = next.trim();
+            tokens.splice(i, 2);
+            i -= 1;
+            continue;
+        }
+        if (typeof token === 'string' && token.toLowerCase() === '--password') {
+            const next = tokens[i + 1];
+            if (!next || typeof next !== 'string') {
+                throw new Error("Usage: enable agent <name|repo/name> [global|devel [repoName]] [--auth none|pwd|sso] [--user <name> --password <value>] [as <alias>]");
+            }
+            password = next;
+            tokens.splice(i, 2);
+            i -= 1;
+        }
+    }
+
     return {
         agentName: tokens[0],
         mode: tokens[1],
         repoName: tokens[2],
         alias,
+        authMode,
+        username,
+        password,
     };
 }
 
@@ -147,7 +186,7 @@ async function handleCommand(args) {
             }
             else if (options[0] === 'agent') {
                 const parsed = parseEnableAgentArgs(options.slice(1));
-                await enableAgent(parsed.agentName, parsed.mode, parsed.repoName, parsed.alias);
+                await enableAgent(parsed.agentName, parsed.mode, parsed.repoName, parsed.alias, parsed.authMode, parsed.username, parsed.password);
             }
             else showHelp();
             break;

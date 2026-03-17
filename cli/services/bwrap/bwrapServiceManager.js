@@ -63,6 +63,19 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
+
+function ensureManifestVolumeHostPath(resolvedHostPath, containerPath) {
+    if (!resolvedHostPath) return;
+    if (!fs.existsSync(resolvedHostPath)) {
+        fs.mkdirSync(resolvedHostPath, { recursive: true });
+    }
+    if (String(containerPath || '').replace(/\/+$/, '') === '/opt/keycloak/data') {
+        const tmpDir = path.join(resolvedHostPath, 'tmp');
+        fs.mkdirSync(tmpDir, { recursive: true });
+        fs.chmodSync(resolvedHostPath, 0o777);
+        fs.chmodSync(tmpDir, 0o777);
+    }
+}
 const BWRAP_PATH = '/usr/bin/bwrap';
 
 function resolveSymlinkPath(symlinkPath) {
@@ -196,9 +209,7 @@ function buildBwrapArgs(options) {
             const resolvedHostPath = path.isAbsolute(hostPath)
                 ? hostPath
                 : path.resolve(WORKSPACE_ROOT, hostPath);
-            if (!fs.existsSync(resolvedHostPath)) {
-                fs.mkdirSync(resolvedHostPath, { recursive: true });
-            }
+            ensureManifestVolumeHostPath(resolvedHostPath, containerPath);
             args.push('--bind', resolvedHostPath, containerPath);
         }
     }
@@ -528,6 +539,9 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
             ports: allPortMappings
         }
     };
+    if (existingRecord.auth) {
+        agents[containerName].auth = existingRecord.auth;
+    }
 
     if (existingRecord.alias || options.alias) {
         agents[containerName].alias = options.alias || existingRecord.alias;

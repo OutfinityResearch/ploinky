@@ -367,6 +367,9 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
             ports: allPortMappings
         }
     };
+    if (existingRecord.auth) {
+        agents[containerName].auth = existingRecord.auth;
+    }
 
     if (existingRecord.alias || options.alias) {
         agents[containerName].alias = options.alias || existingRecord.alias;

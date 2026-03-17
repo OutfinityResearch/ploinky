@@ -94,6 +94,30 @@ function resolveSymlinkPath(symlinkPath) {
     return symlinkPath;
 }
 
+function ensureManifestVolumeHostPath(resolvedHostPath, containerPath) {
+    if (!resolvedHostPath) return;
+    if (!fs.existsSync(resolvedHostPath)) {
+        fs.mkdirSync(resolvedHostPath, { recursive: true });
+    }
+    if (String(containerPath || '').replace(/\/+$/, '') === '/opt/keycloak/data') {
+        const tmpDir = path.join(resolvedHostPath, 'tmp');
+        fs.mkdirSync(tmpDir, { recursive: true });
+        fs.chmodSync(resolvedHostPath, 0o777);
+        fs.chmodSync(tmpDir, 0o777);
+    }
+}
+
+function ensureManifestVolumeHostPaths(manifest) {
+    if (!manifest?.volumes || typeof manifest.volumes !== 'object') return;
+    const workspaceRoot = WORKSPACE_ROOT;
+    for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
+        const resolvedHostPath = path.isAbsolute(hostPath)
+            ? hostPath
+            : path.resolve(workspaceRoot, hostPath);
+        ensureManifestVolumeHostPath(resolvedHostPath, containerPath);
+    }
+}
+
 /**
  * Get mount mode based on active profile.
  * In dev profile, mounts are rw. In qa/prod, mounts are ro.
@@ -280,9 +304,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             const resolvedHostPath = path.isAbsolute(hostPath)
                 ? hostPath
                 : path.resolve(workspaceRoot, hostPath);
-            if (!fs.existsSync(resolvedHostPath)) {
-                fs.mkdirSync(resolvedHostPath, { recursive: true });
-            }
+            ensureManifestVolumeHostPath(resolvedHostPath, containerPath);
             args.push('-v', `${resolvedHostPath}:${containerPath}${runtime === 'podman' ? ':z' : ''}`);
         }
     }
@@ -423,6 +445,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             ports: portMappings
         }
     };
+    if (existingRecord.auth) {
+        agents[containerName].auth = existingRecord.auth;
+    }
 
     if (existingRecord.alias) {
         agents[containerName].alias = existingRecord.alias;
@@ -575,6 +600,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     if (containerExists(containerName)) {
         console.log(`[ensureAgentService] ${agentName}: container exists, checking if running...`);
         if (!isContainerRunning(containerName)) {
+            ensureManifestVolumeHostPaths(manifest);
             syncAgentMcpConfig(containerName, agentPath, agentName);
             try { execSync(`${containerRuntime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
             if (withParallelAgent) {
@@ -642,6 +668,9 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
             ports: allPortMappings
         }
     };
+    if (existingRecord.auth) {
+        agents[containerName].auth = existingRecord.auth;
+    }
     if (aliasOverride) {
         agents[containerName].alias = aliasOverride;
     }

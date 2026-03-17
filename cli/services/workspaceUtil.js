@@ -60,6 +60,15 @@ function findAgentManifest(agentName) {
   return manifestPath;
 }
 
+function shouldEnableManifestDependency(agentRef, authMode) {
+  const normalizedRef = String(agentRef || '').trim().toLowerCase();
+  if (!normalizedRef) return false;
+  if (normalizedRef === 'keycloak' || normalizedRef.startsWith('basic/keycloak')) {
+    return authMode === 'sso';
+  }
+  return true;
+}
+
 async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, ensureComponentToken, enableAgent, killRouterIfRunning } = {}) {
   try {
     if (staticAgentArg) {
@@ -97,11 +106,11 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
         }
       }
 
-      if (!alreadyEnabled) {
-        if (enableAgent) {
+        if (!alreadyEnabled) {
+          if (enableAgent) {
           await enableAgent(staticAgentArg);
-        } else {
-          try {
+          } else {
+            try {
             const info = agentsSvc.enableAgent(staticAgentArg);
             if (info && info.shortAgentName) {
               console.log(`✓ Agent '${info.shortAgentName}' from repo '${info.repoName}' enabled. Use 'start' to start all configured agents.`);
@@ -239,8 +248,17 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     if (staticManifestPath0) {
       try {
         const manifest = JSON.parse(fs.readFileSync(staticManifestPath0, 'utf8'));
+        const staticAgentRecord = Object.values(dedup).find((value) => (
+          value && value.type === 'agent' &&
+          value.agentName === cfg0.static.agent &&
+          !value.alias
+        ));
+        const staticAuthMode = String(staticAgentRecord?.auth?.mode || '').trim().toLowerCase();
         if (Array.isArray(manifest.enable)) {
           for (const agentRef of manifest.enable) {
+            if (!shouldEnableManifestDependency(agentRef, staticAuthMode)) {
+              continue;
+            }
             try {
               const info = agentsSvc.enableAgent(agentRef);
               if (info && info.containerName) {
