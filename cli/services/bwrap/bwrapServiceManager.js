@@ -250,6 +250,7 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
     env.PLOINKY_MCP_CONFIG_PATH = CONTAINER_CONFIG_PATH;
     env.AGENT_NAME = agentName;
     env.WORKSPACE_PATH = agentWorkDir;
+    env.PLOINKY_WORKSPACE_ROOT = WORKSPACE_ROOT;
     env.PLOINKY_RUNTIME = runtimeName;
 
     // Profile env vars

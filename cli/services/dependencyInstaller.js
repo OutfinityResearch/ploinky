@@ -200,7 +200,7 @@ function readPackageBaseTemplate() {
         version: '1.0.0',
         type: 'module',
         dependencies: {
-            'achillesAgentLib': 'github:OutfinityResearch/achillesAgentLib',
+            'achillesAgentLib': 'github:OutfinityResearch/achillesAgentLib#master',
             'mcp-sdk': 'github:PloinkyRepos/MCPSDK#main',
             'node-pty': '^1.0.0',
             'flexsearch': 'github:PloinkyRepos/flexsearch#main'
