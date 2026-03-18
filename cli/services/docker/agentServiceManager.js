@@ -319,6 +319,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const envStrings = [...buildEnvFlags(manifest, profileConfig), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
     envStrings.push(formatEnvFlag('AGENT_NAME', agentName));
     envStrings.push(formatEnvFlag('WORKSPACE_PATH', agentWorkDir));
+    envStrings.push(formatEnvFlag('PLOINKY_WORKSPACE_ROOT', WORKSPACE_ROOT));
 
     const profileEnv = normalizeProfileEnv(profileConfig?.env);
     appendEnvFlagsFromMap(envStrings, profileEnv);
