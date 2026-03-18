@@ -80,6 +80,7 @@ export function createNetwork({
     addClientMsg,
     addClientAttachment,
     addServerMsg,
+    setLastServerMessageMeta,
     showTypingIndicator,
     hideTypingIndicator,
     markUserInputSent
@@ -167,6 +168,16 @@ export function createNetwork({
         }
     }
 
+    function applyServerMessageMeta(payload) {
+        if (!payload || typeof payload !== 'object' || typeof setLastServerMessageMeta !== 'function') {
+            return;
+        }
+        setLastServerMessageMeta({
+            messageId: typeof payload.messageId === 'string' ? payload.messageId : '',
+            rating: payload.rating === 'up' || payload.rating === 'down' ? payload.rating : null
+        });
+    }
+
     function start() {
         dlog('SSE connecting');
         showBanner('Connecting…');
@@ -243,13 +254,28 @@ export function createNetwork({
 
         es.onmessage = (event) => {
             try {
-                const text = JSON.parse(event.data);
-                chatBuffer += stripCtrlAndAnsi(text);
-                pushSrvFromBuffer();
+                const payload = JSON.parse(event.data);
+                if (typeof payload === 'string') {
+                    chatBuffer += stripCtrlAndAnsi(payload);
+                    pushSrvFromBuffer();
+                    return;
+                }
+                if (payload && typeof payload === 'object' && typeof payload.text === 'string') {
+                    handleServerChunk(stripCtrlAndAnsi(payload.text));
+                }
             } catch (error) {
                 dlog('term write error', error);
             }
         };
+
+        es.addEventListener('message-meta', (event) => {
+            try {
+                const payload = JSON.parse(event.data);
+                applyServerMessageMeta(payload);
+            } catch (error) {
+                dlog('message meta error', error);
+            }
+        });
     }
 
     function stop() {
@@ -458,11 +484,45 @@ export function createNetwork({
         });
     }
 
+    function sendFeedback(messageId, rating) {
+        const normalizedId = typeof messageId === 'string' ? messageId.trim() : '';
+        const normalizedRating = rating === 'up' || rating === 'down' ? rating : null;
+        if (!normalizedId) {
+            return Promise.reject(new Error('missing_message_id'));
+        }
+
+        return fetch(toEndpoint('feedback'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tabId: TAB_ID,
+                messageId: normalizedId,
+                rating: normalizedRating
+            })
+        }).then(async (res) => {
+            if (!res.ok) {
+                let errorPayload = null;
+                try {
+                    errorPayload = await res.json();
+                } catch (_) {
+                    errorPayload = null;
+                }
+                throw new Error(errorPayload?.error || `feedback_failed_${res.status}`);
+            }
+            return res.json().catch(() => ({ ok: true }));
+        }).catch((error) => {
+            dlog('feedback error', error);
+            showBanner('Feedback error', 'err');
+            throw error;
+        });
+    }
+
     return {
         start,
         stop,
         sendCommand,
         sendQuickCommand,
-        sendAttachments
+        sendAttachments,
+        sendFeedback
     };
 }

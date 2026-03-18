@@ -132,7 +132,6 @@ export function initRealtimeSpeechToText(elements = {}, options = {}) {
                         // After session.created, configure the session
                         if (message.type === 'session.created') {
                             sessionId = message.session?.id || null;
-                            console.debug('[stt-realtime] Session payload', message.session);
                             dlog('[stt-realtime] Configuring session');
                             const updatePayload = {
                                 type: 'session.update',

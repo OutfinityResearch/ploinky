@@ -108,6 +108,7 @@ const network = createNetwork({
     addClientMsg: messages.addClientMsg,
     addClientAttachment: messages.addClientAttachment,
     addServerMsg: messages.addServerMsg,
+    setLastServerMessageMeta: messages.setLastServerMessageMeta,
     showTypingIndicator: messages.showTypingIndicator,
     hideTypingIndicator: messages.hideTypingIndicator,
     markUserInputSent: messages.markUserInputSent
@@ -210,10 +211,10 @@ function initMessageToolbar() {
         }
     };
 
-    const handleAction = (action, bubble) => {
+    const handleAction = async (action, bubble) => {
         const text = getBubbleText(bubble);
         if (action === 'copy') {
-            copyText(text);
+            await copyText(text);
             return;
         }
         if (action === 'insert') {
@@ -228,6 +229,17 @@ function initMessageToolbar() {
             const current = bubble?.dataset?.rating;
             const next = current === desired ? '' : desired;
             setRating(bubble, next);
+            const messageId = typeof bubble?.dataset?.messageId === 'string' ? bubble.dataset.messageId.trim() : '';
+            if (!messageId) {
+                setRating(bubble, current || '');
+                showBanner('Feedback unavailable for this message', 'err');
+                return;
+            }
+            try {
+                await network.sendFeedback(messageId, next || null);
+            } catch (_) {
+                setRating(bubble, current || '');
+            }
         }
     };
 
@@ -344,13 +356,14 @@ function initMessageToolbar() {
 
         let menu = bubble.querySelector('.wa-context-menu');
         if (!menu) {
+            const isAssistantMessage = !!(message && message.classList.contains('in'));
             menu = document.createElement('div');
             menu.className = 'wa-context-menu';
             menu.innerHTML = `
                 <button type="button" data-action="copy" title="Copy">Copy</button>
                 <button type="button" data-action="insert" title="Insert into prompt">Insert</button>
-                <button type="button" data-action="thumb-up" title="Thumb up">👍</button>
-                <button type="button" data-action="thumb-down" title="Thumb down">👎</button>
+                ${isAssistantMessage ? '<button type="button" data-action="thumb-up" title="Thumb up">👍</button>' : ''}
+                ${isAssistantMessage ? '<button type="button" data-action="thumb-down" title="Thumb down">👎</button>' : ''}
             `;
             menu.addEventListener('click', (event) => {
                 const btn = event.target?.closest('button[data-action]');
@@ -358,7 +371,7 @@ function initMessageToolbar() {
                     return;
                 }
                 const action = btn.dataset.action;
-                handleAction(action, bubble);
+                void handleAction(action, bubble);
                 hideVisibleMenu();
             });
             bubble.appendChild(menu);

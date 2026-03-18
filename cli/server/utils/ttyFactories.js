@@ -164,7 +164,8 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
         hostCommand: commands?.host || '',
         containerCommand: commands?.container || '',
         source: commands?.source || 'unset',
-        agentName: commands?.agentName || ''
+        agentName: commands?.agentName || '',
+        unsupportedReason: commands?.unsupportedReason || ''
     });
     const resolveHostWorkdir = (config) => {
         // webchat hostCommand frequently runs `ploinky cli <agent>`.
@@ -178,7 +179,7 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
     const buildFactoryResult = (config) => {
         if (!pty) {
             logBootEvent('webchat_factory_disabled', { reason: 'pty_unavailable' });
-            return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '' };
+            return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '', unavailableReason: '' };
         }
         const hostWorkdir = resolveHostWorkdir(config);
         if (createWebChatLocalFactory) {
@@ -194,7 +195,8 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
                 factory,
                 label: command ? command : 'local shell',
                 runtime: 'local',
-                agentName: config.agentName || ''
+                agentName: config.agentName || '',
+                unavailableReason: ''
             };
         }
         if (createWebChatTTYFactory) {
@@ -216,11 +218,12 @@ function createWebchatFactoryConfig(pty, webchatTTYModule, resolvedWebchatComman
                 factory,
                 label: containerLabel,
                 runtime: 'docker',
-                agentName: config.agentName || ''
+                agentName: config.agentName || '',
+                unavailableReason: ''
             };
         }
         logBootEvent('webchat_factory_disabled', { reason: 'no_factory_available' });
-        return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '' };
+        return { factory: null, label: '-', runtime: 'disabled', agentName: config.agentName || '', unavailableReason: '' };
     };
 
     return (commandsOverride = null) => {
@@ -278,7 +281,8 @@ function createServiceConfig(getWebttyFactory, getWebchatFactory) {
             ttyFactory: factoryResult.factory,
             agentName: factoryResult.agentName || appName || 'ChatAgent',
             containerName: factoryResult.label,
-            runtime: factoryResult.runtime
+            runtime: factoryResult.runtime,
+            unavailableReason: factoryResult.unavailableReason || ''
         };
         base.getFactoryForCommands = (commands) => {
             if (!commands) return null;

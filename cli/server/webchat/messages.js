@@ -1058,6 +1058,23 @@ export function createMessages({
         };
     }
 
+    function setLastServerMessageMeta({ messageId = '', rating = null } = {}) {
+        const bubble = lastServerMsg?.bubble;
+        if (!bubble) {
+            return false;
+        }
+        const normalizedId = typeof messageId === 'string' ? messageId.trim() : '';
+        if (normalizedId) {
+            bubble.dataset.messageId = normalizedId;
+        }
+        if (rating === 'up' || rating === 'down') {
+            bubble.dataset.rating = rating;
+        } else if (rating === null) {
+            delete bubble.dataset.rating;
+        }
+        return true;
+    }
+
     function addServerMsg(text) {
         let normalized = typeof text === 'string' ? text : '';
 
@@ -1130,6 +1147,7 @@ export function createMessages({
         addClientMsg,
         addClientAttachment,
         addServerMsg,
+        setLastServerMessageMeta,
         showTypingIndicator,
         hideTypingIndicator,
         applyViewMoreSettingToAllBubbles,

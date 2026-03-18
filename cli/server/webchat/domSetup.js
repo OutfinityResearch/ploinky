@@ -32,7 +32,7 @@ function readInitialViewMoreLimit() {
 
 export function initDom() {
     const TAB_ID = crypto.randomUUID();
-    const dlog = (...args) => console.log('[webchat]', ...args);
+    const dlog = () => {};
 
     const body = document.body;
     const markdown = window.webchatMarkdown;

@@ -95,7 +95,6 @@ export function initOpenAISpeechToText(elements = {}, options = {}) {
 
             if (data.text) {
                 const normalizedText = normalizeWhitespace(data.text);
-                dlog('[stt] Transcription received:', normalizedText);
 
                 transcriptBuffer = normalizedText;
                 appendVoiceText(normalizedText);
@@ -323,4 +322,3 @@ export function initOpenAISpeechToText(elements = {}, options = {}) {
         }
     };
 }
-
