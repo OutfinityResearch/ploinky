@@ -405,7 +405,19 @@ async function runCli(agentName, args) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const cliBase = getCliCmd(manifest);
   if (!cliBase || !cliBase.trim()) { throw new Error(`Manifest for '${shortAgentName}' has no 'cli' command.`); }
-  const rawCmd = cliBase + (args && args.length ? (' ' + args.join(' ')) : '');
+
+  // Separate SSO args from regular args — SSO context is passed as env vars,
+  // not CLI flags, so plain shell CLIs (/bin/sh) don't crash on unknown options.
+  const ssoArgs = (args || []).filter(a => /^--sso-/.test(a));
+  const regularArgs = (args || []).filter(a => !/^--sso-/.test(a));
+  const ssoExports = ssoArgs.map(a => {
+    const match = a.match(/^--sso-(.+?)=(.*)$/);
+    if (!match) return '';
+    const envName = 'SSO_' + match[1].toUpperCase().replace(/-/g, '_');
+    return `${envName}=${shellQuote(match[2])}`;
+  }).filter(Boolean);
+  const ssoPrefix = ssoExports.length ? 'export ' + ssoExports.join(' ') + '; ' : '';
+  const rawCmd = ssoPrefix + cliBase + (regularArgs.length ? (' ' + regularArgs.join(' ')) : '');
   const cmd = wrapCliWithWebchat(rawCmd);
   const { ensureAgentService, attachInteractive, getConfiguredProjectPath, getAgentContainerName } = dockerSvc;
   const agentDir = path.dirname(manifestPath);
