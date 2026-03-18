@@ -326,7 +326,7 @@ function buildBwrapEntryCommand(agentName, manifest, profileConfig, needsCoreDep
 
     // Build install snippet — skip apk (host deps pre-installed), just npm install
     const installSnippet = needsCoreDeps
-        ? `( echo "[deps] ${agentName}: Installing dependencies (bwrap)..."; npm install --prefix "$WORKSPACE_PATH"; )`
+        ? `( echo "[deps] ${agentName}: Installing dependencies (bwrap)..."; npm install --no-package-lock --prefix "$WORKSPACE_PATH"; )`
         : '';
 
     // Manifest install hook (e.g. installPrerequisites.sh, installPersisto.sh)

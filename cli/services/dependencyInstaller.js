@@ -463,7 +463,7 @@ function needsHostInstall(agentName, options = {}) {
 function runNpmInstallInContainer(containerName, workDir, log = debugLog) {
     try {
         log(`[deps] Running npm install in ${workDir}...`);
-        execSync(`${containerRuntime} exec -w "${workDir}" ${containerName} npm install`, {
+        execSync(`${containerRuntime} exec -w "${workDir}" ${containerName} npm install --no-package-lock`, {
             stdio: 'inherit',
             timeout: 600000 // 10 minute timeout
         });
@@ -1014,7 +1014,7 @@ function installDependenciesInContainer(agentName, containerImage, options = {})
         '  (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
         '  (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
         ') 2>/dev/null',
-        '&& npm install'
+        '&& npm install --no-package-lock'
     ].join(' ');
 
     args.push(containerImage, 'sh', '-c', installScript);
@@ -1122,7 +1122,7 @@ function buildEntrypointInstallScript(agentName) {
         '          (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
         '        ) 2>/dev/null;',
         // --- npm install -----------------------------------------------------------
-        `        npm install --prefix "$WORKSPACE_PATH";`,
+        `        npm install --no-package-lock --prefix "$WORKSPACE_PATH";`,
         '    else',
         `        echo "[deps] ${agentName}: npm not found, skipping Node.js dependency install";`,
         '    fi',
