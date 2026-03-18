@@ -86,6 +86,9 @@ Ploinky can persist WebChat transcripts in an encrypted store and expose them in
 - Message content is encrypted at rest; normal router logs remain operational and should not contain conversation bodies.
 - The transcript viewer is available in `Dashboard -> Transcripts`.
 - WebChat feedback is stored at turn level: a `like` / `dislike` applies to the paired `user` prompt and `assistant` reply, not just to the assistant message in isolation.
+- Feedback analytics are available in `Dashboard -> Feedback`.
+- The dashboard feedback API is exposed at `GET /dashboard/api/feedback` and returns aggregate counts plus the rated turns list.
+- Feedback aggregation uses the assistant reply as the source of truth for a rated turn, then resolves the paired user prompt from transcript metadata to avoid double counting.
 
 Relevant configuration:
 
