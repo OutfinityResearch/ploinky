@@ -409,6 +409,104 @@ Or single port:
 
 ---
 
+## WebChat Requirements
+
+WebChat does not talk to agents through MCP. It talks to the agent CLI declared in the manifest and streams messages over stdin/stdout.
+
+### How WebChat Sends Input
+
+- WebChat writes structured message envelopes to stdin.
+- A chat-capable agent must keep reading stdin for the full lifetime of the session.
+- A chat-capable agent must write its replies to stdout.
+
+The envelope format is implemented in the shared Achilles services and includes:
+
+- `text`
+- `attachments`
+- optional user/session metadata
+
+### CLI Requirements for Chat-Capable Agents
+
+For a reliable WebChat experience, the manifest `cli` should point to a real long-running CLI process, for example:
+
+```json
+{
+  "cli": "node /code/main.mjs"
+}
+```
+
+That CLI should:
+
+- keep running across multiple messages
+- read stdin continuously, not only once until EOF
+- parse WebChat envelopes or delegate that parsing to a shared helper
+- write plain response text to stdout
+
+### Plain Shell CLIs
+
+A plain shell CLI such as:
+
+```json
+{
+  "cli": "/bin/sh"
+}
+```
+
+or:
+
+```json
+{
+  "cli": "/bin/bash"
+}
+```
+
+is not a conversational implementation by itself. In that setup WebChat only mirrors the incoming payload into the shell session. That may still be useful for debugging, but it is not equivalent to a dedicated chat CLI.
+
+### Shared CLI Recommendation
+
+`ploinky cli <agent>` and WebChat both use the manifest `cli`. The recommended approach is to expose one CLI entrypoint that works in both contexts:
+
+- interactive terminal use via `ploinky cli <agent>`
+- streaming input from WebChat
+
+---
+
+## Encrypted Transcript Storage
+
+Ploinky can store WebChat conversations in an encrypted transcript store and expose them through the Dashboard.
+
+### Storage Model
+
+- Transcript files are stored under `.ploinky/transcripts/`
+- Message content is encrypted at rest
+- Operational router logs should remain metadata-only and should not store chat bodies
+- WebChat `like` / `dislike` feedback is stored per turn, linking the `user` prompt with the paired `assistant` reply
+
+### Configuration
+
+| Variable | Description |
+|----------|-------------|
+| `PLOINKY_TRANSCRIPTS_MASTER_KEY` | Master key used to derive transcript encryption keys |
+| `PLOINKY_TRANSCRIPT_RETENTION_DAYS` | Retention window for transcript files |
+| `PLOINKY_TRANSCRIPT_VIEWER_ROLES` | Allowed SSO roles for transcript viewing |
+| `PLOINKY_TRANSCRIPT_VIEWER_ALLOW_LOCAL` | Enables transcript viewing for local dashboard sessions |
+
+### Access Model
+
+- SSO users need a role from `PLOINKY_TRANSCRIPT_VIEWER_ROLES`
+- Local authenticated users can view transcripts when `PLOINKY_TRANSCRIPT_VIEWER_ALLOW_LOCAL=1`
+- Legacy dashboard token sessions can also view transcripts when `PLOINKY_TRANSCRIPT_VIEWER_ALLOW_LOCAL=1`
+
+### Dashboard Viewer
+
+Transcript viewing is available in:
+
+- `Dashboard -> Transcripts`
+
+The viewer is intended for inspection and audit access, while the underlying transcript files remain encrypted on disk.
+
+---
+
 ## CLI Commands Reference
 
 ### Repository Management

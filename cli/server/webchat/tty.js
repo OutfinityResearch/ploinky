@@ -25,6 +25,15 @@ function shellEscape(str) {
     return String(str);
 }
 
+function shouldAppendIdentityArgs(command) {
+    const raw = String(command || '').trim();
+    if (!raw) {
+        return false;
+    }
+    const firstToken = raw.split(/\s+/, 1)[0];
+    return !/^(?:\/bin\/)?(?:ba)?sh$/i.test(firstToken);
+}
+
 function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
     const DEBUG = process.env.WEBTTY_DEBUG === '1';
     const log = (...args) => { if (DEBUG) console.log('[webchat][tty]', ...args); };
@@ -61,7 +70,7 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
             ? entry
             : "(command -v /bin/bash >/dev/null 2>&1 && exec /bin/bash) || exec /bin/sh";
 
-        if (ssoCliArgs.length > 0) {
+        if (ssoCliArgs.length > 0 && shouldAppendIdentityArgs(shellCmd)) {
             shellCmd = `${shellCmd} ${ssoCliArgs.join(' ')}`;
         }
 
@@ -221,7 +230,7 @@ function createLocalTTYFactory({ ptyLib, workdir, command }) {
             let useEntry = entry && String(entry).trim() ? String(entry) : fallbackEntry;
 
             // Append SSO args to command
-            if (ssoCliArgs.length > 0) {
+            if (ssoCliArgs.length > 0 && shouldAppendIdentityArgs(useEntry)) {
                 useEntry = `${useEntry} ${ssoCliArgs.join(' ')}`;
             }
 

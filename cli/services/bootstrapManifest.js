@@ -29,6 +29,39 @@ function parseEnableDirective(entry) {
     return { spec, alias };
 }
 
+function parsePloinkyDirectives(rawValue) {
+    if (Array.isArray(rawValue)) {
+        return rawValue.flatMap((item) => parsePloinkyDirectives(item)).filter(Boolean);
+    }
+    if (typeof rawValue !== 'string') {
+        return [];
+    }
+    return rawValue
+        .split(/[,\n;]+/)
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean);
+}
+
+function resolveManifestAuthMode(manifest) {
+    const ploinkyDirectives = parsePloinkyDirectives(manifest?.ploinky);
+    if (ploinkyDirectives.includes('pwd enable')) {
+        return 'local';
+    }
+    if (ploinkyDirectives.includes('sso enable')) {
+        return 'sso';
+    }
+    return 'none';
+}
+
+function shouldEnableDirectiveForManifest(parsedDirective, manifest) {
+    const spec = String(parsedDirective?.spec || '').trim().toLowerCase();
+    if (!spec) return false;
+    if (spec === 'keycloak' || spec.startsWith('basic/keycloak')) {
+        return resolveManifestAuthMode(manifest) === 'sso';
+    }
+    return true;
+}
+
 export async function applyManifestDirectives(agentNameOrPath) {
     let manifest;
     let baseDir;
@@ -59,6 +92,9 @@ export async function applyManifestDirectives(agentNameOrPath) {
             try {
                 const parsed = parseEnableDirective(rawEntry);
                 if (!parsed) continue;
+                if (!shouldEnableDirectiveForManifest(parsed, manifest)) {
+                    continue;
+                }
                 enableAgent(parsed.spec, undefined, undefined, parsed.alias);
             } catch (err) {
                 const message = err && err.message ? err.message : String(err);
