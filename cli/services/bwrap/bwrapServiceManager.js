@@ -250,6 +250,7 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
     env.PLOINKY_MCP_CONFIG_PATH = CONTAINER_CONFIG_PATH;
     env.AGENT_NAME = agentName;
     env.WORKSPACE_PATH = agentWorkDir;
+    env.PLOINKY_WORKSPACE_ROOT = WORKSPACE_ROOT;
     env.PLOINKY_RUNTIME = runtimeName;
 
     // Profile env vars
@@ -325,7 +326,7 @@ function buildBwrapEntryCommand(agentName, manifest, profileConfig, needsCoreDep
 
     // Build install snippet — skip apk (host deps pre-installed), just npm install
     const installSnippet = needsCoreDeps
-        ? `( echo "[deps] ${agentName}: Installing dependencies (bwrap)..."; npm install --prefix "$WORKSPACE_PATH"; )`
+        ? `( echo "[deps] ${agentName}: Installing dependencies (bwrap)..."; npm install --no-package-lock --prefix "$WORKSPACE_PATH"; )`
         : '';
 
     // Manifest install hook (e.g. installPrerequisites.sh, installPersisto.sh)

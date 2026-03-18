@@ -131,7 +131,7 @@ function buildSeatbeltEntryCommand(agentName, manifest, profileConfig, needsCore
 
     // Build install snippet — npm install with real paths
     const installSnippet = needsCoreDeps
-        ? `( echo "[deps] ${agentName}: Installing dependencies (seatbelt)..."; npm install --prefix "$WORKSPACE_PATH"; )`
+        ? `( echo "[deps] ${agentName}: Installing dependencies (seatbelt)..."; npm install --no-package-lock --prefix "$WORKSPACE_PATH"; )`
         : '';
 
     // Manifest install hook
