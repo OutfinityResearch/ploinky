@@ -505,6 +505,23 @@ Transcript viewing is available in:
 
 The viewer is intended for inspection and audit access, while the underlying transcript files remain encrypted on disk.
 
+### Feedback Analytics
+
+Feedback analytics are available in:
+
+- `Dashboard -> Feedback`
+
+The dashboard feedback API is exposed at:
+
+- `GET /dashboard/api/feedback`
+
+Behavior:
+
+- WebChat stores feedback per turn, linking the `user` prompt with the corresponding `assistant` reply
+- The feedback summary uses rated `assistant` messages as the source of truth for each turn
+- The paired `user` prompt is resolved from transcript metadata (`promptMessageId` / `turnId`) so rated turns are not counted twice
+- The dashboard view shows aggregate totals, per-agent breakdowns, and the list of rated turns with direct links back to the full transcript
+
 ---
 
 ## CLI Commands Reference
