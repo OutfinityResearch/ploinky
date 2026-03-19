@@ -26,6 +26,7 @@ export function showHelp(args = []) {
   webmeet [moderatorAgent] [--rotate]  Show WebMeet token; --rotate mints a new one
   dashboard [--rotate]           Show or rotate Dashboard token and print access URL
   sso enable|disable|status  Configure SSO (Keycloak) middleware and secrets
+  github-auth enable|disable|status  Configure GitHub OAuth for workspace Git operations
   vars                           List all variable names (no values)
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
@@ -162,6 +163,30 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             syntax: 'dashboard [--rotate]',
             examples: [ 'dashboard', 'dashboard --rotate' ],
             notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
+        },
+        'github-auth': {
+            description: 'Manage workspace GitHub OAuth configuration for Git push/pull.',
+            subcommands: {
+                'enable': {
+                    syntax: 'github-auth enable [--client-id-var NAME] [--client-secret-var NAME] [--scope-var NAME] [--scope VALUE]',
+                    description: 'Enable workspace GitHub auth config and store which variables should be read from .ploinky/.secrets.',
+                    examples: [
+                        'github-auth enable',
+                        'github-auth enable --client-id-var MY_GH_CLIENT_ID --client-secret-var MY_GH_CLIENT_SECRET'
+                    ],
+                    notes: 'After enable, set the actual secret values with ploinky var <NAME> <value>.'
+                },
+                'disable': {
+                    syntax: 'github-auth disable',
+                    description: 'Disable GitHub OAuth usage from workspace config without deleting stored secrets.',
+                    examples: [ 'github-auth disable' ]
+                },
+                'status': {
+                    syntax: 'github-auth status',
+                    description: 'Show current workspace GitHub auth config and whether client ID / secret are present.',
+                    examples: [ 'github-auth status' ]
+                }
+            }
         },
         'sso': {
             description: 'Manage SSO middleware (OIDC providers such as Keycloak).',

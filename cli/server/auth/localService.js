@@ -63,6 +63,31 @@ function authenticateLocalUser({ username, password, policy, routeKey = '' }) {
     return { sessionId, user };
 }
 
+function createExternalSession({ user, routeKey = '', provider = 'external' } = {}) {
+    const now = Date.now();
+    const safeProvider = String(provider || 'external').trim() || 'external';
+    const sourceUser = user && typeof user === 'object' ? user : {};
+    const login = String(sourceUser.login || sourceUser.username || sourceUser.name || '').trim();
+    const email = String(sourceUser.email || '').trim() || null;
+    const safeUser = {
+        id: String(sourceUser.id || `${safeProvider}:${login || 'user'}`).trim(),
+        username: login || String(sourceUser.name || sourceUser.id || 'user').trim(),
+        name: String(sourceUser.name || login || sourceUser.id || 'User').trim(),
+        email,
+        roles: [safeProvider]
+    };
+    const { id: sessionId } = sessionStore.createSession({
+        user: safeUser,
+        externalAuth: {
+            provider: safeProvider,
+            routeKey: String(routeKey || '').trim()
+        },
+        tokens: null,
+        expiresAt: now + sessionStore.sessionTtlMs
+    });
+    return { sessionId, user: safeUser };
+}
+
 function getSession(sessionId) {
     return sessionStore.getSession(sessionId);
 }
@@ -142,6 +167,7 @@ function getSessionCookieMaxAge() {
 
 export {
     authenticateLocalUser,
+    createExternalSession,
     getSession,
     getSessionCookieMaxAge,
     resolveLocalAuthConfig,

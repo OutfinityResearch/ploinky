@@ -50,6 +50,7 @@ import {
     shutdownSession,
 } from './sessionControl.js';
 import { handleSsoCommand } from './ssoCommands.js';
+import { handleGithubAuthCommand } from './githubAuthCommands.js';
 import ClientCommands from './client.js';
 
 
@@ -293,6 +294,9 @@ async function handleCommand(args) {
         }
         case 'sso':
             await handleSsoCommand(options);
+            break;
+        case 'github-auth':
+            await handleGithubAuthCommand(options);
             break;
         case 'webtty': {
             const argsList = (options || []).filter(Boolean);

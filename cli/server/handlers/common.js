@@ -63,7 +63,8 @@ function buildCookie(name, value, req, pathPrefix, options = {}) {
     const prefix = pathPrefix || '/';
     parts.push(`Path=${prefix}`);
     parts.push('HttpOnly');
-    parts.push('SameSite=Strict');
+    const sameSite = String(options.sameSite || 'Strict').trim() || 'Strict';
+    parts.push(`SameSite=${sameSite}`);
     const secure = Boolean(req.socket && req.socket.encrypted) ||
         String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
     if (secure) parts.push('Secure');

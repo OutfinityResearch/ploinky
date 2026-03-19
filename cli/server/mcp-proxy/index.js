@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sendJson, ensureAuthenticated } from '../authHandlers.js';
+import { buildGithubSessionMeta } from '../auth/githubAuthService.js';
 import { createAgentClient } from '../AgentClient.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
@@ -124,6 +125,13 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                         },
                         sessionId: req.sessionId || '',
                     };
+                    const githubMeta = buildGithubSessionMeta({
+                        sessionId: req.sessionId || '',
+                        authMode: req.authMode || ''
+                    });
+                    if (githubMeta) {
+                        authMeta.github = githubMeta;
+                    }
                     const nextMeta = args._meta && typeof args._meta === 'object' ? { ...args._meta } : {};
                     nextMeta.auth = authMeta;
                     args._meta = nextMeta;
