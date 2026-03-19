@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
-import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { loadAgents, saveAgents } from './workspace.js';
 import { setEnvVar } from './secretVars.js';
+import { hashPassword } from './localAuthPasswords.js';
 import {
     getAgentContainerName,
     parseManifestPorts,
@@ -95,10 +95,6 @@ function parsePloinkyDirectives(rawValue) {
         .split(/[,\n;]+/)
         .map((entry) => entry.trim().toLowerCase())
         .filter(Boolean);
-}
-
-function hashPassword(password) {
-    return `sha256:${crypto.createHash('sha256').update(String(password), 'utf8').digest('hex')}`;
 }
 
 function resolveManifestPwdDefaults(manifest) {

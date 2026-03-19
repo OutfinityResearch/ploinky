@@ -47,6 +47,7 @@ function createSessionStore({ sessionTtlMs = DEFAULT_SESSION_TTL_MS, pendingTtlM
         const now = Date.now();
         const expiresAt = record.expiresAt || (now + sessionTtlMs);
         const session = {
+            ...record,
             id: sid,
             user: record.user,
             tokens: record.tokens,
@@ -94,6 +95,16 @@ function createSessionStore({ sessionTtlMs = DEFAULT_SESSION_TTL_MS, pendingTtlM
         sessions.delete(sessionId);
     }
 
+    function deleteSessionsWhere(predicate) {
+        if (typeof predicate !== 'function') return;
+        cleanupSessions();
+        for (const [sessionId, session] of sessions.entries()) {
+            if (predicate(session, sessionId)) {
+                sessions.delete(sessionId);
+            }
+        }
+    }
+
     function getAllSessions() {
         cleanupSessions();
         return Array.from(sessions.values());
@@ -108,6 +119,7 @@ function createSessionStore({ sessionTtlMs = DEFAULT_SESSION_TTL_MS, pendingTtlM
         getSession,
         updateSession,
         deleteSession,
+        deleteSessionsWhere,
         getAllSessions
     };
 }

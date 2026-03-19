@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
-import { resolveVarValue } from '../../services/secretVars.js';
+import { resolveVarValue, setEnvVar } from '../../services/secretVars.js';
+import { hashPassword, verifyPasswordHash } from '../../services/localAuthPasswords.js';
 import { createSessionStore } from './sessionStore.js';
 
 const sessionStore = createSessionStore();
@@ -21,28 +22,6 @@ function safeEqual(left, right) {
     return crypto.timingSafeEqual(leftBuf, rightBuf);
 }
 
-function verifyPasswordHash(password, storedHash) {
-    const raw = String(storedHash || '').trim();
-    if (!raw) return false;
-
-    if (raw.startsWith('sha256:')) {
-        const expected = raw.slice('sha256:'.length).trim().toLowerCase();
-        const actual = crypto.createHash('sha256').update(String(password || ''), 'utf8').digest('hex');
-        return safeEqual(actual, expected);
-    }
-
-    if (raw.startsWith('scrypt:')) {
-        const [, saltHex = '', keyHex = ''] = raw.split(':');
-        if (!saltHex || !keyHex) return false;
-        const salt = Buffer.from(saltHex, 'hex');
-        const expected = Buffer.from(keyHex, 'hex');
-        const actual = crypto.scryptSync(String(password || ''), salt, expected.length);
-        return crypto.timingSafeEqual(actual, expected);
-    }
-
-    return false;
-}
-
 function resolveLocalAuthConfig(policy = {}) {
     const usernameVar = String(policy.userVar || '').trim();
     const passwordHashVar = String(policy.passwordHashVar || '').trim();
@@ -54,7 +33,7 @@ function resolveLocalAuthConfig(policy = {}) {
     };
 }
 
-function authenticateLocalUser({ username, password, policy }) {
+function authenticateLocalUser({ username, password, policy, routeKey = '' }) {
     const config = resolveLocalAuthConfig(policy);
     if (!config.username || !config.passwordHash) {
         throw new Error('local_auth_not_configured');
@@ -73,6 +52,11 @@ function authenticateLocalUser({ username, password, policy }) {
     };
     const { id: sessionId } = sessionStore.createSession({
         user,
+        localAuth: {
+            routeKey: String(routeKey || '').trim(),
+            userVar: config.usernameVar,
+            passwordHashVar: config.passwordHashVar
+        },
         tokens: null,
         expiresAt: now + sessionStore.sessionTtlMs
     });
@@ -87,6 +71,71 @@ function revokeSession(sessionId) {
     sessionStore.deleteSession(sessionId);
 }
 
+function revokeSessionsForLocalPolicy(policy = {}) {
+    const usernameVar = String(policy.userVar || '').trim();
+    const passwordHashVar = String(policy.passwordHashVar || '').trim();
+    sessionStore.deleteSessionsWhere((session) => {
+        const localAuth = session?.localAuth || {};
+        return localAuth.userVar === usernameVar && localAuth.passwordHashVar === passwordHashVar;
+    });
+}
+
+function updateLocalCredentials({
+    currentPassword,
+    nextUsername,
+    nextPassword = '',
+    policy,
+    sessionUser = null
+}) {
+    const config = resolveLocalAuthConfig(policy);
+    if (!config.username || !config.passwordHash) {
+        throw new Error('local_auth_not_configured');
+    }
+
+    const normalizedCurrentPassword = String(currentPassword || '');
+    if (!normalizedCurrentPassword) {
+        throw new Error('current_password_required');
+    }
+
+    const requestedUsername = String(
+        nextUsername === undefined || nextUsername === null ? config.username : nextUsername
+    ).trim();
+    if (!requestedUsername) {
+        throw new Error('username_required');
+    }
+
+    if (sessionUser?.username && !safeEqual(sessionUser.username, config.username)) {
+        throw new Error('session_stale');
+    }
+
+    if (!verifyPasswordHash(normalizedCurrentPassword, config.passwordHash)) {
+        throw new Error('invalid_credentials');
+    }
+
+    const normalizedNextPassword = String(nextPassword || '');
+    const usernameChanged = !safeEqual(requestedUsername, config.username);
+    const passwordChanged = normalizedNextPassword.length > 0;
+
+    if (!usernameChanged && !passwordChanged) {
+        throw new Error('no_changes_requested');
+    }
+
+    if (usernameChanged) {
+        setEnvVar(config.usernameVar, requestedUsername);
+    }
+    if (passwordChanged) {
+        setEnvVar(config.passwordHashVar, hashPassword(normalizedNextPassword));
+    }
+
+    revokeSessionsForLocalPolicy(policy);
+
+    return {
+        username: requestedUsername,
+        usernameChanged,
+        passwordChanged
+    };
+}
+
 function getSessionCookieMaxAge() {
     return Math.floor(sessionStore.sessionTtlMs / 1000);
 }
@@ -96,5 +145,7 @@ export {
     getSession,
     getSessionCookieMaxAge,
     resolveLocalAuthConfig,
-    revokeSession
+    revokeSession,
+    revokeSessionsForLocalPolicy,
+    updateLocalCredentials
 };

@@ -10,7 +10,7 @@ import { decodeJwt, verifySignature, validateClaims } from './auth/jwt.js';
 import { createJwksCache } from './auth/jwksCache.js';
 import { loadAuthConfig } from './auth/config.js';
 import { createMetadataCache } from './auth/keycloakClient.js';
-import { authenticateLocalUser, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, resolveLocalAuthConfig, revokeSession as revokeLocalSession } from './auth/localService.js';
+import { authenticateLocalUser, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, resolveLocalAuthConfig, revokeSession as revokeLocalSession, updateLocalCredentials } from './auth/localService.js';
 
 const SSO_AUTH_COOKIE_NAME = 'ploinky_sso';
 const LOCAL_AUTH_COOKIE_NAME = 'ploinky_local';
@@ -88,13 +88,7 @@ function renderLoggedOutHtml(nextPath) {
       <h1>Signed out</h1>
       <p>Your session was closed. Sign in again to return to the workspace.</p>
       <a class="auth-btn" href="${escapeHtml(loginUrl)}">Sign in</a>
-      <div class="auth-meta">Next destination: ${escapeHtml(safeNext)}</div>
     </section>
-    <aside class="auth-side">
-      <div class="auth-side-label">Workspace</div>
-      <div class="auth-side-title">Shared authentication across workspace tools</div>
-      <p>Authentication is managed centrally so the app surface, MCP endpoints, and routed services stay under one access policy.</p>
-    </aside>
   </main>
 </body>
 </html>`;
@@ -236,11 +230,22 @@ function getAuthPageStyles() {
       color: #b3261e;
       font-size: 14px;
     }
+    .auth-notice {
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      font-size: 14px;
+    }
     .auth-meta {
       margin-top: 14px;
       font-size: 12px;
       color: var(--auth-ink-soft);
       word-break: break-word;
+    }
+    .auth-meta a {
+      color: var(--auth-accent-strong);
     }
     .auth-actions {
       display: flex;
@@ -261,12 +266,14 @@ function getAuthPageStyles() {
     }`;
 }
 
-function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', userVar = '', passwordHashVar = '' } = {}) {
+function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = '', userVar = '', passwordHashVar = '' } = {}) {
     const safeAgent = escapeHtml(agentName || 'application');
     const safeReturnTo = escapeHtml(normalizeRelativePath(returnTo, '/'));
     const safeError = escapeHtml(error || '');
+    const safeNotice = escapeHtml(notice || '');
     const safeUserVar = escapeHtml(userVar || '');
     const safePasswordVar = escapeHtml(passwordHashVar || '');
+    const safeAccountUrl = escapeHtml(`/auth/account?agent=${encodeURIComponent(agentName || '')}&returnTo=${encodeURIComponent(normalizeRelativePath(returnTo, '/'))}`);
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -283,6 +290,7 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', userVar =
       <div class="auth-kicker">Workspace Access</div>
       <h1>Sign in</h1>
       <p>Local authentication is enabled for ${safeAgent}.</p>
+      ${safeNotice ? `<div class="auth-notice">${safeNotice}</div>` : ''}
       ${safeError ? `<div class="auth-error">${safeError}</div>` : ''}
       <form method="post" action="/auth/login">
         <input type="hidden" name="agent" value="${safeAgent}" />
@@ -293,7 +301,67 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', userVar =
         <input id="password" name="password" type="password" autocomplete="current-password" required />
         <button class="auth-btn" type="submit">Sign in</button>
       </form>
-      ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">To change these credentials, update the workspace variables below.</div><div class="auth-meta">Expected vars: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
+      <div class="auth-meta">After signing in, you can change the username or password in <a href="${safeAccountUrl}">account settings</a>.</div>
+      ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">Workspace variables: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function renderLocalAccountHtml({
+    agentName,
+    returnTo = '/',
+    error = '',
+    notice = '',
+    username = '',
+    userVar = '',
+    passwordHashVar = ''
+} = {}) {
+    const safeAgent = escapeHtml(agentName || 'application');
+    const safeReturnTo = escapeHtml(normalizeRelativePath(returnTo, '/'));
+    const safeError = escapeHtml(error || '');
+    const safeNotice = escapeHtml(notice || '');
+    const safeUsername = escapeHtml(username || '');
+    const safeUserVar = escapeHtml(userVar || '');
+    const safePasswordVar = escapeHtml(passwordHashVar || '');
+    const safeLogoutUrl = escapeHtml(`/auth/logout?returnTo=${encodeURIComponent(normalizeRelativePath(returnTo, '/'))}`);
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Account settings</title>
+  <style>
+    ${getAuthPageStyles()}
+  </style>
+</head>
+<body>
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="auth-kicker">Workspace Access</div>
+      <h1>Account settings</h1>
+      <p>Update the local credentials for ${safeAgent}. Confirm the current password before saving any change.</p>
+      ${safeNotice ? `<div class="auth-notice">${safeNotice}</div>` : ''}
+      ${safeError ? `<div class="auth-error">${safeError}</div>` : ''}
+      <form method="post" action="/auth/account">
+        <input type="hidden" name="returnTo" value="${safeReturnTo}" />
+        <label for="newUsername">Username</label>
+        <input id="newUsername" name="newUsername" type="text" autocomplete="username" value="${safeUsername}" required />
+        <label for="newPassword">New password</label>
+        <input id="newPassword" name="newPassword" type="password" autocomplete="new-password" />
+        <label for="confirmPassword">Confirm new password</label>
+        <input id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password" />
+        <label for="currentPassword">Current password</label>
+        <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required />
+        <button class="auth-btn" type="submit">Save changes</button>
+      </form>
+      <div class="auth-actions">
+        <a class="auth-btn secondary" href="${safeReturnTo}">Back</a>
+        <a class="auth-btn secondary" href="${safeLogoutUrl}">Sign out</a>
+      </div>
+      <div class="auth-meta">Leave the new password fields empty if you only want to change the username.</div>
+      ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">Workspace variables: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
     </section>
   </main>
 </body>
@@ -376,6 +444,51 @@ function resolveAuthContext(parsedUrl) {
     const policy = record?.auth || { mode: 'none' };
     const mode = String(policy.mode || 'none').trim().toLowerCase() || 'none';
     return { routeKey, mode, policy, record };
+}
+
+function getLocalRouteKey(parsedUrl, session = null, fallback = '') {
+    const fromSession = String(session?.localAuth?.routeKey || '').trim();
+    if (fromSession) return fromSession;
+    const fromQuery = String(parsedUrl.searchParams.get('agent') || '').trim();
+    if (fromQuery) return fromQuery;
+    return String(fallback || '').trim();
+}
+
+function getLocalAuthPolicyFromSession(session = null, fallbackPolicy = null) {
+    const localAuth = session?.localAuth || {};
+    if (localAuth.userVar && localAuth.passwordHashVar) {
+        return {
+            mode: 'local',
+            userVar: localAuth.userVar,
+            passwordHashVar: localAuth.passwordHashVar
+        };
+    }
+    return fallbackPolicy;
+}
+
+function getLocalAccountErrorMessage(code = '') {
+    switch (String(code || '').trim()) {
+        case 'current_password_required':
+            return 'Enter the current password to apply changes.';
+        case 'username_required':
+            return 'Username cannot be empty.';
+        case 'password_too_short':
+            return 'New password must be at least 8 characters.';
+        case 'password_confirmation_required':
+            return 'Confirm the new password.';
+        case 'password_confirmation_mismatch':
+            return 'The new password and confirmation do not match.';
+        case 'invalid_credentials':
+            return 'Current password is incorrect.';
+        case 'local_auth_not_configured':
+            return 'Local auth is not configured for this account.';
+        case 'no_changes_requested':
+            return 'No changes were submitted.';
+        case 'session_stale':
+            return 'Your session is out of date. Sign in again and retry.';
+        default:
+            return code ? 'Unable to update credentials.' : '';
+    }
 }
 
 function readTextBody(req) {
@@ -590,6 +703,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                         agentName: authContext.routeKey,
                         returnTo,
                         error: parsedUrl.searchParams.get('error') || '',
+                        notice: parsedUrl.searchParams.get('notice') || '',
                         userVar: localCfg.usernameVar,
                         passwordHashVar: localCfg.passwordHashVar
                     }));
@@ -604,7 +718,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 const returnTo = normalizeRelativePath(body?.returnTo || '/', '/');
                 const agent = String(body?.agent || authContext.routeKey || '').trim();
                 try {
-                    const result = authenticateLocalUser({ username, password, policy: authContext.policy });
+                    const result = authenticateLocalUser({ username, password, policy: authContext.policy, routeKey: agent });
                     const cookie = buildCookie(LOCAL_AUTH_COOKIE_NAME, result.sessionId, req, '/', {
                         maxAge: getLocalSessionCookieMaxAge()
                     });
@@ -649,6 +763,129 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 redirectUrl
             }));
             appendLog('auth_login_redirect', { returnTo });
+            return true;
+        }
+        if (pathname === '/auth/account') {
+            if (method !== 'GET' && method !== 'POST') {
+                res.writeHead(405); res.end(); return true;
+            }
+            const cookies = parseCookies(req);
+            const sessionId = cookies.get(LOCAL_AUTH_COOKIE_NAME) || '';
+            const session = getLocalSession(sessionId);
+            const routeKey = getLocalRouteKey(parsedUrl, session, authContext.routeKey);
+            const returnToFromQuery = normalizeRelativePath(parsedUrl.searchParams.get('returnTo') || '/', '/');
+
+            if (!session) {
+                const params = new URLSearchParams({ returnTo: returnToFromQuery });
+                if (routeKey) params.set('agent', routeKey);
+                res.writeHead(302, { Location: `/auth/login?${params.toString()}` });
+                res.end('Authentication required');
+                return true;
+            }
+
+            req.user = session.user;
+            req.session = session;
+            req.sessionId = sessionId;
+            req.authMode = 'local';
+
+            const policy = getLocalAuthPolicyFromSession(session, authContext.policy);
+
+            if (method === 'GET') {
+                const localCfg = resolveLocalAuthConfig(policy);
+                res.writeHead(200, {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Cache-Control': 'no-store'
+                });
+                res.end(renderLocalAccountHtml({
+                    agentName: routeKey,
+                    returnTo: returnToFromQuery,
+                    error: getLocalAccountErrorMessage(parsedUrl.searchParams.get('error') || ''),
+                    notice: parsedUrl.searchParams.get('notice') || '',
+                    username: localCfg.username || req.user?.username || '',
+                    userVar: localCfg.usernameVar,
+                    passwordHashVar: localCfg.passwordHashVar
+                }));
+                return true;
+            }
+
+            const body = await readLoginBody(req);
+            const returnTo = normalizeRelativePath(body?.returnTo || '/', '/');
+            const nextUsername = String(body?.newUsername || '').trim();
+            const currentPassword = String(body?.currentPassword || '');
+            const newPassword = String(body?.newPassword || '');
+            const confirmPassword = String(body?.confirmPassword || '');
+            const wantsJson = String(req.headers?.accept || '').toLowerCase().includes('application/json');
+            let errorCode = '';
+
+            if (!currentPassword) {
+                errorCode = 'current_password_required';
+            } else if (!nextUsername) {
+                errorCode = 'username_required';
+            } else if ((newPassword || confirmPassword) && !confirmPassword) {
+                errorCode = 'password_confirmation_required';
+            } else if ((newPassword || confirmPassword) && newPassword !== confirmPassword) {
+                errorCode = 'password_confirmation_mismatch';
+            } else if (newPassword && newPassword.length < 8) {
+                errorCode = 'password_too_short';
+            }
+
+            if (!errorCode) {
+                try {
+                    const result = updateLocalCredentials({
+                        currentPassword,
+                        nextUsername,
+                        nextPassword: newPassword,
+                        policy,
+                        sessionUser: req.user
+                    });
+                    const clearCookie = buildCookie(LOCAL_AUTH_COOKIE_NAME, '', req, '/', { maxAge: 0 });
+                    const notice = result.passwordChanged
+                        ? 'Credentials updated. Sign in again with the new username and password.'
+                        : 'Username updated. Sign in again with the new username.';
+                    appendLog('auth_local_account_updated', {
+                        user: req.user?.username || null,
+                        agent: routeKey || null,
+                        usernameChanged: result.usernameChanged,
+                        passwordChanged: result.passwordChanged
+                    });
+                    if (wantsJson) {
+                        res.writeHead(200, {
+                            'Content-Type': 'application/json',
+                            'Set-Cookie': clearCookie
+                        });
+                        res.end(JSON.stringify({ ok: true, notice }));
+                        return true;
+                    }
+                    const params = new URLSearchParams({ returnTo, notice });
+                    if (routeKey) params.set('agent', routeKey);
+                    res.writeHead(302, {
+                        Location: `/auth/login?${params.toString()}`,
+                        'Set-Cookie': clearCookie
+                    });
+                    res.end('Credentials updated');
+                    return true;
+                } catch (err) {
+                    errorCode = err?.message || 'local_account_update_failed';
+                    appendLog('auth_local_account_update_failure', {
+                        error: errorCode,
+                        agent: routeKey || null
+                    });
+                }
+            }
+
+            if (wantsJson) {
+                sendJson(res, 400, {
+                    ok: false,
+                    error: errorCode,
+                    message: getLocalAccountErrorMessage(errorCode)
+                });
+                return true;
+            }
+
+            const params = new URLSearchParams({ returnTo });
+            if (errorCode) params.set('error', errorCode);
+            res.writeHead(302, { Location: `/auth/account?${params.toString()}` });
+            res.end('Unable to update credentials');
             return true;
         }
         if (pathname === '/auth/callback') {
