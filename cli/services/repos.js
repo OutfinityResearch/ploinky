@@ -50,6 +50,7 @@ const PREDEFINED_REPOS = {
     vibe: { url: 'https://github.com/PloinkyRepos/vibe.git', description: 'Vibe coding agents' },
     security: { url: 'https://github.com/PloinkyRepos/security.git', description: 'Security and scanning tools' },
     extra: { url: 'https://github.com/PloinkyRepos/extra.git', description: 'Additional utility agents' },
+    AchillesIDE: { url: 'https://github.com/PloinkyRepos/AssistOSExplorer.git', description: 'Workspace IDE with Explorer UI, SOPLang editing and Git workflows' },
     demo: { url: 'https://github.com/PloinkyRepos/demo.git', description: 'Demo agents and examples' },
     proxies: { url: 'https://github.com/PloinkyRepos/proxies.git', description: 'API proxy agents (Kiro Gateway)' }
 };
@@ -68,7 +69,10 @@ function ensureReposDir() {
 
 export function resolveRepoUrl(name, url) {
     if (url && url.trim()) return url;
-    const preset = PREDEFINED_REPOS[String(name || '').toLowerCase()];
+    const rawName = String(name || '');
+    const preset = PREDEFINED_REPOS[rawName]
+        || PREDEFINED_REPOS[rawName.toLowerCase()]
+        || Object.entries(PREDEFINED_REPOS).find(([key]) => key.toLowerCase() === rawName.toLowerCase())?.[1];
     return preset ? preset.url : null;
 }
 

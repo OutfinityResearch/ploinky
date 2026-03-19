@@ -716,6 +716,7 @@ getAgentMcpUrl(agentName)  // Returns /mcps/<agentName>/mcp
 | `vibe` | Vibe coding agents |
 | `security` | Security and scanning tools |
 | `extra` | Additional utility agents |
+| `AchillesIDE` | Workspace IDE with Explorer UI, SOPLang editing and Git workflows |
 | `demo` | Demo agents and examples |
 
 ### Available Agents in `basic` Repository
