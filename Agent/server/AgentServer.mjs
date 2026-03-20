@@ -9,6 +9,7 @@ const { z } = zod;
 
 const DEFAULT_MAX_CONCURRENT_TASKS = 10;
 const TASK_QUEUE_FILE = path.resolve(process.cwd(), '.tasksQueue');
+const PLOINKY_AUTH_INFO_HEADER = 'x-ploinky-auth-info';
 
 // AgentServer (MCP over HTTP): exposes tools/resources via Streamable HTTP transport on PORT (default 7000) at /mcp.
 
@@ -259,6 +260,52 @@ function executeShell(spec, payload, options = {}) {
     });
 }
 
+function decodeAuthInfoFromHeaders(headers = null) {
+    if (!headers || typeof headers !== 'object') return null;
+    const raw = headers[PLOINKY_AUTH_INFO_HEADER] || headers[PLOINKY_AUTH_INFO_HEADER.toLowerCase()] || null;
+    if (!raw || typeof raw !== 'string') return null;
+    try {
+        const decoded = Buffer.from(raw, 'base64').toString('utf8');
+        const parsed = JSON.parse(decoded);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+function sanitizeAuthInfoForLog(authInfo = null) {
+    if (!authInfo || typeof authInfo !== 'object') return null;
+    const github = authInfo.github && typeof authInfo.github === 'object'
+        ? {
+            provider: authInfo.github.provider || '',
+            tokenType: authInfo.github.tokenType || '',
+            scope: authInfo.github.scope || '',
+            hasAccessToken: Boolean(authInfo.github.accessToken),
+            user: authInfo.github.user || null
+        }
+        : null;
+    return {
+        ...authInfo,
+        github
+    };
+}
+
+function sanitizeContextForLog(context = {}) {
+    if (!context || typeof context !== 'object') return context;
+    return {
+        ...context,
+        authInfo: sanitizeAuthInfoForLog(context.authInfo || null)
+    };
+}
+
+function sanitizePayloadForLog(payload = {}) {
+    if (!payload || typeof payload !== 'object') return payload;
+    return {
+        ...payload,
+        metadata: sanitizeContextForLog(payload.metadata || {})
+    };
+}
+
 const initialConfigResult = getConfigResult();
 const initialConfig = initialConfigResult ? initialConfigResult.config : {};
 const taskQueue = new TaskQueue({
@@ -306,10 +353,14 @@ async function registerFromConfig(server, config, helpers) {
                     context = args;
                     args = {};
                 }
+                const authInfo = decodeAuthInfoFromHeaders(context?.requestInfo?.headers || null);
+                if (authInfo) {
+                    context = { ...context, authInfo };
+                }
                 console.log(`[AgentServer/MCP] Tool '${name}' args:`, args);
-                console.log(`[AgentServer/MCP] Tool '${name}' context:`, context);
+                console.log(`[AgentServer/MCP] Tool '${name}' context:`, sanitizeContextForLog(context));
                 const payload = { tool: name, input: args, metadata: context };
-                console.log(`[AgentServer/MCP] Tool '${name}' payload:`, JSON.stringify(payload));
+                console.log(`[AgentServer/MCP] Tool '${name}' payload:`, JSON.stringify(sanitizePayloadForLog(payload)));
                 if (isAsync) {
                     const enqueued = taskQueue.enqueueTask({
                         toolName: name,

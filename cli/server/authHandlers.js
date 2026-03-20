@@ -462,15 +462,19 @@ function resolveAuthRouteKey(parsedUrl) {
     const parts = pathname.split('/').filter(Boolean);
     const routing = readRouting();
     const routes = routing.routes || {};
-    if ((pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/')) && parts.length >= 2) {
-        return parts[1];
+    const explicit = String(parsedUrl.searchParams.get('agent') || '').trim();
+    const staticAgent = String(routing.static?.agent || '').trim();
+    if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/')) {
+        if (explicit) return explicit;
+        if (staticAgent) return staticAgent;
+        if (parts.length >= 2) {
+            return parts[1];
+        }
     }
     if (parts.length >= 1 && routes[parts[0]]) {
         return parts[0];
     }
-    const explicit = String(parsedUrl.searchParams.get('agent') || '').trim();
     if (explicit) return explicit;
-    const staticAgent = String(routing.static?.agent || '').trim();
     return staticAgent || null;
 }
 

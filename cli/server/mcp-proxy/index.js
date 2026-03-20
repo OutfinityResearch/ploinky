@@ -5,6 +5,7 @@ import { createAgentClient } from '../AgentClient.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
 const AGENT_PROXY_SERVER_INFO = { name: 'ploinky-router-proxy', version: '1.0.0' };
+const PLOINKY_AUTH_INFO_HEADER = 'x-ploinky-auth-info';
 
 // Session store for agent MCP connections
 const agentSessionStore = new Map();
@@ -26,6 +27,15 @@ function isJsonRpcPayload(payload) {
         return payload.some(item => item && typeof item === 'object' && item.jsonrpc === '2.0');
     }
     return !!(payload && typeof payload === 'object' && payload.jsonrpc === '2.0');
+}
+
+function encodeAuthInfoHeader(authInfo = null) {
+    if (!authInfo || typeof authInfo !== 'object') return '';
+    try {
+        return Buffer.from(JSON.stringify(authInfo), 'utf8').toString('base64');
+    } catch {
+        return '';
+    }
 }
 
 /**
@@ -91,7 +101,31 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
         return;
     }
 
-    const agentClient = createAgentClient(baseUrl);
+    let requestHeaders = null;
+    if (req.user && typeof req.user === 'object') {
+        const authInfo = {
+            user: {
+                id: req.user.id || '',
+                username: req.user.username || req.user.name || req.user.email || '',
+                email: req.user.email || '',
+                roles: Array.isArray(req.user.roles) ? [...req.user.roles] : [],
+            },
+            sessionId: req.sessionId || '',
+        };
+        const githubMeta = buildGithubSessionMeta({
+            sessionId: req.sessionId || '',
+            authMode: req.authMode || ''
+        });
+        if (githubMeta) {
+            authInfo.github = githubMeta;
+        }
+        const encoded = encodeAuthInfoHeader(authInfo);
+        if (encoded) {
+            requestHeaders = { [PLOINKY_AUTH_INFO_HEADER]: encoded };
+        }
+    }
+
+    const agentClient = createAgentClient(baseUrl, requestHeaders ? { requestHeaders } : undefined);
     try {
         switch (message.method) {
             case 'tools/list': {

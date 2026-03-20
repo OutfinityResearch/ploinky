@@ -4,14 +4,19 @@
 import { client as mcpClient, StreamableHTTPClientTransport } from 'mcp-sdk';
 const { Client } = mcpClient;
 
-function createAgentClient(baseUrl) {
+function createAgentClient(baseUrl, options = {}) {
   let client = null;
   let transport = null;
   let connected = false;
+  const requestHeaders = options && typeof options === 'object' && options.requestHeaders && typeof options.requestHeaders === 'object'
+    ? options.requestHeaders
+    : null;
 
   async function connect() {
     if (connected && client && transport) return;
-    transport = new StreamableHTTPClientTransport(new URL(baseUrl));
+    transport = new StreamableHTTPClientTransport(new URL(baseUrl), requestHeaders
+      ? { requestInit: { headers: requestHeaders } }
+      : undefined);
     client = new Client({ name: 'ploinky-router', version: '1.0.0' });
     await client.connect(transport);
     connected = true;
