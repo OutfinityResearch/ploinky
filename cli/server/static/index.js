@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { waitForAgentReady } from '../utils/agentReadiness.js';
 
 const ROUTING_FILE = path.resolve('.ploinky/routing.json');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +28,12 @@ function getStaticHostPath() {
         if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) return abs;
     } catch (_) { }
     return null;
+}
+
+function getStaticAgentName() {
+    const cfg = readRouting();
+    const agent = cfg?.static?.agent;
+    return typeof agent === 'string' && agent.trim() ? agent.trim() : null;
 }
 
 function getWorkspaceRoot() {
@@ -191,7 +198,94 @@ function resolveStaticFile(requestPath) {
     return null;
 }
 
-function serveStaticRequest(req, res) {
+function isStaticEntrypointPath(pathname) {
+    const normalized = typeof pathname === 'string' && pathname.trim() ? pathname.trim() : '/';
+    const staticAgent = getStaticAgentName();
+    if (normalized === '/' || normalized === '/index.html') {
+        return true;
+    }
+    if (!staticAgent) {
+        return false;
+    }
+    return normalized === `/${staticAgent}`
+        || normalized === `/${staticAgent}/`
+        || normalized === `/${staticAgent}/index.html`;
+}
+
+function renderStaticBootstrapHtml(agentName) {
+    const safeAgent = String(agentName || 'application');
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Starting ${safeAgent}</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(135deg, #f4f6fb, #dbeafe);
+      color: #1f2937;
+    }
+    .boot-card {
+      width: min(420px, calc(100vw - 32px));
+      padding: 28px;
+      border-radius: 20px;
+      background: rgba(255,255,255,0.94);
+      border: 1px solid rgba(31,41,55,0.08);
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.14);
+    }
+    .boot-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .boot-spinner {
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      border: 2px solid #2563eb;
+      border-right-color: transparent;
+      animation: boot-spin .7s linear infinite;
+      flex: 0 0 auto;
+    }
+    p {
+      margin: 0;
+      line-height: 1.55;
+      color: #4b5563;
+      font-size: 14px;
+    }
+    @keyframes boot-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <main class="boot-card">
+    <div class="boot-row">
+      <span class="boot-spinner" aria-hidden="true"></span>
+      <span>Starting ${safeAgent}...</span>
+    </div>
+    <p>The workspace is still booting. This page will retry automatically.</p>
+  </main>
+  <script>
+    window.setTimeout(function () {
+      window.location.reload();
+    }, 1000);
+  </script>
+</body>
+</html>`;
+}
+
+async function serveStaticRequest(req, res) {
     try {
         const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
         const pathname = decodeURIComponent(parsed.pathname || '/');
@@ -208,6 +302,25 @@ function serveStaticRequest(req, res) {
 
         const root = getStaticHostPath();
         if (!root) return false;
+
+        if (isStaticEntrypointPath(pathname)) {
+            const staticAgent = getStaticAgentName();
+            if (staticAgent) {
+                const ready = await waitForAgentReady(staticAgent, {
+                    timeoutMs: 15000,
+                    intervalMs: 150,
+                    probeTimeoutMs: 350
+                });
+                if (!ready) {
+                    res.writeHead(503, {
+                        'Content-Type': 'text/html; charset=utf-8',
+                        'Cache-Control': 'no-store'
+                    });
+                    res.end(renderStaticBootstrapHtml(staticAgent));
+                    return true;
+                }
+            }
+        }
 
         const rel = pathname.replace(/^\/+/, '');
         const target = resolveStaticFile(rel || '');
@@ -346,6 +459,7 @@ function serveWorkspaceFileRequest(req, res) {
 
 export {
     getStaticHostPath,
+    getStaticAgentName,
     resolveAssetPath,
     resolveFirstAvailable,
     sendFile,

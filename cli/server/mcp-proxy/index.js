@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sendJson, ensureAuthenticated } from '../authHandlers.js';
 import { buildGithubSessionMeta } from '../auth/githubAuthService.js';
 import { createAgentClient } from '../AgentClient.js';
+import { waitForAgentReady } from '../utils/agentReadiness.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
 const AGENT_PROXY_SERVER_INFO = { name: 'ploinky-router-proxy', version: '1.0.0' };
@@ -273,8 +274,36 @@ async function handleAgentMcpRequest(req, res, route, agentName) {
             payload = {};
         }
 
+        const isJsonRpc = isJsonRpcPayload(payload);
+        const isReady = await waitForAgentReady(route, {
+            timeoutMs: 5000,
+            intervalMs: 125,
+            probeTimeoutMs: 250
+        });
+        if (!isReady) {
+            if (isJsonRpc) {
+                const message = Array.isArray(payload) ? payload[0] : payload;
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: message?.id ?? null,
+                    error: {
+                        code: -32000,
+                        message: `Agent '${agentName}' is still starting. Try again in a moment.`
+                    }
+                }));
+                return;
+            }
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                error: 'agent_not_ready',
+                detail: `Agent '${agentName}' is still starting.`
+            }));
+            return;
+        }
+
         try {
-            if (isJsonRpcPayload(payload)) {
+            if (isJsonRpc) {
                 await handleAgentJsonRpc(req, res, route, agentName, payload);
                 return;
             }

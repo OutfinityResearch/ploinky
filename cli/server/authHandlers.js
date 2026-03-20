@@ -13,6 +13,7 @@ import { createMetadataCache } from './auth/keycloakClient.js';
 import { authenticateLocalUser, createExternalSession, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, resolveLocalAuthConfig, revokeSession as revokeLocalSession, updateLocalCredentials } from './auth/localService.js';
 import { loadGithubAuthConfig, getGithubAuthStatus, beginGithubDeviceFlow, pollGithubDeviceFlow, beginGithubLogin, finishGithubLogin, saveGithubSession, disconnectGithubSession, clearGithubSession } from './auth/githubAuthService.js';
 import { saveGithubAuthSetup } from '../services/githubAuth.js';
+import { waitForAgentReady } from './utils/agentReadiness.js';
 
 const SSO_AUTH_COOKIE_NAME = 'ploinky_sso';
 const LOCAL_AUTH_COOKIE_NAME = 'ploinky_local';
@@ -261,6 +262,26 @@ function getAuthPageStyles() {
       box-shadow: none;
       border: 1px solid var(--auth-line);
     }
+    .auth-btn.is-loading {
+      position: relative;
+      pointer-events: none;
+      opacity: 0.78;
+    }
+    .auth-btn-spinner {
+      width: 14px;
+      height: 14px;
+      margin-right: 8px;
+      border-radius: 999px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      animation: auth-spin .7s linear infinite;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+    @keyframes auth-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
     .auth-error {
       margin-bottom: 12px;
       padding: 12px 14px;
@@ -313,6 +334,9 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
     const safeUserVar = escapeHtml(userVar || '');
     const safePasswordVar = escapeHtml(passwordHashVar || '');
     const safeAccountUrl = escapeHtml(`/auth/account?agent=${encodeURIComponent(agentName || '')}&returnTo=${encodeURIComponent(normalizeRelativePath(returnTo, '/'))}`);
+    const githubButtonHtml = githubLoginUrl
+        ? `<div class="auth-actions"><a class="auth-btn secondary" id="githubLoginButton" href="${escapeHtml(githubLoginUrl)}"><span class="auth-btn-label">Continue with GitHub</span></a></div>`
+        : '';
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -340,11 +364,23 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
         <input id="password" name="password" type="password" autocomplete="current-password" required />
         <button class="auth-btn" type="submit">Sign in</button>
       </form>
-      ${githubLoginUrl ? `<div class="auth-actions"><a class="auth-btn secondary" href="${escapeHtml(githubLoginUrl)}">Continue with GitHub</a></div>` : ''}
+      ${githubButtonHtml}
       <div class="auth-meta">After signing in, you can change the username or password in <a href="${safeAccountUrl}">account settings</a>.</div>
       ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">Workspace variables: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
     </section>
   </main>
+  <script>
+    (function () {
+      var githubButton = document.getElementById('githubLoginButton');
+      if (!githubButton) return;
+      githubButton.addEventListener('click', function () {
+        if (githubButton.classList.contains('is-loading')) return;
+        githubButton.classList.add('is-loading');
+        githubButton.setAttribute('aria-disabled', 'true');
+        githubButton.innerHTML = '<span class="auth-btn-spinner" aria-hidden="true"></span><span class="auth-btn-label">Opening GitHub...</span>';
+      });
+    }());
+  </script>
 </body>
 </html>`;
 }
@@ -455,6 +491,18 @@ function readRouting() {
     } catch (_) {
         return {};
     }
+}
+
+async function waitForAgentRedirectReady(agentName) {
+    const normalizedAgent = typeof agentName === 'string' ? agentName.trim() : '';
+    if (!normalizedAgent) {
+        return true;
+    }
+    return waitForAgentReady(normalizedAgent, {
+        timeoutMs: 5000,
+        intervalMs: 125,
+        probeTimeoutMs: 250
+    });
 }
 
 function resolveAuthRouteKey(parsedUrl) {
@@ -813,6 +861,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 const agent = String(body?.agent || authContext.routeKey || '').trim();
                 try {
                     const result = authenticateLocalUser({ username, password, policy: authContext.policy, routeKey: agent });
+                    await waitForAgentRedirectReady(agent);
                     const cookie = buildCookie(LOCAL_AUTH_COOKIE_NAME, result.sessionId, req, '/', {
                         maxAge: getLocalSessionCookieMaxAge(),
                         sameSite: 'Lax'
@@ -1065,6 +1114,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                     routeKey: result.routeKey || authContext.routeKey || '',
                     provider: 'github'
                 });
+                await waitForAgentRedirectReady(result.routeKey || authContext.routeKey || '');
                 saveGithubSession({ sessionId: created.sessionId, authMode: 'local' }, result.connection);
                 const cookie = buildCookie(LOCAL_AUTH_COOKIE_NAME, created.sessionId, req, '/', {
                     maxAge: getLocalSessionCookieMaxAge(),
@@ -1266,6 +1316,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 return true;
             }
             const result = await authService.handleCallback({ code, state, baseUrl });
+            await waitForAgentRedirectReady(authContext.routeKey || '');
             const cookie = buildCookie(SSO_AUTH_COOKIE_NAME, result.sessionId, req, '/', {
                 maxAge: authService.getSessionCookieMaxAge(),
                 sameSite: 'Lax'

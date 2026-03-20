@@ -257,7 +257,7 @@ async function processRequest(req, res) {
         // Static file serving
         if (staticSrv.serveWorkspaceFileRequest(req, res)) return;
         if (staticSrv.serveAgentStaticRequest(req, res)) return;
-        if (staticSrv.serveStaticRequest(req, res)) return;
+        if (await staticSrv.serveStaticRequest(req, res)) return;
 
         res.writeHead(404);
         return res.end('Not Found');
