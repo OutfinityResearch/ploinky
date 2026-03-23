@@ -10,9 +10,7 @@ import { decodeJwt, verifySignature, validateClaims } from './auth/jwt.js';
 import { createJwksCache } from './auth/jwksCache.js';
 import { loadAuthConfig } from './auth/config.js';
 import { createMetadataCache } from './auth/keycloakClient.js';
-import { authenticateLocalUser, createExternalSession, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, resolveLocalAuthConfig, revokeSession as revokeLocalSession, updateLocalCredentials } from './auth/localService.js';
-import { loadGithubAuthConfig, getGithubAuthStatus, beginGithubDeviceFlow, pollGithubDeviceFlow, beginGithubLogin, finishGithubLogin, saveGithubSession, disconnectGithubSession, clearGithubSession } from './auth/githubAuthService.js';
-import { saveGithubAuthSetup } from '../services/githubAuth.js';
+import { authenticateLocalUser, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, resolveLocalAuthConfig, revokeSession as revokeLocalSession, updateLocalCredentials } from './auth/localService.js';
 import { waitForAgentReady } from './utils/agentReadiness.js';
 
 const SSO_AUTH_COOKIE_NAME = 'ploinky_sso';
@@ -326,7 +324,7 @@ function getAuthPageStyles() {
     }`;
 }
 
-function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = '', userVar = '', passwordHashVar = '', githubLoginUrl = '' } = {}) {
+function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = '', userVar = '', passwordHashVar = '' } = {}) {
     const safeAgent = escapeHtml(agentName || 'application');
     const safeReturnTo = escapeHtml(normalizeRelativePath(returnTo, '/'));
     const safeError = escapeHtml(error || '');
@@ -334,9 +332,6 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
     const safeUserVar = escapeHtml(userVar || '');
     const safePasswordVar = escapeHtml(passwordHashVar || '');
     const safeAccountUrl = escapeHtml(`/auth/account?agent=${encodeURIComponent(agentName || '')}&returnTo=${encodeURIComponent(normalizeRelativePath(returnTo, '/'))}`);
-    const githubButtonHtml = githubLoginUrl
-        ? `<div class="auth-actions"><a class="auth-btn secondary" id="githubLoginButton" href="${escapeHtml(githubLoginUrl)}"><span class="auth-btn-label">Continue with GitHub</span></a></div>`
-        : '';
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -364,23 +359,10 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
         <input id="password" name="password" type="password" autocomplete="current-password" required />
         <button class="auth-btn" type="submit">Sign in</button>
       </form>
-      ${githubButtonHtml}
       <div class="auth-meta">After signing in, you can change the username or password in <a href="${safeAccountUrl}">account settings</a>.</div>
       ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">Workspace variables: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
     </section>
   </main>
-  <script>
-    (function () {
-      var githubButton = document.getElementById('githubLoginButton');
-      if (!githubButton) return;
-      githubButton.addEventListener('click', function () {
-        if (githubButton.classList.contains('is-loading')) return;
-        githubButton.classList.add('is-loading');
-        githubButton.setAttribute('aria-disabled', 'true');
-        githubButton.innerHTML = '<span class="auth-btn-spinner" aria-hidden="true"></span><span class="auth-btn-label">Opening GitHub...</span>';
-      });
-    }());
-  </script>
 </body>
 </html>`;
 }
@@ -575,31 +557,6 @@ async function resolveSessionForAuthContext(authContext, sessionId) {
         session = authService.getSession(sessionId);
     }
     return session;
-}
-
-function getGithubAuthErrorMessage(code = '') {
-    switch (String(code || '').trim()) {
-        case 'github_auth_not_configured':
-            return 'GitHub auth is not configured for this workspace.';
-        case 'github_client_id_required':
-            return 'Enter a GitHub OAuth client ID.';
-        case 'github_device_flow_not_started':
-            return 'GitHub sign-in has not started yet.';
-        case 'github_device_flow_expired':
-            return 'The GitHub sign-in code expired. Start again.';
-        case 'github_device_flow_access_denied':
-            return 'GitHub sign-in was cancelled.';
-        case 'github_oauth_client_secret_required':
-            return 'GitHub sign-in is not fully configured for this workspace.';
-        case 'github_oauth_state_invalid':
-            return 'GitHub sign-in expired. Start again.';
-        case 'missing_base_url':
-            return 'GitHub sign-in is not available from this request.';
-        case 'missing_session':
-            return 'Authentication required.';
-        default:
-            return code ? 'GitHub authentication failed.' : '';
-    }
 }
 
 function getLocalAccountErrorMessage(code = '') {
@@ -832,10 +789,6 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 if (method === 'GET') {
                     const returnTo = parsedUrl.searchParams.get('returnTo') || '/';
                     const localCfg = resolveLocalAuthConfig(authContext.policy);
-                    const githubCfg = loadGithubAuthConfig();
-                    const githubLoginUrl = githubCfg?.clientId && githubCfg?.clientSecret
-                        ? `/auth/github/login?agent=${encodeURIComponent(authContext.routeKey || '')}&returnTo=${encodeURIComponent(returnTo)}`
-                        : '';
                     res.writeHead(200, {
                         'Content-Type': 'text/html; charset=utf-8',
                         'Cache-Control': 'no-store'
@@ -846,8 +799,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                         error: parsedUrl.searchParams.get('error') || '',
                         notice: parsedUrl.searchParams.get('notice') || '',
                         userVar: localCfg.usernameVar,
-                        passwordHashVar: localCfg.passwordHashVar,
-                        githubLoginUrl
+                        passwordHashVar: localCfg.passwordHashVar
                     }));
                     return true;
                 }
@@ -1012,7 +964,6 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                         usernameChanged: result.usernameChanged,
                         passwordChanged: result.passwordChanged
                     });
-                    clearGithubSession({ sessionId, authMode: 'local' });
                     if (wantsJson) {
                         res.writeHead(200, {
                             'Content-Type': 'application/json',
@@ -1054,247 +1005,8 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             return true;
         }
 
-        if (pathname === '/auth/github/login') {
-            if (method !== 'GET') {
-                res.writeHead(405); res.end(); return true;
-            }
-            if (authContext.mode !== 'local') {
-                sendJson(res, 404, { ok: false, error: 'github_login_not_supported' });
-                return true;
-            }
-            const returnTo = normalizeRelativePath(parsedUrl.searchParams.get('returnTo') || '/', '/');
-            const agent = String(parsedUrl.searchParams.get('agent') || authContext.routeKey || '').trim();
-            try {
-                const { redirectUrl } = beginGithubLogin({
-                    baseUrl,
-                    authMode: 'local',
-                    routeKey: agent,
-                    returnTo
-                });
-                res.writeHead(302, { Location: redirectUrl });
-                res.end('Redirecting to GitHub');
-                return true;
-            } catch (err) {
-                const errorCode = err?.message || 'github_login_start_failed';
-                const params = new URLSearchParams({
-                    returnTo,
-                    error: getGithubAuthErrorMessage(errorCode) || 'GitHub sign-in failed.'
-                });
-                if (agent) params.set('agent', agent);
-                res.writeHead(302, { Location: `/auth/login?${params.toString()}` });
-                res.end('GitHub sign-in unavailable');
-                return true;
-            }
-        }
-        if (pathname === '/auth/github/callback') {
-            if (method !== 'GET') {
-                res.writeHead(405); res.end(); return true;
-            }
-            const code = String(parsedUrl.searchParams.get('code') || '').trim();
-            const stateParam = String(parsedUrl.searchParams.get('state') || '').trim();
-            const oauthError = String(parsedUrl.searchParams.get('error') || '').trim();
-            try {
-                if (oauthError) {
-                    throw new Error(oauthError === 'access_denied' ? 'github_device_flow_access_denied' : oauthError);
-                }
-                if (!code || !stateParam) {
-                    throw new Error('missing_parameters');
-                }
-                const result = await finishGithubLogin({ code, state: stateParam, baseUrl });
-                if (result.authMode !== 'local') {
-                    throw new Error('github_login_not_supported');
-                }
-                const created = createExternalSession({
-                    user: {
-                        id: result.user?.id ? `github:${result.user.id}` : 'github:user',
-                        login: result.user?.login || '',
-                        name: result.user?.name || result.user?.login || 'GitHub',
-                        email: result.user?.email || ''
-                    },
-                    routeKey: result.routeKey || authContext.routeKey || '',
-                    provider: 'github'
-                });
-                await waitForAgentRedirectReady(result.routeKey || authContext.routeKey || '');
-                saveGithubSession({ sessionId: created.sessionId, authMode: 'local' }, result.connection);
-                const cookie = buildCookie(LOCAL_AUTH_COOKIE_NAME, created.sessionId, req, '/', {
-                    maxAge: getLocalSessionCookieMaxAge(),
-                    sameSite: 'Lax'
-                });
-                res.writeHead(302, {
-                    Location: normalizeRelativePath(result.returnTo || '/', '/'),
-                    'Set-Cookie': cookie
-                });
-                res.end('GitHub login successful');
-                appendLog('auth_github_login_success', {
-                    user: created.user?.username || created.user?.id || null,
-                    agent: result.routeKey || null
-                });
-                return true;
-            } catch (err) {
-                const errorCode = err?.message || 'github_login_callback_failed';
-                appendLog('auth_github_login_failure', { error: errorCode });
-                const params = new URLSearchParams({
-                    error: getGithubAuthErrorMessage(errorCode) || 'GitHub sign-in failed.'
-                });
-                res.writeHead(302, { Location: `/auth/login?${params.toString()}` });
-                res.end('GitHub login failed');
-                return true;
-            }
-        }
         if (pathname.startsWith('/auth/github/')) {
-            const cookieName = getCookieNameForMode(authContext.mode);
-            if (authContext.mode === 'none') {
-                sendJson(res, 404, { ok: false, error: 'auth_disabled' });
-                return true;
-            }
-            if (method !== 'GET' && method !== 'POST') {
-                res.writeHead(405, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
-                return true;
-            }
-            const cookies = parseCookies(req);
-            const sessionId = cookies.get(cookieName) || '';
-            const session = await resolveSessionForAuthContext(authContext, sessionId);
-            if (!session) {
-                const clearCookie = buildCookie(cookieName, '', req, '/', { maxAge: 0, sameSite: 'Lax' });
-                res.writeHead(401, {
-                    'Content-Type': 'application/json',
-                    'Set-Cookie': clearCookie
-                });
-                res.end(JSON.stringify({ ok: false, error: 'not_authenticated' }));
-                return true;
-            }
-
-            req.user = session.user;
-            req.session = session;
-            req.sessionId = sessionId;
-            req.authMode = authContext.mode;
-
-            const sessionRef = { sessionId, authMode: authContext.mode };
-            const refreshCookie = buildCookie(cookieName, sessionId, req, '/', {
-                maxAge: authContext.mode === 'local'
-                    ? getLocalSessionCookieMaxAge()
-                    : authService.getSessionCookieMaxAge(),
-                sameSite: 'Lax'
-            });
-            appendSetCookie(res, refreshCookie);
-
-            if (pathname === '/auth/github/status') {
-                if (method !== 'GET') {
-                    res.writeHead(405, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
-                    return true;
-                }
-                sendJson(res, 200, { ok: true, github: getGithubAuthStatus(sessionRef) });
-                return true;
-            }
-
-            if (pathname === '/auth/github/config') {
-                if (method === 'GET') {
-                    sendJson(res, 200, { ok: true, github: getGithubAuthStatus(sessionRef) });
-                    return true;
-                }
-                if (method !== 'POST') {
-                    res.writeHead(405, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
-                    return true;
-                }
-                try {
-                    const body = await readJsonBody(req);
-                    saveGithubAuthSetup({
-                        clientId: body?.clientId,
-                        clientSecret: Object.prototype.hasOwnProperty.call(body || {}, 'clientSecret') ? body.clientSecret : undefined,
-                        scope: body?.scope
-                    });
-                    appendLog('auth_github_config_saved', { user: req.user?.username || req.user?.email || req.user?.id || null });
-                    sendJson(res, 200, { ok: true, github: getGithubAuthStatus(sessionRef) });
-                } catch (err) {
-                    const errorCode = err?.message || 'github_config_save_failed';
-                    appendLog('auth_github_config_save_failure', { error: errorCode });
-                    sendJson(res, 400, {
-                        ok: false,
-                        error: errorCode,
-                        message: getGithubAuthErrorMessage(errorCode)
-                    });
-                }
-                return true;
-            }
-
-
-            if (pathname === '/auth/github/device/start') {
-                if (method !== 'POST') {
-                    res.writeHead(405, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
-                    return true;
-                }
-                try {
-                    const result = await beginGithubDeviceFlow(sessionRef);
-                    appendLog('auth_github_device_start', { user: req.user?.username || req.user?.email || req.user?.id || null });
-                    sendJson(res, 200, { ok: true, github: result });
-                } catch (err) {
-                    const errorCode = err?.message || 'github_device_flow_start_failed';
-                    appendLog('auth_github_device_start_failure', { error: errorCode });
-                    sendJson(res, 400, {
-                        ok: false,
-                        error: errorCode,
-                        message: getGithubAuthErrorMessage(errorCode)
-                    });
-                }
-                return true;
-            }
-
-            if (pathname === '/auth/github/device/poll') {
-                if (method !== 'POST') {
-                    res.writeHead(405, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
-                    return true;
-                }
-                try {
-                    const result = await pollGithubDeviceFlow(sessionRef);
-                    if (result?.connected) {
-                        appendLog('auth_github_device_connected', {
-                            user: req.user?.username || req.user?.email || req.user?.id || null,
-                            github: result.connection?.user?.login || null
-                        });
-                    }
-                    sendJson(res, 200, { ok: true, github: result });
-                } catch (err) {
-                    const errorCode = err?.message || 'github_device_flow_poll_failed';
-                    appendLog('auth_github_device_poll_failure', { error: errorCode });
-                    sendJson(res, 400, {
-                        ok: false,
-                        error: errorCode,
-                        message: getGithubAuthErrorMessage(errorCode)
-                    });
-                }
-                return true;
-            }
-
-            if (pathname === '/auth/github/disconnect') {
-                if (method !== 'POST') {
-                    res.writeHead(405, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
-                    return true;
-                }
-                try {
-                    const result = await disconnectGithubSession(sessionRef);
-                    appendLog('auth_github_disconnect', {
-                        user: req.user?.username || req.user?.email || req.user?.id || null
-                    });
-                    sendJson(res, 200, { ok: true, github: result });
-                } catch (err) {
-                    const errorCode = err?.message || 'github_disconnect_failed';
-                    appendLog('auth_github_disconnect_failure', { error: errorCode });
-                    sendJson(res, 400, {
-                        ok: false,
-                        error: errorCode,
-                        message: getGithubAuthErrorMessage(errorCode)
-                    });
-                }
-                return true;
-            }
-
-            sendJson(res, 404, { ok: false, error: 'not_found' });
+            sendJson(res, 404, { ok: false, error: 'github_auth_removed' });
             return true;
         }
         if (pathname === '/auth/callback') {
@@ -1337,7 +1049,6 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             const cookieName = getCookieNameForMode(authContext.mode);
             const sessionId = cookies.get(cookieName) || '';
             const requestedReturnTo = normalizeRelativePath(parsedUrl.searchParams.get('returnTo') || '/', '/');
-            clearGithubSession({ sessionId, authMode: authContext.mode });
             const outcome = authContext.mode === 'local'
                 ? (revokeLocalSession(sessionId), { redirect: requestedReturnTo || '/' })
                 : await authService.logout(sessionId, {
