@@ -363,6 +363,19 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
       ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">Workspace variables: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
     </section>
   </main>
+  <script>
+    (() => {
+      const form = document.querySelector('form[action="/auth/login"]');
+      const button = form?.querySelector('button[type="submit"]');
+      if (!form || !button) return;
+      form.addEventListener('submit', () => {
+        if (button.classList.contains('is-loading')) return;
+        button.classList.add('is-loading');
+        button.disabled = true;
+        button.innerHTML = '<span class="auth-btn-spinner" aria-hidden="true"></span><span>Signing in...</span>';
+      });
+    })();
+  </script>
 </body>
 </html>`;
 }
@@ -422,6 +435,19 @@ function renderLocalAccountHtml({
       ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">Workspace variables: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
     </section>
   </main>
+  <script>
+    (() => {
+      const form = document.querySelector('form[action="/auth/account"]');
+      const button = form?.querySelector('button[type="submit"]');
+      if (!form || !button) return;
+      form.addEventListener('submit', () => {
+        if (button.classList.contains('is-loading')) return;
+        button.classList.add('is-loading');
+        button.disabled = true;
+        button.innerHTML = '<span class="auth-btn-spinner" aria-hidden="true"></span><span>Saving...</span>';
+      });
+    })();
+  </script>
 </body>
 </html>`;
 }
