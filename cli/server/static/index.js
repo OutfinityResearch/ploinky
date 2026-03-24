@@ -2,6 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { waitForAgentReady } from '../utils/agentReadiness.js';
+import {
+    getWorkspaceRoot,
+    isPathWithinRoots,
+    sanitizeRelativeRequestPath,
+    toRealPathSafe
+} from '../utils/workspacePaths.js';
 
 const ROUTING_FILE = path.resolve('.ploinky/routing.json');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,28 +40,6 @@ function getStaticAgentName() {
     const cfg = readRouting();
     const agent = cfg?.static?.agent;
     return typeof agent === 'string' && agent.trim() ? agent.trim() : null;
-}
-
-function getWorkspaceRoot() {
-    const staticRoot = getStaticHostPath();
-    if (!staticRoot) return null;
-    let current = path.resolve(staticRoot);
-    while (true) {
-        if (path.basename(current) === '.ploinky') {
-            const workspaceRoot = path.dirname(current);
-            try {
-                if (fs.existsSync(workspaceRoot) && fs.statSync(workspaceRoot).isDirectory()) {
-                    return workspaceRoot;
-                }
-            } catch (_) { }
-            return null;
-        }
-        const parent = path.dirname(current);
-        if (parent === current) {
-            return null;
-        }
-        current = parent;
-    }
 }
 
 function dedupe(paths) {
@@ -92,34 +76,8 @@ function getBaseDirs(appName, fallbackDir) {
     return dedupe(dirs);
 }
 
-function sanitizeRelative(relPath) {
-    const cleaned = String(relPath || '').replace(/[\\]+/g, '/').replace(/^\/+/, '');
-    if (cleaned.includes('..')) return null;
-    return cleaned;
-}
-
-function toRealPathSafe(value) {
-    try {
-        return fs.realpathSync(value);
-    } catch (_) {
-        return null;
-    }
-}
-
 function isPathWithinAllowedRoots(allowedRoots, targetPath) {
-    try {
-        const realTarget = fs.realpathSync(targetPath);
-        for (const root of allowedRoots || []) {
-            const realRoot = toRealPathSafe(root);
-            if (!realRoot) continue;
-            if (realTarget === realRoot || realTarget.startsWith(realRoot + path.sep)) {
-                return true;
-            }
-        }
-        return false;
-    } catch (_) {
-        return false;
-    }
+    return isPathWithinRoots(allowedRoots, targetPath);
 }
 
 function getStaticAllowedRoots() {
@@ -135,7 +93,7 @@ function getAgentAllowedRoots(agentName) {
 }
 
 function resolveAssetPath(appName, fallbackDir, relPath) {
-    const sanitized = sanitizeRelative(relPath);
+    const sanitized = sanitizeRelativeRequestPath(relPath);
     if (!sanitized) return null;
     const bases = getBaseDirs(appName, fallbackDir);
     for (const base of bases) {
@@ -170,7 +128,7 @@ function resolveStaticFile(requestPath) {
     const root = getStaticHostPath();
     if (!root) return null;
     const allowedRoots = getStaticAllowedRoots();
-    const rel = sanitizeRelative(requestPath);
+    const rel = sanitizeRelativeRequestPath(requestPath);
     if (rel === null) return null;
     const candidates = [];
     // Primary candidate
@@ -338,6 +296,7 @@ function getMimeType(filePath) {
         '.svg': 'image/svg+xml',
         '.html': 'text/html',
         '.json': 'application/json',
+        '.pdf': 'application/pdf',
         '.png': 'image/png',
         '.jpg': 'image/jpeg',
         '.jpeg': 'image/jpeg',
@@ -385,7 +344,7 @@ function resolveWorkspaceFile(requestPath) {
         return { status: 'unavailable', filePath: null };
     }
 
-    const rel = sanitizeRelative(requestPath);
+    const rel = sanitizeRelativeRequestPath(requestPath);
     if (rel === null || !rel.length) {
         return { status: 'denied', filePath: null };
     }
@@ -480,7 +439,7 @@ function getAgentHostPath(agentName) {
 }
 
 function safeJoin(base, rel) {
-    const cleaned = sanitizeRelative(rel || '');
+    const cleaned = sanitizeRelativeRequestPath(rel || '');
     if (cleaned === null) return null;
     const p = path.join(base, cleaned);
     const absBase = path.resolve(base);

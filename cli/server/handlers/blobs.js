@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 
 import { loadAgents } from '../../services/workspace.js';
+import { getWorkspaceRoot, resolveWorkspacePath } from '../utils/workspacePaths.js';
 
 function ensureSharedHostDir() {
     const dir = path.resolve(process.cwd(), 'shared');
@@ -311,6 +312,52 @@ function handleGetHead(req, res, agent, id, isHead = false) {
     }
 }
 
+function resolveWorkspaceUploadPath(inputPath) {
+    return resolveWorkspacePath(inputPath, {
+        workspaceRoot: getWorkspaceRoot(),
+        leadingSlashIsWorkspaceRelative: true
+    });
+}
+
+function handleWorkspaceUpload(req, res) {
+    if (req.method !== 'POST' && req.method !== 'PUT') {
+        res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'POST, PUT' });
+        res.end(JSON.stringify({ ok: false, error: 'Method not allowed' }));
+        return;
+    }
+
+    try {
+        const u = new URL(req.url || '/upload', `http://${req.headers.host || 'localhost'}`);
+        const targetPath = resolveWorkspaceUploadPath(u.searchParams.get('path') || '');
+        const parentDir = path.dirname(targetPath);
+        fs.mkdirSync(parentDir, { recursive: true });
+
+        const out = fs.createWriteStream(targetPath);
+        let size = 0;
+        req.on('data', chunk => {
+            size += chunk.length;
+        });
+        req.pipe(out);
+        out.on('finish', () => {
+            res.writeHead(200, { 'Content-Type': 'application/json', 'X-Content-Type-Options': 'nosniff' });
+            res.end(JSON.stringify({
+                ok: true,
+                path: targetPath,
+                size
+            }));
+        });
+        out.on('error', () => {
+            try { fs.unlinkSync(targetPath); } catch (_) {}
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, error: 'Write error' }));
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: message }));
+    }
+}
+
 function handleBlobs(req, res) {
     const u = new URL(req.url || '/blobs', `http://${req.headers.host || 'localhost'}`);
     const pathname = u.pathname || '/blobs';
@@ -364,4 +411,4 @@ function handleBlobs(req, res) {
     res.writeHead(404); res.end('Not Found');
 }
 
-export { handleBlobs };
+export { handleBlobs, handleWorkspaceUpload };

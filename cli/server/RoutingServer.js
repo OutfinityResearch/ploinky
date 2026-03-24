@@ -9,7 +9,7 @@ import { handleWebChat } from './handlers/webchat.js';
 import { handleDashboard } from './handlers/dashboard.js';
 import { handleWebMeet } from './handlers/webmeet.js';
 import { handleStatus } from './handlers/status.js';
-import { handleBlobs } from './handlers/blobs.js';
+import { handleBlobs, handleWorkspaceUpload } from './handlers/blobs.js';
 import * as staticSrv from './static/index.js';
 
 // Authentication and routing
@@ -219,6 +219,8 @@ async function processRequest(req, res) {
         return handleWebMeet(req, res, config.webmeet, globalState.webmeet);
     } else if (pathname.startsWith('/status')) {
         return handleStatus(req, res, config.status, globalState.status);
+    } else if (pathname === '/upload') {
+        return handleWorkspaceUpload(req, res);
     } else if (pathname.startsWith('/blobs')) {
         return handleBlobs(req, res);
     } else if (pathname === '/mcp' || pathname === '/mcp/') {
