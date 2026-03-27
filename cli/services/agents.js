@@ -79,8 +79,7 @@ function buildDefaultLocalAuthVars(routeKey) {
         .replace(/^_+|_+$/g, '')
         .toUpperCase() || 'AGENT';
     return {
-        userVar: `PLOINKY_AUTH_${suffix}_USER`,
-        passwordHashVar: `PLOINKY_AUTH_${suffix}_PASSWORD_HASH`
+        usersVar: `PLOINKY_AUTH_${suffix}_USERS`
     };
 }
 
@@ -97,17 +96,28 @@ function parsePloinkyDirectives(rawValue) {
         .filter(Boolean);
 }
 
-function resolveManifestPwdDefaults(manifest) {
-    const user = String(
-        manifest?.pwd?.user ??
-        manifest?.pwd?.username ??
-        ''
-    ).trim();
-    const password = String(
-        manifest?.pwd?.password ??
-        ''
-    );
-    return { user, password };
+function normalizeManifestPwdUsers(manifest) {
+    const users = Array.isArray(manifest?.pwd?.users) ? manifest.pwd.users : [];
+    return users
+        .map((entry) => {
+            const username = String(entry?.username ?? entry?.user ?? '').trim();
+            const password = String(entry?.password ?? '');
+            const name = String(entry?.name ?? username).trim();
+            const email = String(entry?.email ?? '').trim();
+            const roles = Array.isArray(entry?.roles) ? entry.roles.map((role) => String(role || '').trim()).filter(Boolean) : [];
+            if (!username || !password) {
+                return null;
+            }
+            return {
+                id: `local:${username}`,
+                username,
+                name: name || username,
+                email: email || null,
+                passwordHash: hashPassword(password),
+                roles: roles.length ? Array.from(new Set(['local', ...roles])) : ['local']
+            };
+        })
+        .filter(Boolean);
 }
 
 function resolveManifestAuthMode(manifest) {
@@ -207,13 +217,13 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam, authMode
     const authMode = authModeParam === undefined || authModeParam === null || String(authModeParam).trim() === ''
         ? resolveManifestAuthMode(manifest)
         : normalizeAuthMode(authModeParam);
-    const manifestPwdDefaults = resolveManifestPwdDefaults(manifest);
+    const manifestPwdUsers = normalizeManifestPwdUsers(manifest);
     const username = typeof authOptions?.username === 'string' && authOptions.username.trim()
         ? authOptions.username.trim()
-        : manifestPwdDefaults.user;
+        : '';
     const password = typeof authOptions?.password === 'string' && authOptions.password.length
         ? authOptions.password
-        : manifestPwdDefaults.password;
+        : '';
     if ((username || password) && authMode !== 'local') {
         throw new Error('The --user and --password options are only valid with --auth pwd.');
     }
@@ -293,8 +303,22 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam, authMode
             ...buildDefaultLocalAuthVars(routeKey)
         };
         if (username && password) {
-            setEnvVar(record.auth.userVar, username);
-            setEnvVar(record.auth.passwordHashVar, hashPassword(password));
+            setEnvVar(record.auth.usersVar, JSON.stringify({
+                version: 1,
+                users: [{
+                    id: `local:${username}`,
+                    username,
+                    name: username,
+                    email: null,
+                    passwordHash: hashPassword(password),
+                    roles: ['local']
+                }]
+            }));
+        } else if (manifestPwdUsers.length) {
+            setEnvVar(record.auth.usersVar, JSON.stringify({
+                version: 1,
+                users: manifestPwdUsers
+            }));
         }
     } else {
         record.auth = { mode: authMode };

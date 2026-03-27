@@ -10,7 +10,7 @@ import { decodeJwt, verifySignature, validateClaims } from './auth/jwt.js';
 import { createJwksCache } from './auth/jwksCache.js';
 import { loadAuthConfig } from './auth/config.js';
 import { createMetadataCache } from './auth/keycloakClient.js';
-import { authenticateLocalUser, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, resolveLocalAuthConfig, revokeSession as revokeLocalSession, updateLocalCredentials } from './auth/localService.js';
+import { authenticateLocalUser, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, listLocalAuthUsers, resolveLocalAuthConfig, revokeSession as revokeLocalSession, updateLocalCredentials } from './auth/localService.js';
 import { waitForAgentReady } from './utils/agentReadiness.js';
 
 const SSO_AUTH_COOKIE_NAME = 'ploinky_sso';
@@ -324,13 +324,12 @@ function getAuthPageStyles() {
     }`;
 }
 
-function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = '', userVar = '', passwordHashVar = '' } = {}) {
+function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = '', usersVar = '' } = {}) {
     const safeAgent = escapeHtml(agentName || 'application');
     const safeReturnTo = escapeHtml(normalizeRelativePath(returnTo, '/'));
     const safeError = escapeHtml(error || '');
     const safeNotice = escapeHtml(notice || '');
-    const safeUserVar = escapeHtml(userVar || '');
-    const safePasswordVar = escapeHtml(passwordHashVar || '');
+    const safeUsersVar = escapeHtml(usersVar || '');
     const safeAccountUrl = escapeHtml(`/auth/account?agent=${encodeURIComponent(agentName || '')}&returnTo=${encodeURIComponent(normalizeRelativePath(returnTo, '/'))}`);
     return `<!doctype html>
 <html lang="en">
@@ -360,7 +359,7 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
         <button class="auth-btn" type="submit">Sign in</button>
       </form>
       <div class="auth-meta">After signing in, you can change the username or password in <a href="${safeAccountUrl}">account settings</a>.</div>
-      ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">Workspace variables: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
+      ${safeUsersVar ? `<div class="auth-meta">Workspace variable: ${safeUsersVar}</div>` : ''}
     </section>
   </main>
   <script>
@@ -386,16 +385,14 @@ function renderLocalAccountHtml({
     error = '',
     notice = '',
     username = '',
-    userVar = '',
-    passwordHashVar = ''
+    usersVar = ''
 } = {}) {
     const safeAgent = escapeHtml(agentName || 'application');
     const safeReturnTo = escapeHtml(normalizeRelativePath(returnTo, '/'));
     const safeError = escapeHtml(error || '');
     const safeNotice = escapeHtml(notice || '');
     const safeUsername = escapeHtml(username || '');
-    const safeUserVar = escapeHtml(userVar || '');
-    const safePasswordVar = escapeHtml(passwordHashVar || '');
+    const safeUsersVar = escapeHtml(usersVar || '');
     const safeLogoutUrl = escapeHtml(`/auth/logout?returnTo=${encodeURIComponent(normalizeRelativePath(returnTo, '/'))}`);
     return `<!doctype html>
 <html lang="en">
@@ -432,7 +429,7 @@ function renderLocalAccountHtml({
         <a class="auth-btn secondary" href="${safeLogoutUrl}">Sign out</a>
       </div>
       <div class="auth-meta">Leave the new password fields empty if you only want to change the username.</div>
-      ${(safeUserVar || safePasswordVar) ? `<div class="auth-meta">Workspace variables: ${safeUserVar}${safeUserVar && safePasswordVar ? ', ' : ''}${safePasswordVar}</div>` : ''}
+      ${safeUsersVar ? `<div class="auth-meta">Workspace variable: ${safeUsersVar}</div>` : ''}
     </section>
   </main>
   <script>
@@ -556,11 +553,10 @@ function getLocalRouteKey(parsedUrl, session = null, fallback = '') {
 
 function getLocalAuthPolicyFromSession(session = null, fallbackPolicy = null) {
     const localAuth = session?.localAuth || {};
-    if (localAuth.userVar && localAuth.passwordHashVar) {
+    if (localAuth.usersVar) {
         return {
             mode: 'local',
-            userVar: localAuth.userVar,
-            passwordHashVar: localAuth.passwordHashVar
+            usersVar: localAuth.usersVar
         };
     }
     if (session?.externalAuth?.provider) {
@@ -824,8 +820,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                         returnTo,
                         error: parsedUrl.searchParams.get('error') || '',
                         notice: parsedUrl.searchParams.get('notice') || '',
-                        userVar: localCfg.usernameVar,
-                        passwordHashVar: localCfg.passwordHashVar
+                        usersVar: localCfg.usersVar
                     }));
                     return true;
                 }
@@ -943,9 +938,8 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                     returnTo: returnToFromQuery,
                     error: getLocalAccountErrorMessage(parsedUrl.searchParams.get('error') || ''),
                     notice: parsedUrl.searchParams.get('notice') || '',
-                    username: localCfg.username || req.user?.username || '',
-                    userVar: localCfg.usernameVar,
-                    passwordHashVar: localCfg.passwordHashVar
+                    username: req.user?.username || '',
+                    usersVar: localCfg.usersVar
                 }));
                 return true;
             }
@@ -1028,6 +1022,42 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             if (errorCode) params.set('error', errorCode);
             res.writeHead(302, { Location: `/auth/account?${params.toString()}` });
             res.end('Unable to update credentials');
+            return true;
+        }
+
+        if (pathname === '/auth/local-users') {
+            if (method !== 'GET') {
+                res.writeHead(405); res.end(); return true;
+            }
+            if (authContext.mode !== 'local') {
+                sendJson(res, 404, { ok: false, error: 'local_auth_disabled' });
+                return true;
+            }
+            const cookies = parseCookies(req);
+            const sessionId = cookies.get(LOCAL_AUTH_COOKIE_NAME) || '';
+            const session = getLocalSession(sessionId);
+            if (!session) {
+                sendJson(res, 401, { ok: false, error: 'authentication_required' });
+                return true;
+            }
+            const policy = authContext.policy;
+            const users = listLocalAuthUsers(policy)
+                .map((entry) => ({
+                    id: entry.id,
+                    username: entry.username,
+                    name: entry.name,
+                    email: entry.email
+                }))
+                .sort((left, right) => {
+                    const leftName = String(left.name || left.username || '').toLowerCase();
+                    const rightName = String(right.name || right.username || '').toLowerCase();
+                    return leftName.localeCompare(rightName);
+                });
+            sendJson(res, 200, {
+                ok: true,
+                agent: authContext.routeKey || '',
+                users
+            });
             return true;
         }
 

@@ -89,8 +89,8 @@ async function enableAgent(agentName, mode, repoNameParam, alias, authMode, user
     const aliasNote = resolvedAlias ? ` as '${resolvedAlias}'` : '';
     const authLabel = auth?.mode === 'local' ? 'pwd' : (auth?.mode || 'none');
     console.log(`✓ Agent '${shortAgentName}' from repo '${repoName}' enabled${aliasNote} with auth '${authLabel}'. Use 'start' to start all configured agents.`);
-    if (auth?.mode === 'local' && auth.userVar && auth.passwordHashVar) {
-        console.log(`  Local auth vars: ${auth.userVar}, ${auth.passwordHashVar}`);
+    if (auth?.mode === 'local' && auth.usersVar) {
+        console.log(`  Local auth users var: ${auth.usersVar}`);
         if (username) {
             console.log(`  Local auth user set to '${username}'.`);
         }
