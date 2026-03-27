@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
     buildEnvFlags,
+    ensurePersistentSecret,
     formatEnvFlag,
     getExposedNames,
     getManifestEnvNames,
@@ -28,14 +29,8 @@ import {
 } from './common.js';
 import { clearLivenessState } from './healthProbes.js';
 import { stopAndRemove } from './containerFleet.js';
-import {
-    DEFAULT_AGENT_ENTRY,
-    launchAgentSidecar,
-    readManifestAgentCommand,
-    readManifestStartCommand,
-    splitCommandArgs
-} from './agentCommands.js';
-import { WORKSPACE_ROOT } from '../config.js';
+import { DEFAULT_AGENT_ENTRY, launchAgentSidecar, readManifestAgentCommand, readManifestStartCommand, splitCommandArgs } from './agentCommands.js';
+import { WORKSPACE_ROOT, DPU_DATA_ROOT } from '../config.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
@@ -316,10 +311,25 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (!p) continue;
         args.splice(1, 0, '-p', String(p));
     }
+
+    // DPU isolation: bind private storage for dpuAgent
+    if (agentName === 'dpuAgent') {
+        if (!fs.existsSync(DPU_DATA_ROOT)) {
+            fs.mkdirSync(DPU_DATA_ROOT, { recursive: true });
+        }
+        args.push('-v', `${DPU_DATA_ROOT}:/dpu-data${runtime === 'podman' ? ':z' : ''}`);
+        // Inject DPU_DATA_ROOT to point to the internal mount point
+    }
+
     const envStrings = [...buildEnvFlags(manifest, profileConfig), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
     envStrings.push(formatEnvFlag('AGENT_NAME', agentName));
     envStrings.push(formatEnvFlag('WORKSPACE_PATH', agentWorkDir));
     envStrings.push(formatEnvFlag('PLOINKY_WORKSPACE_ROOT', WORKSPACE_ROOT));
+    if (agentName === 'dpuAgent') {
+        envStrings.push(formatEnvFlag('DPU_WORKSPACE_ROOT', WORKSPACE_ROOT));
+        envStrings.push(formatEnvFlag('DPU_DATA_ROOT', '/dpu-data'));
+        envStrings.push(formatEnvFlag('DPU_MASTER_KEY', ensurePersistentSecret('DPU_MASTER_KEY')));
+    }
 
     const profileEnv = normalizeProfileEnv(profileConfig?.env);
     appendEnvFlagsFromMap(envStrings, profileEnv);

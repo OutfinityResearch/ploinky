@@ -184,7 +184,7 @@ test('getProfileEnvVars includes profile metadata', () => {
     assert.strictEqual(envVars.PLOINKY_REPO_NAME, 'repo-x');
     assert.strictEqual(envVars.PLOINKY_CONTAINER_NAME, 'container-x');
     assert.strictEqual(envVars.PLOINKY_CONTAINER_ID, 'container-x');
-    assert.strictEqual(envVars.PLOINKY_CWD, tempDir);
+    assert.strictEqual(path.resolve(envVars.PLOINKY_CWD), fs.realpathSync(tempDir));
 });
 
 test('loadSecretsFile parses secrets and strips quotes', () => {

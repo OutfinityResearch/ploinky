@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { randomBytes } from 'crypto';
 import path from 'path';
 import { SECRETS_FILE } from './config.js';
 import { getConfig } from './workspace.js';
@@ -89,6 +90,33 @@ export function resolveVarValue(name) {
     const raw = secrets[name];
     if (raw === undefined) return '';
     return resolveAlias(raw, secrets);
+}
+
+export function ensurePersistentSecret(name, { allowEnvFile = true, byteLength = 32 } = {}) {
+    if (!name) {
+        throw new Error('Missing secret name.');
+    }
+
+    const processValue = String(process.env[name] || '').trim();
+    if (processValue) {
+        return processValue;
+    }
+
+    if (allowEnvFile) {
+        const envFileValue = String(loadEnvFile()[name] || '').trim();
+        if (envFileValue) {
+            return envFileValue;
+        }
+    }
+
+    const existingValue = String(resolveVarValue(name) || '').trim();
+    if (existingValue) {
+        return existingValue;
+    }
+
+    const generatedValue = randomBytes(byteLength).toString('hex');
+    setEnvVar(name, generatedValue);
+    return generatedValue;
 }
 
 function toBool(value, defaultValue = false) {
@@ -325,6 +353,8 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                 } else if (Object.prototype.hasOwnProperty.call(rawSpec, 'value')) {
                     defaultValue = rawSpec.value;
                 }
+                addSpec(insideName, sourceName, required, defaultValue);
+                continue;
             } else {
                 defaultValue = rawSpec;
             }
@@ -362,7 +392,8 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
     for (const spec of specs) {
         let resolvedValue;
         let usedDefault = false;
-        const hasSecret = spec.sourceName && Object.prototype.hasOwnProperty.call(secrets, spec.sourceName);
+        const hasSecret = spec.sourceName
+            && Object.prototype.hasOwnProperty.call(secrets, spec.sourceName);
         if (hasSecret) {
             resolvedValue = resolveAlias(secrets[spec.sourceName], secrets);
         } else if (spec.sourceName && Object.prototype.hasOwnProperty.call(process.env, spec.sourceName)) {
