@@ -23,8 +23,12 @@ const TASK_POLL_INTERVAL_MS = (() => {
 const RECOVERABLE_ERROR_PATTERNS = [
     'Missing or invalid MCP session',
     'Request timed out',
-    'fetch failed'
+    'fetch failed',
+    ' is still starting.',
+    'Try again in a moment'
 ];
+
+const AGENT_STARTING_RETRY_DELAYS_MS = [300, 900];
 
 function isRecoverableMcpError(error) {
     const message = error?.message || error?.toString?.() || '';
@@ -46,15 +50,30 @@ function resolveBaseUrl(baseUrl) {
     return new URL(baseUrl).toString();
 }
 
+function isAgentProxyMcpEndpoint(endpoint) {
+    try {
+        const url = new URL(endpoint);
+        return /^\/mcps\/[^/]+\/mcp$/.test(url.pathname || '');
+    } catch {
+        return false;
+    }
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function createAgentClient(baseUrl) {
     const endpoint = resolveBaseUrl(baseUrl);
+    const disableSseProbe = isAgentProxyMcpEndpoint(endpoint);
 
     let connected = false;
     let sessionId = null;
     let protocolVersion = null;
     let abortController = null;
     let streamTask = null;
-    let streamUnsupported = false;
+    let streamUnsupported = disableSseProbe;
+    let connectPromise = null;
     let messageId = 0;
     const requestControllers = new Set();
 
@@ -460,25 +479,47 @@ function createAgentClient(baseUrl) {
         if (connected) {
             return;
         }
+        if (connectPromise) {
+            await connectPromise;
+            return;
+        }
 
-        ensureStreamTask();
+        connectPromise = (async () => {
+            for (let attempt = 0; ; attempt += 1) {
+                try {
+                    ensureStreamTask();
 
-        const initResult = await sendRequest('initialize', {
-            protocolVersion: DEFAULT_PROTOCOL_VERSION,
-            capabilities: {},
-            clientInfo: {
-                name: 'ploinky-router',
-                version: '1.0.0'
+                    const initResult = await sendRequest('initialize', {
+                        protocolVersion: DEFAULT_PROTOCOL_VERSION,
+                        capabilities: {},
+                        clientInfo: {
+                            name: 'ploinky-router',
+                            version: '1.0.0'
+                        }
+                    });
+
+                    protocolVersion = initResult.protocolVersion ?? DEFAULT_PROTOCOL_VERSION;
+                    serverCapabilities = initResult.capabilities ?? null;
+                    serverInfo = initResult.serverInfo ?? null;
+                    instructions = initResult.instructions ?? null;
+
+                    await sendNotification('notifications/initialized');
+                    connected = true;
+                    return;
+                } catch (error) {
+                    if (attempt >= AGENT_STARTING_RETRY_DELAYS_MS.length || !isRecoverableMcpError(error)) {
+                        throw error;
+                    }
+                    await resetConnectionState();
+                    await sleep(AGENT_STARTING_RETRY_DELAYS_MS[attempt]);
+                }
             }
-        });
-
-        protocolVersion = initResult.protocolVersion ?? DEFAULT_PROTOCOL_VERSION;
-        serverCapabilities = initResult.capabilities ?? null;
-        serverInfo = initResult.serverInfo ?? null;
-        instructions = initResult.instructions ?? null;
-
-        await sendNotification('notifications/initialized');
-        connected = true;
+        })();
+        try {
+            await connectPromise;
+        } finally {
+            connectPromise = null;
+        }
     }
 
     async function resetConnectionState() {
@@ -495,7 +536,8 @@ function createAgentClient(baseUrl) {
         requestControllers.clear();
         streamTask = null;
         abortController = null;
-        streamUnsupported = false;
+        streamUnsupported = disableSseProbe;
+        connectPromise = null;
 
         for (const { reject } of pending.values()) {
             reject(new Error('MCP client reset'));
@@ -634,7 +676,8 @@ function createAgentClient(baseUrl) {
         }
         streamTask = null;
         abortController = null;
-        streamUnsupported = false;
+        streamUnsupported = disableSseProbe;
+        connectPromise = null;
 
         try {
             if (currentSessionId) {
