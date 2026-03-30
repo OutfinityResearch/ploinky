@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const REPO_ROOT = '/Users/adrianganga/Desktop/devWork/ploinky';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const REPO_ROOT = path.resolve(__dirname, '../..');
 
 test('local auth credentials can update username and password and revoke the old session', async (t) => {
     const workspace = mkdtempSync(path.join(os.tmpdir(), 'ploinky-local-auth-'));

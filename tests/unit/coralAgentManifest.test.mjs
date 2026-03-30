@@ -13,8 +13,8 @@ import { getManifestEnvSpecs } from '../../cli/services/secretVars.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Path to coral-agent manifest
-const CORAL_MANIFEST_PATH = path.resolve(__dirname, '../../../coralFlow/coral-agent/manifest.json');
+// Path to test fixture manifest with wildcard env declarations
+const CORAL_MANIFEST_PATH = path.resolve(__dirname, '../fixtures/coral-agent/manifest.json');
 
 // Simulate environment variables from ~/work/.env
 function setupTestEnv() {

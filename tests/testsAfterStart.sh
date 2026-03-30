@@ -142,7 +142,7 @@ test_check "WebChat logout clears session cookies and access" fast_check_webchat
 stage_header "WebChat SSO Parameters"
 test_action "Configure WebChat CLI for test agent" configure_webchat_cli_for_test_agent
 wait_for_router
-test_check "WebChat CLI session logs guest SSO args" test_sso_params_disabled
+test_check "WebChat CLI session exports guest SSO context" test_sso_params_disabled
 #test_check "WebChat CLI session logs SSO identity when enabled" test_sso_params_enabled
 
 stage_header "Router Static Assets"

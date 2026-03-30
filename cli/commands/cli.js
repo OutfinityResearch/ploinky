@@ -3,7 +3,6 @@ import path from 'path';
 import { execSync, spawn } from 'child_process';
 import { debugLog, findAgent } from '../services/utils.js';
 import { isKnownCommand } from '../services/commandRegistry.js';
-import 'achillesAgentLib/LLMAgents';
 import { showHelp } from '../services/help.js';
 import * as envSvc from '../services/secretVars.js';
 import * as agentsSvc from '../services/agents.js';
@@ -51,6 +50,18 @@ import {
 } from './sessionControl.js';
 import { handleSsoCommand } from './ssoCommands.js';
 import ClientCommands from './client.js';
+
+let llmAgentsLoadPromise = null;
+
+async function ensureLlmAgentsLoaded() {
+    if (!llmAgentsLoadPromise) {
+        llmAgentsLoadPromise = import('achillesAgentLib/LLMAgents').catch((error) => {
+            llmAgentsLoadPromise = null;
+            throw error;
+        });
+    }
+    return llmAgentsLoadPromise;
+}
 
 
 function parseEnableAgentArgs(rawOptions = []) {
@@ -621,6 +632,11 @@ async function handleCommand(args) {
             if (!isKnownCommand(command)) {
                 const handled = await handleSystemCommand(command, options);
                 if (!handled) {
+                    try {
+                        await ensureLlmAgentsLoaded();
+                    } catch (error) {
+                        debugLog('LLMAgents preload failed:', error?.message || error);
+                    }
                     await handleInvalidCommand(command, options, async (suggestedLine) => {
                         const trimmedSuggestion = (suggestedLine || '').trim();
                         if (!trimmedSuggestion) return;

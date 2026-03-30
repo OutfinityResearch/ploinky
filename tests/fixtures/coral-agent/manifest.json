@@ -1,0 +1,31 @@
+{
+  "container": "node:20-bullseye",
+  "agent": "node /code/server.js",
+  "profiles": {
+    "default": {
+      "env": [
+        "LLM_MODEL_*",
+        "ACHILLES_*",
+        "OPENAI_*_URL",
+        "OPENAI_*_KEY_ENV",
+        "ANTHROPIC_*_URL",
+        "ANTHROPIC_*_KEY_ENV",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "AXIOLOGIC_API_KEY",
+        "OPENROUTER_API_KEY",
+        "PERSISTO_URL",
+        "PERSISTO_HOST",
+        "PERSISTO_PORT",
+        "WORKSPACE_PATH",
+        "CORAL_AGENT_LOG_DIR",
+        "FILE_PARSER_AGENT_NAME",
+        "FILE_PARSER_TOOL_NAME",
+        "FILE_PARSER_MCP_URL",
+        "PLOINKY_ROUTER_URL",
+        "PLOINKY_ROUTER_PORT"
+      ]
+    }
+  }
+}

@@ -91,9 +91,9 @@ test_sso_params_disabled() {
   mapfile -t lines <"$log_file"
 
   local required=(
-    "--sso-user=guest"
-    "--sso-user-id=guest"
-    "--sso-roles=guest"
+    "ENV_SSO_USER=guest"
+    "ENV_SSO_USER_ID=guest"
+    "ENV_SSO_ROLES=guest"
   )
 
   local missing=0
@@ -149,10 +149,10 @@ test_sso_params_enabled() {
 
   for line in "${lines[@]}"; do
     case "$line" in
-      --sso-user=guest|--sso-user-id=guest|--sso-roles=guest)
+      ENV_SSO_USER=guest|ENV_SSO_USER_ID=guest|ENV_SSO_ROLES=guest)
         found_guest=1
         ;;
-      --sso-user=*|--sso-user-id=*|--sso-email=*|--sso-roles=*)
+      ENV_SSO_USER=*|ENV_SSO_USER_ID=*|ENV_SSO_EMAIL=*|ENV_SSO_ROLES=*)
         if [[ "$line" != *"=guest" ]]; then
           found_real=1
         fi
