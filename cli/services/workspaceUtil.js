@@ -13,6 +13,9 @@ import { executeHostHook, isInlineCommand } from './lifecycleHooks.js';
 import { getActiveProfile, getProfileConfig, getProfileEnvVars } from './profileService.js';
 import { getSecrets, createEnvWithSecrets } from './secretInjector.js';
 import { LOGS_DIR, ROUTING_FILE, RUNNING_DIR } from './config.js';
+import { getAgentWorkDir } from './workspaceStructure.js';
+import { needsHostInstall } from './dependencyInstaller.js';
+import { waitForAgentReady } from '../server/utils/agentReadiness.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -367,6 +370,36 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
       }
     };
     await updateRoutes();
+
+    const staticRouteKey = preferredStatic?.[1]?.alias || staticShortAgent;
+    const staticRoute = cfg.routes?.[staticRouteKey] || null;
+    const staticDependencyPackagePath = path.join(getAgentWorkDir(staticShortAgent), 'package.json');
+    const staticDependencyState = needsHostInstall(staticShortAgent, {
+      agentPath: staticAgentPath,
+      packagePath: staticDependencyPackagePath
+    });
+    const defaultStaticReadyTimeoutMs = staticDependencyState.needsInstall ? 600000 : 120000;
+    const staticReadyTimeoutMs = Number.parseInt(process.env.PLOINKY_STATIC_AGENT_READY_TIMEOUT_MS || String(defaultStaticReadyTimeoutMs), 10);
+    const staticReadyIntervalMs = Number.parseInt(process.env.PLOINKY_STATIC_AGENT_READY_INTERVAL_MS || '250', 10);
+    const staticProbeTimeoutMs = Number.parseInt(process.env.PLOINKY_STATIC_AGENT_READY_PROBE_TIMEOUT_MS || '1000', 10);
+
+    if (!staticRoute?.hostPort) {
+      throw new Error(`Static agent '${staticAgent}' did not expose a host port.`);
+    }
+
+    console.log(`[start] Waiting for static agent '${staticAgent}' to become ready on port ${staticRoute.hostPort}...`);
+    if (staticDependencyState.needsInstall) {
+      console.log(`[start] ${staticAgent}: dependency cache cold or invalid (${staticDependencyState.reason}); using extended readiness timeout ${staticReadyTimeoutMs}ms.`);
+    }
+    const staticReady = await waitForAgentReady(staticRoute, {
+      timeoutMs: staticReadyTimeoutMs,
+      intervalMs: staticReadyIntervalMs,
+      probeTimeoutMs: staticProbeTimeoutMs
+    });
+    if (!staticReady) {
+      throw new Error(`Static agent '${staticAgent}' did not become ready within ${staticReadyTimeoutMs}ms.`);
+    }
+
     const routerPidFile = path.join(runningDir, 'router.pid');
     const child = spawn(process.execPath, [routerPath], {
       detached: true,

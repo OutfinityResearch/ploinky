@@ -36,6 +36,12 @@ function getConfiguredProjectPath(agentName, repoName, alias) {
     }
     try {
         const map = loadAgentsMap();
+        const staticAgent = typeof map?._config?.static?.agent === 'string'
+            ? map._config.static.agent.trim()
+            : '';
+        if (staticAgent && staticAgent === agentName) {
+            return WORKSPACE_ROOT;
+        }
         if (alias) {
             const aliasRec = Object.values(map || {}).find(r => r && r.type === 'agent' && r.alias === alias);
             if (aliasRec && aliasRec.projectPath && typeof aliasRec.projectPath === 'string') {

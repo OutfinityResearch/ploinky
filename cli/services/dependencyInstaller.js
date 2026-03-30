@@ -369,6 +369,30 @@ function setupAgentWorkDir(agentName) {
     return workDir;
 }
 
+function getInstalledPackageStampPath(agentName) {
+    return path.join(getAgentWorkDir(agentName), '.ploinky-install-package.json');
+}
+
+function filesHaveSameContent(firstPath, secondPath) {
+    try {
+        if (!fs.existsSync(firstPath) || !fs.existsSync(secondPath)) {
+            return false;
+        }
+        return fs.readFileSync(firstPath, 'utf8') === fs.readFileSync(secondPath, 'utf8');
+    } catch (_) {
+        return false;
+    }
+}
+
+function writeInstalledPackageStamp(agentName, packagePath) {
+    if (!packagePath || !fs.existsSync(packagePath)) {
+        return false;
+    }
+    const stampPath = getInstalledPackageStampPath(agentName);
+    fs.copyFileSync(packagePath, stampPath);
+    return true;
+}
+
 /**
  * Check if npm install needs to be run.
  * @param {string} containerName - The container name
@@ -450,6 +474,20 @@ function needsHostInstall(agentName, options = {}) {
         return { needsInstall: true, reason: 'Cannot read node_modules directory' };
     }
 
+    const requiredCoreModulePath = path.join(nodeModulesPath, 'mcp-sdk');
+    if (!fs.existsSync(requiredCoreModulePath)) {
+        return { needsInstall: true, reason: 'mcp-sdk is missing from node_modules' };
+    }
+
+    const stampPath = getInstalledPackageStampPath(agentName);
+    if (!fs.existsSync(stampPath)) {
+        return { needsInstall: true, reason: 'Installed package stamp is missing' };
+    }
+
+    if (!filesHaveSameContent(resolvedPackagePath, stampPath)) {
+        return { needsInstall: true, reason: 'package.json changed since the last successful install' };
+    }
+
     return { needsInstall: false, reason: 'Dependencies already installed' };
 }
 
@@ -492,7 +530,7 @@ function installDependencies(containerName, agentName, options = {}) {
     const { force = false, verbose = false } = options;
     const log = verbose ? console.log : debugLog;
 
-    const agentWorkDir = getAgentWorkDir(agentName);  // $CWD/.ploinky/agents/<agent>/
+    const agentWorkDir = getAgentWorkDir(agentName);
     const nodeModulesPath = path.join(agentWorkDir, 'node_modules');
     const mcpSdkPath = path.join(nodeModulesPath, 'mcp-sdk');
     const hasCoreModules = fs.existsSync(mcpSdkPath);
@@ -523,6 +561,7 @@ function installDependencies(containerName, agentName, options = {}) {
             if (!coreResult.success) {
                 return coreResult;
             }
+            writeInstalledPackageStamp(agentName, corePackagePath);
         }
 
         // Step 2: If agent has package.json, copy from /code and install (adds to existing node_modules)
@@ -537,6 +576,7 @@ function installDependencies(containerName, agentName, options = {}) {
             if (!agentResult.success) {
                 return agentResult;
             }
+            writeInstalledPackageStamp(agentName, agentPackagePath);
         }
 
         log(`[deps] Dependencies installed successfully for ${agentName}`);
@@ -571,7 +611,11 @@ function installCoreDependencies(containerName, agentName) {
         writeFileInContainer(containerName, corePackagePath, JSON.stringify(corePackage, null, 2));
 
         // Run npm install inside container
-        return runNpmInstallInContainer(containerName, agentWorkDir, debugLog);
+        const result = runNpmInstallInContainer(containerName, agentWorkDir, debugLog);
+        if (result.success) {
+            writeInstalledPackageStamp(agentName, corePackagePath);
+        }
+        return result;
     } catch (err) {
         return { success: false, message: `Core installation failed: ${err.message}` };
     }
@@ -605,7 +649,11 @@ function installAgentDependencies(containerName, agentName) {
         dockerExec(containerName, `cp /code/package.json "${agentPackagePath}"`);
 
         // Run npm install inside container (adds to existing node_modules)
-        return runNpmInstallInContainer(containerName, agentWorkDir, debugLog);
+        const result = runNpmInstallInContainer(containerName, agentWorkDir, debugLog);
+        if (result.success) {
+            writeInstalledPackageStamp(agentName, agentPackagePath);
+        }
+        return result;
     } catch (err) {
         return { success: false, message: `Agent installation failed: ${err.message}` };
     }
@@ -1025,6 +1073,7 @@ function installDependenciesInContainer(agentName, containerImage, options = {})
         if (result.status !== 0) {
             return { success: false, message: `npm install failed with code ${result.status}` };
         }
+        writeInstalledPackageStamp(agentName, workDirPackageJson);
         log(`[deps] ${agentName}: Dependencies installed successfully`);
         return { success: true, message: 'Dependencies installed successfully' };
     } catch (err) {
@@ -1114,15 +1163,20 @@ function buildEntrypointInstallScript(agentName) {
     const snippet = [
         '(',
         '    if command -v npm >/dev/null 2>&1; then',
-        `        echo "[deps] ${agentName}: Installing dependencies...";`,
+        '        INSTALL_STAMP="$WORKSPACE_PATH/.ploinky-install-package.json";',
+        '        if [ -d "$WORKSPACE_PATH/node_modules/mcp-sdk" ] && [ -f "$INSTALL_STAMP" ] && [ -f "$WORKSPACE_PATH/package.json" ] && cmp -s "$WORKSPACE_PATH/package.json" "$INSTALL_STAMP"; then',
+        `            echo "[deps] ${agentName}: Using cached dependencies";`,
+        '        else',
+        `            echo "[deps] ${agentName}: Installing dependencies...";`,
         // --- install git + build tools (apk first, then apt-get) -------------------
-        '        (',
-        '          command -v git >/dev/null 2>&1 ||',
-        '          (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
-        '          (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
-        '        ) 2>/dev/null;',
+        '            (',
+        '              command -v git >/dev/null 2>&1 ||',
+        '              (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
+        '              (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
+        '            ) 2>/dev/null;',
         // --- npm install -----------------------------------------------------------
-        `        npm install --no-package-lock --prefix "$WORKSPACE_PATH";`,
+        `            npm install --no-package-lock --prefix "$WORKSPACE_PATH" && cp "$WORKSPACE_PATH/package.json" "$INSTALL_STAMP";`,
+        '        fi',
         '    else',
         `        echo "[deps] ${agentName}: npm not found, skipping Node.js dependency install";`,
         '    fi',
@@ -1152,5 +1206,7 @@ export {
     getCoreDependencyNames,
     runPersistentInstall,
     prepareAgentPackageJson,
+    getInstalledPackageStampPath,
     buildEntrypointInstallScript,
+    writeInstalledPackageStamp,
 };

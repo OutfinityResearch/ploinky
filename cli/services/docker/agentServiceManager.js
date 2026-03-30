@@ -654,9 +654,9 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         ...getExposedNames(manifest, profileConfig),
         ...Object.keys(profileEnv)
     ];
-    let projPath = existingRecord.projectPath;
+    let projPath = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), aliasOverride);
     if (!projPath) {
-        projPath = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), aliasOverride);
+        projPath = existingRecord.projectPath;
     }
     agents[containerName] = {
         agentName,
