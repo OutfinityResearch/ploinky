@@ -70,6 +70,38 @@ async function updateRepo(repoName) {
     }
 }
 
+async function updateAllRepos() {
+    const repos = getRepoNames();
+    if (!repos.length) {
+        console.log('No installed repositories to update.');
+        return { total: 0, updated: 0, failed: [] };
+    }
+
+    const failed = [];
+    let updated = 0;
+
+    for (const repoName of repos) {
+        try {
+            reposSvc.updateRepo(repoName);
+            console.log(`✓ Repo '${repoName}' updated.`);
+            updated += 1;
+        } catch (err) {
+            const message = err?.message || String(err);
+            failed.push({ repoName, message });
+            console.error(`✗ Repo '${repoName}' update failed: ${message}`);
+        }
+    }
+
+    console.log(`Update summary: ${updated}/${repos.length} repositories updated.`);
+
+    if (failed.length) {
+        const failedNames = failed.map(entry => entry.repoName).join(', ');
+        throw new Error(`Failed to update ${failed.length} repository(s): ${failedNames}`);
+    }
+
+    return { total: repos.length, updated, failed };
+}
+
 function enableRepo(repoName, branch = null) {
     if (!repoName) throw new Error('Usage: enable repo <name> [branch]');
     reposSvc.enableRepo(repoName, branch);
@@ -107,6 +139,7 @@ export {
     getAgentNames,
     addRepo,
     updateRepo,
+    updateAllRepos,
     enableRepo,
     disableRepo,
     enableAgent,

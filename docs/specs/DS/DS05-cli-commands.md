@@ -37,7 +37,7 @@ ploinky [command] [subcommand] [arguments...] [options]
 
 | Category | Commands |
 |----------|----------|
-| Repository Management | `add repo`, `enable repo`, `disable repo`, `list repos`, `update repo` |
+| Repository Management | `add repo`, `enable repo`, `disable repo`, `list repos`, `update` |
 | Agent Operations | `enable agent`, `disable agent`, `reinstall`, `list agents` |
 | Workspace Control | `start`, `stop`, `restart`, `shutdown`, `destroy`, `clean`, `status` |
 | Interactive Access | `shell`, `cli`, `run` |
@@ -201,12 +201,15 @@ Repositories:
   custom     [enabled]   3 agents
 ```
 
-#### `update repo <name>`
+#### `update | update all | update repos | update <name> | update repo <name>`
 
-Pull latest changes from repository.
+Pull latest changes from repositories. Without arguments, updates all installed repositories.
 
 ```bash
-> update repo basic
+> update
+Updating installed repositories... done
+
+> update basic
 Updating 'basic'... done. Updated 3 agents.
 ```
 
@@ -725,7 +728,7 @@ Show help information.
 Ploinky CLI - Containerized Agent Runtime
 
 Commands:
-  Repository:   add repo, enable repo, disable repo, list repos, update repo
+  Repository:   add repo, enable repo, disable repo, list repos, update
   Agents:       enable agent, disable agent, reinstall, list agents
   Workspace:    start, stop, restart, shutdown, destroy, clean, status
   Interactive:  shell, cli, run

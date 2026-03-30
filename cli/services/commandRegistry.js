@@ -1,5 +1,6 @@
 const rawCommands = {
     add: ['repo'],
+    update: ['repo', 'repos', 'all'],
     reinstall: ['agent'],
     enable: ['repo', 'agent'],
     disable: ['repo', 'agent'],

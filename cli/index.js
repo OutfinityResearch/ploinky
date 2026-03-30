@@ -30,7 +30,7 @@ function completer(line) {
 
         // Determine the context for completion
         if (line.endsWith(' ')) {
-            if (words.length === 1 && subcommands.length > 0 && command !== 'reinstall') {
+            if (words.length === 1 && subcommands.length > 0 && command !== 'reinstall' && command !== 'update') {
                 context = 'subcommands';
             } else if (command === 'help' && words.length === 1) {
                 // For help command, show all available commands
@@ -56,6 +56,8 @@ function completer(line) {
                 context = 'none';
             } else if (command === 'reinstall' && words.length === 1) {
                 context = 'args';
+            } else if (command === 'update' && words.length === 1) {
+                context = 'args';
             } else if ((command === 'start') && words.length === 2) {
                 context = 'subcommands';
             } else if (words.length === 2) {
@@ -73,7 +75,7 @@ function completer(line) {
         } else {
             if (words.length === 1) context = 'commands';
             else if (words.length === 2 && subcommands.length > 0) {
-                if ((command === 'disable' || command === 'reinstall') && !subcommands.includes(words[1])) {
+                if ((command === 'disable' || command === 'reinstall' || command === 'update') && !subcommands.includes(words[1])) {
                     context = 'args';
                 } else {
                     context = 'subcommands';
@@ -131,11 +133,19 @@ function completer(line) {
             const subcommand = words[1];
             if ((command === 'shell') ||
                 (command === 'cli') ||
-                (command === 'update' && subcommand === 'agent') ||
                 (command === 'reinstall' && (subcommand === 'agent' || words.length <= 2)) ||
                 (command === 'enable' && subcommand === 'agent') ||
                 (command === 'client' && ['methods', 'status', 'task', 'task-status'].includes(subcommand))) {
                 completions = getAgentNames();
+            } else if (command === 'update') {
+                const repos = getRepoNames();
+                if (words.length <= 2) {
+                    completions = ['all', 'repos', 'repo', ...repos];
+                } else if (subcommand === 'repo' || subcommand === 'repository') {
+                    completions = repos;
+                } else {
+                    completions = repos;
+                }
             } else if (command === 'logs' && subcommand === 'tail') {
                 completions = ['router', 'webtty'];
             } else if (command === 'logs' && subcommand === 'last') {

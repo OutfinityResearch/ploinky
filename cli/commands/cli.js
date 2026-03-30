@@ -28,6 +28,7 @@ import {
     getAgentNames,
     addRepo,
     updateRepo,
+    updateAllRepos,
     enableRepo,
     disableRepo,
     enableAgent,
@@ -178,9 +179,17 @@ async function handleCommand(args) {
             handleEchoCommand(options);
             break;
         case 'update':
-            if (options[0] === 'agent') await updateAgent(options[1]);
-            else if (options[0] === 'repo') await updateRepo(options[1]);
-            else showHelp();
+            {
+                const first = String(options[0] || '').trim();
+                const firstLower = first.toLowerCase();
+                if (!first || firstLower === 'all' || firstLower === 'repos' || firstLower === 'repositories') {
+                    await updateAllRepos();
+                } else if (firstLower === 'repo' || firstLower === 'repository') {
+                    await updateRepo(options[1]);
+                } else {
+                    await updateRepo(first);
+                }
+            }
             break;
         case 'reinstall': {
             const sub = String(options[0] || '').trim();

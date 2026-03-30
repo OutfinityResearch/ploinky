@@ -104,11 +104,16 @@ enable repo cloud</code></pre>
                         <p>List all available repositories and their status.</p>
                         <pre><code>list repos</code></pre>
 
-                        <h3>update repo</h3>
-                        <p>Pull latest changes from remote for a repository.</p>
-                        <pre><code>update repo &lt;name&gt;</code></pre>
-                        <pre><code># Example
-update repo basic</code></pre>
+                        <h3>update</h3>
+                        <p>Pull latest changes from remote. Without arguments, all installed repositories are updated.</p>
+                        <pre><code>update
+update all
+update repos
+update &lt;name&gt;
+update repo &lt;name&gt;</code></pre>
+                        <pre><code># Examples
+update
+update basic</code></pre>
                     </div>
 
                     <div class="doc-section" id="agent">

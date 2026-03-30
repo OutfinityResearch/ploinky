@@ -16,7 +16,7 @@ export function showHelp(args = []) {
 
 ▶ LOCAL DEVELOPMENT
   add repo <name> [url] [branch] Add repository (basic/cloud/vibe/security/extra/demo)
-  update repo <name>             Pull latest changes from remote for a repository
+  update [all|repos|<name>]      Pull latest changes from remote (all repos by default)
   start [staticAgent] [port]     Start agents from .ploinky/agents.json and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
@@ -96,14 +96,9 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         
         'update': {
             description: 'Update repositories',
-            subcommands: {
-                'repo': {
-                    syntax: 'update repo <name>',
-                    description: 'Run git pull --rebase --autostash inside the repository to fetch latest changes',
-                    examples: [ 'update repo basic' ],
-                    notes: 'Autostash preserves local changes; resolve conflicts if git reports them.'
-                }
-            }
+            syntax: 'update | update all | update repos | update <name> | update repo <name>',
+            examples: [ 'update', 'update all', 'update repos', 'update basic', 'update repo basic' ],
+            notes: 'Runs git pull --rebase --autostash for target repositories. `update` without arguments updates all installed repos.'
         },
         
         

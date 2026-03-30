@@ -485,7 +485,7 @@ const repoErrors = {
 
   REPO_EXISTS: (name) =>
     `Repository '${name}' already exists.\n` +
-    `Run 'update repo ${name}' to update it.`,
+    `Run 'update ${name}' (or 'update repo ${name}') to update it.`,
 
   CLONE_FAILED: (name, error) =>
     `Failed to clone repository '${name}'.\n` +
