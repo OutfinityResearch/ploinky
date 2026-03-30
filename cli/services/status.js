@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
-import { PLOINKY_DIR } from './config.js';
+import { PLOINKY_DIR, ROUTING_FILE } from './config.js';
 import * as reposSvc from './repos.js';
 import { collectLiveAgentContainers, getAgentsRegistry } from './docker/index.js';
 import { findAgent } from './utils.js';
@@ -222,7 +222,7 @@ export function listAgents() {
 
 export function listRoutes() {
     try {
-        const routingPath = path.resolve('.ploinky/routing.json');
+        const routingPath = ROUTING_FILE;
         if (!fs.existsSync(routingPath)) {
             console.log('No routing configuration found (.ploinky/routing.json missing).');
             console.log("Tip: run 'start <staticAgent> <port>' to generate it.");

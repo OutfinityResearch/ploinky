@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { spawn, spawnSync } from 'child_process';
+import { LOGS_DIR } from './config.js';
 
 export function getLogPath(kind) {
-    const base = path.resolve('logs');
+    const base = LOGS_DIR;
     const map = { router: 'router.log' };
     const file = map[kind] || map.router;
     return path.join(base, file);

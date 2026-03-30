@@ -18,7 +18,7 @@ import {
     readManifestAgentCommand,
     readManifestStartCommand
 } from '../docker/agentCommands.js';
-import { WORKSPACE_ROOT } from '../config.js';
+import { LOGS_DIR } from '../config.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {
     runPreContainerLifecycle,
@@ -279,7 +279,7 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     });
 
     // Ensure logs directory exists
-    const logsDir = path.resolve(WORKSPACE_ROOT, 'logs');
+    const logsDir = LOGS_DIR;
     if (!fs.existsSync(logsDir)) {
         fs.mkdirSync(logsDir, { recursive: true });
     }

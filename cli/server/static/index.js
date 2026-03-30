@@ -8,8 +8,8 @@ import {
     sanitizeRelativeRequestPath,
     toRealPathSafe
 } from '../utils/workspacePaths.js';
+import { ROUTING_FILE } from '../../services/config.js';
 
-const ROUTING_FILE = path.resolve('.ploinky/routing.json');
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../../../');
 const MCP_BROWSER_CLIENT_URL = '/MCPBrowserClient.js';

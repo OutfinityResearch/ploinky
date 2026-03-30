@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie } from './common.js';
 import * as staticSrv from '../static/index.js';
 import * as secretVars from '../../services/secretVars.js';
+import { ROUTING_FILE } from '../../services/config.js';
 import { findAgent } from '../../services/utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,8 +16,6 @@ const __dirname = path.dirname(__filename);
 const appName = 'webmeet';
 const fallbackAppPath = path.join(__dirname, '../', appName);
 const SID_COOKIE = `${appName}_sid`;
-const ROUTING_FILE = path.resolve('.ploinky/routing.json');
-
 function buildIdentityHeaders(req) {
     if (!req || !req.user) return {};
     const headers = {};

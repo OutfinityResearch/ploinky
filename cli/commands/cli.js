@@ -42,6 +42,7 @@ import {
 import { runSettingsMenu } from '../services/settingsMenu.js';
 import { configureWebttyShell } from './webttyCommands.js';
 import { handleProfileCommand } from './profileCommands.js';
+import { ROUTING_FILE } from '../services/config.js';
 import {
     cleanupSessionContainers,
     destroyAll,
@@ -466,7 +467,7 @@ async function handleCommand(args) {
                         }
 
                         try {
-                            const routingFile = path.resolve('.ploinky/routing.json');
+                            const routingFile = ROUTING_FILE;
                             let cfg = { routes: {} };
                             try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch (_) {}
                             cfg.routes = cfg.routes || {};
@@ -563,7 +564,7 @@ async function handleCommand(args) {
                 console.log('[shutdown] Removed containers:');
                 list.forEach(n => console.log(` - ${n}`));
             }
-            console.log(`Destroyed ${list.length} containers from this workspace (per .ploinky/agents).`);
+            console.log(`Destroyed ${list.length} containers from this workspace (per .ploinky/agents.json).`);
             break;
         }
         case 'stop': {

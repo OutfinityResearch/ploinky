@@ -374,7 +374,7 @@ export function registerSkillsAsMCPTools(mcpServer, skills) {
 ### Skill Directory Location
 
 ```
-$CWD/skills/<agent>/skills/
+$CWD/.ploinky/skills/<agent>/skills/
   └── (symlink to .ploinky/repos/<repo>/<agent>/skills/)
 ```
 

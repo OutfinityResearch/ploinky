@@ -250,7 +250,7 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam, authMode
         } catch (_) {}
         if (!projectPath) {
             runMode = 'isolated';
-            // Use new workspace structure: $WORKSPACE_ROOT/agents/<agentName>/
+            // Use workspace structure: $WORKSPACE_ROOT/.ploinky/agents/<agentName>/
             projectPath = getAgentWorkDir(shortAgentName);
             try { fs.mkdirSync(projectPath, { recursive: true }); } catch (_) {}
         }
@@ -344,10 +344,10 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam, authMode
 
     // Create workspace structure for the agent
     try {
-        // Create agent working directory: $CWD/agents/<agentName>/
+        // Create agent working directory: $WORKSPACE_ROOT/.ploinky/agents/<agentName>/
         createAgentWorkDir(shortAgentName);
 
-        // Create symlinks: $CWD/code/<agentName> and $CWD/skills/<agentName>
+        // Create symlinks: $WORKSPACE_ROOT/.ploinky/code/<agentName> and .ploinky/skills/<agentName>
         createAgentSymlinks(shortAgentName, repoName, agentPath);
     } catch (err) {
         console.error(`Warning: Failed to create workspace structure for ${shortAgentName}: ${err.message}`);

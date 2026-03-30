@@ -1,18 +1,21 @@
 import fs from 'fs';
 import path from 'path';
-import { WORKSPACE_ROOT, AGENTS_WORK_DIR, CODE_DIR, SKILLS_DIR } from './config.js';
+import { WORKSPACE_ROOT, PLOINKY_DIR, AGENTS_WORK_DIR, CODE_DIR, SKILLS_DIR } from './config.js';
 
 /**
  * Initialize the workspace directory structure.
- * Creates: .ploinky/, agents/, code/, skills/
+ * Creates: .ploinky/, .ploinky/agents/, .ploinky/code/, .ploinky/skills/, .ploinky/logs/, .ploinky/shared/
  * @param {string} [workspacePath] - Optional workspace path, defaults to CWD
  */
 export function initWorkspaceStructure(workspacePath = WORKSPACE_ROOT) {
+    const runtimeRoot = path.join(workspacePath, '.ploinky');
     const dirs = [
-        path.join(workspacePath, '.ploinky'),
-        path.join(workspacePath, 'agents'),
-        path.join(workspacePath, 'code'),
-        path.join(workspacePath, 'skills')
+        runtimeRoot,
+        path.join(runtimeRoot, 'agents'),
+        path.join(runtimeRoot, 'code'),
+        path.join(runtimeRoot, 'skills'),
+        path.join(runtimeRoot, 'logs'),
+        path.join(runtimeRoot, 'shared')
     ];
 
     for (const dir of dirs) {
@@ -24,8 +27,8 @@ export function initWorkspaceStructure(workspacePath = WORKSPACE_ROOT) {
 
 /**
  * Create symlinks for agent code and skills directories.
- * - $CWD/code/<agentName> -> .ploinky/repos/<repo>/<agent>/code/
- * - $CWD/skills/<agentName> -> .ploinky/repos/<repo>/<agent>/skills/
+ * - $WORKSPACE_ROOT/.ploinky/code/<agentName> -> .ploinky/repos/<repo>/<agent>/code/
+ * - $WORKSPACE_ROOT/.ploinky/skills/<agentName> -> .ploinky/repos/<repo>/<agent>/skills/
  * @param {string} agentName - The agent name
  * @param {string} repoName - The repository name
  * @param {string} agentPath - The full path to the agent directory in repos
@@ -42,7 +45,7 @@ export function createAgentSymlinks(agentName, repoName, agentPath) {
         fs.mkdirSync(skillsDir, { recursive: true });
     }
 
-    // Create symlink for code: $CWD/code/<agentName> -> agent source
+    // Create symlink for code: $WORKSPACE_ROOT/.ploinky/code/<agentName> -> agent source
     const codeSymlinkPath = path.join(codeDir, agentName);
     const codeTargetPath = path.join(agentPath, 'code');
 
@@ -74,7 +77,7 @@ export function createAgentSymlinks(agentName, repoName, agentPath) {
         }
     }
 
-    // Create symlink for skills: $CWD/skills/<agentName> -> agent skills
+    // Create symlink for skills: $WORKSPACE_ROOT/.ploinky/skills/<agentName> -> agent skills
     const skillsSymlinkPath = path.join(skillsDir, agentName);
     const skillsTargetPath = path.join(agentPath, 'skills');
 
@@ -132,7 +135,7 @@ export function removeAgentSymlinks(agentName) {
 /**
  * Get the agent working directory path.
  * @param {string} agentName - The agent name
- * @returns {string} The path to $CWD/agents/<agentName>/
+ * @returns {string} The path to $WORKSPACE_ROOT/.ploinky/agents/<agentName>/
  */
 export function getAgentWorkDir(agentName) {
     return path.join(AGENTS_WORK_DIR, agentName);
@@ -141,7 +144,7 @@ export function getAgentWorkDir(agentName) {
 /**
  * Get the agent code path (symlink location).
  * @param {string} agentName - The agent name
- * @returns {string} The path to $CWD/code/<agentName>/
+ * @returns {string} The path to $WORKSPACE_ROOT/.ploinky/code/<agentName>/
  */
 export function getAgentCodePath(agentName) {
     return path.join(CODE_DIR, agentName);
@@ -150,7 +153,7 @@ export function getAgentCodePath(agentName) {
 /**
  * Get the agent skills path (symlink location).
  * @param {string} agentName - The agent name
- * @returns {string} The path to $CWD/skills/<agentName>/
+ * @returns {string} The path to $WORKSPACE_ROOT/.ploinky/skills/<agentName>/
  */
 export function getAgentSkillsPath(agentName) {
     return path.join(SKILLS_DIR, agentName);
@@ -198,12 +201,15 @@ export function removeAgentWorkDir(agentName, force = false) {
 export function verifyWorkspaceStructure() {
     const cwd = WORKSPACE_ROOT;
     const issues = [];
+    const runtimeRoot = path.join(cwd, '.ploinky');
 
     const requiredDirs = [
-        { path: path.join(cwd, '.ploinky'), name: '.ploinky' },
-        { path: path.join(cwd, 'agents'), name: 'agents' },
-        { path: path.join(cwd, 'code'), name: 'code' },
-        { path: path.join(cwd, 'skills'), name: 'skills' }
+        { path: runtimeRoot, name: '.ploinky' },
+        { path: path.join(runtimeRoot, 'agents'), name: '.ploinky/agents' },
+        { path: path.join(runtimeRoot, 'code'), name: '.ploinky/code' },
+        { path: path.join(runtimeRoot, 'skills'), name: '.ploinky/skills' },
+        { path: path.join(runtimeRoot, 'logs'), name: '.ploinky/logs' },
+        { path: path.join(runtimeRoot, 'shared'), name: '.ploinky/shared' }
     ];
 
     for (const dir of requiredDirs) {
@@ -214,9 +220,9 @@ export function verifyWorkspaceStructure() {
         }
     }
 
-    // Check symlinks in code/ and skills/
-    const codeDir = path.join(cwd, 'code');
-    const skillsDir = path.join(cwd, 'skills');
+    // Check symlinks in .ploinky/code/ and .ploinky/skills/
+    const codeDir = path.join(runtimeRoot, 'code');
+    const skillsDir = path.join(runtimeRoot, 'skills');
 
     if (fs.existsSync(codeDir)) {
         const codeEntries = fs.readdirSync(codeDir);
@@ -228,7 +234,7 @@ export function verifyWorkspaceStructure() {
                     const target = fs.readlinkSync(entryPath);
                     const resolvedTarget = path.resolve(codeDir, target);
                     if (!fs.existsSync(resolvedTarget)) {
-                        issues.push(`Broken symlink: code/${entry} -> ${target}`);
+                        issues.push(`Broken symlink: .ploinky/code/${entry} -> ${target}`);
                     }
                 }
             } catch (_) {}
@@ -245,7 +251,7 @@ export function verifyWorkspaceStructure() {
                     const target = fs.readlinkSync(entryPath);
                     const resolvedTarget = path.resolve(skillsDir, target);
                     if (!fs.existsSync(resolvedTarget)) {
-                        issues.push(`Broken symlink: skills/${entry} -> ${target}`);
+                        issues.push(`Broken symlink: .ploinky/skills/${entry} -> ${target}`);
                     }
                 }
             } catch (_) {}
@@ -263,9 +269,8 @@ export function verifyWorkspaceStructure() {
  * @returns {string} The path to the base package.json template
  */
 export function getPackageBaseTemplatePath() {
-    const cwd = process.cwd();
     // Check local templates first, then fall back to ploinky templates
-    const localTemplate = path.join(cwd, '.ploinky', 'package.base.json');
+    const localTemplate = path.join(PLOINKY_DIR, 'package.base.json');
     if (fs.existsSync(localTemplate)) {
         return localTemplate;
     }

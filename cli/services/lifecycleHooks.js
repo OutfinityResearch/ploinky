@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync, spawnSync } from 'child_process';
 import { containerRuntime } from './docker/common.js';
+import { RUNNING_DIR } from './config.js';
 import { debugLog } from './utils.js';
 import { getProfileConfig, getProfileEnvVars, getHookNames, getActiveProfile } from './profileService.js';
 import { validateSecrets, getSecrets, createEnvWithSecrets, formatMissingSecretsError } from './secretInjector.js';
@@ -421,7 +422,7 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath, profile
         const profileConfig = getProfileConfig(`${repoName}/${agentName}`, profileName) || {};
         if (profileConfig.preinstall) {
             // Check if preinstall was already run for this agent in this session
-            const markerDir = path.join(process.cwd(), '.ploinky', 'running');
+            const markerDir = RUNNING_DIR;
             const markerFile = path.join(markerDir, `preinstall-${agentName}-${profileName || 'default'}`);
             
             if (fs.existsSync(markerFile)) {

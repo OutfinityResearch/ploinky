@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import { LOGS_DIR } from '../../services/config.js';
 
-const LOG_DIR = path.resolve(process.cwd(), 'logs');
+const LOG_DIR = LOGS_DIR;
 const LOG_PATH = path.join(LOG_DIR, 'router.log');
 
 function ensureLogDirectory() {

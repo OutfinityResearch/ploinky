@@ -34,12 +34,12 @@ Agents need different configurations for different environments:
 └─────────────────────────────────────────────────────────────────────┘
 
 1. Workspace Structure Init [HOST]
-   └─→ Ensure: .ploinky/, agents/, code/, skills/
-   └─→ Create: $CWD/agents/<agentName>/
+   └─→ Ensure: .ploinky/, .ploinky/agents/, .ploinky/code/, .ploinky/skills/
+   └─→ Create: $CWD/.ploinky/agents/<agentName>/
 
 2. Symbolic Links Creation [HOST]
-   └─→ code symlink: $CWD/code/<agent> -> .ploinky/repos/.../code/
-   └─→ skills symlink: $CWD/skills/<agent> -> .ploinky/repos/.../skills/
+   └─→ code symlink: $CWD/.ploinky/code/<agent> -> .ploinky/repos/.../code/
+   └─→ skills symlink: $CWD/.ploinky/skills/<agent> -> .ploinky/repos/.../skills/
 
 3. Container Creation
    └─→ docker create with profile-specific mounts

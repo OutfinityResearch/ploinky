@@ -68,14 +68,14 @@ function ensureWorkspace() {
 
 // Load agent registry
 function loadAgents() {
-    const agentsFile = path.join(PLOINKY_DIR, 'agents');
+    const agentsFile = path.join(PLOINKY_DIR, 'agents.json');
     if (!fs.existsSync(agentsFile)) return {};
     return JSON.parse(fs.readFileSync(agentsFile, 'utf8'));
 }
 
 // Save agent registry
 function saveAgents(agents) {
-    const agentsFile = path.join(PLOINKY_DIR, 'agents');
+    const agentsFile = path.join(PLOINKY_DIR, 'agents.json');
     fs.writeFileSync(agentsFile, JSON.stringify(agents, null, 2));
 }
 
@@ -92,7 +92,7 @@ function setConfig(config) {
 }</code></pre>
 
                         <h3>Data Structure</h3>
-                        <pre><code>// .ploinky/agents file structure
+                        <pre><code>// .ploinky/agents.json file structure
 {
     "_config": {
         "static": {

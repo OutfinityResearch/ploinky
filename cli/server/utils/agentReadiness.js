@@ -1,9 +1,7 @@
 import fs from 'fs';
 import http from 'http';
 import net from 'net';
-import path from 'path';
-
-const ROUTING_FILE = path.resolve('.ploinky/routing.json');
+import { ROUTING_FILE } from '../../services/config.js';
 
 function readRouting() {
     try {

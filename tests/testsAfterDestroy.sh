@@ -30,7 +30,7 @@ assert_agent_removed_from_registry() {
     echo "Failed to compute container name for '${repo_name}/${agent_name}'." >&2
     return 1
   fi
-  if grep -Fq "$container_name" "$TEST_RUN_DIR/.ploinky/agents"; then
+  if grep -Fq "$container_name" "$TEST_RUN_DIR/.ploinky/agents.json"; then
     echo "Registry still contains container '${container_name}'." >&2
     return 1
   fi

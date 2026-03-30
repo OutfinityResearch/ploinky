@@ -285,8 +285,8 @@ test('createAgentSymlinks creates code and skills symlinks', () => {
 
     assert.doesNotThrow(() => createAgentSymlinks(agentName, repoName, agentPath));
 
-    const codeLink = path.join(tempDir, 'code', agentName);
-    const skillsLink = path.join(tempDir, 'skills', agentName);
+    const codeLink = path.join(tempDir, '.ploinky', 'code', agentName);
+    const skillsLink = path.join(tempDir, '.ploinky', 'skills', agentName);
 
     assert.ok(fs.lstatSync(codeLink).isSymbolicLink());
     assert.ok(fs.lstatSync(skillsLink).isSymbolicLink());
@@ -307,7 +307,7 @@ test('createAgentSymlinks skips skills when folder is missing', () => {
 
     createAgentSymlinks(agentName, repoName, agentPath);
 
-    const skillsLink = path.join(tempDir, 'skills', agentName);
+    const skillsLink = path.join(tempDir, '.ploinky', 'skills', agentName);
     assert.ok(!fs.existsSync(skillsLink));
 });
 
@@ -322,8 +322,8 @@ test('removeAgentSymlinks removes created symlinks', () => {
     createAgentSymlinks(agentName, repoName, agentPath);
     removeAgentSymlinks(agentName);
 
-    const codeLink = path.join(tempDir, 'code', agentName);
-    const skillsLink = path.join(tempDir, 'skills', agentName);
+    const codeLink = path.join(tempDir, '.ploinky', 'code', agentName);
+    const skillsLink = path.join(tempDir, '.ploinky', 'skills', agentName);
 
     assert.ok(!fs.existsSync(codeLink));
     assert.ok(!fs.existsSync(skillsLink));

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { appendLog } from '../server/utils/logger.js';
+import { ROUTING_FILE, RUNNING_DIR } from '../services/config.js';
 import {
     addSessionContainer,
     cleanupSessionSet,
@@ -19,11 +20,11 @@ function cleanupSessionContainers() {
 
 function killRouterIfRunning() {
     try {
-        const pidFile = path.resolve('.ploinky/running/router.pid');
+        const pidFile = path.join(RUNNING_DIR, 'router.pid');
         let stopped = false;
         let port = 8080;
         try {
-            const routing = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'), 'utf8')) || {};
+            const routing = JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')) || {};
             if (routing.port) port = parseInt(routing.port, 10) || port;
         } catch (_) { }
 

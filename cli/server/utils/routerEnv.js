@@ -1,7 +1,7 @@
 import fs from 'fs';
-import path from 'path';
 import crypto from 'crypto';
 import * as envSvc from '../../services/secretVars.js';
+import { ROUTING_FILE } from '../../services/config.js';
 
 const COMPONENTS = {
   webtty: { varName: 'WEBTTY_TOKEN', label: 'WebTTY', path: '/webtty' },
@@ -13,7 +13,7 @@ const COMPONENTS = {
 function getRouterPort() {
   let port = null;
   try {
-    const routing = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'), 'utf8'));
+    const routing = JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8'));
     if (routing && routing.port) {
       const candidate = parseInt(routing.port, 10);
       if (!Number.isNaN(candidate) && candidate > 0) port = candidate;

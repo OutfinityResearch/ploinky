@@ -25,7 +25,7 @@ import {
     readManifestAgentCommand,
     readManifestStartCommand
 } from '../docker/agentCommands.js';
-import { WORKSPACE_ROOT } from '../config.js';
+import { LOGS_DIR, ROUTING_FILE, WORKSPACE_ROOT } from '../config.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {
     runPreContainerLifecycle,
@@ -277,7 +277,7 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
     // Router port
     let routerPort = '8080';
     try {
-        const routingFile = path.resolve('.ploinky/routing.json');
+        const routingFile = ROUTING_FILE;
         if (fs.existsSync(routingFile)) {
             const routing = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {};
             if (routing.port) routerPort = String(routing.port);
@@ -454,7 +454,7 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
     bwrapArgs.push('--', 'sh', '-c', entryCmd);
 
     // Ensure logs directory exists
-    const logsDir = path.resolve(WORKSPACE_ROOT, 'logs');
+    const logsDir = LOGS_DIR;
     if (!fs.existsSync(logsDir)) {
         fs.mkdirSync(logsDir, { recursive: true });
     }

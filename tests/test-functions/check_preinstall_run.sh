@@ -29,7 +29,7 @@ check_preinstall_run() {
       local container_logs=""
       if is_bwrap_agent "$explorer_container"; then
         local sandbox_log
-        for sandbox_log in "$TEST_RUN_DIR/logs/explorer-bwrap.log" "$TEST_RUN_DIR/logs/explorer-seatbelt.log"; do
+        for sandbox_log in "$TEST_RUN_DIR/.ploinky/logs/explorer-bwrap.log" "$TEST_RUN_DIR/.ploinky/logs/explorer-seatbelt.log"; do
           [[ -f "$sandbox_log" ]] && break
         done
         container_logs=$(cat "$sandbox_log" 2>&1) || true

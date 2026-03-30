@@ -52,7 +52,7 @@ You can use Ploinky in two ways:
 
 ## Core commands (in p-cli)
 
-- `enable agent <name> [as <alias>]`: register an agent in `.ploinky/agents` (creates a minimal manifest if missing). Use `as <alias>` to spin up additional instances with unique container names.
+- `enable agent <name> [as <alias>]`: register an agent in `.ploinky/agents.json` (creates a minimal manifest if missing). Use `as <alias>` to spin up additional instances with unique container names.
 - `start <staticAgent> <port>`: first run requires a static agent and port; subsequent runs can just use `start`.
   - Ensures all enabled agents are running and launches the Router on `<port>`.
   - Serves static files from the repository of `<staticAgent>`; non `/mcps/...` paths are static.
@@ -62,8 +62,8 @@ You can use Ploinky in two ways:
 - `client task <agent> [--parameters <params>] [-key value...]`: send a task to an agent.
 - `client methods <agent>`: list available methods for an agent.
 - `client status <agent>`: check agent health status.
-- `stop`: stop containers recorded in `.ploinky/agents` (do not remove).
-- `shutdown`: stop and remove containers recorded in `.ploinky/agents`.
+- `stop`: stop containers recorded in `.ploinky/agents.json` (do not remove).
+- `shutdown`: stop and remove containers recorded in `.ploinky/agents.json`.
 
 ## Notes
 

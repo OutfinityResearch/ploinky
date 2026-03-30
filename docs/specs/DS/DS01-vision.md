@@ -189,7 +189,7 @@ Client → Router (8088) → /mcps/<agent>/mcp → Agent Container (7000) → Ag
 
 1. User runs `ploinky` or `p-cli` command
 2. CLI loads configuration from `.ploinky/` directory
-3. Enabled agents are loaded from `.ploinky/agents` registry
+3. Enabled agents are loaded from `.ploinky/agents.json` registry
 4. User enables agents via `enable agent <name>`
 5. User starts workspace via `start <agent> <port>`
 6. Router server starts on specified port
@@ -211,7 +211,13 @@ Client → Router (8088) → /mcps/<agent>/mcp → Agent Container (7000) → Ag
 
 ```
 $CWD/.ploinky/
-├── agents                    # JSON registry of enabled agents
+├── agents.json               # JSON registry of enabled agents
+├── agents/                   # Agent working directories
+├── code/                     # Symlinks to agent code
+├── skills/                   # Symlinks to agent skills
+├── logs/                     # Router/watchdog logs
+├── shared/                   # Shared files for blob APIs
+├── ploinky_history           # CLI command history
 ├── enabled_repos.json        # List of active repositories
 ├── .secrets                  # Key-value secrets file
 ├── routing.json              # Router configuration (generated)

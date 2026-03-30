@@ -22,12 +22,13 @@ import {
     REPOS_DIR,
     waitForContainerRunning
 } from './common.js';
+import { SHARED_DIR } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 function ensureSharedHostDir() {
-    const dir = path.resolve(process.cwd(), 'shared');
+    const dir = SHARED_DIR;
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
     return dir;
 }

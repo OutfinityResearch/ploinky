@@ -542,12 +542,12 @@ export function startHealthMonitoring(containerId, config, onUnhealthy) {
 | Host Path | Container Path | Mode | Purpose |
 |---|---|---|---|
 | `<ploinky>/Agent/` | `/Agent` | `ro` (always) | Agent runtime framework (AgentServer.mjs, TaskQueue.mjs) |
-| `$CWD/code/<agent>/` (resolved) | `/code` | `rw` or `ro` (profile) | Agent source code |
-| `$CWD/agents/<agent>/node_modules/` | `/code/node_modules` | `rw` | npm dependencies (for agent code) |
-| `$CWD/agents/<agent>/node_modules/` | `/Agent/node_modules` | `rw` | npm dependencies (for AgentServer.mjs) |
-| `$CWD/shared/` | `/shared` | `rw` | Shared data between agents |
-| `$CWD/agents/<agent>/` | same path | `rw` | CWD passthrough for runtime data |
-| `$CWD/skills/<agent>/` (resolved) | `/code/skills` | `rw` or `ro` (profile) | Skills directory (only if exists) |
+| `$CWD/.ploinky/code/<agent>/` (resolved) | `/code` | `rw` or `ro` (profile) | Agent source code |
+| `$CWD/.ploinky/agents/<agent>/node_modules/` | `/code/node_modules` | `rw` | npm dependencies (for agent code) |
+| `$CWD/.ploinky/agents/<agent>/node_modules/` | `/Agent/node_modules` | `rw` | npm dependencies (for AgentServer.mjs) |
+| `$CWD/.ploinky/shared/` | `/shared` | `rw` | Shared data between agents |
+| `$CWD/.ploinky/agents/<agent>/` | same path | `rw` | CWD passthrough for runtime data |
+| `$CWD/.ploinky/skills/<agent>/` (resolved) | `/code/skills` | `rw` or `ro` (profile) | Skills directory (only if exists) |
 
 **Mount mode is profile-dependent:**
 - `dev` profile: code=`rw`, skills=`rw`
@@ -567,24 +567,24 @@ Inside a running agent container:
 │   │   ├── AgentServer.mjs
 │   │   ├── AgentServer.sh
 │   │   └── TaskQueue.mjs
-│   └── node_modules/             # --> host: $CWD/agents/<agent>/node_modules/ (rw)
+│   └── node_modules/             # --> host: $CWD/.ploinky/agents/<agent>/node_modules/ (rw)
 │
 ├── code/                         # Agent source code (rw or ro per profile)
 │   ├── main.mjs                  # (example agent entry)
 │   ├── package.json              # Agent's own package.json
 │   ├── skills/          # Skills directory (if mounted)
-│   └── node_modules/             # --> host: $CWD/agents/<agent>/node_modules/ (rw)
+│   └── node_modules/             # --> host: $CWD/.ploinky/agents/<agent>/node_modules/ (rw)
 │
 ├── shared/                       # Shared data between agents (rw)
 │
-└── $CWD/agents/<agent>/          # CWD passthrough mount (rw)
+└── $CWD/.ploinky/agents/<agent>/          # CWD passthrough mount (rw)
 ```
 
 Note: `/code/node_modules` and `/Agent/node_modules` point to the **same** host directory.
 
 ### Dependency Installation
 
-Ploinky manages Node.js dependencies for agents by merging global + agent dependencies on the host, then running `npm install` inside the container entrypoint. Dependencies persist in the workspace `agents/<agent>/` directory.
+Ploinky manages Node.js dependencies for agents by merging global + agent dependencies on the host, then running `npm install` inside the container entrypoint. Dependencies persist in the workspace `.ploinky/agents/<agent>/` directory.
 
 #### Global Dependencies
 
@@ -615,9 +615,9 @@ Defined in `globalDeps/package.json`, these are available to **every** agent:
 `dependencyInstaller.js:prepareAgentPackageJson(agentName)`:
 
 1. Reads `globalDeps/package.json` (4 global dependencies)
-2. Checks if agent has its own `package.json` at `$CWD/code/<agentName>/package.json`
+2. Checks if agent has its own `package.json` at `$CWD/.ploinky/code/<agentName>/package.json`
 3. If yes, **merges** agent dependencies into global (agent deps take precedence for conflicts)
-4. Writes merged `package.json` to `$CWD/agents/<agentName>/package.json`
+4. Writes merged `package.json` to `$CWD/.ploinky/agents/<agentName>/package.json`
 
 Decision logic in `agentServiceManager.js`:
 ```
@@ -656,7 +656,7 @@ cd /code && <entrypoint-deps-install> && <manifest-install-hook> && <agent-comma
 #### Where Dependencies End Up
 
 ```
-Host:       $CWD/agents/<agentName>/node_modules/   (persists across container restarts)
+Host:       $CWD/.ploinky/agents/<agentName>/node_modules/   (persists across container restarts)
 
 Container:  /code/node_modules      <── same host directory
             /Agent/node_modules     <── same host directory
@@ -675,21 +675,22 @@ Note: The sync list (`CORE_DEPENDENCIES = ['achillesAgentLib', 'mcp-sdk', 'flexs
 ```
 Host Filesystem:
 $CWD/
-├── agents/
-│   └── <agent>/
-│       ├── package.json      # Merged package.json (core + agent)
-│       ├── package-lock.json
-│       └── node_modules/     # Installed dependencies
-│           ├── achillesAgentLib/
-│           ├── flexsearch/
-│           ├── mcp-sdk/
-│           └── node-pty/
+└── .ploinky/
+    └── agents/
+        └── <agent>/
+            ├── package.json      # Merged package.json (core + agent)
+            ├── package-lock.json
+            └── node_modules/     # Installed dependencies
+                ├── achillesAgentLib/
+                ├── flexsearch/
+                ├── mcp-sdk/
+                └── node-pty/
 
 Container View:
 /code/
 ├── main.mjs                  # Agent source (from .ploinky/repos/...)
 ├── package.json              # Agent's package.json
-└── node_modules/             # Mounted from $CWD/agents/<agent>/node_modules/
+└── node_modules/             # Mounted from $CWD/.ploinky/agents/<agent>/node_modules/
 ```
 
 ### Module Resolution Inside Containers
@@ -734,7 +735,7 @@ These are injected into every agent container:
 
 | Variable | Value | Purpose |
 |---|---|---|
-| `WORKSPACE_PATH` | `$CWD/agents/<agentName>/` | Agent working directory |
+| `WORKSPACE_PATH` | `$CWD/.ploinky/agents/<agentName>/` | Agent working directory |
 | `AGENT_NAME` | `<agentName>` | Agent identifier |
 | `NODE_PATH` | `/code/node_modules` | Module resolution for AgentServer.mjs |
 | `PLOINKY_MCP_CONFIG_PATH` | `/tmp/ploinky/mcp-config.json` | MCP configuration file path |

@@ -1,13 +1,12 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
-import path from 'path';
 import { normalizeLifecycleCommands } from './agentCommands.js';
 import { containerRuntime, waitForContainerRunning, isContainerRunning } from './common.js';
-import { WORKSPACE_ROOT } from '../config.js';
+import { SHARED_DIR } from '../config.js';
 
 
 function ensureSharedHostDir() {
-    const dir = path.resolve(WORKSPACE_ROOT, 'shared');
+    const dir = SHARED_DIR;
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
     return dir;
 }

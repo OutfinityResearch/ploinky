@@ -2,7 +2,7 @@
 
 ## Summary
 
-Ploinky provides structured JSON logging for the RoutingServer and Watchdog, CLI-accessible log commands for tailing and viewing logs, and memory/crash diagnostics. All log events are written to `logs/router.log` and `logs/watchdog.log` in JSON-lines format.
+Ploinky provides structured JSON logging for the RoutingServer and Watchdog, CLI-accessible log commands for tailing and viewing logs, and memory/crash diagnostics. All log events are written to `.ploinky/logs/router.log` and `.ploinky/logs/watchdog.log` in JSON-lines format.
 
 ## Background / Problem Statement
 
@@ -41,7 +41,7 @@ Operating a multi-container system requires visibility into:
 │          │                         │                        │
 │          ▼                         ▼                        │
 │  ┌─────────────────────────────────────────────────┐       │
-│  │              logs/ directory                      │       │
+│  │         .ploinky/logs/ directory                  │       │
 │  │  watchdog.log    router.log                       │       │
 │  └─────────────────────────────────────────────────┘       │
 │                         │                                   │
@@ -162,13 +162,13 @@ Operating a multi-container system requires visibility into:
 
 | Function | Description |
 |----------|-------------|
-| `appendLog(type, data)` | Append JSON log entry to `logs/router.log` |
+| `appendLog(type, data)` | Append JSON log entry to `.ploinky/logs/router.log` |
 | `logBootEvent(action, details)` | Log a boot/startup event (type: `boot_operation`) |
 | `logCrash(errorType, error, additionalData)` | Log crash with stack, memory, pid, uptime |
 | `logMemoryUsage()` | Log current memory usage snapshot |
 | `logShutdown(reason, exitCode, additionalData)` | Log shutdown with reason and exit code |
-| `LOG_DIR` | Resolved log directory path (`$CWD/logs`) |
-| `LOG_PATH` | Router log file path (`$CWD/logs/router.log`) |
+| `LOG_DIR` | Resolved log directory path (`$CWD/.ploinky/logs`) |
+| `LOG_PATH` | Router log file path (`$CWD/.ploinky/logs/router.log`) |
 
 ### Log Utilities (cli/services/logUtils.js)
 
@@ -184,9 +184,9 @@ Operating a multi-container system requires visibility into:
 
 ```
 appendLog(type, data):
-├─ Ensure logs/ directory exists (mkdir -p)
+├─ Ensure .ploinky/logs/ directory exists (mkdir -p)
 ├─ Build JSON record: { ts, level: 'debug', type, ...data }
-├─ appendFileSync to logs/router.log
+├─ appendFileSync to .ploinky/logs/router.log
 └─ On error: silently ignore (logging must never crash the server)
 ```
 
@@ -229,7 +229,7 @@ ploinky logs last [200] [router]
 
 ### Log Directory
 
-All logs are written to `$CWD/logs/` where `$CWD` is the workspace directory. The directory is created automatically on first write.
+All logs are written to `$CWD/.ploinky/logs/` where `$CWD` is the workspace directory. The directory is created automatically on first write.
 
 ### Log Types Reference
 

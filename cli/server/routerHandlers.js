@@ -5,9 +5,9 @@ import { randomUUID } from 'node:crypto';
 
 import { sendJson } from './authHandlers.js';
 import { createAgentClient } from './AgentClient.js';
+import { ROUTING_FILE } from '../services/config.js';
 
-const ROUTING_DIR = path.resolve('.ploinky');
-const ROUTING_FILE = path.join(ROUTING_DIR, 'routing.json');
+const ROUTING_DIR = path.dirname(ROUTING_FILE);
 
 const ROUTER_PROTOCOL_VERSION = '2025-06-18';
 const ROUTER_SERVER_INFO = { name: 'ploinky-router', version: '1.0.0' };

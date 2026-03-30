@@ -1,10 +1,8 @@
 import fs from 'fs';
-import path from 'path';
 
 import * as workspaceSvc from './workspace.js';
+import { ROUTING_FILE } from './config.js';
 import { resolveVarValue } from './secretVars.js';
-
-const ROUTING_FILE = path.resolve('.ploinky/routing.json');
 
 // Standard SSO environment variable naming conventions
 // Used by auth/config.js and CLI commands for consistent variable resolution

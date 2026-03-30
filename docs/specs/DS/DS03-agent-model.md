@@ -411,12 +411,12 @@ Lifecycle hooks allow agents to run scripts at specific points during startup. H
 
 ```
  1. Workspace Structure Init [HOST]
-    └─> Ensure: .ploinky/, agents/, code/, skills/
-    └─> Create: $CWD/agents/<agentName>/
+    └─> Ensure: .ploinky/, .ploinky/agents/, .ploinky/code/, .ploinky/skills/
+    └─> Create: $CWD/.ploinky/agents/<agentName>/
 
  2. Symbolic Links Creation [HOST]
-    └─> code symlink: $CWD/code/<agent> -> .ploinky/repos/.../code/
-    └─> skills symlink: $CWD/skills/<agent> -> .ploinky/repos/.../skills/
+    └─> code symlink: $CWD/.ploinky/code/<agent> -> .ploinky/repos/.../code/
+    └─> skills symlink: $CWD/.ploinky/skills/<agent> -> .ploinky/repos/.../skills/
 
  3. Container Creation
     └─> docker create with profile-specific mounts
@@ -551,17 +551,17 @@ const defaultMounts = [
     mode: 'rw'  // CWD passthrough for runtime data access
   },
   {
-    source: '$CWD/code/$AGENT',
+    source: '$CWD/.ploinky/code/$AGENT',
     target: '/code',
     mode: 'profile-dependent'  // rw in dev, ro in qa/prod
   },
   {
-    source: '$CWD/agents/$AGENT/node_modules',
+    source: '$CWD/.ploinky/agents/$AGENT/node_modules',
     target: '/code/node_modules',
     mode: 'ro'  // Always read-only
   },
   {
-    source: '$CWD/skills/$AGENT',
+    source: '$CWD/.ploinky/skills/$AGENT',
     target: '/code/skills',
     mode: 'profile-dependent'  // rw in dev, ro in qa/prod
   },
@@ -580,7 +580,7 @@ const defaultMounts = [
 | `PLOINKY_AGENT_NAME` | Current agent name |
 | `PLOINKY_REPO_NAME` | Repository name |
 | `PLOINKY_PROFILE` | Active profile |
-| `WORKSPACE_PATH` | Agent runtime data path (`$CWD/agents/<agent>/`) |
+| `WORKSPACE_PATH` | Agent runtime data path (`$CWD/.ploinky/agents/<agent>/`) |
 | `AGENT_PORT` | AgentServer HTTP port (default: 7000) |
 | `ROUTER_HOST` | Router hostname for inter-agent calls |
 

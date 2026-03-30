@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { ROUTING_FILE } from '../../services/config.js';
 function trimCommand(value) {
     if (!value) return '';
     const text = String(value).trim();
@@ -56,7 +57,7 @@ function resolveCliTarget(record = {}, fallbackName = '') {
 }
 
 function resolveWebchatCommands(options = {}) {
-    const routingFilePath = options.routingFilePath || path.resolve('.ploinky/routing.json');
+    const routingFilePath = options.routingFilePath || ROUTING_FILE;
     const { agentName: staticAgentName, hostPath, containerName, alias } = resolveStaticAgentDetails(routingFilePath);
 
     if (!staticAgentName || !hostPath) {
@@ -94,7 +95,7 @@ function resolveWebchatCommands(options = {}) {
 }
 
 function resolveWebchatCommandsForAgent(agentRef, options = {}) {
-    const routingFilePath = options.routingFilePath || path.resolve('.ploinky/routing.json');
+    const routingFilePath = options.routingFilePath || ROUTING_FILE;
     const routing = readRoutingConfig(routingFilePath);
     if (!routing) return null;
     const routes = routing.routes || {};

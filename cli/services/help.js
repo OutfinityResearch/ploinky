@@ -17,7 +17,7 @@ export function showHelp(args = []) {
 ▶ LOCAL DEVELOPMENT
   add repo <name> [url] [branch] Add repository (basic/cloud/vibe/security/extra/demo)
   update repo <name>             Pull latest changes from remote for a repository
-  start [staticAgent] [port]     Start agents from .ploinky/agents and launch Router
+  start [staticAgent] [port]     Start agents from .ploinky/agents.json and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
   webconsole [shell] [--rotate]  Prepare WebTTY (alias). Prints URL; --rotate mints new token.
@@ -189,7 +189,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         
         
         'shutdown': {
-            description: 'Stop and remove containers recorded in .ploinky/agents',
+            description: 'Stop and remove containers recorded in .ploinky/agents.json',
             syntax: 'shutdown',
             examples: ['shutdown'],
             notes: 'Removes containers for all enabled agents in this workspace.'
@@ -221,7 +221,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'agent': {
                     syntax: 'enable agent <name|repo/name> [global|devel [repoName]] [--auth none|pwd|sso] [--user <name> --password <value>] [as <alias>]',
-                    description: 'Register agent in .ploinky/agents (for start/stop/shutdown). Modes: isolated (omitted) creates a subfolder <agentName>; global uses current project; devel uses a repo under .ploinky/repos. Use "as <alias>" to create an additional instance with its own container name.',
+                    description: 'Register agent in .ploinky/agents.json (for start/stop/shutdown). Modes: isolated (omitted) creates a subfolder <agentName>; global uses current project; devel uses a repo under .ploinky/repos. Use "as <alias>" to create an additional instance with its own container name.',
                     examples: [
                         'enable agent demo',
                         'enable agent demo --auth pwd',
@@ -231,7 +231,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                         'enable agent demo devel simulator',
                         'enable agent demo as demo2'
                     ],
-                    notes: 'If --auth is omitted, no auth is applied unless the agent manifest declares a default auth mode. Pwd auth stores policy in .ploinky/agents and can also seed credentials via --user/--password or manifest defaults under `pwd.user` and `pwd.password`. Note: enable agent is optional. You can `enable repo` then `start <agent>`; it will use isolated mode (creates <agentName> subfolder). Aliases must be unique; commands like refresh/disable should target the alias when multiple containers exist.'
+                    notes: 'If --auth is omitted, no auth is applied unless the agent manifest declares a default auth mode. Pwd auth stores policy in .ploinky/agents.json and can also seed credentials via --user/--password or manifest defaults under `pwd.user` and `pwd.password`. Note: enable agent is optional. You can `enable repo` then `start <agent>`; it will use isolated mode (creates <agentName> subfolder). Aliases must be unique; commands like refresh/disable should target the alias when multiple containers exist.'
                 }
             }
         },
@@ -262,7 +262,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Show enabled agents and router configuration',
             syntax: 'status',
             examples: [ 'status' ],
-            notes: 'Reads .ploinky/agents and prints container, binds, ports, and static config.'
+            notes: 'Reads .ploinky/agents.json and prints container, binds, ports, and static config.'
         },
         'refresh': {
             description: 'Refresh an agent by re-creating its container.',
@@ -306,7 +306,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 },
                 'agent': {
                     syntax: 'disable <agentName>',
-                    description: 'Remove an enabled agent from .ploinky/agents (container must be destroyed first)',
+                    description: 'Remove an enabled agent from .ploinky/agents.json (container must be destroyed first)',
                     examples: [ 'disable demo', 'disable agent repoName/demo' ]
                 }
             }
@@ -440,7 +440,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'cloud destroy <agents|server-agents>',
                     description: 'Stop and remove agent containers',
                     examples: [
-                        'cloud destroy agents            # Local .ploinky/agents',
+                        'cloud destroy agents            # Local .ploinky/agents.json',
                         'cloud destroy server-agents     # On connected server'
                     ]
                 },

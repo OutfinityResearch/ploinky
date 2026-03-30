@@ -3,10 +3,11 @@ import path from 'path';
 import crypto from 'crypto';
 
 import { loadAgents } from '../../services/workspace.js';
+import { SHARED_DIR } from '../../services/config.js';
 import { getWorkspaceRoot, resolveWorkspacePath } from '../utils/workspacePaths.js';
 
 function ensureSharedHostDir() {
-    const dir = path.resolve(process.cwd(), 'shared');
+    const dir = SHARED_DIR;
     try { fs.mkdirSync(dir, { recursive: true }); } catch (_) {}
     return dir;
 }

@@ -476,11 +476,11 @@ function runNpmInstallInContainer(containerName, workDir, log = debugLog) {
 
 /**
  * Install dependencies inside a running container.
- * Uses CWD mount to write directly to host filesystem at $CWD/agents/<agent>/.
+ * Uses CWD mount to write directly to host filesystem at $CWD/.ploinky/agents/<agent>/.
  *
  * This follows the spec:
- * 1. Copy core package.json (4 global deps) to $CWD/agents/<agent>/package.json
- * 2. Run npm install in $CWD/agents/<agent>/
+ * 1. Copy core package.json (4 global deps) to $CWD/.ploinky/agents/<agent>/package.json
+ * 2. Run npm install in $CWD/.ploinky/agents/<agent>/
  * 3. If agent has package.json in /code, merge and run npm install again
  *
  * @param {string} containerName - The container name
@@ -492,7 +492,7 @@ function installDependencies(containerName, agentName, options = {}) {
     const { force = false, verbose = false } = options;
     const log = verbose ? console.log : debugLog;
 
-    const agentWorkDir = getAgentWorkDir(agentName);  // $CWD/agents/<agent>/
+    const agentWorkDir = getAgentWorkDir(agentName);  // $CWD/.ploinky/agents/<agent>/
     const nodeModulesPath = path.join(agentWorkDir, 'node_modules');
     const mcpSdkPath = path.join(nodeModulesPath, 'mcp-sdk');
     const hasCoreModules = fs.existsSync(mcpSdkPath);
@@ -1035,7 +1035,7 @@ function installDependenciesInContainer(agentName, containerImage, options = {})
 /**
  * Prepare the merged package.json on the host filesystem.
  * Reads globalDeps/package.json, merges with the agent's own package.json
- * (if present), and writes the result to $CWD/agents/<agent>/package.json.
+ * (if present), and writes the result to $CWD/.ploinky/agents/<agent>/package.json.
  *
  * This runs on the HOST before the container starts so the file is ready
  * when the entrypoint's npm install picks it up via the CWD mount.

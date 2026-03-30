@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 
 import * as staticSrv from '../static/index.js';
+import { ROUTING_FILE } from '../../services/config.js';
 import { getAllServerStatuses } from '../../services/serverManager.js';
 import { loadAgents } from '../../services/workspace.js';
 
@@ -76,7 +77,7 @@ function collectWorkspaceAgents() {
 
 function collectStaticInfo() {
     try {
-        const routing = JSON.parse(fs.readFileSync(path.resolve('.ploinky/routing.json'), 'utf8')) || {};
+        const routing = JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')) || {};
         let repo = null;
         if (routing?.static?.hostPath) {
             // Extract repo name from path like /path/to/.ploinky/repos/repoName/agentName

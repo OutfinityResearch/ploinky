@@ -3,9 +3,8 @@ import path from 'path';
 import net from 'net';
 import crypto from 'crypto';
 import { setEnvVar } from './secretVars.js';
+import { RUNNING_DIR, SERVERS_CONFIG_FILE } from './config.js';
 import { appendLog } from '../server/utils/logger.js';
-
-const SERVERS_CONFIG_FILE = path.resolve('.ploinky/servers.json');
 
 function getRandomPort(min = 10000, max = 60000) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -114,7 +113,7 @@ export function updateServerConfig(serverName, updates) {
 
 export function isServerRunning(pidFile) {
     try {
-        const pidPath = path.resolve('.ploinky/running', pidFile);
+        const pidPath = path.join(RUNNING_DIR, pidFile);
         if (fs.existsSync(pidPath)) {
             const pid = parseInt(fs.readFileSync(pidPath, 'utf8').trim(), 10);
             if (pid && !Number.isNaN(pid)) {
@@ -132,7 +131,7 @@ export function isServerRunning(pidFile) {
 
 export function stopServer(pidFile, serverName) {
     try {
-        const pidPath = path.resolve('.ploinky/running', pidFile);
+        const pidPath = path.join(RUNNING_DIR, pidFile);
         if (fs.existsSync(pidPath)) {
             const pid = parseInt(fs.readFileSync(pidPath, 'utf8').trim(), 10);
             if (pid && !Number.isNaN(pid)) {

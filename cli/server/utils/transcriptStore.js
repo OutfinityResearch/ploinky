@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 
 import { resolveVarValue, setEnvVar } from '../../services/secretVars.js';
+import { TRANSCRIPTS_DIR } from '../../services/config.js';
 import {
     createWrappedDek,
     decryptMessagePayload,
@@ -11,7 +12,7 @@ import {
     unwrapDek,
 } from './transcriptCrypto.js';
 
-const TRANSCRIPT_DIR = path.resolve('.ploinky/transcripts');
+const TRANSCRIPT_DIR = TRANSCRIPTS_DIR;
 const MASTER_KEY_VAR = 'PLOINKY_TRANSCRIPTS_MASTER_KEY';
 const RETENTION_DAYS_VAR = 'PLOINKY_TRANSCRIPT_RETENTION_DAYS';
 const DEFAULT_RETENTION_DAYS = 30;

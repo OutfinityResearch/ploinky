@@ -5,6 +5,7 @@ import { appendLog } from './utils/logger.js';
 import { parseCookies, buildCookie, readJsonBody, appendSetCookie } from './handlers/common.js';
 import { resolveVarValue } from '../services/secretVars.js';
 import { resolveEnabledAgentRecord } from '../services/agents.js';
+import { ROUTING_FILE } from '../services/config.js';
 import { createAuthService } from './auth/service.js';
 import { decodeJwt, verifySignature, validateClaims } from './auth/jwt.js';
 import { createJwksCache } from './auth/jwksCache.js';
@@ -15,7 +16,6 @@ import { waitForAgentReady } from './utils/agentReadiness.js';
 
 const SSO_AUTH_COOKIE_NAME = 'ploinky_sso';
 const LOCAL_AUTH_COOKIE_NAME = 'ploinky_local';
-const ROUTING_FILE = path.resolve('.ploinky/routing.json');
 const authService = createAuthService();
 const jwksCache = createJwksCache();
 const agentMetadataCache = createMetadataCache();

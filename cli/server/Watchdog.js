@@ -6,6 +6,7 @@ import http from 'http';
 
 import { createContainerMonitor, startContainerMonitor, stopContainerMonitor, clearContainerTargets } from './containerMonitor.js';
 import { appendLog } from './utils/logger.js';
+import { LOGS_DIR } from '../services/config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,8 +14,8 @@ const __dirname = path.dirname(__filename);
 // Configuration
 const CONFIG = {
     SERVER_SCRIPT: path.join(__dirname, 'RoutingServer.js'),
-    LOG_DIR: path.resolve(process.cwd(), 'logs'),
-    PROCESS_LOG: path.join(path.resolve(process.cwd(), 'logs'), 'watchdog.log'),
+    LOG_DIR: LOGS_DIR,
+    PROCESS_LOG: path.join(LOGS_DIR, 'watchdog.log'),
     
     // Restart configuration
     MAX_RESTARTS_IN_WINDOW: 5,        // Max restarts allowed in time window

@@ -72,8 +72,8 @@ Long-running services need resilience:
 ```javascript
 const CONFIG = {
   SERVER_SCRIPT: 'cli/server/RoutingServer.js',
-  LOG_DIR: '$CWD/logs',
-  PROCESS_LOG: '$CWD/logs/watchdog.log',
+  LOG_DIR: '$CWD/.ploinky/logs',
+  PROCESS_LOG: '$CWD/.ploinky/logs/watchdog.log',
 
   // Restart limits
   MAX_RESTARTS_IN_WINDOW: 5,     // Max restarts in time window
@@ -339,8 +339,8 @@ Signal received (SIGINT, SIGTERM, SIGQUIT):
 
 | File | Writer | Format |
 |------|--------|--------|
-| `logs/watchdog.log` | Watchdog | JSON-lines |
-| `logs/router.log` | RoutingServer (via logger.js) | JSON-lines |
+| `.ploinky/logs/watchdog.log` | Watchdog | JSON-lines |
+| `.ploinky/logs/router.log` | RoutingServer (via logger.js) | JSON-lines |
 
 ### Probe Backoff Constants
 

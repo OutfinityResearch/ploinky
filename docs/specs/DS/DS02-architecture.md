@@ -238,7 +238,7 @@ interface MCPResponse {
 
 2. CLI parses command, validates arguments
 
-3. Workspace service loads .ploinky/agents registry
+3. Workspace service loads .ploinky/agents.json registry
 
 4. For each enabled agent:
    a. Load manifest.json
@@ -316,7 +316,18 @@ The workspace is any directory containing a `.ploinky/` subdirectory. Ploinky di
 <workspace-root>/
 │
 ├── .ploinky/                        # Ploinky metadata (hidden)
-│   ├── agents                       # JSON file: registered agent records
+│   ├── agents.json                  # JSON file: registered agent records
+│   ├── agents/                      # Working directories (one per agent)
+│   │   └── <agentName>/
+│   │       ├── node_modules/        # Installed npm dependencies
+│   │       ├── package.json         # Merged package.json (global + agent)
+│   │       └── package-lock.json    # Lock file from npm install
+│   ├── code/                        # Symlinks to agent source code
+│   │   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/code/
+│   ├── skills/                      # Symlinks to agent skills
+│   │   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/skills/
+│   ├── logs/                        # Router/watchdog logs
+│   ├── shared/                      # Shared directory accessible to all agents
 │   ├── enabled_repos.json           # JSON file: enabled repository list
 │   ├── routing.json                 # JSON file: container routing table
 │   ├── running/                     # Running container state
@@ -330,20 +341,6 @@ The workspace is any directory containing a `.ploinky/` subdirectory. Ploinky di
 │               ├── code/            # Agent source code (optional subdirectory)
 │               ├── skills/ # Agent skills (optional)
 │               └── package.json     # Agent-specific dependencies (optional)
-│
-├── agents/                          # Working directories (one per agent)
-│   └── <agentName>/
-│       ├── node_modules/            # Installed npm dependencies
-│       ├── package.json             # Merged package.json (global + agent)
-│       └── package-lock.json        # Lock file from npm install
-│
-├── code/                            # Symlinks to agent source code
-│   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/code/
-│
-├── skills/                          # Symlinks to agent skills
-│   └── <agentName> --> .ploinky/repos/<repoName>/<agentName>/skills/
-│
-└── shared/                          # Shared directory accessible to all agents
 ```
 
 **Key source files:**
@@ -357,22 +354,24 @@ The workspace is any directory containing a `.ploinky/` subdirectory. Ploinky di
 | `WORKSPACE_ROOT` | First ancestor directory containing `.ploinky/` |
 | `PLOINKY_DIR` | `<WORKSPACE_ROOT>/.ploinky` |
 | `REPOS_DIR` | `<WORKSPACE_ROOT>/.ploinky/repos` |
-| `AGENTS_FILE` | `<WORKSPACE_ROOT>/.ploinky/agents` |
+| `AGENTS_FILE` | `<WORKSPACE_ROOT>/.ploinky/agents.json` |
 | `SECRETS_FILE` | `<WORKSPACE_ROOT>/.ploinky/.secrets` |
-| `AGENTS_WORK_DIR` | `<WORKSPACE_ROOT>/agents` |
-| `CODE_DIR` | `<WORKSPACE_ROOT>/code` |
-| `SKILLS_DIR` | `<WORKSPACE_ROOT>/skills` |
+| `AGENTS_WORK_DIR` | `<WORKSPACE_ROOT>/.ploinky/agents` |
+| `CODE_DIR` | `<WORKSPACE_ROOT>/.ploinky/code` |
+| `SKILLS_DIR` | `<WORKSPACE_ROOT>/.ploinky/skills` |
+| `LOGS_DIR` | `<WORKSPACE_ROOT>/.ploinky/logs` |
+| `SHARED_DIR` | `<WORKSPACE_ROOT>/.ploinky/shared` |
 | `GLOBAL_DEPS_PATH` | `<ploinky-install>/globalDeps` |
 | `TEMPLATES_DIR` | `<ploinky-install>/templates` |
 
 ### Symlinks
 
-Symlinks provide convenient top-level access to agent code and skills that live deep inside `.ploinky/repos/`.
+Symlinks provide convenient workspace access to agent code and skills that live deep inside `.ploinky/repos/`.
 
 | Symlink | Target | Condition |
 |---|---|---|
-| `$CWD/code/<agentName>` | `.ploinky/repos/<repo>/<agent>/code/` | Always (falls back to agent root if no `code/` subdirectory) |
-| `$CWD/skills/<agentName>` | `.ploinky/repos/<repo>/<agent>/skills/` | Only if `skills/` exists |
+| `$CWD/.ploinky/code/<agentName>` | `.ploinky/repos/<repo>/<agent>/code/` | Always (falls back to agent root if no `code/` subdirectory) |
+| `$CWD/.ploinky/skills/<agentName>` | `.ploinky/repos/<repo>/<agent>/skills/` | Only if `skills/` exists |
 
 **Creation logic** (`workspaceStructure.js:createAgentSymlinks()`):
 
@@ -410,7 +409,7 @@ const mod = await import(`${pathToFileURL(llmPath).href}?v=${version}`);
 
 **Inside containers (AgentServer.mjs at `/Agent/server/`):** Node.js would walk up to `/Agent/node_modules/` which is empty by default. Two mechanisms fix this:
 
-1. **Dual mount** — `$CWD/agents/<agent>/node_modules/` is mounted at both `/code/node_modules` and `/Agent/node_modules`
+1. **Dual mount** — `$CWD/.ploinky/agents/<agent>/node_modules/` is mounted at both `/code/node_modules` and `/Agent/node_modules`
 2. **NODE_PATH** — Set to `/code/node_modules` as a container environment variable
 
 ```javascript

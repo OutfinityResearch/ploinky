@@ -70,9 +70,9 @@ TEST_RUN_DIR="/tmp/ploinky-test-abc123"
 TEST_AGENT_CONT_NAME="ploinky_basic_testAgent_a1b2c3"
 TEST_ROUTER_PORT="12345"
 TEST_AGENT_HOST_PORT="12346"
-TEST_PERSIST_MARKER="/tmp/ploinky-test-abc123/agents/testAgent/persist-marker"
-TEST_PERSIST_FILE="/tmp/ploinky-test-abc123/agents/testAgent/data.json"
-TEST_ROUTER_LOG="/tmp/ploinky-test-abc123/logs/router.log"
+TEST_PERSIST_MARKER="/tmp/ploinky-test-abc123/.ploinky/agents/testAgent/persist-marker"
+TEST_PERSIST_FILE="/tmp/ploinky-test-abc123/.ploinky/agents/testAgent/data.json"
+TEST_ROUTER_LOG="/tmp/ploinky-test-abc123/.ploinky/logs/router.log"
 TEST_REPO_NAME="basic"
 ```
 

@@ -12,6 +12,7 @@ import { applyManifestDirectives } from './bootstrapManifest.js';
 import { executeHostHook, isInlineCommand } from './lifecycleHooks.js';
 import { getActiveProfile, getProfileConfig, getProfileEnvVars } from './profileService.js';
 import { getSecrets, createEnvWithSecrets } from './secretInjector.js';
+import { LOGS_DIR, ROUTING_FILE, RUNNING_DIR } from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -294,7 +295,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
       // Dependencies first, then static agent
       return [...dependencies, ...staticAgents];
     };
-    const routingFile = path.resolve('.ploinky/routing.json');
+    const routingFile = ROUTING_FILE;
     let cfg = { routes: {} };
     try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch (_) {}
     cfg.routes = cfg.routes || {};
@@ -330,7 +331,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     if (typeof killRouterIfRunning === 'function') {
       try { killRouterIfRunning(); } catch (_) {}
     }
-    const runningDir = path.resolve('.ploinky/running');
+    const runningDir = RUNNING_DIR;
     fs.mkdirSync(runningDir, { recursive: true });
     const routerPath = path.resolve(__dirname, '../server/Watchdog.js');
     const updateRoutes = async () => {
@@ -381,8 +382,8 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     child.unref();
     console.log(`[start] Watchdog launched in background (pid ${child.pid}).`);
     console.log(`[start] Watchdog will automatically restart the server if it crashes.`);
-    console.log(`[start] Server logs: ${path.resolve('logs/router.log')}`);
-    console.log(`[start] Watchdog logs: ${path.resolve('logs/watchdog.log')}`);
+    console.log(`[start] Server logs: ${path.join(LOGS_DIR, 'router.log')}`);
+    console.log(`[start] Watchdog logs: ${path.join(LOGS_DIR, 'watchdog.log')}`);
     console.log(`[start] Dashboard: http://127.0.0.1:${staticPort}/dashboard`);
   } catch (e) {
     console.error('start (workspace) failed:', e.message);
@@ -561,7 +562,7 @@ async function refreshAgent(agentName) {
 
         // Routing update logic from original restart command
         try {
-            const routingFile = path.resolve('.ploinky/routing.json');
+            const routingFile = ROUTING_FILE;
             let cfg = { routes: {} };
             try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch(_) {}
             cfg.routes = cfg.routes || {};
@@ -614,7 +615,7 @@ async function refreshAgent(agentName) {
                 } catch(_) { return false; }
             };
             if (!isRouterUp(cfg.port)) {
-                const runningDir = path.resolve('.ploinky/running');
+                const runningDir = RUNNING_DIR;
                 fs.mkdirSync(runningDir, { recursive: true });
                 const routerPath = path.resolve(__dirname, '../server/Watchdog.js');
                 const routerPidFile = path.join(runningDir, 'router.pid');

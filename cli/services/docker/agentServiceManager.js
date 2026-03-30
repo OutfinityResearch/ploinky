@@ -30,7 +30,7 @@ import {
 import { clearLivenessState } from './healthProbes.js';
 import { stopAndRemove } from './containerFleet.js';
 import { DEFAULT_AGENT_ENTRY, launchAgentSidecar, readManifestAgentCommand, readManifestStartCommand, splitCommandArgs } from './agentCommands.js';
-import { WORKSPACE_ROOT, DPU_DATA_ROOT } from '../config.js';
+import { ROUTING_FILE, WORKSPACE_ROOT, DPU_DATA_ROOT } from '../config.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
@@ -342,7 +342,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     let routerPort = '8080';
     try {
-        const routingFile = path.resolve('.ploinky/routing.json');
+        const routingFile = ROUTING_FILE;
         if (fs.existsSync(routingFile)) {
             const routing = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {};
             if (routing.port) {

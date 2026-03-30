@@ -192,7 +192,7 @@ resolve_agent_name_from_container() {
   local container_name="$1"
   load_state
   require_var "TEST_RUN_DIR" || return 1
-  local registry="$TEST_RUN_DIR/.ploinky/agents"
+  local registry="$TEST_RUN_DIR/.ploinky/agents.json"
   if [[ ! -f "$registry" ]]; then
     return 1
   fi
@@ -209,7 +209,7 @@ resolve_agent_runtime_from_container() {
   local container_name="$1"
   load_state
   require_var "TEST_RUN_DIR" || return 1
-  local registry="$TEST_RUN_DIR/.ploinky/agents"
+  local registry="$TEST_RUN_DIR/.ploinky/agents.json"
   if [[ ! -f "$registry" ]]; then
     echo "container"
     return 0
@@ -262,7 +262,7 @@ function sanitize(value) {
 
 try {
   if (!repo) {
-    const mapPath = path.join(cwd, '.ploinky', 'agents');
+    const mapPath = path.join(cwd, '.ploinky', 'agents.json');
     const raw = fs.readFileSync(mapPath, 'utf8');
     const data = JSON.parse(raw || '{}');
     if (data && typeof data === 'object') {
@@ -413,7 +413,7 @@ assert_container_exists() {
     # For bwrap agents, the registry entry survives ploinky stop (removed only by destroy)
     load_state
     require_var "TEST_RUN_DIR" || return 1
-    local registry="$TEST_RUN_DIR/.ploinky/agents"
+    local registry="$TEST_RUN_DIR/.ploinky/agents.json"
     if [[ ! -f "$registry" ]]; then
       echo "Agents registry missing." >&2
       return 1
@@ -843,7 +843,7 @@ assert_agent_registered() {
   require_var "TEST_RUN_DIR" || return 1
   require_var "TEST_AGENT_NAME" || return 1
   require_var "TEST_REPO_NAME" || return 1
-  local registry="$TEST_RUN_DIR/.ploinky/agents"
+  local registry="$TEST_RUN_DIR/.ploinky/agents.json"
   if [[ ! -f "$registry" ]]; then
     echo "Agents registry '${registry}' missing." >&2
     return 1

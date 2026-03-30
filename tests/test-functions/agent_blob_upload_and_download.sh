@@ -138,7 +138,7 @@ fast_check_shared_blob_upload() {
   require_var "TEST_RUN_DIR"
   require_var "TEST_ROUTER_PORT"
 
-  local shared_dir="$TEST_RUN_DIR/shared"
+  local shared_dir="$TEST_RUN_DIR/.ploinky/shared"
   local upload_file
   if ! upload_file=$(mktemp -p "$TEST_RUN_DIR" fast-shared-upload.XXXXXX.bin); then
     echo "Failed to allocate temporary upload file for shared blobs." >&2

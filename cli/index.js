@@ -5,7 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initEnvironment, setDebugMode } from './services/config.js';
+import { HISTORY_FILE, initEnvironment, setDebugMode } from './services/config.js';
 import { handleCommand, getAgentNames, getRepoNames, cleanupSessionContainers as cleanupCliSessions } from './commands/cli.js';
 import { getCommandRegistry } from './services/commandRegistry.js';
 import { showHelp } from './services/help.js';
@@ -268,8 +268,8 @@ function startInteractiveMode() {
             try { process.stdout.write('\x1b[?25h\x1b[0m'); } catch(_) {}
         } catch(_) {}
     };
-    // Use .ploinky_history in the current directory
-    const historyPath = path.join(process.cwd(), '.ploinky_history');
+    // Keep CLI history under workspace .ploinky/
+    const historyPath = HISTORY_FILE;
     let history = [];
     try {
         if (fs.existsSync(historyPath)) {

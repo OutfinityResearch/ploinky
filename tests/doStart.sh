@@ -14,12 +14,12 @@ require_var "TEST_PERSIST_MARKER"
 
 cd "$TEST_RUN_DIR"
 
-mkdir -p "$TEST_RUN_DIR/logs"
-start_log="$TEST_RUN_DIR/logs/start-demo.log"
+mkdir -p "$TEST_RUN_DIR/.ploinky/logs"
+start_log="$TEST_RUN_DIR/.ploinky/logs/start-demo.log"
 : >"$start_log"
 write_state_var "TEST_START_LOG" "$start_log"
 
-test_agent_start_log="$TEST_RUN_DIR/logs/testAgent_start_log"
+test_agent_start_log="$TEST_RUN_DIR/.ploinky/logs/testAgent_start_log"
 : >"$test_agent_start_log"
 write_state_var "TEST_AGENT_START_LOG" "$test_agent_start_log"
 
@@ -74,7 +74,7 @@ fi
 
 write_state_var "TEST_AGENT_HOST_PORT" "$agent_host_port"
 write_state_var "TEST_AGENT_HEALTH_URL" "http://127.0.0.1:${agent_host_port}/health"
-write_state_var "TEST_ROUTER_LOG" "$TEST_RUN_DIR/logs/router.log"
+write_state_var "TEST_ROUTER_LOG" "$TEST_RUN_DIR/.ploinky/logs/router.log"
 test_info "Agent host port resolved to ${agent_host_port}."
 
 persist_marker="$TEST_PERSIST_MARKER"
@@ -95,9 +95,9 @@ if ! wait_for_router; then
   test_info "Router failed to respond. start-demo.log contents:"
   cat "$start_log" >&2
   test_info "Watchdog log contents:"
-  cat "$TEST_RUN_DIR/logs/watchdog.log" >&2 2>/dev/null || true
+  cat "$TEST_RUN_DIR/.ploinky/logs/watchdog.log" >&2 2>/dev/null || true
   test_info "Router log contents:"
-  cat "$TEST_RUN_DIR/logs/router.log" >&2 2>/dev/null || true
+  cat "$TEST_RUN_DIR/.ploinky/logs/router.log" >&2 2>/dev/null || true
   test_info "Running containers:"
   docker ps -a 2>/dev/null || podman ps -a 2>/dev/null || true
   exit 1
