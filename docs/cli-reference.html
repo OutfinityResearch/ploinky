@@ -141,16 +141,17 @@ enable agent demo global             # run in current directory
 enable agent demo devel simulator    # run inside .ploinky/repos/simulator
 enable agent demo as demo2           # second container with alias "demo2"</code></pre>
                         <div class="alert alert-info">
-                            <strong>Note:</strong> Using <code>enable agent</code> is optional. You can <code>enable repo</code> then <code>start &lt;agent&gt;</code> directly; the agent will use the isolated mode and a subfolder <code>&lt;agentName&gt;</code> will be created. When supplying an alias, it becomes the container name for refresh/disable/start operations and must be unique; reusing an alias returns <code>alias already exists</code>.
+                            <strong>Note:</strong> Using <code>enable agent</code> is optional. You can <code>enable repo</code> then <code>start &lt;agent&gt;</code> directly; the agent will use the isolated mode and a subfolder <code>&lt;agentName&gt;</code> will be created. When supplying an alias, it becomes the container name for reinstall/disable/start operations and must be unique; reusing an alias returns <code>alias already exists</code>.
                         </div>
 
                         
 
-                        <h3>refresh agent</h3>
+                        <h3>reinstall</h3>
                         <p>Stops, removes, and re-creates the agent's container. This is a destructive operation that ensures the agent starts from a clean state. This command only has an effect if the agent's container is currently running.</p>
-                        <pre><code>refresh agent &lt;name&gt;
+                        <pre><code>reinstall &lt;name&gt;
+reinstall agent &lt;name&gt;
 # Example
-refresh agent demo  # stop, remove, and re-create the container for the 'demo' agent</code></pre>
+reinstall demo  # stop, remove, and re-create the container for the 'demo' agent</code></pre>
 
                         <h3>list agents</h3>
                         <p>List all available agents from enabled repositories.</p>

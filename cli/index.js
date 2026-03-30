@@ -30,7 +30,7 @@ function completer(line) {
 
         // Determine the context for completion
         if (line.endsWith(' ')) {
-            if (words.length === 1 && subcommands.length > 0) {
+            if (words.length === 1 && subcommands.length > 0 && command !== 'reinstall') {
                 context = 'subcommands';
             } else if (command === 'help' && words.length === 1) {
                 // For help command, show all available commands
@@ -54,6 +54,8 @@ function completer(line) {
             } else if (command === 'list' && words.length === 2) {
                 // After list agents/repos, don't show anything
                 context = 'none';
+            } else if (command === 'reinstall' && words.length === 1) {
+                context = 'args';
             } else if ((command === 'start') && words.length === 2) {
                 context = 'subcommands';
             } else if (words.length === 2) {
@@ -71,11 +73,13 @@ function completer(line) {
         } else {
             if (words.length === 1) context = 'commands';
             else if (words.length === 2 && subcommands.length > 0) {
-                if (command === 'disable' && !subcommands.includes(words[1])) {
+                if ((command === 'disable' || command === 'reinstall') && !subcommands.includes(words[1])) {
                     context = 'args';
                 } else {
                     context = 'subcommands';
                 }
+            } else if (command === 'reinstall' && words.length === 2) {
+                context = 'args';
             }
             else if (command === 'help' && words.length === 2) {
                 // Completing help topics
@@ -107,6 +111,9 @@ function completer(line) {
             if (command === 'disable') {
                 completions = [...new Set([...subcommands, ...getAgentNames()])];
             }
+            if (command === 'reinstall') {
+                completions = [...new Set([...subcommands, ...getAgentNames()])];
+            }
         } else if (context === 'help-topics') {
             // For help command, suggest all available commands
             completions = Object.keys(COMMANDS).filter(cmd => cmd !== 'help' && cmd !== 'exit' && cmd !== 'quit' && cmd !== 'clear');
@@ -125,7 +132,7 @@ function completer(line) {
             if ((command === 'shell') ||
                 (command === 'cli') ||
                 (command === 'update' && subcommand === 'agent') ||
-                (command === 'refresh' && subcommand === 'agent') ||
+                (command === 'reinstall' && (subcommand === 'agent' || words.length <= 2)) ||
                 (command === 'enable' && subcommand === 'agent') ||
                 (command === 'client' && ['methods', 'status', 'task', 'task-status'].includes(subcommand))) {
                 completions = getAgentNames();

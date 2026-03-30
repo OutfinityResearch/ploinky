@@ -590,7 +590,7 @@ const defaultMounts = [
 
 | Error | Cause | Recovery |
 |-------|-------|----------|
-| `MANIFEST_NOT_FOUND` | Missing manifest.json | Check repo path, refresh repo |
+| `MANIFEST_NOT_FOUND` | Missing manifest.json | Check repo path, update repo |
 | `CONTAINER_CREATE_FAILED` | Docker error during create | Check image, disk space |
 | `CONTAINER_START_FAILED` | Container exits immediately | Check logs, fix entrypoint |
 | `HEALTH_CHECK_TIMEOUT` | Agent not responding | Check port binding, agent code |

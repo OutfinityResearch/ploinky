@@ -583,7 +583,7 @@ app.get('/mcp/status', (req, res) => {
     }
   }
 }</code></pre>
-                        <p>Scripts must live in the agent root (mounted as <code>/code</code>) and simply return exit code 0 for success. <code>interval</code> controls how often the probe runs (seconds), <code>timeout</code> caps each execution, and the success/failure thresholds set how many consecutive results are required before the CLI reports a pass or restart-worthy failure. Missing probes are treated as healthy by default; repeated liveness failures trigger automatic container restarts that follow a CrashLoopBackOff curve (base 10s delay, doubling up to five minutes, reset after 10 minutes of stable uptime or any manual stop/restart/refresh), while readiness failures currently emit a warning (<code>Container failed to become ready</code>) without killing the process.</p>
+                        <p>Scripts must live in the agent root (mounted as <code>/code</code>) and simply return exit code 0 for success. <code>interval</code> controls how often the probe runs (seconds), <code>timeout</code> caps each execution, and the success/failure thresholds set how many consecutive results are required before the CLI reports a pass or restart-worthy failure. Missing probes are treated as healthy by default; repeated liveness failures trigger automatic container restarts that follow a CrashLoopBackOff curve (base 10s delay, doubling up to five minutes, reset after 10 minutes of stable uptime or any manual stop/restart/reinstall), while readiness failures currently emit a warning (<code>Container failed to become ready</code>) without killing the process.</p>
                     </div>
 
                     <div class="doc-section">
@@ -600,7 +600,7 @@ app.get('/mcp/status', (req, res) => {
                             <li><code>"agentName devel repoName"</code>: Enables an agent from the specified repository (<code>repoName</code>) in development mode.</li>
                             <li><code>"agentName ... as alias"</code>: Adds an alias so the resulting container is recorded under <code>alias</code> (required when the same agent is enabled more than once).</li>
                         </ul>
-                        <p>Aliases behave exactly like CLI-provided aliases: they must be unique per workspace, become the canonical container names for future commands (<code>refresh agent</code>, <code>disable agent</code>, etc.), and trigger an <code>alias already exists</code> error if reused.</p>
+                        <p>Aliases behave exactly like CLI-provided aliases: they must be unique per workspace, become the canonical container names for future commands (<code>reinstall</code>, <code>disable agent</code>, etc.), and trigger an <code>alias already exists</code> error if reused.</p>
 
                         <pre><code># manifest.json
 {

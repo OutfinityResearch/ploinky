@@ -541,7 +541,7 @@ Behavior:
 |---------|-------------|
 | `enable agent <name> [mode] [as alias]` | Enable an agent |
 | `disable agent <name>` | Disable an agent |
-| `refresh agent <name>` | Rebuild and restart agent container |
+| `reinstall <name>` or `reinstall agent <name>` | Rebuild and restart agent container |
 | `list agents` | List all enabled agents |
 
 **Agent Modes:**

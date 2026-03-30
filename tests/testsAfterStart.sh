@@ -131,7 +131,7 @@ stage_header "CLI Variable Commands"
 test_check "var sets ${FAST_VAR_TEST_NAME}" fast_cli_set_var
 test_check "vars lists ${FAST_VAR_TEST_NAME}" fast_cli_vars_contains
 test_check "echo returns ${FAST_VAR_TEST_NAME}" fast_cli_echo_var_matches
-test_check "expose applies to ${FAST_VAR_TEST_NAME}" fast_cli_expose_and_refresh
+test_check "expose applies to ${FAST_VAR_TEST_NAME}" fast_cli_expose_and_reinstall
 test_check "Agent sees exposed ${FAST_VAR_TEST_NAME} via shell" fast_cli_verify_var_in_shell
 
 stage_header "WebChat Command"

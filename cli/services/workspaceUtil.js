@@ -495,8 +495,8 @@ async function runShell(agentName) {
   }
 }
 
-async function refreshAgent(agentName) {
-    if (!agentName) { throw new Error('Usage: refresh agent <name>'); }
+async function reinstallAgent(agentName) {
+    if (!agentName) { throw new Error('Usage: reinstall <name> | reinstall agent <name>'); }
 
     const { getAgentContainerName, isContainerRunning, stopAndRemove, ensureAgentService } = dockerSvc;
     let registryRecord = null;
@@ -537,7 +537,7 @@ async function refreshAgent(agentName) {
         return;
     }
 
-    console.log(`Refreshing (re-creating) agent '${agentName}'...`);
+    console.log(`Reinstalling (re-creating) agent '${agentName}'...`);
 
     try {
         const short = resolved.shortAgentName;
@@ -558,7 +558,7 @@ async function refreshAgent(agentName) {
         if (!hostPort) {
             throw new Error(`Failed to resolve host port for restarted agent '${short}'.`);
         }
-        console.log(`[refresh] refreshed '${short}' [container: ${newContainerName}]`);
+        console.log(`[reinstall] reinstalled '${short}' [container: ${newContainerName}]`);
 
         // Routing update logic from original restart command
         try {
@@ -626,14 +626,14 @@ async function refreshAgent(agentName) {
                 });
                 try { fs.writeFileSync(routerPidFile, String(child.pid)); } catch(_) {}
                 child.unref();
-                console.log(`[refresh] Watchdog launched (pid ${child.pid}) on port ${cfg.port}.`);
-                console.log(`[refresh] Watchdog will automatically restart the server if needed.`);
+                console.log(`[reinstall] Watchdog launched (pid ${child.pid}) on port ${cfg.port}.`);
+                console.log(`[reinstall] Watchdog will automatically restart the server if needed.`);
             }
         } catch (e) {
-            console.error('[refresh] routing update/router start failed:', e?.message||e);
+            console.error('[reinstall] routing update/router start failed:', e?.message||e);
         }
     } catch (e) {
-        console.error(`[refresh] ${agentName}: ${e?.message||e}`);
+        console.error(`[reinstall] ${agentName}: ${e?.message||e}`);
     }
 }
 
@@ -641,5 +641,5 @@ export {
   startWorkspace,
   runCli,
   runShell,
-  refreshAgent
+  reinstallAgent
 };

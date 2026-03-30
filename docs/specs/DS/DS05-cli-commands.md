@@ -38,7 +38,7 @@ ploinky [command] [subcommand] [arguments...] [options]
 | Category | Commands |
 |----------|----------|
 | Repository Management | `add repo`, `enable repo`, `disable repo`, `list repos`, `update repo` |
-| Agent Operations | `enable agent`, `disable agent`, `refresh agent`, `list agents` |
+| Agent Operations | `enable agent`, `disable agent`, `reinstall`, `list agents` |
 | Workspace Control | `start`, `stop`, `restart`, `shutdown`, `destroy`, `clean`, `status` |
 | Interactive Access | `shell`, `cli`, `run` |
 | Web Interfaces | `webtty`, `webchat`, `webconsole`, `webmeet`, `dashboard` |
@@ -70,6 +70,7 @@ export async function dispatchCommand(args, context) {
     'add': () => handleAdd(subArgs, context),
     'enable': () => handleEnable(subArgs, context),
     'disable': () => handleDisable(subArgs, context),
+    'reinstall': () => handleReinstall(subArgs, context),
     'list': () => handleList(subArgs, context),
     'update': () => handleUpdate(subArgs, context),
 
@@ -272,18 +273,18 @@ Disable an agent and remove from registry.
 Agent 'node-dev' disabled. Container stopped and removed.
 ```
 
-#### `refresh agent <name>`
+#### `reinstall <name> | reinstall agent <name>`
 
 Rebuild and restart an agent container.
 
 ```bash
-> refresh agent node-dev
-Refreshing 'node-dev'...
+> reinstall node-dev
+Reinstalling 'node-dev'...
   Stopping container... done
   Removing container... done
   Creating container... done
   Starting container... done
-Agent 'node-dev' refreshed successfully.
+Agent 'node-dev' reinstalled successfully.
 ```
 
 #### `list agents`
@@ -725,7 +726,7 @@ Ploinky CLI - Containerized Agent Runtime
 
 Commands:
   Repository:   add repo, enable repo, disable repo, list repos, update repo
-  Agents:       enable agent, disable agent, refresh agent, list agents
+  Agents:       enable agent, disable agent, reinstall, list agents
   Workspace:    start, stop, restart, shutdown, destroy, clean, status
   Interactive:  shell, cli, run
   Web:          webtty, webchat, webconsole, webmeet, dashboard

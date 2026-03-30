@@ -55,7 +55,7 @@ EOF
   require_var "TEST_REPO_NAME"
   require_var "TEST_HEALTH_AGENT_CONT_NAME"
   local qualified="${TEST_REPO_NAME}/${TEST_HEALTH_AGENT_NAME}"
-  ploinky refresh agent "$qualified"
+  ploinky reinstall "$qualified"
   wait_for_container "$TEST_HEALTH_AGENT_CONT_NAME" 20
 }
 

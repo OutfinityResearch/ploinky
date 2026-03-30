@@ -33,7 +33,7 @@ fast_cli_echo_var_matches() {
   fi
 }
 
-fast_cli_expose_and_refresh() {
+fast_cli_expose_and_reinstall() {
   require_var "TEST_AGENT_NAME"
   require_var "TEST_AGENT_CONT_NAME"
   require_var "FAST_VAR_TEST_NAME"
@@ -53,8 +53,8 @@ fast_cli_expose_and_refresh() {
     return 1
   fi
 
-  if ! ploinky refresh agent "$TEST_AGENT_NAME" >/dev/null; then
-    echo "Failed to refresh agent ${TEST_AGENT_NAME} after expose." >&2
+  if ! ploinky reinstall "$TEST_AGENT_NAME" >/dev/null; then
+    echo "Failed to reinstall agent ${TEST_AGENT_NAME} after expose." >&2
     return 1
   fi
 

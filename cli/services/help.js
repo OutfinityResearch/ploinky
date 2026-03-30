@@ -40,6 +40,7 @@ export function showHelp(args = []) {
   client status <agent>          One-line status (HTTP code, parsed)
 
   status | restart               Show state | restart enabled agents + Router
+  reinstall <agentName>          Re-create a running agent container (destructive)
   stop | shutdown | clean        Stop containers | remove containers
   logs tail [router]             Follow router logs
   logs last <N>                  Show last N router log lines
@@ -231,7 +232,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                         'enable agent demo devel simulator',
                         'enable agent demo as demo2'
                     ],
-                    notes: 'If --auth is omitted, no auth is applied unless the agent manifest declares a default auth mode. Pwd auth stores policy in .ploinky/agents.json and can also seed credentials via --user/--password or manifest defaults under `pwd.user` and `pwd.password`. Note: enable agent is optional. You can `enable repo` then `start <agent>`; it will use isolated mode (creates <agentName> subfolder). Aliases must be unique; commands like refresh/disable should target the alias when multiple containers exist.'
+                    notes: 'If --auth is omitted, no auth is applied unless the agent manifest declares a default auth mode. Pwd auth stores policy in .ploinky/agents.json and can also seed credentials via --user/--password or manifest defaults under `pwd.user` and `pwd.password`. Note: enable agent is optional. You can `enable repo` then `start <agent>`; it will use isolated mode (creates <agentName> subfolder). Aliases must be unique; commands like reinstall/disable should target the alias when multiple containers exist.'
                 }
             }
         },
@@ -264,13 +265,13 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             examples: [ 'status' ],
             notes: 'Reads .ploinky/agents.json and prints container, binds, ports, and static config.'
         },
-        'refresh': {
-            description: 'Refresh an agent by re-creating its container.',
+        'reinstall': {
+            description: 'Reinstall an agent by re-creating its container.',
             subcommands: {
                 'agent': {
-                    syntax: 'refresh agent <name>',
+                    syntax: 'reinstall <name> | reinstall agent <name>',
                     description: 'Stops, removes, and re-creates the agent\'s container. This is a destructive operation that ensures the agent starts from a clean state. This command only has an effect if the agent\'s container is currently running.',
-                    examples: [ 'refresh agent MyAPI' ],
+                    examples: [ 'reinstall MyAPI', 'reinstall agent MyAPI' ],
                     notes: 'This is useful for applying configuration changes that require a new container.'
                 }
             }

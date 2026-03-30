@@ -8,7 +8,7 @@ import * as envSvc from '../services/secretVars.js';
 import * as agentsSvc from '../services/agents.js';
 import { listRepos, listAgents, listCurrentAgents, listRoutes, statusWorkspace } from '../services/status.js';
 import { logsTail, showLast } from '../services/logUtils.js';
-import { startWorkspace, runCli, runShell, refreshAgent } from '../services/workspaceUtil.js';
+import { startWorkspace, runCli, runShell, reinstallAgent } from '../services/workspaceUtil.js';
 import { refreshComponentToken, ensureComponentToken, getComponentToken } from '../server/utils/routerEnv.js';
 import {
     getAgentContainerName,
@@ -182,9 +182,15 @@ async function handleCommand(args) {
             else if (options[0] === 'repo') await updateRepo(options[1]);
             else showHelp();
             break;
-        case 'refresh':
-            if (options[0] === 'agent' && options[1]) await refreshAgent(options[1]); else showHelp();
+        case 'reinstall': {
+            const sub = String(options[0] || '').trim();
+            const target = sub.toLowerCase() === 'agent'
+                ? String(options[1] || '').trim()
+                : sub;
+            if (target) await reinstallAgent(target);
+            else showHelp();
             break;
+        }
         case 'enable':
             if (options[0] === 'repo') {
                 const branchIdx = options.indexOf('--branch');
