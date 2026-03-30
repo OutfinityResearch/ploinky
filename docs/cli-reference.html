@@ -446,7 +446,7 @@ MCP ping succeeded.</code></pre>
                         <pre><code>stop</code></pre>
 
                         <h3>clean / destroy / shutdown</h3>
-                        <p>Stops and Removes all Ploinky containers from the workspace.</p>
+                        <p><code>destroy</code> and <code>clean</code> stop/remove workspace containers and clear <code>.ploinky/agents</code> so dependencies reinstall on next <code>start</code>. <code>shutdown</code> removes containers only.</p>
                         <pre><code>clean
 destroy</code></pre>
                         <div class="alert alert-danger">
@@ -487,7 +487,14 @@ help cli       # Help for cli command</code></pre>
                         
                         <h3>Workspace Directory Structure</h3>
                         <pre><code>.ploinky/
-├── agents/           # Agent registry
+├── agents.json       # Agent registry
+├── agents/           # Agent runtime workdirs (node_modules, runtime data)
+├── code/             # Symlinks to agent code
+├── skills/           # Symlinks to agent skills
+├── shared/           # Shared blob storage
+├── logs/             # Application logs
+│   ├── router.log
+│   └── watchdog.log
 ├── repos/            # Downloaded repositories
 ├── routing.json      # Router configuration
 ├── .secrets          # Environment variables
@@ -495,9 +502,7 @@ help cli       # Help for cli command</code></pre>
     ├── router.pid
     ├── webtty.pid
     ├── webchat.pid
-    └── dashboard.pid
-logs/                 # Application logs
-└── router.log</code></pre>
+    └── dashboard.pid</code></pre>
 
                         <h3>Agent Manifest (manifest.json)</h3>
                         <pre><code>{

@@ -376,25 +376,24 @@ Workspace shut down.
 
 #### `destroy`
 
-Complete cleanup of all Ploinky containers.
+Complete cleanup of all Ploinky containers and agent runtime workdirs.
 
 ```bash
 > destroy
 WARNING: This will remove ALL Ploinky containers.
 Continue? (y/N): y
 Destroying all containers... done
-Cleaning workspace state... done
+Cleared agent runtime workspace: .ploinky/agents
 ```
 
 #### `clean`
 
-Clean temporary files and caches.
+Same destructive cleanup path as `destroy`.
 
 ```bash
 > clean
-Cleaning temporary files... done
-  Removed 15 log files
-  Cleared cache (23MB)
+Destroying all containers... done
+Cleared agent runtime workspace: .ploinky/agents
 ```
 
 #### `status`

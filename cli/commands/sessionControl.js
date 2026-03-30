@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
 import { appendLog } from '../server/utils/logger.js';
-import { ROUTING_FILE, RUNNING_DIR } from '../services/config.js';
+import { AGENTS_WORK_DIR, ROUTING_FILE, RUNNING_DIR } from '../services/config.js';
 import {
     addSessionContainer,
     cleanupSessionSet,
@@ -120,6 +120,14 @@ async function destroyAll() {
             console.log('Removed containers:');
             list.forEach(n => console.log(` - ${n}`));
         }
+
+        try {
+            fs.rmSync(AGENTS_WORK_DIR, { recursive: true, force: true });
+            console.log('Cleared agent runtime workspace: .ploinky/agents');
+        } catch (err) {
+            console.error(`Failed to clear .ploinky/agents: ${err.message}`);
+        }
+
         console.log(`Destroyed ${list.length} containers from this workspace.`);
     }
     catch (e) { console.error('Destroy failed:', e.message); }
