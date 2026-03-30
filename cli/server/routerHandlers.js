@@ -91,6 +91,121 @@ export function proxyMcpPassthrough(req, res, targetPort, agentPath) {
     req.pipe(upstream, { end: true });
 }
 
+export function proxyHttpPassthrough(req, res, targetPort, agentPath, extraHeaders = {}) {
+    const pathWithLeadingSlash = agentPath.startsWith('/') ? agentPath : `/${agentPath}`;
+    const headers = {
+        ...req.headers,
+        ...extraHeaders,
+        host: `127.0.0.1:${targetPort}`
+    };
+
+    const upstream = http.request({
+        hostname: '127.0.0.1',
+        port: targetPort,
+        path: pathWithLeadingSlash,
+        method: req.method,
+        headers
+    }, upstreamRes => {
+        res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
+        upstreamRes.pipe(res, { end: true });
+    });
+
+    upstream.on('error', err => {
+        if (!res.headersSent) {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+        }
+        res.end(JSON.stringify({ error: 'upstream error', detail: String(err) }));
+    });
+
+    req.on('aborted', () => {
+        upstream.destroy();
+    });
+
+    req.pipe(upstream, { end: true });
+}
+
+function buildPlainAuthInfoHeader(req) {
+    if (!req.user || typeof req.user !== 'object') {
+        return {};
+    }
+    return {
+        'x-ploinky-auth-info': JSON.stringify({
+            user: {
+                id: req.user.id || '',
+                username: req.user.username || req.user.name || req.user.email || '',
+                email: req.user.email || '',
+                roles: Array.isArray(req.user.roles) ? [...req.user.roles] : []
+            },
+            sessionId: req.sessionId || ''
+        })
+    };
+}
+
+function matchesServicePrefix(pathname, prefix) {
+    return typeof pathname === 'string' && pathname.startsWith(prefix);
+}
+
+function buildServiceAgentPath(pathname, search = '', externalPrefix, internalPrefix) {
+    const suffix = matchesServicePrefix(pathname, externalPrefix)
+        ? pathname.slice(externalPrefix.length)
+        : '';
+    const normalizedSuffix = suffix.replace(/^\/+/, '');
+    return `${internalPrefix}${normalizedSuffix}${search || ''}`;
+}
+
+const HTTP_SERVICE_ROUTE_DEFINITIONS = [
+    {
+        agentName: 'explorer',
+        externalPrefix: '/services/explorer/office/',
+        internalPrefix: '/office/',
+        isPublic: false,
+        notFoundMessage: 'Explorer route not found.',
+        buildHeaders: req => buildPlainAuthInfoHeader(req)
+    },
+    {
+        agentName: 'explorer',
+        externalPrefix: '/public-services/explorer/office/',
+        internalPrefix: '/office/',
+        isPublic: true,
+        notFoundMessage: 'Explorer route not found.'
+    }
+];
+
+function resolveHttpServiceRoute(pathname) {
+    return HTTP_SERVICE_ROUTE_DEFINITIONS.find(definition =>
+        matchesServicePrefix(pathname, definition.externalPrefix)
+    ) || null;
+}
+
+export function isPublicHttpServiceRoute(pathname) {
+    const definition = resolveHttpServiceRoute(pathname);
+    return Boolean(definition?.isPublic);
+}
+
+export function handleHttpServiceRoute(req, res, parsedUrl, apiRoutes = loadApiRoutes()) {
+    const pathname = parsedUrl?.pathname || '';
+    const definition = resolveHttpServiceRoute(pathname);
+    if (!definition) {
+        return false;
+    }
+
+    const route = apiRoutes[definition.agentName];
+    if (!route || !route.hostPort) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: definition.notFoundMessage }));
+        return true;
+    }
+
+    proxyHttpPassthrough(
+        req,
+        res,
+        route.hostPort,
+        buildServiceAgentPath(pathname, parsedUrl?.search, definition.externalPrefix, definition.internalPrefix),
+        definition.buildHeaders ? definition.buildHeaders(req) : {}
+    );
+    return true;
+}
+
 export function proxyApi(req, res, targetPort, identityHeaders = {}) {
     const method = (req.method || 'GET').toUpperCase();
     const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);

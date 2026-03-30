@@ -14,7 +14,7 @@ import * as staticSrv from './static/index.js';
 
 // Authentication and routing
 import { ensureAuthenticated, ensureAgentAuthenticated, handleAuthRoutes } from './authHandlers.js';
-import { loadApiRoutes, handleRouterMcp } from './routerHandlers.js';
+import { loadApiRoutes, handleRouterMcp, handleHttpServiceRoute, isPublicHttpServiceRoute } from './routerHandlers.js';
 
 // Logging
 import { appendLog, logBootEvent, logMemoryUsage } from './utils/logger.js';
@@ -184,6 +184,8 @@ async function processRequest(req, res) {
         if (handled) return;
     }
 
+    const isPublicServiceRoute = isPublicHttpServiceRoute(pathname);
+
     // For /mcps/ routes, check agent auth first, then fall back to user auth
     if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/') || pathname === '/mcp') {
         const hasAuthHeader = req.headers?.authorization && typeof req.headers.authorization === 'string';
@@ -202,6 +204,8 @@ async function processRequest(req, res) {
             const authResult = await ensureAuthenticated(req, res, parsedUrl);
             if (!authResult.ok) return;
         }
+    } else if (isPublicServiceRoute) {
+        // Tokenized public service routes are intentionally public.
     } else {
         // Ensure authenticated for other protected routes
         const authResult = await ensureAuthenticated(req, res, parsedUrl);
@@ -223,6 +227,8 @@ async function processRequest(req, res) {
         return handleWorkspaceUpload(req, res);
     } else if (pathname.startsWith('/blobs')) {
         return handleBlobs(req, res);
+    } else if (handleHttpServiceRoute(req, res, parsedUrl)) {
+        return;
     } else if (pathname === '/mcp' || pathname === '/mcp/') {
         return handleRouterMcp(req, res);
     } else if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/')) {
