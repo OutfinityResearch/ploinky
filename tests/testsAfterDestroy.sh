@@ -20,6 +20,8 @@ disable_agent() {
     ( cd "$TEST_RUN_DIR" && ploinky disable agent "$TEST_AGENT_TO_DISABLE_NAME" )
   }
 
+test_check "Destroy removed .ploinky/agents workspace" assert_file_not_exists "$TEST_RUN_DIR/.ploinky/agents"
+
 test_action "Action: Disabling agent ${TEST_AGENT_TO_DISABLE_NAME}" disable_agent
 
 assert_agent_removed_from_registry() {

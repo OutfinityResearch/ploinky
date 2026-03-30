@@ -165,7 +165,7 @@ TEST_REPO_NAME="basic"
   - Disable test agent
   - Destroy workspace (`ploinky destroy`)
   - Delete temporary directory
-- **Verifies**: Agent removed from registry, containers removed, workspace deleted, logs removed
+- **Verifies**: Agent removed from registry, containers removed, `.ploinky/agents` removed, workspace deleted, logs removed
 
 #### Stage 7: NODE UNIT TESTS
 

@@ -198,7 +198,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Stop and remove all Ploinky containers created in this workspace',
             syntax: 'destroy',
             examples: ['destroy'],
-            notes: 'Irreversible for running containers; use with care.'
+            notes: 'Irreversible for running containers; also clears .ploinky/agents so dependencies are rebuilt on next start.'
         },
         
         'enable': {
