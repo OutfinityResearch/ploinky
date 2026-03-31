@@ -1,15 +1,27 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 
+const DEFAULT_MAX_LOG_TAIL_BYTES = 128 * 1024;
+
+function parsePositiveInt(value, fallback) {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed;
+    }
+    return fallback;
+}
+
 export class TaskQueue {
-    constructor({ maxConcurrent = 10, storagePath, executor }) {
+    constructor({ maxConcurrent = 10, storagePath, executor, maxLogTailBytes = DEFAULT_MAX_LOG_TAIL_BYTES }) {
         if (typeof executor !== 'function') {
             throw new Error('TaskQueue requires an executor function');
         }
         this.maxConcurrent = maxConcurrent;
         this.storagePath = storagePath;
         this.executor = executor;
+        this.maxLogTailBytes = parsePositiveInt(maxLogTailBytes, DEFAULT_MAX_LOG_TAIL_BYTES);
         this.tasks = new Map();
+        this.taskLogs = new Map();
         this.pending = [];
         this.running = new Set();
         this.initialized = false;
@@ -66,7 +78,10 @@ export class TaskQueue {
                         createdAt: entry.createdAt || new Date().toISOString(),
                         updatedAt: entry.updatedAt || entry.createdAt || new Date().toISOString(),
                         error: entry.error ?? null,
-                        result: null
+                        result: null,
+                        logTail: '',
+                        logSeq: 0,
+                        logTruncated: false
                     };
                     this.tasks.set(task.id, task);
                 }
@@ -104,6 +119,82 @@ export class TaskQueue {
         return randomBytes(8).toString('hex');
     }
 
+    createTaskLogState() {
+        return {
+            tail: '',
+            tailBytes: 0,
+            seq: 0,
+            truncated: false
+        };
+    }
+
+    getOrCreateTaskLogState(taskId) {
+        let state = this.taskLogs.get(taskId);
+        if (!state) {
+            state = this.createTaskLogState();
+            this.taskLogs.set(taskId, state);
+        }
+        return state;
+    }
+
+    syncTaskLogSnapshot(taskId) {
+        const task = this.tasks.get(taskId);
+        if (!task) {
+            return;
+        }
+        const state = this.getOrCreateTaskLogState(taskId);
+        task.logTail = state.tail;
+        task.logSeq = state.seq;
+        task.logTruncated = state.truncated;
+    }
+
+    appendTaskLog(taskId, chunk) {
+        if (!taskId) {
+            return;
+        }
+        const text = Buffer.isBuffer(chunk)
+            ? chunk.toString('utf8')
+            : (typeof chunk === 'string' ? chunk : String(chunk ?? ''));
+        if (!text) {
+            return;
+        }
+
+        const state = this.getOrCreateTaskLogState(taskId);
+        state.seq += 1;
+        state.tail += text;
+        state.tailBytes += Buffer.byteLength(text, 'utf8');
+
+        if (state.tailBytes > this.maxLogTailBytes) {
+            state.truncated = true;
+            while (state.tailBytes > this.maxLogTailBytes && state.tail.length > 0) {
+                const bytesToDrop = state.tailBytes - this.maxLogTailBytes;
+                const charsToDrop = Math.max(1, Math.min(state.tail.length, bytesToDrop));
+                const dropped = state.tail.slice(0, charsToDrop);
+                state.tail = state.tail.slice(charsToDrop);
+                state.tailBytes -= Buffer.byteLength(dropped, 'utf8');
+            }
+        }
+
+        this.syncTaskLogSnapshot(taskId);
+    }
+
+    getTaskLogSnapshot(taskId) {
+        const state = this.taskLogs.get(taskId);
+        if (state) {
+            return {
+                tail: state.tail,
+                seq: state.seq,
+                truncated: state.truncated
+            };
+        }
+        const task = this.tasks.get(taskId);
+        return {
+            tail: typeof task?.logTail === 'string' ? task.logTail : '',
+            seq: Number.isFinite(task?.logSeq) ? task.logSeq : 0,
+            truncated: task?.logTruncated === true
+        };
+    }
+
     enqueueTask({ toolName, commandSpec, payload, timeoutMs }) {
         this.initialize();
         const id = this.generateId();
@@ -123,9 +214,13 @@ export class TaskQueue {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             error: null,
-            result: null
+            result: null,
+            logTail: '',
+            logSeq: 0,
+            logTruncated: false
         };
         this.tasks.set(task.id, task);
+        this.taskLogs.set(task.id, this.createTaskLogState());
         this.pending.push(task.id);
         this.persistTasks();
         this.processQueue();
@@ -198,6 +293,12 @@ export class TaskQueue {
                             }
                         }, task.timeoutMs);
                     }
+                },
+                onStdoutChunk: (chunk) => {
+                    this.appendTaskLog(task.id, chunk);
+                },
+                onStderrChunk: (chunk) => {
+                    this.appendTaskLog(task.id, chunk);
                 }
             });
 
@@ -244,6 +345,7 @@ export class TaskQueue {
         if (!task) {
             return null;
         }
+        const logSnapshot = this.getTaskLogSnapshot(task.id);
         return {
             id: task.id,
             toolName: task.toolName,
@@ -251,7 +353,10 @@ export class TaskQueue {
             createdAt: task.createdAt,
             updatedAt: task.updatedAt,
             error: task.error,
-            result: task.result
+            result: task.result,
+            logTail: logSnapshot.tail,
+            logSeq: logSnapshot.seq,
+            logTruncated: logSnapshot.truncated
         };
     }
 }

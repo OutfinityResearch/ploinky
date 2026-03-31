@@ -310,9 +310,14 @@ function createAgentClient(baseUrl) {
             } else if (result.task) {
                 const task = result.task;
                 const status = typeof task.status === 'string' ? task.status : null;
+                const logSeqValue = Number(task?.logSeq);
+                const logSeq = Number.isFinite(logSeqValue) ? logSeqValue : null;
                 const isTerminal = status === 'completed' || status === 'failed';
-                if (poller.lastStatus !== status) {
+                const statusChanged = poller.lastStatus !== status;
+                const logChanged = poller.lastLogSeq !== logSeq;
+                if (statusChanged || logChanged) {
                     poller.lastStatus = status;
+                    poller.lastLogSeq = logSeq;
                     callback(task);
                 }
                 if (isTerminal) {
@@ -342,6 +347,7 @@ function createAgentClient(baseUrl) {
         taskPollers.set(taskId, {
             timer: null,
             lastStatus: null,
+            lastLogSeq: null,
             lastError: null,
             statusPath: options.statusPath || null
         });
