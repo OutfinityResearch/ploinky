@@ -183,15 +183,20 @@ export function resolveAgentPort(agentOrRoute) {
 export async function waitForAgentReady(agentOrRoute, {
     timeoutMs = 5000,
     intervalMs = 125,
-    probeTimeoutMs = 250
+    probeTimeoutMs = 250,
+    protocol = 'mcp'
 } = {}) {
     const port = resolveAgentPort(agentOrRoute);
     if (!port) {
         return false;
     }
     const deadline = Date.now() + Math.max(0, timeoutMs);
+    const normalizedProtocol = String(protocol || 'mcp').trim().toLowerCase();
     while (true) {
         if (await probeLocalPort(port, probeTimeoutMs)) {
+            if (normalizedProtocol === 'tcp') {
+                return true;
+            }
             if (await probeAgentMcp(port, Math.max(500, probeTimeoutMs * 2))) {
                 return true;
             }

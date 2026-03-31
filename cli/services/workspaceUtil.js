@@ -308,12 +308,34 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     let staticAgentPath = null;
     let staticRepoName = null;
     let staticShortAgent = null;
+    const declaredDependencyKeys = new Set();
     try {
       const res = utils.findAgent(staticAgent);
       staticManifestPath = res.manifestPath;
       staticAgentPath = path.dirname(staticManifestPath);
       staticRepoName = res.repo;
       staticShortAgent = res.shortAgentName;
+      try {
+        const staticManifest = JSON.parse(fs.readFileSync(staticManifestPath, 'utf8'));
+        const staticRecord = Object.values(reg || {}).find((value) => (
+          value && value.type === 'agent' &&
+          value.agentName === staticShortAgent &&
+          value.repoName === staticRepoName &&
+          !value.alias
+        ));
+        const staticAuthMode = String(staticRecord?.auth?.mode || '').trim().toLowerCase();
+        if (Array.isArray(staticManifest.enable)) {
+          for (const agentRef of staticManifest.enable) {
+            if (!shouldEnableManifestDependency(agentRef, staticAuthMode)) {
+              continue;
+            }
+            try {
+              const depInfo = utils.findAgent(agentRef);
+              declaredDependencyKeys.add(`${depInfo.repo}/${depInfo.shortAgentName}`);
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
     } catch (e) {
       console.error(`start: static agent '${staticAgent}' not found in any repo. Use 'enable agent <repo/name>' or check repos.`);
       return;
@@ -370,6 +392,58 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
       }
     };
     await updateRoutes();
+
+    const dependencyRouteEntries = names
+      .map((name) => {
+        const rec = reg[name];
+        if (!rec || !rec.agentName) return null;
+        if (!declaredDependencyKeys.has(`${rec.repoName}/${rec.agentName}`)) return null;
+        const routeKey = rec.alias || rec.agentName;
+        const route = cfg.routes?.[routeKey] || null;
+        if (!route?.hostPort) return null;
+        const isStaticRoute = rec.agentName === staticShortAgent && rec.repoName === staticRepoName && !rec.alias;
+        if (isStaticRoute) return null;
+        const manifestRef = rec.repoName ? `${rec.repoName}/${rec.agentName}` : rec.agentName;
+        let readinessProtocol = 'mcp';
+        try {
+          const dependencyManifestPath = findAgentManifest(manifestRef);
+          const dependencyManifest = JSON.parse(fs.readFileSync(dependencyManifestPath, 'utf8'));
+          readinessProtocol = getAgentCmd(dependencyManifest) ? 'mcp' : 'tcp';
+        } catch (_) {}
+        return {
+          name,
+          routeKey,
+          route,
+          rec,
+          readinessProtocol
+        };
+      })
+      .filter(Boolean);
+
+    const defaultDependencyReadyTimeoutMs = Number.parseInt(process.env.PLOINKY_DEPENDENCY_AGENT_READY_TIMEOUT_MS || '120000', 10);
+    const dependencyReadyIntervalMs = Number.parseInt(process.env.PLOINKY_DEPENDENCY_AGENT_READY_INTERVAL_MS || '250', 10);
+    const dependencyProbeTimeoutMs = Number.parseInt(process.env.PLOINKY_DEPENDENCY_AGENT_READY_PROBE_TIMEOUT_MS || '1000', 10);
+
+    for (const dependencyEntry of dependencyRouteEntries) {
+      const dependencyState = needsHostInstall(dependencyEntry.rec.agentName, {
+        agentPath: dependencyEntry.route.hostPath,
+        packagePath: path.join(getAgentWorkDir(dependencyEntry.rec.agentName), 'package.json')
+      });
+      const dependencyReadyTimeoutMs = dependencyState.needsInstall ? 600000 : defaultDependencyReadyTimeoutMs;
+      console.log(`[start] Waiting for dependent agent '${dependencyEntry.route.agent || dependencyEntry.rec.agentName}' to become ready on port ${dependencyEntry.route.hostPort}...`);
+      if (dependencyState.needsInstall) {
+        console.log(`[start] ${dependencyEntry.route.agent || dependencyEntry.rec.agentName}: dependency cache cold or invalid (${dependencyState.reason}); using extended readiness timeout ${dependencyReadyTimeoutMs}ms.`);
+      }
+      const dependencyReady = await waitForAgentReady(dependencyEntry.route, {
+        timeoutMs: dependencyReadyTimeoutMs,
+        intervalMs: dependencyReadyIntervalMs,
+        probeTimeoutMs: dependencyProbeTimeoutMs,
+        protocol: dependencyEntry.readinessProtocol
+      });
+      if (!dependencyReady) {
+        throw new Error(`Dependent agent '${dependencyEntry.route.agent || dependencyEntry.rec.agentName}' did not become ready within ${dependencyReadyTimeoutMs}ms.`);
+      }
+    }
 
     const staticRouteKey = preferredStatic?.[1]?.alias || staticShortAgent;
     const staticRoute = cfg.routes?.[staticRouteKey] || null;
