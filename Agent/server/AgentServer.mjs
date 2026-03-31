@@ -8,6 +8,7 @@ import { TaskQueue } from './TaskQueue.mjs';
 const { z } = zod;
 
 const DEFAULT_MAX_CONCURRENT_TASKS = 10;
+const DEFAULT_TASK_LOG_TAIL_BYTES = 128 * 1024;
 const TASK_QUEUE_FILE = path.resolve(process.cwd(), '.tasksQueue');
 const PLOINKY_AUTH_INFO_HEADER = 'x-ploinky-auth-info';
 
@@ -78,6 +79,18 @@ function resolveMaxConcurrent(config) {
         }
     }
     return DEFAULT_MAX_CONCURRENT_TASKS;
+}
+
+function resolveTaskLogTailBytes(config) {
+    const configValue = Number(config?.taskLogTailBytes);
+    if (Number.isFinite(configValue) && configValue > 0) {
+        return Math.floor(configValue);
+    }
+    const envValue = Number(process.env.PLOINKY_MCP_TASK_LOG_TAIL_BYTES);
+    if (Number.isFinite(envValue) && envValue > 0) {
+        return Math.floor(envValue);
+    }
+    return DEFAULT_TASK_LOG_TAIL_BYTES;
 }
 
 function buildCommandSpec(entry, defaultCwd) {
@@ -235,8 +248,26 @@ function executeShell(spec, payload, options = {}) {
         }
         const stdout = [];
         const stderr = [];
-        child.stdout.on('data', chunk => stdout.push(chunk));
-        child.stderr.on('data', chunk => stderr.push(chunk));
+        child.stdout.on('data', chunk => {
+            stdout.push(chunk);
+            if (typeof options.onStdoutChunk === 'function') {
+                try {
+                    options.onStdoutChunk(chunk);
+                } catch (err) {
+                    console.warn('[AgentServer/MCP] onStdoutChunk hook failed:', err);
+                }
+            }
+        });
+        child.stderr.on('data', chunk => {
+            stderr.push(chunk);
+            if (typeof options.onStderrChunk === 'function') {
+                try {
+                    options.onStderrChunk(chunk);
+                } catch (err) {
+                    console.warn('[AgentServer/MCP] onStderrChunk hook failed:', err);
+                }
+            }
+        });
         child.on('error', reject);
         child.stdin.on('error', err => {
             if (err?.code === 'EPIPE') {
@@ -310,6 +341,7 @@ const initialConfigResult = getConfigResult();
 const initialConfig = initialConfigResult ? initialConfigResult.config : {};
 const taskQueue = new TaskQueue({
     maxConcurrent: resolveMaxConcurrent(initialConfig),
+    maxLogTailBytes: resolveTaskLogTailBytes(initialConfig),
     storagePath: TASK_QUEUE_FILE,
     executor: executeShell
 });

@@ -107,3 +107,36 @@ test('TaskQueue captures task failures and surfaces stderr', async (t) => {
     const failed = queue.getTask(id);
     assert.equal(failed?.error, 'boom');
 });
+
+test('TaskQueue exposes live log tail updates while task is running', async (t) => {
+    const storagePath = makeTempStorage(t);
+    const completions = [];
+
+    const queue = new TaskQueue({
+        maxConcurrent: 1,
+        storagePath,
+        executor: (_spec, _payload, options = {}) => new Promise(resolve => {
+            options.onStdoutChunk?.('step 1\n');
+            options.onStderrChunk?.('step 2\n');
+            completions.push(resolve);
+        })
+    });
+
+    const { id } = queue.enqueueTask(dummyTaskConfig({ job: 'logs' }));
+
+    const runningTask = await waitFor(() => {
+        const task = queue.getTask(id);
+        return task?.status === 'running' && task?.logSeq >= 2 ? task : null;
+    });
+
+    assert.match(runningTask.logTail, /step 1/);
+    assert.match(runningTask.logTail, /step 2/);
+    assert.equal(runningTask.logTruncated, false);
+
+    completions[0]({ code: 0, stdout: 'done', stderr: '' });
+    await waitFor(() => queue.getTask(id)?.status === 'completed');
+
+    const completed = queue.getTask(id);
+    assert.ok(completed.logSeq >= 2);
+    assert.match(completed.logTail, /step 1/);
+});
