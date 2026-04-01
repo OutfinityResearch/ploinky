@@ -270,18 +270,6 @@ function syncCoreDepsFromPath(agentName, sourceNodeModules, options = {}) {
     const coreDeps = getCoreDependencyNames();
     log(`[deps-core] ${agentName}: Syncing core dependencies: ${coreDeps.join(', ')}`);
 
-    // Pull latest for git-cloned core deps before syncing to agents
-    for (const depName of coreDeps) {
-        const depGitDir = path.join(sourceNodeModules, depName, '.git');
-        if (fs.existsSync(depGitDir)) {
-            try {
-                const depDir = path.join(sourceNodeModules, depName);
-                execSync('git pull --ff-only 2>/dev/null || true', { cwd: depDir, stdio: 'pipe', timeout: 15000 });
-                log(`[deps-core] ${agentName}: Pulled latest ${depName}`);
-            } catch { /* ignore pull failures — offline or conflicts */ }
-        }
-    }
-
     for (const depName of coreDeps) {
         const sourcePath = path.join(sourceNodeModules, depName);
         const targetPath = path.join(agentNodeModules, depName);
@@ -1175,20 +1163,16 @@ function buildEntrypointInstallScript(agentName) {
     const snippet = [
         '(',
         '    if command -v npm >/dev/null 2>&1; then',
-        '        INSTALL_STAMP="$WORKSPACE_PATH/.ploinky-install-package.json";',
-        '        if [ -d "$WORKSPACE_PATH/node_modules/mcp-sdk" ] && [ -f "$INSTALL_STAMP" ] && [ -f "$WORKSPACE_PATH/package.json" ] && cmp -s "$WORKSPACE_PATH/package.json" "$INSTALL_STAMP"; then',
-        `            echo "[deps] ${agentName}: Using cached dependencies";`,
-        '        else',
-        `            echo "[deps] ${agentName}: Installing dependencies...";`,
+        `        echo "[deps] ${agentName}: Installing dependencies...";`,
         // --- install git + build tools (apk first, then apt-get) -------------------
-        '            (',
-        '              command -v git >/dev/null 2>&1 ||',
-        '              (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
-        '              (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
-        '            ) 2>/dev/null;',
-        // --- npm install -----------------------------------------------------------
-        `            npm install --no-package-lock --prefix "$WORKSPACE_PATH" && cp "$WORKSPACE_PATH/package.json" "$INSTALL_STAMP";`,
-        '        fi',
+        '        (',
+        '          command -v git >/dev/null 2>&1 ||',
+        '          (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
+        '          (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
+        '        ) 2>/dev/null;',
+        // --- force fresh achillesAgentLib, then npm install for all deps -----------
+        '        rm -rf "$WORKSPACE_PATH/node_modules/achillesAgentLib";',
+        `        npm install --no-package-lock --prefix "$WORKSPACE_PATH";`,
         '    else',
         `        echo "[deps] ${agentName}: npm not found, skipping Node.js dependency install";`,
         '    fi',

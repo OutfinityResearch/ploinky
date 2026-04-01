@@ -447,17 +447,6 @@ async function handleCommand(args) {
 
                     console.log(`Restarting (${agentRuntime}) agent '${agentName}'...`);
 
-                    // Sync core dependencies before restart
-                    try {
-                        const { syncCoreDependencies } = await import('../services/dependencyInstaller.js');
-                        const syncResult = syncCoreDependencies(agentName, { force: true });
-                        if (syncResult.synced) {
-                            console.log(`Synced core dependencies: ${syncResult.modules.join(', ')}`);
-                        }
-                    } catch (e) {
-                        debugLog(`[restart] Core dependency sync skipped: ${e.message}`);
-                    }
-
                     // Stop existing process (bwrap or container if transitioning)
                     if (bwrapRunning) {
                         stopBwrapProcess(resolved.shortAgentName);
@@ -525,17 +514,6 @@ async function handleCommand(args) {
                     }
 
                     console.log(`Restarting (stop/start) agent '${agentName}'...`);
-
-                    // Sync core dependencies (achillesAgentLib) before restart
-                    try {
-                        const { syncCoreDependencies } = await import('../services/dependencyInstaller.js');
-                        const syncResult = syncCoreDependencies(agentName, { force: true });
-                        if (syncResult.synced) {
-                            console.log(`Synced core dependencies: ${syncResult.modules.join(', ')}`);
-                        }
-                    } catch (e) {
-                        debugLog(`[restart] Core dependency sync skipped: ${e.message}`);
-                    }
 
                     const runtime = getRuntime();
                     try {
