@@ -270,6 +270,18 @@ function syncCoreDepsFromPath(agentName, sourceNodeModules, options = {}) {
     const coreDeps = getCoreDependencyNames();
     log(`[deps-core] ${agentName}: Syncing core dependencies: ${coreDeps.join(', ')}`);
 
+    // Pull latest for git-cloned core deps before syncing to agents
+    for (const depName of coreDeps) {
+        const depGitDir = path.join(sourceNodeModules, depName, '.git');
+        if (fs.existsSync(depGitDir)) {
+            try {
+                const depDir = path.join(sourceNodeModules, depName);
+                execSync('git pull --ff-only 2>/dev/null || true', { cwd: depDir, stdio: 'pipe', timeout: 15000 });
+                log(`[deps-core] ${agentName}: Pulled latest ${depName}`);
+            } catch { /* ignore pull failures — offline or conflicts */ }
+        }
+    }
+
     for (const depName of coreDeps) {
         const sourcePath = path.join(sourceNodeModules, depName);
         const targetPath = path.join(agentNodeModules, depName);
