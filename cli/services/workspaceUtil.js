@@ -289,7 +289,10 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
               continue;
             }
             try {
-              const info = agentsSvc.enableAgent(parsedAgentRef);
+              const parsedDirective = parseEnableDirective(agentRef);
+              const enableSpec = parsedDirective?.spec || String(agentRef || '').trim();
+              const enableAlias = parsedDirective?.alias;
+              const info = agentsSvc.enableAgent(enableSpec, undefined, undefined, enableAlias);
               if (info && info.containerName) {
                 const regMap = workspaceSvc.loadAgents();
                 const record = regMap[info.containerName];
