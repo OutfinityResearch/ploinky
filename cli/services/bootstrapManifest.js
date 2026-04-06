@@ -4,7 +4,7 @@ import * as repos from './repos.js';
 import { enableAgent } from './agents.js';
 import { findAgent } from './utils.js';
 
-function parseEnableDirective(entry) {
+export function parseEnableDirective(entry) {
     if (entry === null || entry === undefined) return null;
     const raw = typeof entry === 'string' ? entry : String(entry || '').trim();
     const trimmed = raw.trim();

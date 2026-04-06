@@ -40,6 +40,23 @@ function probeLocalPort(port, timeoutMs = 250) {
     });
 }
 
+function probeLocalPortDetailed(port, timeoutMs = 250) {
+    return new Promise((resolve) => {
+        const socket = net.createConnection({ host: '127.0.0.1', port });
+        let settled = false;
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            try { socket.destroy(); } catch (_) { }
+            resolve(result);
+        };
+        socket.setTimeout(timeoutMs);
+        socket.once('connect', () => finish({ ok: true, reason: 'connected' }));
+        socket.once('timeout', () => finish({ ok: false, reason: 'timeout' }));
+        socket.once('error', (error) => finish({ ok: false, reason: error?.code || 'error' }));
+    });
+}
+
 function postJson(host, port, targetPath, payload, timeoutMs = 700, extraHeaders = {}) {
     return new Promise((resolve) => {
         const body = Buffer.from(JSON.stringify(payload || {}), 'utf8');
@@ -184,7 +201,8 @@ export async function waitForAgentReady(agentOrRoute, {
     timeoutMs = 5000,
     intervalMs = 125,
     probeTimeoutMs = 250,
-    protocol = 'mcp'
+    protocol = 'mcp',
+    onProgress = null
 } = {}) {
     const port = resolveAgentPort(agentOrRoute);
     if (!port) {
@@ -192,14 +210,67 @@ export async function waitForAgentReady(agentOrRoute, {
     }
     const deadline = Date.now() + Math.max(0, timeoutMs);
     const normalizedProtocol = String(protocol || 'mcp').trim().toLowerCase();
+    const startedAt = Date.now();
+    let attempt = 0;
     while (true) {
-        if (await probeLocalPort(port, probeTimeoutMs)) {
+        attempt += 1;
+        const portProbe = await probeLocalPortDetailed(port, probeTimeoutMs);
+        if (portProbe.ok) {
             if (normalizedProtocol === 'tcp') {
+                if (typeof onProgress === 'function') {
+                    onProgress({
+                        port,
+                        protocol: normalizedProtocol,
+                        elapsedMs: Date.now() - startedAt,
+                        timeoutMs,
+                        attempt,
+                        portOpen: true,
+                        ready: true,
+                        stage: 'ready'
+                    });
+                }
                 return true;
             }
-            if (await probeAgentMcp(port, Math.max(500, probeTimeoutMs * 2))) {
+            const mcpReady = await probeAgentMcp(port, Math.max(500, probeTimeoutMs * 2));
+            if (mcpReady) {
+                if (typeof onProgress === 'function') {
+                    onProgress({
+                        port,
+                        protocol: normalizedProtocol,
+                        elapsedMs: Date.now() - startedAt,
+                        timeoutMs,
+                        attempt,
+                        portOpen: true,
+                        ready: true,
+                        stage: 'ready'
+                    });
+                }
                 return true;
             }
+            if (typeof onProgress === 'function') {
+                onProgress({
+                    port,
+                    protocol: normalizedProtocol,
+                    elapsedMs: Date.now() - startedAt,
+                    timeoutMs,
+                    attempt,
+                    portOpen: true,
+                    ready: false,
+                    stage: 'waiting_for_protocol'
+                });
+            }
+        } else if (typeof onProgress === 'function') {
+            onProgress({
+                port,
+                protocol: normalizedProtocol,
+                elapsedMs: Date.now() - startedAt,
+                timeoutMs,
+                attempt,
+                portOpen: false,
+                ready: false,
+                stage: 'waiting_for_port',
+                lastError: portProbe.reason
+            });
         }
         if (Date.now() >= deadline) {
             return false;

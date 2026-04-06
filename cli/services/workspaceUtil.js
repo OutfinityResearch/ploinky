@@ -8,7 +8,7 @@ import * as workspaceSvc from './workspace.js';
 import * as dockerSvc from './docker/index.js';
 import { getRuntimeForAgent, isSandboxRuntime, loadAgentsMap } from './docker/common.js';
 import { isBwrapProcessRunning, stopBwrapProcess } from './bwrap/bwrapFleet.js';
-import { applyManifestDirectives } from './bootstrapManifest.js';
+import { applyManifestDirectives, parseEnableDirective } from './bootstrapManifest.js';
 import { executeHostHook, isInlineCommand } from './lifecycleHooks.js';
 import { getActiveProfile, getProfileConfig, getProfileEnvVars } from './profileService.js';
 import { getSecrets, createEnvWithSecrets } from './secretInjector.js';
@@ -71,6 +71,30 @@ function shouldEnableManifestDependency(agentRef, authMode) {
     return authMode === 'sso';
   }
   return true;
+}
+
+function parseManifestDependencyRef(agentRef) {
+  try {
+    const parsed = parseEnableDirective(agentRef);
+    const spec = String(parsed?.spec || '').trim();
+    if (!spec) return '';
+    const colonIndex = spec.indexOf(':');
+    if (colonIndex !== -1) {
+      return spec.slice(0, colonIndex).trim();
+    }
+    const tokens = spec.split(/\s+/).filter(Boolean);
+    if (!tokens.length) return '';
+    return tokens[0];
+  } catch (_) {
+    const raw = String(agentRef || '').trim();
+    if (!raw) return '';
+    const colonIndex = raw.indexOf(':');
+    if (colonIndex !== -1) {
+      return raw.slice(0, colonIndex).trim();
+    }
+    const tokens = raw.split(/\s+/).filter(Boolean);
+    return tokens[0] || '';
+  }
 }
 
 async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, ensureComponentToken, enableAgent, killRouterIfRunning } = {}) {
@@ -260,11 +284,12 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
         const staticAuthMode = String(staticAgentRecord?.auth?.mode || '').trim().toLowerCase();
         if (Array.isArray(manifest.enable)) {
           for (const agentRef of manifest.enable) {
-            if (!shouldEnableManifestDependency(agentRef, staticAuthMode)) {
+            const parsedAgentRef = parseManifestDependencyRef(agentRef);
+            if (!shouldEnableManifestDependency(parsedAgentRef, staticAuthMode)) {
               continue;
             }
             try {
-              const info = agentsSvc.enableAgent(agentRef);
+              const info = agentsSvc.enableAgent(parsedAgentRef);
               if (info && info.containerName) {
                 const regMap = workspaceSvc.loadAgents();
                 const record = regMap[info.containerName];
@@ -326,11 +351,12 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
         const staticAuthMode = String(staticRecord?.auth?.mode || '').trim().toLowerCase();
         if (Array.isArray(staticManifest.enable)) {
           for (const agentRef of staticManifest.enable) {
-            if (!shouldEnableManifestDependency(agentRef, staticAuthMode)) {
+            const parsedAgentRef = parseManifestDependencyRef(agentRef);
+            if (!shouldEnableManifestDependency(parsedAgentRef, staticAuthMode)) {
               continue;
             }
             try {
-              const depInfo = utils.findAgent(agentRef);
+              const depInfo = utils.findAgent(parsedAgentRef);
               declaredDependencyKeys.add(`${depInfo.repo}/${depInfo.shortAgentName}`);
             } catch (_) {}
           }
@@ -362,9 +388,9 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     const updateRoutes = async () => {
       cfg.routes = cfg.routes || {};
       const failedAgents = [];
-      for (const name of names) {
+      const routeResults = await Promise.all(names.map(async (name) => {
         const rec = reg[name];
-        if (!rec || !rec.agentName) continue;
+        if (!rec || !rec.agentName) return null;
         const shortAgentName = rec.agentName;
         const manifestRef = rec.repoName ? `${rec.repoName}/${shortAgentName}` : shortAgentName;
         try {
@@ -374,17 +400,35 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
           const repoName = rec.repoName || path.basename(path.dirname(agentPath));
           const routeKey = rec.alias || shortAgentName;
           const { containerName, hostPort } = ensureAgentService(shortAgentName, manifest, agentPath, { containerName: name, alias: rec.alias });
-          cfg.routes[routeKey] = cfg.routes[routeKey] || {};
-          cfg.routes[routeKey].container = containerName;
-          cfg.routes[routeKey].hostPath = agentPath;
-          cfg.routes[routeKey].repo = repoName;
-          cfg.routes[routeKey].agent = shortAgentName;
-          if (rec.alias) cfg.routes[routeKey].alias = rec.alias;
-          cfg.routes[routeKey].hostPort = hostPort || cfg.routes[routeKey].hostPort;
+          return {
+            ok: true,
+            shortAgentName,
+            routeKey,
+            route: {
+              ...(cfg.routes[routeKey] || {}),
+              container: containerName,
+              hostPath: agentPath,
+              repo: repoName,
+              agent: shortAgentName,
+              ...(rec.alias ? { alias: rec.alias } : {}),
+              hostPort: hostPort || cfg.routes[routeKey]?.hostPort
+            }
+          };
         } catch (agentErr) {
           console.error(`[start] Failed to start agent '${shortAgentName}': ${agentErr.message}`);
-          failedAgents.push(shortAgentName);
+          return {
+            ok: false,
+            shortAgentName
+          };
         }
+      }));
+      for (const result of routeResults) {
+        if (!result) continue;
+        if (!result.ok) {
+          failedAgents.push(result.shortAgentName);
+          continue;
+        }
+        cfg.routes[result.routeKey] = result.route;
       }
       fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
       if (failedAgents.length > 0) {
@@ -419,32 +463,33 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
         };
       })
       .filter(Boolean);
+    const startedDependencyKeys = new Set(
+      dependencyRouteEntries.map((entry) => `${entry.rec.repoName}/${entry.rec.agentName}`)
+    );
+    const missingDependencyKeys = Array.from(declaredDependencyKeys)
+      .filter((key) => !startedDependencyKeys.has(key))
+      .sort((a, b) => a.localeCompare(b));
+    if (missingDependencyKeys.length) {
+      throw new Error(`Declared dependency routes are missing for: ${missingDependencyKeys.join(', ')}`);
+    }
 
     const defaultDependencyReadyTimeoutMs = Number.parseInt(process.env.PLOINKY_DEPENDENCY_AGENT_READY_TIMEOUT_MS || '120000', 10);
     const dependencyReadyIntervalMs = Number.parseInt(process.env.PLOINKY_DEPENDENCY_AGENT_READY_INTERVAL_MS || '250', 10);
     const dependencyProbeTimeoutMs = Number.parseInt(process.env.PLOINKY_DEPENDENCY_AGENT_READY_PROBE_TIMEOUT_MS || '1000', 10);
-
-    for (const dependencyEntry of dependencyRouteEntries) {
-      const dependencyState = needsHostInstall(dependencyEntry.rec.agentName, {
-        agentPath: dependencyEntry.route.hostPath,
-        packagePath: path.join(getAgentWorkDir(dependencyEntry.rec.agentName), 'package.json')
-      });
-      const dependencyReadyTimeoutMs = dependencyState.needsInstall ? 600000 : defaultDependencyReadyTimeoutMs;
-      console.log(`[start] Waiting for dependent agent '${dependencyEntry.route.agent || dependencyEntry.rec.agentName}' to become ready on port ${dependencyEntry.route.hostPort}...`);
-      if (dependencyState.needsInstall) {
-        console.log(`[start] ${dependencyEntry.route.agent || dependencyEntry.rec.agentName}: dependency cache cold or invalid (${dependencyState.reason}); using extended readiness timeout ${dependencyReadyTimeoutMs}ms.`);
+    const formatReadyProgress = ({ elapsedMs, timeoutMs, portOpen, protocol, stage, lastError }) => {
+      const elapsedSec = Math.floor(Math.max(0, elapsedMs) / 1000);
+      const timeoutSec = Math.floor(Math.max(0, timeoutMs) / 1000);
+      if (stage === 'waiting_for_port') {
+        return `still waiting (${elapsedSec}s/${timeoutSec}s): port not open yet${lastError ? `, last probe=${lastError}` : ''}`;
       }
-      const dependencyReady = await waitForAgentReady(dependencyEntry.route, {
-        timeoutMs: dependencyReadyTimeoutMs,
-        intervalMs: dependencyReadyIntervalMs,
-        probeTimeoutMs: dependencyProbeTimeoutMs,
-        protocol: dependencyEntry.readinessProtocol
-      });
-      if (!dependencyReady) {
-        throw new Error(`Dependent agent '${dependencyEntry.route.agent || dependencyEntry.rec.agentName}' did not become ready within ${dependencyReadyTimeoutMs}ms.`);
+      if (protocol === 'tcp') {
+        return `still waiting (${elapsedSec}s/${timeoutSec}s): port is open, waiting for TCP readiness`;
       }
-    }
-
+      if (portOpen && stage === 'waiting_for_protocol') {
+        return `still waiting (${elapsedSec}s/${timeoutSec}s): port is open, waiting for MCP handshake`;
+      }
+      return `still waiting (${elapsedSec}s/${timeoutSec}s)`;
+    };
     const staticRouteKey = preferredStatic?.[1]?.alias || staticShortAgent;
     const staticRoute = cfg.routes?.[staticRouteKey] || null;
     const staticDependencyPackagePath = path.join(getAgentWorkDir(staticShortAgent), 'package.json');
@@ -461,18 +506,122 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
       throw new Error(`Static agent '${staticAgent}' did not expose a host port.`);
     }
 
-    console.log(`[start] Waiting for static agent '${staticAgent}' to become ready on port ${staticRoute.hostPort}...`);
-    if (staticDependencyState.needsInstall) {
-      console.log(`[start] ${staticAgent}: dependency cache cold or invalid (${staticDependencyState.reason}); using extended readiness timeout ${staticReadyTimeoutMs}ms.`);
+    const readinessEntries = [
+      ...dependencyRouteEntries.map((dependencyEntry) => {
+        const dependencyLabel = dependencyEntry.route.agent || dependencyEntry.rec.agentName;
+        const dependencyState = needsHostInstall(dependencyEntry.rec.agentName, {
+          agentPath: dependencyEntry.route.hostPath,
+          packagePath: path.join(getAgentWorkDir(dependencyEntry.rec.agentName), 'package.json')
+        });
+        const dependencyReadyTimeoutMs = dependencyState.needsInstall ? 600000 : defaultDependencyReadyTimeoutMs;
+        return {
+          key: dependencyEntry.name,
+          label: dependencyLabel,
+          kind: 'dependency',
+          route: dependencyEntry.route,
+          protocol: dependencyEntry.readinessProtocol,
+          timeoutMs: dependencyReadyTimeoutMs,
+          intervalMs: dependencyReadyIntervalMs,
+          probeTimeoutMs: dependencyProbeTimeoutMs,
+          installState: dependencyState
+        };
+      }),
+      {
+        key: staticRouteKey || staticShortAgent,
+        label: staticAgent,
+        kind: 'static',
+        route: staticRoute,
+        protocol: 'mcp',
+        timeoutMs: staticReadyTimeoutMs,
+        intervalMs: staticReadyIntervalMs,
+        probeTimeoutMs: staticProbeTimeoutMs,
+        installState: staticDependencyState
+      }
+    ];
+
+    const readinessProgress = new Map();
+    const readinessStartAt = Date.now();
+    let lastSummaryBucket = -1;
+    const summarizeReadiness = ({ force = false } = {}) => {
+      const elapsedMs = Date.now() - readinessStartAt;
+      const bucket = Math.floor(elapsedMs / 5000);
+      if (!force) {
+        if (bucket <= 0 || bucket === lastSummaryBucket) return;
+      }
+      lastSummaryBucket = bucket;
+      const readyCount = readinessEntries.reduce((count, entry) => {
+        const state = readinessProgress.get(entry.key);
+        return count + (state?.ready ? 1 : 0);
+      }, 0);
+      const waiting = readinessEntries
+        .filter((entry) => !(readinessProgress.get(entry.key)?.ready))
+        .map((entry) => {
+          const state = readinessProgress.get(entry.key) || {};
+          if (state.elapsedMs) {
+            return `${entry.label} (${formatReadyProgress({
+              elapsedMs: state.elapsedMs,
+              timeoutMs: entry.timeoutMs,
+              portOpen: Boolean(state.portOpen),
+              protocol: entry.protocol,
+              stage: state.stage,
+              lastError: state.lastError
+            })})`;
+          }
+          return `${entry.label} (starting)`;
+        });
+      console.log(`[start] Readiness ${readyCount}/${readinessEntries.length} ready.${waiting.length ? ` Waiting on: ${waiting.join(', ')}` : ''}`);
+    };
+
+    for (const entry of readinessEntries) {
+      const waitLabel = entry.kind === 'static' ? 'static agent' : 'dependent agent';
+      console.log(`[start] Waiting for ${waitLabel} '${entry.label}' to become ready on port ${entry.route.hostPort}...`);
+      if (entry.installState?.needsInstall) {
+        console.log(`[start] ${entry.label}: startup cache cold or invalid (${entry.installState.reason}); using extended readiness timeout ${entry.timeoutMs}ms.`);
+      }
+      readinessProgress.set(entry.key, {
+        ready: false,
+        stage: 'starting',
+        elapsedMs: 0,
+        portOpen: false,
+        lastError: null
+      });
     }
-    const staticReady = await waitForAgentReady(staticRoute, {
-      timeoutMs: staticReadyTimeoutMs,
-      intervalMs: staticReadyIntervalMs,
-      probeTimeoutMs: staticProbeTimeoutMs
-    });
-    if (!staticReady) {
-      throw new Error(`Static agent '${staticAgent}' did not become ready within ${staticReadyTimeoutMs}ms.`);
+    if (readinessEntries.length) {
+      console.log(`[start] Tracking readiness for ${readinessEntries.length} agent(s): ${readinessEntries.map((entry) => entry.label).join(', ')}`);
     }
+
+    await Promise.all(readinessEntries.map(async (entry) => {
+      const ready = await waitForAgentReady(entry.route, {
+        timeoutMs: entry.timeoutMs,
+        intervalMs: entry.intervalMs,
+        probeTimeoutMs: entry.probeTimeoutMs,
+        protocol: entry.protocol,
+        onProgress: (progress) => {
+          readinessProgress.set(entry.key, {
+            ...progress,
+            ready: Boolean(progress?.ready),
+            stage: progress?.stage || 'starting',
+            portOpen: Boolean(progress?.portOpen),
+            lastError: progress?.lastError || null
+          });
+          summarizeReadiness();
+        }
+      });
+      if (!ready) {
+        throw new Error(`${entry.kind === 'static' ? 'Static agent' : 'Dependent agent'} '${entry.label}' did not become ready within ${entry.timeoutMs}ms.`);
+      }
+      const elapsedMs = Number(readinessProgress.get(entry.key)?.elapsedMs || 0);
+      const elapsedSec = Math.floor(elapsedMs / 1000);
+      readinessProgress.set(entry.key, {
+        ...(readinessProgress.get(entry.key) || {}),
+        ready: true,
+        stage: 'ready',
+        portOpen: true,
+        elapsedMs
+      });
+      console.log(`[start] ${entry.label}: ready after ${elapsedSec}s.`);
+      summarizeReadiness({ force: true });
+    }));
 
     const routerPidFile = path.join(runningDir, 'router.pid');
     const child = spawn(process.execPath, [routerPath], {
