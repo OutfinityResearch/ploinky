@@ -51,6 +51,7 @@ const PREDEFINED_REPOS = {
     security: { url: 'https://github.com/PloinkyRepos/security.git', description: 'Security and scanning tools' },
     extra: { url: 'https://github.com/PloinkyRepos/extra.git', description: 'Additional utility agents' },
     AchillesIDE: { url: 'https://github.com/PloinkyRepos/AssistOSExplorer.git', description: 'Workspace IDE with Explorer UI, SOPLang editing and Git workflows' },
+    AchillesCLI: { url: 'https://github.com/OutfinityResearch/AchillesCLI.git', description: 'Workspace CLI for setup and management' },
     demo: { url: 'https://github.com/PloinkyRepos/demo.git', description: 'Demo agents and examples' },
     proxies: { url: 'https://github.com/PloinkyRepos/proxies.git', description: 'API proxy agents (Kiro Gateway)' }
 };

@@ -80,6 +80,7 @@ const PREDEFINED_REPOS = {
   'security': 'https://github.com/PloinkyRepos/security.git',
   'extra': 'https://github.com/PloinkyRepos/extra.git',
   'AchillesIDE': 'https://github.com/PloinkyRepos/AssistOSExplorer.git',
+  'AchillesCLI': 'https://github.com/OutfinityResearch/AchillesCLI.git',
   'demo': 'https://github.com/PloinkyRepos/demo.git'
 };
 ```
@@ -441,6 +442,7 @@ Each repository must follow this structure:
 | `security` | Security tools | clamav-scanner, trivy, snyk |
 | `extra` | Additional utility agents | curl-agent, jq-agent, yq-agent |
 | `AchillesIDE` | Workspace IDE with Explorer UI, SOPLang editing and Git workflows | explorer UI, multimedia tools, SOPLang editing, Git workflows |
+| `AchillesCLI` | Workspace CLI for setup and management | workspace CLI tools |
 | `demo` | Demo agents and examples | hello-world, echo-agent |
 | `proxies` | API proxy agents | Kiro Gateway |
 

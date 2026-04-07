@@ -11,6 +11,7 @@ import {
     populateProcessEnvFromEnvFile,
     resolveEnvFilePath,
 } from '../services/llmProviderUtils.js';
+import { getSecret } from '../services/secretInjector.js';
 import * as inputState from '../services/inputState.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -176,7 +177,14 @@ function extractLlmErrorDetails(error) {
     };
 }
 
+function hydrateLlmEnv() {
+    const envPath = resolveEnvFilePath(path.resolve(process.cwd(), WORKSPACE_ENV_FILENAME));
+    populateProcessEnvFromEnvFile(envPath);
+    return envPath;
+}
+
 async function suggestCommandWithLLM(commandLabel, options = []) {
+    hydrateLlmEnv();
     const rawInput = composeUserCommand(commandLabel, options) || commandLabel || '';
     if (!rawInput.trim()) {
         return { status: 'empty' };
@@ -185,9 +193,10 @@ async function suggestCommandWithLLM(commandLabel, options = []) {
     const prompt = buildLlmPrompt(rawInput);
     try {
         const invoker = await getDefaultInvoker();
+        const configuredModel = String(getSecret('ACHILLES_MODEL_PLAN') || '').trim();
         const response = await invoker({
             prompt,
-            mode: 'fast',
+            model: configuredModel || 'plan',
             params: { temperature: 0.1 },
         });
         const suggestionText = typeof response?.output === 'string' ? response.output : '';
@@ -281,8 +290,7 @@ export async function handleSystemCommand(command, options = []) {
 export async function handleInvalidCommand(command, options = [], executeSuggestion) {
     const commandLabel = command || '';
     const validKeyNames = loadValidLlmApiKeys();
-    const envPath = resolveEnvFilePath(path.resolve(process.cwd(), WORKSPACE_ENV_FILENAME));
-    populateProcessEnvFromEnvFile(envPath);
+    const envPath = hydrateLlmEnv();
     const availableKeys = collectAvailableLlmKeys(envPath);
     const validKeysList = formatValidApiKeyList(validKeyNames);
 

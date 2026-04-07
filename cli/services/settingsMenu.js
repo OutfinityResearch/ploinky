@@ -1,197 +1,241 @@
-import fs from 'fs';
-import path from 'path';
 import readline from 'readline';
-import { fileURLToPath } from 'url';
-import { populateProcessEnvFromEnvFile, resolveEnvFilePath, collectAvailableLlmKeys } from './llmProviderUtils.js';
+import { populateProcessEnvFromEnvFile, resolveEnvFilePath } from './llmProviderUtils.js';
+import { getSecret } from './secretInjector.js';
+import { deleteVar, setEnvVar } from './secretVars.js';
 import * as inputState from './inputState.js';
 
+const SOUL_MODELS_URL = 'https://soul.axiologic.dev/v1/models';
+const ENTER_ALT_SCREEN = '\x1b[?1049h';
+const EXIT_ALT_SCREEN = '\x1b[?1049l';
+
 const VAR_SPECS = [
-    { key: 'ACHILLES_ENABLED_DEEP_MODELS', label: 'Enabled deep model', type: 'model', mode: 'deep' },
-    { key: 'ACHILLES_ENABLED_FAST_MODELS', label: 'Enabled fast model', type: 'model', mode: 'fast' },
-    { key: 'ACHILLES_DEFAULT_MODEL_TYPE', label: 'Default model type', type: 'enum', options: ['fast', 'deep'] },
+    { key: 'ACHILLES_MODEL_PLAN', label: 'Plan model/tag', type: 'model_or_tag' },
+    { key: 'ACHILLES_MODEL_CODE', label: 'Code model/tag', type: 'model_or_tag' },
     { key: 'ACHILLES_DEBUG', label: 'Debug logging', type: 'enum', options: ['true', 'false'] },
 ];
 
-function resolveLlmConfigPath() {
-    const candidates = [
-        path.resolve(process.cwd(), 'node_modules', 'achillesAgentLib', 'LLMConfig.json'),
-        path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'node_modules', 'achillesAgentLib', 'LLMConfig.json'),
-    ];
-    for (const candidate of candidates) {
-        try {
-            if (fs.existsSync(candidate)) {
-                return candidate;
-            }
-        } catch (_) { /* ignore */ }
-    }
-    return candidates[0];
+function formatPrice(priceValue) {
+    if (priceValue === null || priceValue === undefined || priceValue === '') return '?';
+    const asNumber = Number(priceValue);
+    if (Number.isFinite(asNumber)) return `$${asNumber}`;
+    return String(priceValue);
 }
 
-function loadModelOptions(availableKeys) {
-    const configPath = resolveLlmConfigPath();
-    let parsed = {};
-    try {
-        parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (_) {
-        return { fast: [], deep: [] };
-    }
-    const providers = parsed.providers || {};
-    const models = Array.isArray(parsed.models) ? parsed.models : [];
-    const keySet = new Set((availableKeys || []).map((k) => k && k.trim()).filter(Boolean));
-    const result = { fast: [], deep: [] };
-
-    for (const model of models) {
-        const name = typeof model?.name === 'string' ? model.name : null;
-        const mode = model?.mode === 'deep' ? 'deep' : 'fast';
-        const providerKey = model?.provider || model?.providerKey || null;
-        if (!name || !providerKey) continue;
-        const providerCfg = providers[providerKey];
-        const apiKeyEnv = providerCfg?.apiKeyEnv;
-        if (!apiKeyEnv || !keySet.has(apiKeyEnv)) continue;
-        result[mode].push({
-            name,
-            provider: providerKey,
-            inputPrice: model?.inputPrice,
-            outputPrice: model?.outputPrice,
-            context: model?.context
-        });
-    }
-
-    // dedupe by name
-    for (const key of Object.keys(result)) {
-        const seen = new Set();
-        result[key] = result[key].filter((entry) => {
-            if (seen.has(entry.name)) return false;
-            seen.add(entry.name);
-            return true;
-        });
-    }
-    return result;
-}
-
-function parseCurrentModelValue(raw) {
-    if (!raw) return 'unset';
-    try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length && typeof parsed[0] === 'string') {
-            return parsed[0];
-        }
-    } catch (_) { /* noop */ }
-    return raw;
-}
-
-function formatModelValue(modelName) {
-    if (!modelName || modelName === 'unset') return null;
-    return JSON.stringify([modelName]);
-}
-
-function buildValueOptions(spec, models) {
-    if (spec.type === 'enum') {
-        return ['unset', ...spec.options];
-    }
-    if (spec.type === 'model') {
-        const list = spec.mode === 'deep' ? models.deep : models.fast;
-        return ['unset', ...list.map(formatModelOption)];
-    }
-    return ['unset'];
-}
-
-function formatPrice(value) {
-    if (value === null || value === undefined) return '?';
-    const num = Number(value);
-    if (Number.isNaN(num)) return String(value);
-    return `$${num}`;
+function formatContextWindow(contextWindow) {
+    if (contextWindow === null || contextWindow === undefined || contextWindow === '') return 'ctx ?';
+    return `ctx ${contextWindow}`;
 }
 
 function formatModelOption(entry) {
-    if (!entry) return 'unset';
-    const priceIn = formatPrice(entry.inputPrice);
-    const priceOut = formatPrice(entry.outputPrice);
-    const ctx = entry.context || '?';
-    return `${entry.name} [${entry.provider}] (${priceIn}/${priceOut}, ctx ${ctx})`;
+    const tags = Array.isArray(entry.tags) && entry.tags.length
+        ? `tags: ${entry.tags.join(', ')}`
+        : 'tags: -';
+    if (entry.isFree) {
+        return `${entry.name} [${entry.providerKey}] (free, ${formatContextWindow(entry.contextWindow)}, ${tags})`;
+    }
+    const inPrice = formatPrice(entry.inputPrice);
+    const outPrice = formatPrice(entry.outputPrice);
+    return `${entry.name} [${entry.providerKey}] (${inPrice}/${outPrice}, ${formatContextWindow(entry.contextWindow)}, ${tags})`;
 }
 
-function extractValueFromOption(option) {
-    if (!option || option === 'unset') return 'unset';
-    const bracketIndex = option.indexOf(' [');
-    if (bracketIndex !== -1) {
-        return option.slice(0, bracketIndex);
+export async function loadSoulModelCatalog() {
+    const apiKey = String(getSecret('SOUL_GATEWAY_API_KEY') || '').trim();
+    if (!apiKey) {
+        return {
+            models: [],
+            tags: [],
+            warning: 'SOUL_GATEWAY_API_KEY is not set. Add it in .secrets or .env to load models.',
+        };
     }
-    return option;
+
+    try {
+        const response = await fetch(SOUL_MODELS_URL, {
+            method: 'GET',
+            headers: {
+                Authorization: `Bearer ${apiKey}`,
+                Accept: 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Soul models request failed (${response.status}): ${body.slice(0, 300)}`);
+        }
+
+        const payload = await response.json();
+        const rawList = Array.isArray(payload?.data) ? payload.data : [];
+
+        const discoveredModels = rawList
+            .filter((entry) => entry && typeof entry === 'object')
+            .map((entry) => ({
+                name: String(entry.id || '').trim(),
+                providerKey: String(entry.provider || entry.owned_by || '').trim() || 'unknown',
+                isFree: entry.is_free === true,
+                inputPrice: entry.input_price ?? null,
+                outputPrice: entry.output_price ?? null,
+                contextWindow: entry.context_window ?? entry.max_context_tokens ?? null,
+                tags: Array.isArray(entry.tags)
+                    ? entry.tags.map((tag) => String(tag || '').trim()).filter(Boolean)
+                    : [],
+                sortOrder: Number.isFinite(Number(entry.sort_order)) ? Number(entry.sort_order) : 9999,
+            }))
+            .filter((entry) => Boolean(entry.name));
+
+        discoveredModels.sort((left, right) => {
+            if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
+            return left.name.localeCompare(right.name);
+        });
+
+        const uniqueModels = [];
+        const modelSeen = new Set();
+        for (const model of discoveredModels) {
+            if (modelSeen.has(model.name)) continue;
+            modelSeen.add(model.name);
+            uniqueModels.push(model);
+        }
+
+        const tagSet = new Set();
+        for (const model of uniqueModels) {
+            for (const tag of model.tags) {
+                tagSet.add(tag);
+            }
+        }
+
+        return {
+            models: uniqueModels,
+            tags: [...tagSet].sort((a, b) => a.localeCompare(b)),
+            warning: uniqueModels.length
+                ? null
+                : 'Soul gateway returned 0 models for this API key.',
+        };
+    } catch (error) {
+        return {
+            models: [],
+            tags: [],
+            warning: `Failed to load Soul models: ${error.message}`,
+        };
+    }
 }
 
 function getCurrentValueDisplay(spec) {
-    const raw = process.env[spec.key];
+    const raw = getSecret(spec.key);
     if (!raw) return 'unset';
-    if (spec.type === 'model') {
-        return parseCurrentModelValue(raw);
-    }
-    return raw;
+    return String(raw).trim() || 'unset';
 }
 
-function applyValue(spec, optionValue) {
-    if (optionValue === 'unset') {
-        delete process.env[spec.key];
+function buildValueOptions(spec, catalog) {
+    if (spec.type === 'enum') {
+        return [{ value: 'unset', label: 'unset' }, ...spec.options.map((option) => ({ value: option, label: option }))];
+    }
+
+    if (spec.type === 'model_or_tag') {
+        const modelOptions = (catalog.models || []).map((entry) => ({
+            value: entry.name,
+            label: formatModelOption(entry),
+        }));
+        const tagOptions = (catalog.tags || []).map((tag) => ({
+            value: tag,
+            label: `#${tag} [tag]`,
+        }));
+        return [{ value: 'unset', label: 'unset' }, ...modelOptions, ...tagOptions];
+    }
+
+    return [{ value: 'unset', label: 'unset' }];
+}
+
+function applyValue(spec, value) {
+    if (value === 'unset') {
+        deleteVar(spec.key);
         return;
     }
-    if (spec.type === 'model') {
-        const formatted = formatModelValue(optionValue);
-        if (formatted) {
-            process.env[spec.key] = formatted;
-        } else {
-            delete process.env[spec.key];
-        }
-        return;
-    }
-    process.env[spec.key] = optionValue;
+
+    setEnvVar(spec.key, value);
 }
 
 function createMenuRenderer() {
-    const renderState = { rendered: false, lines: 0 };
+    const renderState = { rendered: false };
+
+    const clearScreen = () => {
+        try { readline.cursorTo(process.stdout, 0, 0); } catch (_) { /* noop */ }
+        try { readline.clearScreenDown(process.stdout); } catch (_) { /* noop */ }
+    };
+
     const clear = () => {
-        if (!renderState.rendered || renderState.lines <= 0) return;
-        readline.moveCursor(process.stdout, 0, -renderState.lines);
-        readline.cursorTo(process.stdout, 0);
-        readline.clearScreenDown(process.stdout);
+        if (!renderState.rendered) return;
+        clearScreen();
         renderState.rendered = false;
-        renderState.lines = 0;
+    };
+
+    const computeVisibleOptionWindow = (totalOptions, selectedIndex, maxVisible) => {
+        if (totalOptions <= maxVisible) {
+            return { start: 0, end: totalOptions };
+        }
+        const halfWindow = Math.floor(maxVisible / 2);
+        let start = selectedIndex - halfWindow;
+        if (start < 0) start = 0;
+        let end = start + maxVisible;
+        if (end > totalOptions) {
+            end = totalOptions;
+            start = end - maxVisible;
+        }
+        return { start, end };
     };
 
     const render = (state) => {
-        const { variables, selectedVar, selectingValue, selectedValueIndex, valueOptions } = state;
-        if (renderState.rendered && renderState.lines > 0) {
-            readline.moveCursor(process.stdout, 0, -renderState.lines);
-            readline.cursorTo(process.stdout, 0);
-            readline.clearScreenDown(process.stdout);
-        }
+        clearScreen();
 
         const lines = [
-            '=== Ploinky Env Config ===',
-            '(Prices shown per 1M tokens: input/output)',
-            'Arrow Up/Down to navigate, Enter to edit, Esc/Backspace to exit.',
+            '=== Ploinky LLM Settings ===',
+            'Arrow Up/Down to navigate, Enter to edit/set, Esc/Backspace to exit.',
             '',
         ];
 
-        variables.forEach((entry, idx) => {
-            const pointer = idx === selectedVar ? '>' : ' ';
-            const current = entry.current;
-            lines.push(`${pointer} ${entry.label}: ${current}`);
-            if (selectingValue && idx === selectedVar) {
-                valueOptions.forEach((opt, vIdx) => {
-                    const vPointer = vIdx === selectedValueIndex ? '>' : ' ';
-                    lines.push(`   ${vPointer} ${opt}`);
-                });
-            }
+        if (state.warning) {
+            lines.push(`! ${state.warning}`);
+            lines.push('');
+        }
+
+        state.variables.forEach((entry, idx) => {
+            const pointer = idx === state.selectedVar ? '>' : ' ';
+            lines.push(`${pointer} ${entry.label}: ${entry.current}`);
         });
 
-        const output = `${lines.join('\n')}\n`;
-        process.stdout.write(output);
+        if (state.selectingValue) {
+            const totalOptions = state.valueOptions.length;
+            lines.push('');
+
+            if (!totalOptions) {
+                lines.push('No options available.');
+            } else {
+                const terminalRows = Number(process.stdout.rows) > 0 ? Number(process.stdout.rows) : 24;
+                const reservedRows = 1;
+                const availableRows = Math.max(1, terminalRows - lines.length - reservedRows);
+                const window = computeVisibleOptionWindow(totalOptions, state.selectedValueIndex, availableRows);
+
+                lines.push(`Options ${window.start + 1}-${window.end} / ${totalOptions}`);
+                for (let optionIndex = window.start; optionIndex < window.end; optionIndex += 1) {
+                    const option = state.valueOptions[optionIndex];
+                    const optionPointer = optionIndex === state.selectedValueIndex ? '>' : ' ';
+                    lines.push(`   ${optionPointer} ${option.label}`);
+                }
+            }
+        }
+
+        process.stdout.write(`${lines.join('\n')}\n`);
         renderState.rendered = true;
-        renderState.lines = lines.length;
     };
 
     render.clear = clear;
     return render;
+}
+
+function syncOptionsForSelection(state, catalog) {
+    const spec = state.variables[state.selectedVar];
+    const options = buildValueOptions(spec, catalog);
+    const currentValue = state.variables[state.selectedVar].current;
+    const selectedIndex = options.findIndex((option) => option.value === currentValue);
+    state.valueOptions = options;
+    state.selectedValueIndex = selectedIndex >= 0 ? selectedIndex : 0;
 }
 
 export async function runSettingsMenu({ onEnvChange } = {}) {
@@ -202,36 +246,53 @@ export async function runSettingsMenu({ onEnvChange } = {}) {
 
     const envPath = resolveEnvFilePath(process.cwd());
     populateProcessEnvFromEnvFile(envPath);
-    const availableKeys = collectAvailableLlmKeys(envPath);
-    const modelOptions = loadModelOptions(availableKeys);
+
+    const catalog = await loadSoulModelCatalog();
 
     const variables = VAR_SPECS.map((spec) => ({
         ...spec,
         current: getCurrentValueDisplay(spec),
     }));
 
-    let state = {
+    const state = {
         variables,
         selectedVar: 0,
         selectingValue: false,
         selectedValueIndex: 0,
-        valueOptions: buildValueOptions(variables[0], modelOptions),
+        valueOptions: [],
+        warning: catalog.warning,
     };
+    syncOptionsForSelection(state, catalog);
+
     const renderMenu = createMenuRenderer();
 
     const restoreInput = inputState.prepareForExternalCommand?.() || (() => {});
     const rlInput = process.stdin;
-
     readline.emitKeypressEvents(rlInput);
 
     try { rlInput.setRawMode(true); } catch (_) { /* noop */ }
     try { rlInput.resume(); } catch (_) { /* noop */ }
 
+    let altScreenEnabled = false;
+    if (process.stdout.isTTY) {
+        try {
+            process.stdout.write(ENTER_ALT_SCREEN);
+            altScreenEnabled = true;
+        } catch (_) { /* noop */ }
+    }
+
     let keyHandler = null;
+    let cleanedUp = false;
 
     const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
         try { renderMenu.clear?.(); } catch (_) { /* noop */ }
         try { if (keyHandler) rlInput.off('keypress', keyHandler); } catch (_) { /* noop */ }
+        if (altScreenEnabled) {
+            try { process.stdout.write(EXIT_ALT_SCREEN); } catch (_) { /* noop */ }
+            altScreenEnabled = false;
+        }
         restoreInput();
     };
 
@@ -241,45 +302,47 @@ export async function runSettingsMenu({ onEnvChange } = {}) {
                 cleanup();
                 return resolve(0);
             }
+
             if (key?.name === 'up') {
                 if (state.selectingValue) {
                     state.selectedValueIndex = (state.selectedValueIndex - 1 + state.valueOptions.length) % state.valueOptions.length;
                 } else {
                     state.selectedVar = (state.selectedVar - 1 + state.variables.length) % state.variables.length;
-                    state.valueOptions = buildValueOptions(state.variables[state.selectedVar], modelOptions);
-                    state.selectedValueIndex = 0;
+                    syncOptionsForSelection(state, catalog);
                 }
                 renderMenu(state);
                 return;
             }
+
             if (key?.name === 'down') {
                 if (state.selectingValue) {
                     state.selectedValueIndex = (state.selectedValueIndex + 1) % state.valueOptions.length;
                 } else {
                     state.selectedVar = (state.selectedVar + 1) % state.variables.length;
-                    state.valueOptions = buildValueOptions(state.variables[state.selectedVar], modelOptions);
-                    state.selectedValueIndex = 0;
+                    syncOptionsForSelection(state, catalog);
                 }
                 renderMenu(state);
                 return;
             }
+
             if (key?.name === 'return') {
                 if (!state.selectingValue) {
                     state.selectingValue = true;
                     renderMenu(state);
                     return;
                 }
+
                 const spec = state.variables[state.selectedVar];
-                const option = state.valueOptions[state.selectedValueIndex];
-                const value = extractValueFromOption(option);
+                const selected = state.valueOptions[state.selectedValueIndex];
+                const value = selected?.value || 'unset';
                 applyValue(spec, value);
                 if (typeof onEnvChange === 'function') {
                     try { onEnvChange(spec.key, value); } catch (_) { /* noop */ }
                 }
                 state.variables[state.selectedVar].current = getCurrentValueDisplay(spec);
                 state.selectingValue = false;
+                syncOptionsForSelection(state, catalog);
                 renderMenu(state);
-                return;
             }
         };
 

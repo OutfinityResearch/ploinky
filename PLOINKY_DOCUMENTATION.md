@@ -709,15 +709,16 @@ getAgentMcpUrl(agentName)  // Returns /mcps/<agentName>/mcp
 
 ## Predefined Repositories
 
-| Repository | Description |
-|------------|-------------|
-| `basic` | Default base agents (shell, node-dev, postgres, etc.) |
-| `cloud` | Cloud infrastructure agents |
-| `vibe` | Vibe coding agents |
-| `security` | Security and scanning tools |
-| `extra` | Additional utility agents |
+| Repository | Description                                                       |
+|------------|-------------------------------------------------------------------|
+| `basic` | Default base agents (shell, node-dev, postgres, etc.)             |
+| `cloud` | Cloud infrastructure agents                                       |
+| `vibe` | Vibe coding agents                                                |
+| `security` | Security and scanning tools                                       |
+| `extra` | Additional utility agents                                         |
 | `AchillesIDE` | Workspace IDE with Explorer UI, SOPLang editing and Git workflows |
-| `demo` | Demo agents and examples |
+| `AchillesCLI` | Workspace CLI for managing skills                                 |
+| `demo` | Demo agents and examples                                          |
 
 ### Available Agents in `basic` Repository
 

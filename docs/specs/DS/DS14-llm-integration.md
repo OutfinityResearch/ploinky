@@ -94,12 +94,11 @@ Located at `node_modules/achillesAgentLib/LLMConfig.json`:
 
 | Variable | Label | Type | Options |
 |----------|-------|------|---------|
-| `ACHILLES_ENABLED_DEEP_MODELS` | Enabled deep model | model | Models with mode=deep |
-| `ACHILLES_ENABLED_FAST_MODELS` | Enabled fast model | model | Models with mode=fast |
-| `ACHILLES_DEFAULT_MODEL_TYPE` | Default model type | enum | `fast`, `deep` |
+| `ACHILLES_MODEL_PLAN` | Plan model/tag | selector | Model name or tag |
+| `ACHILLES_MODEL_CODE` | Code model/tag | selector | Model name or tag |
 | `ACHILLES_DEBUG` | Debug logging | enum | `true`, `false` |
 
-Values are stored as process environment variables for the duration of the session. Model values are serialized as JSON arrays: `["model-name"]`.
+Values are persisted in `.ploinky/.secrets` and resolved on demand (with `process.env` taking precedence). Selector values are plain strings and may represent either a model name or a tag.
 
 ### LLM Suggestion Result
 
@@ -170,9 +169,10 @@ Values are stored as process environment variables for the duration of the sessi
        ├─ "/settings" / "settings" → open settings menu
        ├─ System command (ls, git, etc.) → execute directly
        └─ Other input:
-           ├─ Check API key availability
+            ├─ Hydrate env from `.ploinky/.secrets` and `.env`
+            ├─ Check API key availability
            ├─ Build LLM prompt with system context
-           ├─ Call LLM (mode: fast, temperature: 0.1)
+            ├─ Call LLM (model selector from ACHILLES_MODEL_PLAN, temperature: 0.1)
            ├─ Extract suggestion
            └─ If single command found:
                ├─ Prompt "Execute? (y/n)"
@@ -219,25 +219,23 @@ User input: "<user's text>"
 ### Settings Menu Navigation
 
 ```
-=== Ploinky Env Config ===
-(Prices shown per 1M tokens: input/output)
+=== Ploinky LLM Settings ===
 Arrow Up/Down to navigate, Enter to edit, Esc/Backspace to exit.
 
-> Enabled deep model: claude-3-opus
-  Enabled fast model: gpt-4o
-  Default model type: fast
+> Plan model/tag: plan
+  Code model/tag: code
   Debug logging: false
 
    > unset
-     claude-3-opus [anthropic] ($15/$75, ctx 200000)
-     gpt-4 [openai] ($30/$60, ctx 128000)
+     anthropic/claude-haiku-4-5-20251001 [anthropic] ($0/$0, ctx ?, tags: fast, chat, tool-calling)
+     #tool-calling [tag]
 ```
 
 ## Configuration
 
 ### API Key Resolution Order
 
-1. Process environment variable (e.g., `ANTHROPIC_API_KEY`)
+1. Process environment variable (e.g., `SOUL_GATEWAY_API_KEY`)
 2. `.env` file in current directory
 3. `.env` file walking up parent directories
 
@@ -251,7 +249,10 @@ GOOGLE_API_KEY=AIza...
 
 # Debug overrides
 ACHILLES_DEBUG=true
-ACHILLES_DEFAULT_MODEL_TYPE=fast
+
+# Optional selectors (can also be stored in .ploinky/.secrets)
+ACHILLES_MODEL_PLAN=plan
+ACHILLES_MODEL_CODE=code
 ```
 
 ### LLMConfig.json Resolution

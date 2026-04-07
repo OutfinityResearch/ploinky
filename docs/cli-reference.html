@@ -296,13 +296,14 @@ echo API_KEY      # Show raw value
 echo $PROD_KEY    # Show resolved alias</code></pre>
 
                         <h3>/settings (alias: settings)</h3>
-                        <p>Interactively configure Achilles env flags used for LLM selection (works in both Ploinky CLI and Ploinky Shell).</p>
+                        <p>Interactively configure Soul Gateway-backed Achilles model selectors (works in both Ploinky CLI and Ploinky Shell).</p>
                         <pre><code>/settings
 settings</code></pre>
                         <ul>
                             <li>Arrows: navigate variables and options; Enter: edit/set; Esc/Backspace: exit.</li>
-                            <li>Variables: <code>ACHILLES_ENABLED_DEEP_MODELS</code>, <code>ACHILLES_ENABLED_FAST_MODELS</code>, <code>ACHILLES_DEFAULT_MODEL_TYPE</code>, <code>ACHILLES_DEBUG</code>.</li>
-                            <li>Model lists are filtered by available API keys and show provider names; values are applied to the current process env (not persisted to <code>.env</code>).</li>
+                            <li>Variables: <code>ACHILLES_MODEL_PLAN</code>, <code>ACHILLES_MODEL_CODE</code>, <code>ACHILLES_DEBUG</code>.</li>
+                            <li>Model list is loaded from <code>https://soul.axiologic.dev/v1/models</code> using <code>SOUL_GATEWAY_API_KEY</code>; options are built from the returned <code>data[].id</code> entries.</li>
+                            <li>Each selector can be a model name or a tag string; values are persisted in <code>.ploinky/.secrets</code> and resolved on demand (with <code>process.env</code> taking precedence).</li>
                         </ul>
 
                         <h3>expose</h3>

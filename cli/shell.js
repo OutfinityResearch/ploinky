@@ -3,7 +3,6 @@
 import readline from 'readline';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import {
     suggestCommandWithLLM,
@@ -20,7 +19,8 @@ import {
     populateProcessEnvFromEnvFile,
     resolveEnvFilePath,
 } from './services/llmProviderUtils.js';
-import { runSettingsMenu } from './services/settingsMenu.js';
+import { loadSoulModelCatalog, runSettingsMenu } from './services/settingsMenu.js';
+import { getSecret } from './services/secretInjector.js';
 import * as inputState from './services/inputState.js';
 
 const WORKSPACE_ENV_FILENAME = '.env';
@@ -65,7 +65,7 @@ function printUsage() {
 
 function printShellHelp() {
     console.log('Ploinky Shell commands:');
-    console.log('  /settings   Open the interactive settings menu for LLM config flags');
+    console.log('  /settings   Open the interactive settings menu for model/tag selectors');
     console.log('  /help, help Show this help');
     console.log('All other input is sent to the LLM for command recommendations.');
 }
@@ -83,56 +83,6 @@ async function ensureLlmKeyAvailability() {
         envPath,
     };
     return cachedKeyState;
-}
-
-function resolveLlmConfigPath() {
-    const candidates = [
-        path.resolve(process.cwd(), 'node_modules', 'achillesAgentLib', 'LLMConfig.json'),
-        path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', 'achillesAgentLib', 'LLMConfig.json'),
-    ];
-    for (const candidate of candidates) {
-        try {
-            if (fs.existsSync(candidate)) {
-                return candidate;
-            }
-        } catch (_) { /* ignore */ }
-    }
-    return candidates[0];
-}
-
-function loadUsableModels(availableKeys) {
-    const configPath = resolveLlmConfigPath();
-    let parsed = {};
-    try {
-        parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (_) {
-        return { fast: [], deep: [] };
-    }
-    const providers = parsed.providers || {};
-    const models = Array.isArray(parsed.models) ? parsed.models : [];
-    const keySet = new Set((availableKeys || []).map((k) => k && k.trim()).filter(Boolean));
-    const result = { fast: [], deep: [] };
-
-    for (const model of models) {
-        const name = typeof model?.name === 'string' ? model.name : null;
-        const mode = model?.mode === 'deep' ? 'deep' : 'fast';
-        const providerKey = model?.provider || model?.providerKey || null;
-        if (!name || !providerKey) continue;
-        const providerCfg = providers[providerKey];
-        const apiKeyEnv = providerCfg?.apiKeyEnv;
-        if (!apiKeyEnv || !keySet.has(apiKeyEnv)) continue;
-        result[mode].push({ name, provider: providerKey });
-    }
-
-    for (const key of Object.keys(result)) {
-        const seen = new Set();
-        result[key] = result[key].filter((entry) => {
-            if (seen.has(entry.name)) return false;
-            seen.add(entry.name);
-            return true;
-        });
-    }
-    return result;
 }
 
 async function handleSetEnv() {
@@ -161,27 +111,23 @@ function showMissingKeyMessage(validKeys) {
 async function logAvailableModels(availableKeys = []) {
     if (modelsInfoLogged) return;
     modelsInfoLogged = true;
-    const usableKeys = new Set((availableKeys || []).map((k) => k && k.trim()).filter(Boolean));
     try {
-        const { fast = [], deep = [] } = loadUsableModels(Array.from(usableKeys));
-        const mapEntry = (entry, mode) => ({
-            name: entry?.name || entry,
-            mode: mode || entry?.mode || 'fast',
-            provider: entry?.provider || entry?.providerKey || 'unknown'
-        });
-
-        const usableFast = (fast || []).map((entry) => mapEntry(entry, 'fast')).filter((e) => e.name);
-        const usableDeep = (deep || []).map((entry) => mapEntry(entry, 'deep')).filter((e) => e.name);
-        const combined = [...usableFast, ...usableDeep].filter((entry) => entry && entry.name);
+        const catalog = await loadSoulModelCatalog();
+        const combined = (catalog.models || []).map((entry) => ({
+            name: entry?.name,
+            provider: entry?.providerKey || 'unknown',
+            tags: Array.isArray(entry?.tags) ? entry.tags : [],
+        })).filter((entry) => entry?.name);
         const grouped = combined.reduce((acc, entry) => {
             const provider = entry.provider || 'unknown';
             if (!acc[provider]) acc[provider] = [];
-            acc[provider].push(`${entry.name} (${entry.mode})`);
+            const tags = entry.tags.length ? ` [${entry.tags.join(', ')}]` : '';
+            acc[provider].push(`${entry.name}${tags}`);
             return acc;
         }, {});
 
-        if (!usableKeys.size) {
-            console.log(`${SHELL_TAG} ${ANSI_YELLOW}No LLM API keys available; skipping model list.${ANSI_RESET}`);
+        if (catalog.warning) {
+            console.log(`${SHELL_TAG} ${ANSI_YELLOW}${catalog.warning}${ANSI_RESET}`);
             return;
         }
 
@@ -202,7 +148,8 @@ async function logAvailableModels(availableKeys = []) {
 
 async function logCurrentModelChoice() {
     try {
-        const prioritized = await getPrioritizedModels();
+        const configured = String(getSecret('ACHILLES_MODEL_PLAN') || '').trim();
+        const prioritized = await getPrioritizedModels(configured || null);
         const current = Array.isArray(prioritized) && prioritized.length ? prioritized[0] : null;
         if (current) {
             console.log(`${SHELL_TAG} ${ANSI_GREEN}Current LLM model:${ANSI_RESET} ${current}`);
@@ -227,7 +174,7 @@ function logEnvDetails(envPath) {
     }
 
     const envKeyLines = Array.from(validKeys).map((key) => {
-        const value = process.env[key];
+        const value = getSecret(key);
         if (typeof value !== 'string' || !value.trim()) return null;
         return `${key}=${maskApiKey(value)}`;
     }).filter(Boolean);
@@ -239,12 +186,11 @@ function logEnvDetails(envPath) {
 
     const debugVars = [
         'ACHILLES_DEBUG',
-        'ACHILLES_ENABLED_DEEP_MODELS',
-        'ACHILLES_ENABLED_FAST_MODELS',
-        'ACHILLES_DEFAULT_MODEL_TYPE'
+        'ACHILLES_MODEL_PLAN',
+        'ACHILLES_MODEL_CODE',
     ];
     const activeDebugVars = debugVars
-        .map((key) => [key, process.env[key]])
+        .map((key) => [key, getSecret(key)])
         .filter(([, value]) => typeof value === 'string' && value.trim().length);
     if (activeDebugVars.length) {
         const flags = activeDebugVars.map(([key, value]) => `${key}=${value}`);
