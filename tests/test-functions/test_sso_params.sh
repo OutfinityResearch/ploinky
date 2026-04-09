@@ -19,13 +19,44 @@ ensure_webchat_cli_session() {
   local router_port="$TEST_ROUTER_PORT"
   local agent_name="$TEST_AGENT_NAME"
   local workspace="$TEST_AGENT_WORKSPACE"
-  local log_file="$workspace/test-sso-params.log"
   local secrets_file="$TEST_RUN_DIR/.ploinky/.secrets"
   local cookie_file
   local stream_file
   local tab_id="sso-check-$(date +%s%N)"
 
-  rm -f "$log_file"
+  # The agent CLI's CWD comes from the agents.json projectPath, which the
+  # runtime overwrites to the workspace root (see
+  # cli/services/docker/agentServiceManager.js:454). The script writes
+  # `./test-sso-params.log` so the file lands wherever projectPath actually
+  # points. Build a search list across all plausible locations and clean any
+  # stale copy in each before invoking the session.
+  local agents_json="$TEST_RUN_DIR/.ploinky/agents.json"
+  local server_project_path=""
+  if [[ -f "$agents_json" ]]; then
+    server_project_path=$(AGENTS_JSON="$agents_json" AGENT_NAME="$agent_name" node <<'NODE'
+const fs = require('node:fs');
+try {
+  const data = JSON.parse(fs.readFileSync(process.env.AGENTS_JSON, 'utf8') || '{}');
+  for (const [, rec] of Object.entries(data)) {
+    if (rec && rec.type === 'agent' && rec.agentName === process.env.AGENT_NAME && rec.projectPath) {
+      process.stdout.write(String(rec.projectPath));
+      return;
+    }
+  }
+} catch (_) {}
+NODE
+)
+  fi
+  local -a candidate_logs=()
+  [[ -n "$server_project_path" ]] && candidate_logs+=("$server_project_path/test-sso-params.log")
+  candidate_logs+=("$workspace/test-sso-params.log")
+  candidate_logs+=("$TEST_RUN_DIR/test-sso-params.log")
+  for c in "${candidate_logs[@]}"; do
+    rm -f "$c"
+  done
+  # Use the first candidate as the canonical reporting path; the wait loop
+  # below polls all candidates and accepts whichever appears first.
+  local log_file="${candidate_logs[0]}"
 
   local token
   if [[ -f "$secrets_file" ]]; then
@@ -60,16 +91,26 @@ ensure_webchat_cli_session() {
     return 1
   fi
 
+  local found_log=""
   for _ in {1..15}; do
-    [[ -f "$log_file" ]] && break
+    for c in "${candidate_logs[@]}"; do
+      if [[ -f "$c" ]]; then
+        found_log="$c"
+        break 2
+      fi
+    done
     sleep 0.2
   done
 
-  if [[ ! -f "$log_file" ]]; then
-    echo "Expected log file '$log_file' not produced by WebChat session." >&2
+  if [[ -z "$found_log" ]]; then
+    echo "Expected log file 'test-sso-params.log' not produced by WebChat session." >&2
+    echo "Searched: ${candidate_logs[*]}" >&2
     return 1
   fi
 
+  # Export the resolved path so callers (test_sso_params_disabled / _enabled)
+  # don't have to re-derive it.
+  export FAST_SSO_PARAMS_LOG="$found_log"
   return 0
 }
 
@@ -81,14 +122,20 @@ test_sso_params_disabled() {
     return 1
   fi
 
-  local log_file="$TEST_AGENT_WORKSPACE/test-sso-params.log"
+  # ensure_webchat_cli_session exports FAST_SSO_PARAMS_LOG with whichever
+  # candidate path actually had the log file.
+  local log_file="${FAST_SSO_PARAMS_LOG:-$TEST_AGENT_WORKSPACE/test-sso-params.log}"
 
   if [[ ! -f "$log_file" ]]; then
     echo "Log file '$log_file' not found." >&2
     return 1
   fi
 
-  mapfile -t lines <"$log_file"
+  local lines=()
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lines+=("$line")
+  done <"$log_file"
 
   local required=(
     "ENV_SSO_USER=guest"
@@ -142,7 +189,11 @@ test_sso_params_enabled() {
 
   local log_file="$TEST_AGENT_WORKSPACE/test-sso-params.log"
 
-  mapfile -t lines <"$log_file"
+  local lines=()
+  local line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    lines+=("$line")
+  done <"$log_file"
 
   local found_real=0
   local found_guest=0

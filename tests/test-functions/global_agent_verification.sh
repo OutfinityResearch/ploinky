@@ -13,6 +13,7 @@ fast_assert_global_agent_workdir() {
   fi
 
   local expected_dir="$TEST_RUN_DIR"
+  expected_dir=$(resolve_realpath "$expected_dir")
 
   local raw_output
   if ! raw_output=$( { echo "pwd"; echo "exit"; } | ploinky shell "$agent_name" ); then
@@ -23,11 +24,14 @@ fast_assert_global_agent_workdir() {
   local actual_dir
   actual_dir=$(echo "$raw_output" | tr -d '\r' | sed -n 's/^# \(\/.*\)/\1/p' | head -n 1)
   if [[ -z "$actual_dir" ]]; then
-    actual_dir=$(echo "$raw_output" | tr -d '\r' | sed -n '/^\//{p; q}')
+    # BSD sed (macOS) cannot parse `{p; q}` on the same line as the address;
+    # use awk for portability across BSD and GNU.
+    actual_dir=$(echo "$raw_output" | tr -d '\r' | awk '/^\// { print; exit }')
   fi
 
   # Strip trailing prompt echoes such as " # pwd" that may be appended by the container shell.
   actual_dir=${actual_dir%% \#*}
+  actual_dir=$(resolve_realpath "$actual_dir")
 
   if [[ "$actual_dir" != "$expected_dir" ]]; then
     echo "Global agent working directory mismatch for ${agent_name}." >&2

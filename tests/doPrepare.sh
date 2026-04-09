@@ -166,7 +166,10 @@ cat >"${dep_devel_root}/manifest.json" <<'EOF'
 {
   "lite-sandbox": true,
   "container": "node:20-bullseye",
-  "agent": "node -e \"setInterval(()=>{}, 1_000_000)\""
+  "start": "node -e \"require('net').createServer(()=>{}).listen(Number(process.env.PORT||7000), '0.0.0.0'); setInterval(()=>{}, 1_000_000)\"",
+  "readiness": {
+    "protocol": "tcp"
+  }
 }
 EOF
 
@@ -188,9 +191,31 @@ ploinky enable repo "$TEST_REPO_NAME"
 enable_repo_with_branch "demo"
 
 # Pre-clone manifest repos with branches before demo agent processes them
-# These repos are referenced in demo's manifest.repos and need branch support for testing
+# These repos are referenced in demo's manifest.repos and need branch support for testing.
+# webmeet is also pre-cloned so we can slim moderator's enable list before
+# `ploinky start demo` triggers the recursive dependency-graph walk.
 preclone_manifest_repo "fileExplorer" "https://github.com/PloinkyRepos/AssistOSExplorer.git"
 preclone_manifest_repo "soplangBuilder" "https://github.com/PloinkyRepos/SOPLangBuilder.git"
+preclone_manifest_repo "webmeet" "https://github.com/PloinkyRepos/webmeet.git"
+
+# Trim cloned manifests to the minimum dependency surface required by
+# testsAfterStart.sh. Without this, dependency-gated startup (see
+# docs/dependency-gated-startup-implementation.md) cold-installs the entire
+# AssistOSExplorer chain when `ploinky start demo` runs in doStart.sh, which
+# blows past START_ACTION_TIMEOUT. testsAfterStart.sh only asserts that
+# simulator/moderator/explorer are running and that explorer's preinstall +
+# npm install ran — none of explorer's transitive deps are exercised.
+slim_manifest_enable ".ploinky/repos/demo/demo/manifest.json" \
+  '["simulator","moderator","explorer global"]'
+slim_manifest_enable ".ploinky/repos/fileExplorer/explorer/manifest.json" '[]'
+slim_manifest_enable ".ploinky/repos/webmeet/moderator/manifest.json" '[]'
+
+# moderator declares `agent: "node /code/server.js"` (HTTP, not MCP) but no
+# `readiness.protocol` override, so the dependency-gated startup heuristic
+# would classify it as `mcp` and forever wait on a /mcp handshake that
+# server.js does not implement (the test in fast_check_moderator_get just
+# does GET / over HTTP). Force the probe to TCP for the test workspace.
+set_manifest_readiness_protocol ".ploinky/repos/webmeet/moderator/manifest.json" "tcp"
 
 test_info "Enabling agent ${TEST_AGENT_QUALIFIED}."
 ploinky enable agent "$TEST_AGENT_QUALIFIED"

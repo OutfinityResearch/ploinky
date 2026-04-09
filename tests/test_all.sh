@@ -77,7 +77,9 @@ fi
 export PLOINKY_BRANCH="${PLOINKY_BRANCH:-}"
 
 # State file for sharing variables between scripts
-FAST_STATE_FILE=$(mktemp "${TMPDIR:-/tmp}/fast-suite-state-XXXXXX.env")
+# BSD mktemp (macOS) keeps the trailing literal `.env` and never substitutes
+# the X-template, leaving stale state files in TMPDIR after every run.
+FAST_STATE_FILE=$(mktemp "${TMPDIR:-/tmp}/fast-suite-state-XXXXXX")
 export FAST_STATE_FILE
 
 # Results file for the final summary

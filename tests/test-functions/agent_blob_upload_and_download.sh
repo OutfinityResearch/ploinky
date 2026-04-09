@@ -5,7 +5,11 @@ fast_check_agent_blob_upload() {
   require_var "TEST_AGENT_WORKSPACE"
 
   local upload_file
-  if ! upload_file=$(mktemp -p "$TEST_RUN_DIR" fast-agent-upload.XXXXXX.bin); then
+  # BSD mktemp (macOS default) only substitutes the X-template when the X's
+  # are at the very end — a trailing literal suffix like `.bin` makes it
+  # create a file named literally `fast-agent-upload.XXXXXX.bin`. Keep the
+  # X's at the tail and let dd write the random payload.
+  if ! upload_file=$(mktemp "$TEST_RUN_DIR/fast-agent-upload.XXXXXX"); then
     echo "Failed to allocate temporary upload file." >&2
     return 1
   fi
@@ -64,7 +68,33 @@ fast_check_agent_blob_upload() {
     blob_download_url="http://127.0.0.1:${TEST_ROUTER_PORT}${blob_url}"
   fi
 
-  local blob_path="$TEST_AGENT_WORKSPACE/blobs/$blob_id"
+  # The runtime agent registry overwrites `projectPath` to the workspace root
+  # (cli/services/docker/agentServiceManager.js:454), so the blob handler stores
+  # files under $TEST_RUN_DIR/blobs/<id> rather than the per-agent workdir the
+  # tests originally pointed at. Resolve the actual location from the running
+  # agents.json instead of guessing — this also keeps the test correct on Linux
+  # where the same code path runs.
+  local agents_json="$TEST_RUN_DIR/.ploinky/agents.json"
+  local server_project_path=""
+  if [[ -f "$agents_json" ]]; then
+    server_project_path=$(AGENTS_JSON="$agents_json" AGENT_NAME="$TEST_AGENT_NAME" node <<'NODE'
+const fs = require('node:fs');
+try {
+  const data = JSON.parse(fs.readFileSync(process.env.AGENTS_JSON, 'utf8') || '{}');
+  for (const [, rec] of Object.entries(data)) {
+    if (rec && rec.type === 'agent' && rec.agentName === process.env.AGENT_NAME && rec.projectPath) {
+      process.stdout.write(String(rec.projectPath));
+      return;
+    }
+  }
+} catch (_) {}
+NODE
+)
+  fi
+  if [[ -z "$server_project_path" ]]; then
+    server_project_path="$TEST_RUN_DIR"
+  fi
+  local blob_path="$server_project_path/blobs/$blob_id"
   local blob_meta="${blob_path}.json"
 
   if [[ ! -f "$blob_path" ]]; then
@@ -106,7 +136,7 @@ fast_check_agent_blob_download() {
   fi
 
   local download_file
-  if ! download_file=$(mktemp -p "$TEST_RUN_DIR" fast-agent-download.XXXXXX.bin); then
+  if ! download_file=$(mktemp "$TEST_RUN_DIR/fast-agent-download.XXXXXX"); then
     echo "Failed to allocate temporary download file." >&2
     return 1
   fi
@@ -140,7 +170,7 @@ fast_check_shared_blob_upload() {
 
   local shared_dir="$TEST_RUN_DIR/.ploinky/shared"
   local upload_file
-  if ! upload_file=$(mktemp -p "$TEST_RUN_DIR" fast-shared-upload.XXXXXX.bin); then
+  if ! upload_file=$(mktemp "$TEST_RUN_DIR/fast-shared-upload.XXXXXX"); then
     echo "Failed to allocate temporary upload file for shared blobs." >&2
     return 1
   fi
@@ -215,7 +245,7 @@ fast_check_shared_blob_download() {
   fi
 
   local download_file
-  if ! download_file=$(mktemp -p "$TEST_RUN_DIR" fast-shared-download.XXXXXX.bin); then
+  if ! download_file=$(mktemp "$TEST_RUN_DIR/fast-shared-download.XXXXXX"); then
     echo "Failed to allocate temporary download file for shared blob." >&2
     return 1
   fi

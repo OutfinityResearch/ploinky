@@ -180,9 +180,10 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     const runtime = containerRuntime;
     const image = manifest.container || manifest.image || 'node:18-alpine';
-    const { raw: explicitAgentCmd, resolved: resolvedAgentCmd } = readManifestAgentCommand(manifest);
+    const { raw: explicitAgentCmd } = readManifestAgentCommand(manifest);
     const startCmd = readManifestStartCommand(manifest);
     const useStartEntry = Boolean(startCmd);
+    const launchExplicitSidecar = Boolean(startCmd && explicitAgentCmd);
     const cwd = getConfiguredProjectPath(agentName, path.basename(path.dirname(agentPath)), options.alias);
     const sharedDir = ensureSharedHostDir();
 
@@ -283,6 +284,17 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         // CWD passthrough - provides access to agents/<name>/ for runtime data
         '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`
     ];
+
+    // Some modes (for example devel) run with cwd outside the isolated
+    // agent workspace. Mount WORKSPACE_PATH explicitly when it is not covered
+    // by the cwd passthrough so install/start hooks can always read and write
+    // the generated package.json, node_modules, and runtime artifacts.
+    const relativeAgentWorkDir = path.relative(cwd, agentWorkDir);
+    const workDirCoveredByCwdMount = relativeAgentWorkDir === ''
+        || (!relativeAgentWorkDir.startsWith('..') && !path.isAbsolute(relativeAgentWorkDir));
+    if (!workDirCoveredByCwdMount) {
+        args.push('-v', `${agentWorkDir}:${agentWorkDir}${runtime === 'podman' ? ':z' : ''}`);
+    }
 
     // Mount skills directory if it exists
     if (fs.existsSync(agentSkillsPath)) {
@@ -486,9 +498,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         try { stopAndRemove(containerName); } catch (_) { }
         throw error;
     }
-    if (useStartEntry) {
+    if (launchExplicitSidecar) {
         try {
-            launchAgentSidecar({ containerName, agentCommand: resolvedAgentCmd, agentName });
+            launchAgentSidecar({ containerName, agentCommand: explicitAgentCmd, agentName });
         } catch (error) {
             try { stopAndRemove(containerName); } catch (_) { }
             throw error;
@@ -590,9 +602,9 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         containerPortCandidates.push(7000);
     }
 
-    const { resolved: ensuredAgentCmd } = readManifestAgentCommand(manifest);
+    const { raw: explicitAgentCmd } = readManifestAgentCommand(manifest);
     const startCmd = readManifestStartCommand(manifest);
-    const withParallelAgent = Boolean(startCmd);
+    const withParallelAgent = Boolean(startCmd && explicitAgentCmd);
 
     if (forceRecreate && containerExists(containerName)) {
         try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
@@ -616,7 +628,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
             try { execSync(`${containerRuntime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
             if (withParallelAgent) {
                 try {
-                    launchAgentSidecar({ containerName, agentCommand: ensuredAgentCmd, agentName });
+                    launchAgentSidecar({ containerName, agentCommand: explicitAgentCmd, agentName });
                 } catch (error) {
                     try { stopAndRemove(containerName); } catch (_) { }
                     throw error;

@@ -18,7 +18,7 @@ fi
 
 router_log_snapshot=""
 if [[ -f "$TEST_ROUTER_LOG" ]]; then
-    router_log_snapshot=$(mktemp "${TMPDIR:-/tmp}/fast-router-log-XXXXXX.log")
+    router_log_snapshot=$(mktemp "${TMPDIR:-/tmp}/fast-router-log-XXXXXX")
     if ! cp "$TEST_ROUTER_LOG" "$router_log_snapshot" 2>/dev/null; then
         router_log_snapshot=""
     fi

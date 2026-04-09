@@ -4,6 +4,9 @@
   "start": "/code/start_script.sh",
   "agent": "node /code/server.js",
   "cli": "/code/testSSOParams.sh",
+  "readiness": {
+    "protocol": "tcp"
+  },
   "enable": [
     "testAgentDepGlobal global",
     "testAgentDepDevel devel testRepo",

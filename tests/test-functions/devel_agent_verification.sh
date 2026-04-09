@@ -8,6 +8,7 @@ fast_assert_devel_agent_workdir() {
   local agent_name="${!agent_var}"
 
   local expected_dir="$TEST_RUN_DIR/.ploinky/repos/$TEST_REPO_NAME"
+  expected_dir=$(resolve_realpath "$expected_dir")
 
   # The watchdog may still be (re)starting this container.  Wait for it to
   # reach a stable running state before attempting to exec into it.
@@ -30,6 +31,7 @@ fast_assert_devel_agent_workdir() {
   local actual_dir
   # Docker shell prefixes output with "# " (root prompt), bwrap does not
   actual_dir=$(echo "$raw_output" | tr -d '\r' | sed -n 's/^#\{0,1\} *\(\/.*\)/\1/p' | head -1)
+  actual_dir=$(resolve_realpath "$actual_dir")
   if [[ "$actual_dir" != "$expected_dir" ]]; then
     echo "Devel agent working directory mismatch for ${agent_name}." >&2
     echo "Expected: '$expected_dir'" >&2
@@ -41,7 +43,10 @@ fast_assert_devel_agent_workdir() {
   fi
 
   local perm_status
-  perm_status=$(echo "$raw_output" | tr -d '\r' | sed -n 's/^#\{0,1\} *\(PERM_[A-Z0-9]\+\)$/\1/p' | tail -n 1)
+  # `\+` is a GNU sed extension; BSD sed (macOS default) treats it as a literal
+  # `+` and the substitution silently produces nothing. Use POSIX `\{1,\}` so
+  # the same expression works on Linux and macOS.
+  perm_status=$(echo "$raw_output" | tr -d '\r' | sed -n 's/^#\{0,1\} *\(PERM_[A-Z0-9]\{1,\}\)$/\1/p' | tail -n 1)
   if [[ "$perm_status" != "PERM_OK" ]]; then
     echo "Devel agent workspace lacks read/write permissions for ${agent_name}." >&2
     echo "Expected PERM_OK marker but saw: '${perm_status}'" >&2

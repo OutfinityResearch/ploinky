@@ -24,6 +24,111 @@ fi
 
 FAST_CHECK_ERRORS=0
 
+# Cross-platform `timeout` shim. coreutils `timeout` is on every Linux distro
+# but not on default macOS — `brew install coreutils` ships it as `gtimeout`.
+# Detect once at lib.sh source time:
+#   - if external `timeout` exists in PATH, do nothing (Linux happy path)
+#   - else if `gtimeout` exists, define a function that delegates to it
+#   - else define a perl-based fallback that supports the flag set used by
+#     this suite (`DURATION CMD...` and `-k DURATION DURATION CMD...`)
+# All scripts in tests/ source lib.sh so the shadow takes effect everywhere.
+if [[ -z "$(type -P timeout 2>/dev/null || true)" ]]; then
+  _FAST_GTIMEOUT="$(type -P gtimeout 2>/dev/null || true)"
+  if [[ -n "$_FAST_GTIMEOUT" ]]; then
+    timeout() { "$_FAST_GTIMEOUT" "$@"; }
+  else
+    _fast_timeout_to_seconds() {
+      local raw="$1"
+      case "$raw" in
+        *ms) echo $(( ${raw%ms} / 1000 )) ;;
+        *s)  echo "${raw%s}" ;;
+        *m)  echo $(( ${raw%m} * 60 )) ;;
+        *h)  echo $(( ${raw%h} * 3600 )) ;;
+        ''|*[!0-9]*)
+          echo "lib.sh timeout shim: bad duration '$raw'" >&2
+          return 1
+          ;;
+        *)   echo "$raw" ;;
+      esac
+    }
+    timeout() {
+      local kill_after_arg=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          -k)
+            kill_after_arg="$2"
+            shift 2
+            ;;
+          --kill-after=*)
+            kill_after_arg="${1#--kill-after=}"
+            shift
+            ;;
+          --)
+            shift
+            break
+            ;;
+          -*)
+            echo "lib.sh timeout shim: unsupported flag '$1'" >&2
+            return 125
+            ;;
+          *)
+            break
+            ;;
+        esac
+      done
+      if [[ $# -lt 2 ]]; then
+        echo "lib.sh timeout shim: usage: timeout [-k DURATION] DURATION COMMAND [ARG]..." >&2
+        return 125
+      fi
+      local duration="$1"
+      shift
+      local _secs _kill_secs=0
+      _secs=$(_fast_timeout_to_seconds "$duration") || return 125
+      if [[ -n "$kill_after_arg" ]]; then
+        _kill_secs=$(_fast_timeout_to_seconds "$kill_after_arg") || return 125
+      fi
+      perl -e '
+        use strict;
+        use warnings;
+        use POSIX qw(setpgid);
+        my ($timeout_s, $kill_after_s, @cmd) = @ARGV;
+        my $pid = fork();
+        die "fork: $!" unless defined $pid;
+        if ($pid == 0) {
+          # Run the child in its own process group so we can signal the whole
+          # tree on timeout — coreutils `timeout` does the same thing. Without
+          # this, killing only $pid leaves grandchildren (e.g. `tail -f`)
+          # running and the wait blocks forever.
+          setpgid($$, $$);
+          exec { $cmd[0] } @cmd;
+          warn "exec failed: $!";
+          exit 127;
+        }
+        # Best-effort group setup from the parent side too (handles the race
+        # between fork and the child exec).
+        eval { setpgid($pid, $pid); };
+        my $timed_out = 0;
+        local $SIG{ALRM} = sub {
+          $timed_out = 1;
+          kill "-TERM", $pid;
+          if ($kill_after_s > 0) {
+            sleep $kill_after_s;
+            kill "-KILL", $pid;
+          }
+        };
+        alarm $timeout_s;
+        waitpid $pid, 0;
+        my $status = $?;
+        alarm 0;
+        exit 124 if $timed_out;
+        exit(128 + ($status & 127)) if $status & 127;
+        exit($status >> 8);
+      ' "$_secs" "$_kill_secs" "$@"
+    }
+  fi
+  unset _FAST_GTIMEOUT
+fi
+
 init_results() {
   if [[ -n "${FAST_RESULTS_FILE:-}" ]]; then
     echo -n "" > "$FAST_RESULTS_FILE"
@@ -234,6 +339,20 @@ is_sandbox_runtime() {
   [[ "${FAST_AGENT_RUNTIME:-container}" == "bwrap" || "${FAST_AGENT_RUNTIME:-container}" == "seatbelt" ]]
 }
 
+resolve_realpath() {
+  local target="$1"
+  if [[ -z "$target" ]]; then
+    return 1
+  fi
+
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$target"
+    return $?
+  fi
+
+  node -e "const fs=require('fs'); const path=require('path'); const target=process.argv[1]; try { console.log(fs.realpathSync(target)); } catch (_) { console.log(path.resolve(target)); }" "$target"
+}
+
 compute_container_name() {
   local agent_name="$1"
   local repo_name="$2"
@@ -255,6 +374,7 @@ const path = require('path');
 const cwd = process.env.FAST_TMP_CWD;
 const agent = process.env.FAST_TMP_AGENT;
 let repo = process.env.FAST_TMP_REPO || '';
+let workspaceRoot = cwd;
 
 function sanitize(value) {
   return String(value || '').replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -280,8 +400,13 @@ try {
 
 const safeAgent = sanitize(agent);
 const safeRepo = sanitize(repo);
-const projectDir = sanitize(path.basename(cwd));
-const hash = crypto.createHash('sha256').update(cwd).digest('hex').substring(0, 8);
+try {
+  workspaceRoot = fs.realpathSync(cwd);
+} catch (_) {
+  workspaceRoot = path.resolve(cwd);
+}
+const projectDir = sanitize(path.basename(workspaceRoot));
+const hash = crypto.createHash('sha256').update(workspaceRoot).digest('hex').substring(0, 8);
 console.log(`ploinky_${safeRepo}_${safeAgent}_${projectDir}_${hash}`);
 NODE
 }
@@ -313,6 +438,60 @@ assert_file_contains() {
     echo "File '${path}' does not contain pattern '${pattern}'." >&2
     return 1
   fi
+}
+
+find_file_pattern_line() {
+  local path="$1"
+  local pattern="$2"
+  if [[ ! -f "$path" ]]; then
+    echo "File '${path}' missing." >&2
+    return 1
+  fi
+  local line
+  line=$(grep -n -m 1 -F "$pattern" "$path" | cut -d: -f1)
+  if [[ -z "$line" ]]; then
+    echo "Pattern '${pattern}' not found in '${path}'." >&2
+    return 1
+  fi
+  echo "$line"
+}
+
+assert_file_pattern_before() {
+  local path="$1"
+  local earlier="$2"
+  local later="$3"
+  local earlier_line
+  local later_line
+  earlier_line=$(find_file_pattern_line "$path" "$earlier") || return 1
+  later_line=$(find_file_pattern_line "$path" "$later") || return 1
+  if (( earlier_line >= later_line )); then
+    echo "Pattern '${earlier}' (line ${earlier_line}) does not appear before '${later}' (line ${later_line}) in '${path}'." >&2
+    return 1
+  fi
+}
+
+read_route_host_port() {
+  local routing_file="$1"
+  local route_key="$2"
+  if [[ ! -f "$routing_file" ]]; then
+    echo "Routing file '${routing_file}' missing." >&2
+    return 1
+  fi
+  FAST_TMP_ROUTING_FILE="$routing_file" FAST_TMP_ROUTE_KEY="$route_key" node <<'NODE'
+const fs = require('fs');
+
+const routingFile = process.env.FAST_TMP_ROUTING_FILE;
+const routeKey = process.env.FAST_TMP_ROUTE_KEY;
+
+const raw = fs.readFileSync(routingFile, 'utf8');
+const data = JSON.parse(raw || '{}');
+const route = data?.routes?.[routeKey];
+const hostPort = Number(route?.hostPort);
+if (!Number.isFinite(hostPort) || hostPort <= 0) {
+  process.exit(1);
+}
+process.stdout.write(String(hostPort));
+NODE
 }
 
 check_router_stop_entry() {
@@ -974,12 +1153,73 @@ run_with_timeout() {
   local timeout_seconds="$1"
   local description="$2"
   shift 2
-  local command_to_run=($@)
+  local command_to_run=("$@")
 
   test_info "$description"
 
-  timeout "$timeout_seconds" "${command_to_run[@]}"
-  local exit_code=$?
+  local exit_code=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$timeout_seconds" "${command_to_run[@]}"
+    exit_code=$?
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$timeout_seconds" "${command_to_run[@]}"
+    exit_code=$?
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 - "$timeout_seconds" "${command_to_run[@]}" <<'PY'
+import signal
+import subprocess
+import sys
+
+if len(sys.argv) < 3:
+    sys.exit(125)
+
+try:
+    timeout_seconds = float(sys.argv[1])
+except ValueError:
+    sys.exit(125)
+
+command = sys.argv[2:]
+process = None
+
+def forward(sig, _frame):
+    if process and process.poll() is None:
+        try:
+            process.send_signal(sig)
+        except ProcessLookupError:
+            pass
+
+signal.signal(signal.SIGINT, forward)
+signal.signal(signal.SIGTERM, forward)
+
+try:
+    process = subprocess.Popen(command)
+    try:
+        sys.exit(process.wait(timeout=timeout_seconds))
+    except subprocess.TimeoutExpired:
+        try:
+            process.terminate()
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+        sys.exit(124)
+except FileNotFoundError:
+    sys.exit(127)
+PY
+    exit_code=$?
+  else
+    echo "No timeout implementation available (need timeout, gtimeout, or python3)." >&2
+    return 127
+  fi
 
   if [[ $exit_code -eq 124 ]]; then
     fail_message "Timeout: '${description}' exceeded ${timeout_seconds} seconds."
@@ -989,9 +1229,13 @@ run_with_timeout() {
   return $exit_code
 }
 
+to_uppercase() {
+  printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
+}
+
 enable_repo_with_branch() {
   local repo_name="$1"
-  local branch_var="PLOINKY_${repo_name^^}_BRANCH"
+  local branch_var="PLOINKY_$(to_uppercase "$repo_name")_BRANCH"
   local branch="${!branch_var:-}"
 
   if [[ -n "$branch" ]]; then
@@ -1008,7 +1252,7 @@ enable_repo_with_branch() {
 preclone_manifest_repo() {
   local repo_name="$1"
   local repo_url="$2"
-  local branch_var="PLOINKY_${repo_name^^}_BRANCH"
+  local branch_var="PLOINKY_$(to_uppercase "$repo_name")_BRANCH"
   local branch="${!branch_var:-}"
 
   local repo_path=".ploinky/repos/${repo_name}"
@@ -1025,4 +1269,56 @@ preclone_manifest_repo() {
     test_info "Pre-cloning manifest repo ${repo_name}."
     git clone "$repo_url" "$repo_path"
   fi
+}
+
+# Replace the `enable` array of a cloned manifest with the supplied JSON list.
+# Used by the fast suite to keep the dependency-gated startup wave bounded:
+# the demo / explorer / moderator manifests upstream enable a transitive chain
+# (postgres + dpuAgent + gitAgent + llmAssistant + multimedia + tasksAgent + ...)
+# that the assertions in testsAfterStart.sh do not require, and which would
+# otherwise blow past START_ACTION_TIMEOUT during cold install. The slim only
+# touches the cloned copy under .ploinky/repos/, never the upstream source.
+slim_manifest_enable() {
+  local manifest_path="$1"
+  local enable_json="$2"
+  if [[ ! -f "$manifest_path" ]]; then
+    test_info "slim_manifest_enable: ${manifest_path} not found, skipping."
+    return 0
+  fi
+  MANIFEST_PATH="$manifest_path" ENABLE_JSON="$enable_json" node <<'NODE'
+const fs = require('node:fs');
+const target = process.env.MANIFEST_PATH;
+const enable = JSON.parse(process.env.ENABLE_JSON);
+const manifest = JSON.parse(fs.readFileSync(target, 'utf8'));
+manifest.enable = enable;
+fs.writeFileSync(target, JSON.stringify(manifest, null, 4) + '\n');
+NODE
+  test_info "slim_manifest_enable: ${manifest_path} -> ${enable_json}"
+}
+
+# Force a `readiness.protocol` value on a cloned manifest. Used by the fast
+# suite to opt out of the MCP handshake probe for HTTP agents whose manifest
+# declares an `agent` command (which the dependency-gated startup heuristic
+# would otherwise classify as MCP — see docs/static-agent-readiness-probe-bug.md).
+# Recognized values: "tcp" | "mcp".
+set_manifest_readiness_protocol() {
+  local manifest_path="$1"
+  local protocol="$2"
+  if [[ ! -f "$manifest_path" ]]; then
+    test_info "set_manifest_readiness_protocol: ${manifest_path} not found, skipping."
+    return 0
+  fi
+  MANIFEST_PATH="$manifest_path" READINESS_PROTOCOL="$protocol" node <<'NODE'
+const fs = require('node:fs');
+const target = process.env.MANIFEST_PATH;
+const protocol = String(process.env.READINESS_PROTOCOL || '').trim().toLowerCase();
+if (protocol !== 'tcp' && protocol !== 'mcp') {
+  console.error(`set_manifest_readiness_protocol: invalid protocol '${protocol}'`);
+  process.exit(1);
+}
+const manifest = JSON.parse(fs.readFileSync(target, 'utf8'));
+manifest.readiness = { ...(manifest.readiness || {}), protocol };
+fs.writeFileSync(target, JSON.stringify(manifest, null, 4) + '\n');
+NODE
+  test_info "set_manifest_readiness_protocol: ${manifest_path} -> ${protocol}"
 }

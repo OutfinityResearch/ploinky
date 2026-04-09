@@ -57,7 +57,11 @@ test_logs_last_five() {
   fi
 
   output=${output//$'\r'/}
-  mapfile -t _log_lines <<<"$output"
+  local _log_lines=()
+  local log_line
+  while IFS= read -r log_line || [[ -n "$log_line" ]]; do
+    _log_lines+=("$log_line")
+  done <<<"$output"
   local line_count=${#_log_lines[@]}
   if (( line_count != 5 )); then
     echo "Expected 5 log lines, got ${line_count}." >&2

@@ -54,14 +54,19 @@ test_llm_cli_suggestions() {
     return 1
   fi
 
-  if ! output=$(timeout 10s ploinky what is your purpose? 2>&1); then
-    echo "'what is your purpose?' failed or timed out." >&2
+  # `what` is a real command on macOS (`/usr/bin/what`, from SCCS) so the
+  # original probe `ploinky what is your purpose?` ends up forwarding to it
+  # instead of falling through to LLM suggestion. Use a leading word that's
+  # not a binary on any common OS so the system-command lookup misses and
+  # the LLM fallback fires on both Linux and macOS.
+  if ! output=$(timeout 10s ploinky please tell me your purpose 2>&1); then
+    echo "'please tell me your purpose' failed or timed out." >&2
     return 1
   fi
 
   if ! grep -q "LLM suggested:" <<<"$output"; then
     echo "Expected single-command prompt with 'LLM suggested:' marker." >&2
-    printf '%s\n' "--- what is your purpose? output ---" >&2
+    printf '%s\n' "--- please tell me your purpose output ---" >&2
     printf '%s\n' "$output" >&2
     return 1
   fi

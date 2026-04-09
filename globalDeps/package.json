@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Global dependencies available to all ploinky agents",
   "dependencies": {
-    "achillesAgentLib": "github:OutfinityResearch/achillesAgentLib#master",
+    "achillesAgentLib": "github:OutfinityResearch/achillesAgentLib#soul-gateway-transport-families",
     "mcp-sdk": "github:PloinkyRepos/MCPSDK#main",
     "flexsearch": "github:PloinkyRepos/flexsearch#main",
     "node-pty": "^1.0.0"

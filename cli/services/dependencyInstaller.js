@@ -4,7 +4,7 @@ import { execSync, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { containerRuntime } from './docker/common.js';
 import { TEMPLATES_DIR, GLOBAL_DEPS_PATH } from './config.js';
-import { getAgentWorkDir, getAgentCodePath, getPackageBaseTemplatePath } from './workspaceStructure.js';
+import { getAgentWorkDir, getAgentCodePath } from './workspaceStructure.js';
 import { debugLog } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -183,29 +183,6 @@ function getCoreDependencyNames() {
         return Object.keys(config.dependencies);
     }
     return CORE_DEPENDENCIES;
-}
-
-/**
- * Read the base package.json template.
- * @returns {object} The parsed package.json template
- */
-function readPackageBaseTemplate() {
-    const templatePath = getPackageBaseTemplatePath();
-    if (fs.existsSync(templatePath)) {
-        return JSON.parse(fs.readFileSync(templatePath, 'utf8'));
-    }
-    // Return default template if file doesn't exist
-    return {
-        name: 'ploinky-agent-runtime',
-        version: '1.0.0',
-        type: 'module',
-        dependencies: {
-            'achillesAgentLib': 'github:OutfinityResearch/achillesAgentLib#master',
-            'mcp-sdk': 'github:PloinkyRepos/MCPSDK#main',
-            'node-pty': '^1.0.0',
-            'flexsearch': 'github:PloinkyRepos/flexsearch#main'
-        }
-    };
 }
 
 function resolveRootNodeModules() {
@@ -551,7 +528,7 @@ function installDependencies(containerName, agentName, options = {}) {
         // Step 1: Copy core package.json and install (4 global deps)
         if (!hasCoreModules || force) {
             log(`[deps] Installing core dependencies for ${agentName}...`);
-            const corePackage = readPackageBaseTemplate();
+            const corePackage = readGlobalDepsPackage();
             const corePackagePath = path.join(agentWorkDir, 'package.json');
 
             // Copy core package.json inside container
@@ -606,7 +583,7 @@ function installCoreDependencies(containerName, agentName) {
         dockerExec(containerName, `mkdir -p "${agentWorkDir}"`);
 
         // Copy core package.json inside container
-        const corePackage = readPackageBaseTemplate();
+        const corePackage = readGlobalDepsPackage();
         const corePackagePath = path.join(agentWorkDir, 'package.json');
         writeFileInContainer(containerName, corePackagePath, JSON.stringify(corePackage, null, 2));
 
@@ -945,15 +922,31 @@ function runPersistentInstall(agentName, image, installCommand, options = {}) {
 
 /**
  * Read the global dependencies package.json.
+ *
+ * `globalDeps/package.json` is the single source of truth for every
+ * agent's core dependencies (achillesAgentLib, mcp-sdk, flexsearch,
+ * node-pty). It is copied into each agent's workspace package.json
+ * at install time and then read from there on every container start.
+ *
+ * There is deliberately NO hardcoded fallback here — if this file is
+ * missing, the deployment is broken and we want to fail loudly rather
+ * than silently ship a stale template that has drifted from the real
+ * one.
+ *
  * @returns {object} The parsed global package.json
+ * @throws {Error} if globalDeps/package.json cannot be read
  */
 function readGlobalDepsPackage() {
     const globalPackagePath = path.join(GLOBAL_DEPS_PATH, 'package.json');
-    if (fs.existsSync(globalPackagePath)) {
-        return JSON.parse(fs.readFileSync(globalPackagePath, 'utf8'));
+    if (!fs.existsSync(globalPackagePath)) {
+        throw new Error(
+            `ploinky globalDeps package.json not found at ${globalPackagePath}. `
+            + `This file is required — it defines the core dependencies `
+            + `(achillesAgentLib, mcp-sdk, flexsearch, node-pty) that every `
+            + `agent installs on setup.`
+        );
     }
-    // Fall back to base template if globalDeps doesn't exist
-    return readPackageBaseTemplate();
+    return JSON.parse(fs.readFileSync(globalPackagePath, 'utf8'));
 }
 
 /**
@@ -1186,7 +1179,6 @@ export {
     dockerExec,
     fileExistsInContainer,
     dirExistsInContainer,
-    readPackageBaseTemplate,
     readGlobalDepsPackage,
     mergePackageJson,
     setupAgentWorkDir,

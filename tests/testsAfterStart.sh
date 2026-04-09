@@ -30,6 +30,7 @@ source "$TESTS_DIR/test-functions/webmeet_tests.sh"
 source "$TESTS_DIR/test-functions/volume_mount_tests.sh"
 source "$TESTS_DIR/test-functions/dashboard_tests.sh"
 source "$TESTS_DIR/test-functions/manifest_ports_test.sh"
+source "$TESTS_DIR/test-functions/workspace_dependency_startup_tests.sh"
 
 load_state
 require_var "TEST_RUN_DIR"
@@ -151,6 +152,12 @@ test_check "Router serves configured static asset" fast_assert_router_static_ass
 stage_header "Manifest Environment"
 test_check "Variable MY_TEST_VAR from manifest is present after start" assert_container_env "$TEST_AGENT_CONT_NAME" "MY_TEST_VAR" "hello-manifest"
 test_check "Custom volume mount exposes marker" fast_assert_volume_mount
+
+stage_header "Workspace Dependency Startup"
+test_check "Recursive dependency graph waits wave-by-wave before starting dependents" fast_test_recursive_dependency_graph_startup
+test_check "Dependency readiness.protocol override applies to dependency startup gating" fast_test_dependency_readiness_protocol_override
+test_check "Static start-only TCP service becomes ready without MCP probing" fast_test_static_start_only_tcp_readiness
+test_check "Broken dependency prevents router launch and static agent startup" fast_test_dependency_failure_blocks_router_startup
 
 stage_header "Start Command Result"
 test_start_result_file="$TEST_AGENT_WORKSPACE/start-result"
