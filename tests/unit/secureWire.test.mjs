@@ -194,6 +194,40 @@ test('verifyCallerAssertion rejects unknown issuer', () => {
     }), /unknown caller principal/);
 });
 
+test('signCallerAssertion / verifyCallerAssertion work without binding metadata for direct agent calls', () => {
+    const caller = ed25519Pair();
+    const replay = createMemoryReplayCache();
+    const { token, payload } = signCallerAssertion({
+        callerPrincipal: 'agent:gitAgent',
+        tool: 'secret_get',
+        scope: ['secret:read'],
+        bodyObject: EXAMPLE_BODY,
+        privatePem: pemPrivate(caller),
+        audience: 'agent:dpuAgent'
+    });
+
+    assert.equal(payload.binding_id, undefined);
+    assert.equal(payload.alias, undefined);
+    assert.ok(payload.jti);
+
+    const verified = verifyCallerAssertion(token, {
+        resolveCallerPublicKey: () => ({ publicPem: pemPublic(caller) }),
+        replayCache: replay,
+        expectedAudience: 'agent:dpuAgent',
+        bodyObject: EXAMPLE_BODY
+    });
+
+    assert.equal(verified.payload.iss, 'agent:gitAgent');
+    assert.equal(verified.payload.tool, 'secret_get');
+
+    assert.throws(() => verifyCallerAssertion(token, {
+        resolveCallerPublicKey: () => ({ publicPem: pemPublic(caller) }),
+        replayCache: replay,
+        expectedAudience: 'agent:dpuAgent',
+        bodyObject: EXAMPLE_BODY
+    }), /jti has already been consumed/);
+});
+
 test('canonicalJson sorts keys deterministically', () => {
     assert.equal(
         canonicalJson({ b: 1, a: 2, c: { y: 3, x: 4 } }),

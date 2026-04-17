@@ -506,6 +506,20 @@ function saveAgentKeyEntry(principalId, record) {
     workspaceSvc.setConfig(cfg);
 }
 
+export function listRegisteredAgentPublicKeys() {
+    const cfg = workspaceSvc.getConfig() || {};
+    const map = cfg[CAPABILITY_AGENT_KEYS_KEY];
+    if (!map || typeof map !== 'object') {
+        return {};
+    }
+    const out = {};
+    for (const [principalId, record] of Object.entries(map)) {
+        if (!principalId || !record || typeof record !== 'object') continue;
+        out[principalId] = { ...record };
+    }
+    return out;
+}
+
 export function getRegisteredAgentPublicKey(principalId) {
     const clean = toNonEmptyString(principalId);
     if (!clean) return null;

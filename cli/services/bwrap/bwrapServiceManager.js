@@ -35,7 +35,7 @@ import {
     getRouterPublicKey as getRouterPublicKeyMaterial,
     ensureAgentKeypair
 } from '../agentKeystore.js';
-import { resolveBindingsForConsumer, resolveBindingsForProvider } from '../capabilityRegistry.js';
+import { listRegisteredAgentPublicKeys } from '../capabilityRegistry.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {
     runPreContainerLifecycle,
@@ -314,17 +314,9 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
         if (routerKey?.publicKeyJwk) {
             env.PLOINKY_ROUTER_PUBLIC_KEY_JWK = JSON.stringify(routerKey.publicKeyJwk);
         }
-        try {
-            const bindings = resolveBindingsForConsumer(`${repoName}/${agentName}`);
-            if (Object.keys(bindings).length) {
-                env.PLOINKY_CAPABILITY_BINDINGS_JSON = JSON.stringify(bindings);
-            }
-            const providerBindings = resolveBindingsForProvider(`${repoName}/${agentName}`);
-            if (Object.keys(providerBindings).length) {
-                env.PLOINKY_PROVIDER_BINDINGS_JSON = JSON.stringify(providerBindings);
-            }
-        } catch (bindingErr) {
-            debugLog(`[secureWire/bwrap] could not resolve capability bindings for ${agentName}: ${bindingErr?.message || bindingErr}`);
+        const agentPublicKeys = listRegisteredAgentPublicKeys();
+        if (Object.keys(agentPublicKeys).length) {
+            env.PLOINKY_AGENT_PUBLIC_KEYS_JSON = JSON.stringify(agentPublicKeys);
         }
         env.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH = keypair.privatePath;
     } catch (err) {

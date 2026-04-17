@@ -14,11 +14,11 @@ import fs from 'node:fs';
  *     aud: "ploinky-router",
  *     iat: <seconds>,
  *     exp: <seconds>,   // <= 60
- *     nonce: <random>,
+ *     jti: <random>,
  *     user_context_token: <string | undefined>,
  *     body_hash: <base64url sha-256 of canonical request body>,
- *     binding_id: <string>,
- *     alias: <string>,
+ *     binding_id: <string | undefined>,
+ *     alias: <string | undefined>,
  *     tool: <string>,
  *     scope: <string[]>
  *   }
@@ -80,26 +80,29 @@ export function signCallerAssertion({
     audience = 'ploinky-router'
 }) {
     if (!callerPrincipal) throw new Error('signCallerAssertion: callerPrincipal required');
-    if (!bindingId) throw new Error('signCallerAssertion: bindingId required');
     if (!tool) throw new Error('signCallerAssertion: tool required');
     const privateKey = loadPrivateKey({ privatePem, privateKeyPath });
 
     const iat = Math.floor(Date.now() / 1000);
     const exp = iat + Math.max(5, Math.min(Number(lifetimeSeconds) || DEFAULT_LIFETIME_SECONDS, 120));
-    const nonce = crypto.randomBytes(12).toString('base64url');
+    const jti = crypto.randomBytes(12).toString('base64url');
 
     const payload = {
         iss: String(callerPrincipal),
         aud: audience,
         iat,
         exp,
-        nonce,
-        binding_id: String(bindingId),
-        alias: String(alias || ''),
         tool: String(tool),
         scope: Array.isArray(scope) ? [...scope] : [],
-        body_hash: bodyHashForRequest(bodyObject)
+        body_hash: bodyHashForRequest(bodyObject),
+        jti
     };
+    if (bindingId) {
+        payload.binding_id = String(bindingId);
+    }
+    if (alias) {
+        payload.alias = String(alias);
+    }
     if (userContextToken) {
         payload.user_context_token = String(userContextToken);
     }

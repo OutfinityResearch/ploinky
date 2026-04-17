@@ -13,7 +13,7 @@ import { handleBlobs, handleWorkspaceUpload } from './handlers/blobs.js';
 import * as staticSrv from './static/index.js';
 
 // Authentication and routing
-import { ensureAuthenticated, ensureAgentAuthenticated, handleAuthRoutes } from './authHandlers.js';
+import { ensureAuthenticated, handleAuthRoutes } from './authHandlers.js';
 import { loadApiRoutes, handleRouterMcp, handleHttpServiceRoute, isPublicHttpServiceRoute } from './routerHandlers.js';
 
 // Logging
@@ -188,24 +188,21 @@ async function processRequest(req, res) {
 
     // For /mcps/ routes, check agent auth first, then fall back to user auth
     if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/') || pathname === '/mcp') {
-        const hasAuthHeader = req.headers?.authorization && typeof req.headers.authorization === 'string';
         const hasCallerAssertion = typeof req.headers?.['x-ploinky-caller-assertion'] === 'string'
             || typeof req.headers?.['X-PLOINKY-CALLER-ASSERTION'] === 'string';
-        if (hasCallerAssertion) {
-            // Delegated agent-to-agent calls authenticate at the MCP proxy via the
-            // signed caller assertion and resulting router-issued invocation token.
-        } else if (hasAuthHeader && req.headers.authorization.startsWith('Bearer ')) {
-            // Try agent authentication first
-            const agentAuthResult = await ensureAgentAuthenticated(req, res, parsedUrl);
-            if (agentAuthResult.ok) {
-                // Agent authenticated, continue with routing
-            } else {
-                // Agent auth failed, fall back to user auth
-                const authResult = await ensureAuthenticated(req, res, parsedUrl);
-                if (!authResult.ok) return;
+        const hasUserContext = typeof req.headers?.['x-ploinky-user-context'] === 'string'
+            || typeof req.headers?.['X-PLOINKY-USER-CONTEXT'] === 'string';
+        if (hasCallerAssertion || hasUserContext) {
+            if (!(hasCallerAssertion && hasUserContext)) {
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    ok: false,
+                    error: 'incomplete_agent_auth',
+                    detail: 'Delegated agent calls must provide both x-ploinky-caller-assertion and x-ploinky-user-context.'
+                }));
+                return;
             }
         } else {
-            // No bearer token, use user auth
             const authResult = await ensureAuthenticated(req, res, parsedUrl);
             if (!authResult.ok) return;
         }

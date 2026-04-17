@@ -39,7 +39,7 @@ import {
     getRouterPublicKey as getRouterPublicKeyMaterial,
     ensureAgentKeypair
 } from '../agentKeystore.js';
-import { resolveBindingsForConsumer, resolveBindingsForProvider } from '../capabilityRegistry.js';
+import { listRegisteredAgentPublicKeys } from '../capabilityRegistry.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
@@ -396,18 +396,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         if (routerKey?.publicKeyJwk) {
             envStrings.push(formatEnvFlag('PLOINKY_ROUTER_PUBLIC_KEY_JWK', JSON.stringify(routerKey.publicKeyJwk)));
         }
-        try {
-            const repoName = path.basename(path.dirname(agentPath));
-            const bindings = resolveBindingsForConsumer(`${repoName}/${agentName}`);
-            if (Object.keys(bindings).length) {
-                envStrings.push(formatEnvFlag('PLOINKY_CAPABILITY_BINDINGS_JSON', JSON.stringify(bindings)));
-            }
-            const providerBindings = resolveBindingsForProvider(`${repoName}/${agentName}`);
-            if (Object.keys(providerBindings).length) {
-                envStrings.push(formatEnvFlag('PLOINKY_PROVIDER_BINDINGS_JSON', JSON.stringify(providerBindings)));
-            }
-        } catch (bindingErr) {
-            debugLog(`[secureWire] could not resolve capability bindings for ${agentName}: ${bindingErr?.message || bindingErr}`);
+        const agentPublicKeys = listRegisteredAgentPublicKeys();
+        if (Object.keys(agentPublicKeys).length) {
+            envStrings.push(formatEnvFlag('PLOINKY_AGENT_PUBLIC_KEYS_JSON', JSON.stringify(agentPublicKeys)));
         }
     } catch (err) {
         debugLog(`[secureWire] could not propagate router key to ${agentName}: ${err?.message || err}`);

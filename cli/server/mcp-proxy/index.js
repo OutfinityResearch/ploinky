@@ -3,17 +3,15 @@ import { sendJson, ensureAuthenticated } from '../authHandlers.js';
 import { createAgentClient } from '../AgentClient.js';
 import { waitForAgentReady } from '../utils/agentReadiness.js';
 import {
-    buildFirstPartyInvocation,
-    buildDelegatedInvocation,
-    resolveProviderForConsumerAlias
+    buildFirstPartyInvocation
 } from './secureWire.js';
 import { getAgentDescriptorByPrincipal } from '../../services/capabilityRegistry.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
 const AGENT_PROXY_SERVER_INFO = { name: 'ploinky-router-proxy', version: '1.0.0' };
-const PLOINKY_AUTH_INFO_HEADER = 'x-ploinky-auth-info';
 const INVOCATION_TOKEN_HEADER = 'x-ploinky-invocation';
 const CALLER_ASSERTION_HEADER = 'x-ploinky-caller-assertion';
+const USER_CONTEXT_HEADER = 'x-ploinky-user-context';
 
 // Session store for agent MCP connections
 const agentSessionStore = new Map();
@@ -37,26 +35,9 @@ function isJsonRpcPayload(payload) {
     return !!(payload && typeof payload === 'object' && payload.jsonrpc === '2.0');
 }
 
-function encodeAuthInfoHeader(authInfo = null) {
-    if (!authInfo || typeof authInfo !== 'object') return '';
-    try {
-        return Buffer.from(JSON.stringify(authInfo), 'utf8').toString('base64');
-    } catch {
-        return '';
-    }
-}
-
 function isSecureWireEnabled() {
     const flag = String(process.env.PLOINKY_SECURE_WIRE || '').trim().toLowerCase();
     if (flag === '0' || flag === 'false' || flag === 'off') return false;
-    return true;
-}
-
-function isLegacyCompatibilityAllowed() {
-    const flag = String(process.env.PLOINKY_SECURE_WIRE_STRICT || '').trim().toLowerCase();
-    // When STRICT is 1/true/on, we stop emitting the legacy blob. Default:
-    // emit both during migration so old agents keep working.
-    if (flag === '1' || flag === 'true' || flag === 'on') return false;
     return true;
 }
 
@@ -78,6 +59,11 @@ function buildCallerAssertionInputs(req) {
     return null;
 }
 
+function readForwardedUserContextToken(req) {
+    const raw = req.headers?.[USER_CONTEXT_HEADER] || req.headers?.[USER_CONTEXT_HEADER.toLowerCase()];
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
+}
+
 function buildInvocationContextForProviderCall({ req, agentName, toolName, toolArgs }) {
     if (!isSecureWireEnabled()) return null;
     const providerAgentRef = resolveProviderAgentRef(agentName);
@@ -92,14 +78,17 @@ function buildInvocationContextForProviderCall({ req, agentName, toolName, toolA
         : null;
 
     const assertionInput = buildCallerAssertionInputs(req);
+    const forwardedUserContextToken = readForwardedUserContextToken(req);
     if (assertionInput?.callerAssertionToken) {
-        return buildDelegatedInvocation({
-            callerAssertionToken: assertionInput.callerAssertionToken,
-            bodyObject,
-            providerAgentRef,
-            tool: toolName,
-            delegatedUser
-        });
+        if (!forwardedUserContextToken) {
+            throw new Error('Delegated agent call is missing x-ploinky-user-context.');
+        }
+        return {
+            directHeaders: {
+                [CALLER_ASSERTION_HEADER]: assertionInput.callerAssertionToken,
+                [USER_CONTEXT_HEADER]: forwardedUserContextToken
+            }
+        };
     }
     return buildFirstPartyInvocation({
         providerAgentRef,
@@ -177,42 +166,24 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
         return;
     }
 
-    // Build the shared legacy auth blob (used only during migration when
-    // PLOINKY_SECURE_WIRE_STRICT is not set). Downstream providers must not
-    // treat this as a trust source once secure mode is enforced.
-    let legacyAuthHeaders = null;
-    if (req.user && typeof req.user === 'object' && isLegacyCompatibilityAllowed()) {
-        const authInfo = {
-            user: {
-                id: req.user.id || '',
-                username: req.user.username || req.user.name || req.user.email || '',
-                email: req.user.email || '',
-                roles: Array.isArray(req.user.roles) ? [...req.user.roles] : [],
-            },
-            sessionId: req.sessionId || '',
-        };
-        const encoded = encodeAuthInfoHeader(authInfo);
-        if (encoded) {
-            legacyAuthHeaders = { [PLOINKY_AUTH_INFO_HEADER]: encoded };
-        }
-    }
-
     function buildRequestHeadersForToolCall(toolName, toolArgs) {
-        const headers = legacyAuthHeaders ? { ...legacyAuthHeaders } : {};
+        const headers = {};
         const ctx = buildInvocationContextForProviderCall({
             req,
             agentName,
             toolName,
             toolArgs: toolArgs || {}
         });
+        if (ctx?.directHeaders && typeof ctx.directHeaders === 'object') {
+            Object.assign(headers, ctx.directHeaders);
+        }
         if (ctx?.token) {
             headers[INVOCATION_TOKEN_HEADER] = ctx.token;
         }
         return Object.keys(headers).length ? headers : null;
     }
 
-    const listHeaders = legacyAuthHeaders ? { ...legacyAuthHeaders } : null;
-    const agentClient = createAgentClient(baseUrl, listHeaders ? { requestHeaders: listHeaders } : undefined);
+    const agentClient = createAgentClient(baseUrl);
     try {
         switch (message.method) {
             case 'tools/list': {
@@ -243,33 +214,6 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                 const toolClient = createAgentClient(baseUrl, toolHeaders ? { requestHeaders: toolHeaders } : undefined);
 
                 try {
-                    if (req.user && typeof req.user === 'object' && isLegacyCompatibilityAllowed()) {
-                        // Transitional: keep _meta.auth during migration for old tool
-                        // wrappers that still read it. This will be removed once all
-                        // providers verify invocation tokens.
-                        const authMeta = {
-                            user: {
-                                id: req.user.id || '',
-                                username: req.user.username || req.user.name || req.user.email || '',
-                                email: req.user.email || '',
-                                roles: Array.isArray(req.user.roles) ? [...req.user.roles] : [],
-                            },
-                            sessionId: req.sessionId || '',
-                        };
-                        const nextMeta = args._meta && typeof args._meta === 'object' ? { ...args._meta } : {};
-                        nextMeta.auth = authMeta;
-                        args._meta = nextMeta;
-
-                        const nextParams = args.params && typeof args.params === 'object' && !Array.isArray(args.params)
-                            ? { ...args.params }
-                            : {};
-                        const nextParamsMeta = nextParams._meta && typeof nextParams._meta === 'object'
-                            ? { ...nextParams._meta }
-                            : {};
-                        nextParamsMeta.auth = authMeta;
-                        nextParams._meta = nextParamsMeta;
-                        args.params = nextParams;
-                    }
                     const result = await toolClient.callTool(name, args);
                     sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
                 } finally {
