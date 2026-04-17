@@ -189,7 +189,12 @@ async function processRequest(req, res) {
     // For /mcps/ routes, check agent auth first, then fall back to user auth
     if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/') || pathname === '/mcp') {
         const hasAuthHeader = req.headers?.authorization && typeof req.headers.authorization === 'string';
-        if (hasAuthHeader && req.headers.authorization.startsWith('Bearer ')) {
+        const hasCallerAssertion = typeof req.headers?.['x-ploinky-caller-assertion'] === 'string'
+            || typeof req.headers?.['X-PLOINKY-CALLER-ASSERTION'] === 'string';
+        if (hasCallerAssertion) {
+            // Delegated agent-to-agent calls authenticate at the MCP proxy via the
+            // signed caller assertion and resulting router-issued invocation token.
+        } else if (hasAuthHeader && req.headers.authorization.startsWith('Bearer ')) {
             // Try agent authentication first
             const agentAuthResult = await ensureAgentAuthenticated(req, res, parsedUrl);
             if (agentAuthResult.ok) {

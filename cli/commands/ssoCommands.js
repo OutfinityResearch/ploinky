@@ -1,149 +1,101 @@
 import { showHelp } from '../services/help.js';
 import {
-    setSsoEnabled,
-    disableSsoConfig,
+    bindSsoProvider,
+    unbindSsoProvider,
     gatherSsoStatus,
-    extractShortAgentName as extractSsoShortName,
-    SSO_ENV_ROLE_CANDIDATES,
-    resolveEnvRoleValues as resolveSsoEnvRoleValues
+    getSsoBinding,
+    listAuthProviders
 } from '../services/sso.js';
 
-function parseFlagArgs(args = []) {
-    const flags = {};
-    const rest = [];
-    for (let i = 0; i < args.length; i += 1) {
-        const token = args[i];
-        if (!token || !String(token).startsWith('--')) {
-            rest.push(token);
-            continue;
-        }
-        const eqIdx = token.indexOf('=');
-        let key = token.slice(2);
-        let value;
-        if (eqIdx !== -1) {
-            key = token.slice(2, eqIdx);
-            value = token.slice(eqIdx + 1);
-        } else if (i + 1 < args.length && !String(args[i + 1]).startsWith('--')) {
-            value = args[i + 1];
-            i += 1;
-        } else {
-            value = 'true';
-        }
-        if (value === 'true') value = true;
-        else if (value === 'false') value = false;
-        flags[key] = value;
+function printProviderChoices(providers = []) {
+    if (!providers.length) {
+        console.log('No auth-provider/v1 agents are installed.');
+        console.log('Install a provider agent, then run `ploinky sso enable <providerAgent>`.');
+        return;
     }
-    return { flags, rest };
+    console.log('Installed auth-provider/v1 agents:');
+    for (const provider of providers) {
+        console.log(`  - ${provider.agentRef}`);
+    }
 }
 
-function printSsoDetails(status, { includeSecrets = false } = {}) {
-    const { config, secrets, routerPort, providerHostPort } = status;
+function chooseProvider(explicitProvider) {
+    if (explicitProvider) return explicitProvider;
+
+    const binding = getSsoBinding();
+    if (binding?.provider) return binding.provider;
+
+    const providers = listAuthProviders();
+    if (!providers.length) {
+        throw new Error('No auth-provider/v1 agents are installed.');
+    }
+
+    if (providers.length === 1) return providers[0].agentRef;
+
+    const names = providers.map((provider) => provider.agentRef).join(', ');
+    throw new Error(`Multiple auth-provider/v1 agents are installed. Choose one explicitly: ${names}`);
+}
+
+function printSsoDetails(status) {
+    const { config, routerPort, providerHostPort } = status;
     if (!config.enabled) {
-        console.log('SSO is disabled. Run `ploinky sso enable` to enforce SSO.');
+        console.log('SSO is disabled. Run `ploinky sso enable <providerAgent>` to bind an auth provider.');
+        printProviderChoices(listAuthProviders());
         return;
     }
     console.log('SSO is enabled:');
-    console.log(`  Provider: ${config.provider}`);
+    console.log(`  Provider: ${config.providerAgent}`);
+    console.log(`  Contract: auth-provider/v1`);
     console.log(`  Router port: ${routerPort}`);
-    console.log(`  Provider port: ${providerHostPort}`);
-    console.log(`  Redirect URI: ${config.redirectUri}`);
-    if (config.externalBaseUrl) {
-        console.log(`  External base URL: ${config.externalBaseUrl}`);
+    if (providerHostPort) {
+        console.log(`  Provider port: ${providerHostPort}`);
     }
-    if (includeSecrets) {
-        const secretKeys = Object.keys(secrets || {});
-        if (secretKeys.length) {
-            console.log('  Secrets:');
-            for (const key of secretKeys) {
-                const masked = secrets[key] ? `${secrets[key].slice(0, 4)}***` : '<empty>';
-                console.log(`    ${key}: ${masked}`);
-            }
-        }
+    const providerConfig = config.providerConfig || {};
+    if (providerConfig.baseUrl) {
+        console.log(`  Base URL: ${providerConfig.baseUrl}`);
     }
-    if (Array.isArray(config.roles) && config.roles.length) {
-        console.log('  Roles:');
-        for (const role of config.roles) {
-            const envRole = role.envRole || 'unknown';
-            const agentName = role.agent || '<none>';
-            console.log(`    ${envRole} -> ${agentName}`);
-        }
+    if (providerConfig.redirectUri) {
+        console.log(`  Redirect URI: ${providerConfig.redirectUri}`);
     }
 }
 
-async function enableSsoCommand(options = []) {
-    const { flags } = parseFlagArgs(options);
-    const roleInputs = [];
-    for (const [key, value] of Object.entries(flags)) {
-        if (!key.startsWith('role-')) continue;
-        const role = key.slice('role-'.length);
-        if (!role) continue;
-        roleInputs.push({ role, agent: value });
-    }
-
-    const status = gatherSsoStatus();
-    if (status.config.enabled) {
-        console.log('SSO is already enabled. Use `ploinky sso disable` to reset.');
-        return;
-    }
-
-    const roles = [];
-    for (const { role, agent } of roleInputs) {
-        if (!role || !agent) continue;
-        roles.push({ envRole: role, agent: extractSsoShortName(agent) });
-    }
-
-    const roleValues = resolveSsoEnvRoleValues({
-        provider: process.env.SSO_PROVIDER,
-        clientId: process.env.SSO_CLIENT_ID,
-        clientSecret: process.env.SSO_CLIENT_SECRET,
-        redirectUri: process.env.SSO_REDIRECT_URI,
-        externalBaseUrl: process.env.SSO_EXTERNAL_BASE_URL,
-        roles: roles.length ? roles : undefined,
-    });
-
-    const missingRequired = roleValues.missing.filter(item => item.required);
-    if (missingRequired.length) {
-        const missing = missingRequired.map(item => item.candidates.filter(Boolean).join('/')).join(', ');
-        console.log(`Cannot enable SSO. Missing required environment variables: ${missing}.`);
-        console.log('Configure the variables and run `ploinky sso enable` again.');
-        return;
-    }
-
-    const missingOptional = roleValues.missing.filter(item => !item.required);
-    if (missingOptional.length) {
-        const hint = missingOptional.map(item => item.candidates.filter(Boolean).join('/')).join(', ');
-        console.log(`Warning: optional SSO environment variables not set: ${hint}. Router will continue without them.`);
-    }
-
-    setSsoEnabled(true);
-    console.log('✓ SSO enabled. Router will enforce Single Sign-On using existing environment variables.');
-    printSsoDetails(gatherSsoStatus(), { includeSecrets: true });
+async function enableSsoCommand(args = []) {
+    const providerAgent = chooseProvider(args[0] || '');
+    bindSsoProvider(providerAgent);
+    console.log(`✓ SSO enabled via ${providerAgent}.`);
+    printSsoDetails(gatherSsoStatus());
 }
 
 function disableSsoCommand() {
-    disableSsoConfig();
-    console.log('✓ SSO disabled. Restart the workspace to return to token-based auth.');
+    unbindSsoProvider();
+    console.log('✓ SSO disabled. Dev-only web-token auth remains available when configured.');
 }
 
 function showSsoStatusCommand() {
-    printSsoDetails(gatherSsoStatus(), { includeSecrets: true });
+    printSsoDetails(gatherSsoStatus());
 }
 
 async function handleSsoCommand(options = []) {
     const subcommand = (options[0] || 'status').toLowerCase();
     const rest = options.slice(1);
     if (subcommand === 'enable') {
-        if (rest.length > 0) {
-            throw new Error('Usage: ploinky sso enable');
+        if (rest.length > 1) {
+            throw new Error('Usage: ploinky sso enable [providerAgent]');
         }
         await enableSsoCommand(rest);
         return;
     }
     if (subcommand === 'disable') {
+        if (rest.length > 0) {
+            throw new Error('Usage: ploinky sso disable');
+        }
         disableSsoCommand();
         return;
     }
     if (subcommand === 'status') {
+        if (rest.length > 0) {
+            throw new Error('Usage: ploinky sso status');
+        }
         showSsoStatusCommand();
         return;
     }

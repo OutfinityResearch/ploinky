@@ -5,7 +5,7 @@ import { PLOINKY_DIR, ROUTING_FILE } from './config.js';
 import * as reposSvc from './repos.js';
 import { collectLiveAgentContainers, getAgentsRegistry } from './docker/index.js';
 import { findAgent } from './utils.js';
-import { gatherSsoStatus } from './sso.js';
+import { gatherSsoStatus, getSsoBinding, listAuthProviders } from './sso.js';
 
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 const PREDEFINED_REPOS = reposSvc.getPredefinedRepos();
@@ -340,42 +340,39 @@ function listReposForStatus() {
 }
 
 function printSsoStatusSummary(ssoStatus) {
-    if (!ssoStatus.config.enabled) {
+    const binding = (() => {
+        try { return getSsoBinding(); } catch (_) { return null; }
+    })();
+    const enabled = Boolean(ssoStatus.config.enabled) && Boolean(binding);
+    if (!enabled) {
         console.log(`- ${styles.label('SSO')}: ${styles.danger('disabled')}`);
+        const installedProviders = (() => {
+            try { return listAuthProviders(); } catch (_) { return []; }
+        })();
+        if (installedProviders.length) {
+            const names = installedProviders.map((p) => p.agentRef).join(', ');
+            console.log(`  ${bulletSymbol} ${styles.muted(`Installed auth-provider/v1 providers: ${names}`)}`);
+        } else {
+            console.log(`  ${bulletSymbol} ${styles.muted('No auth-provider/v1 agents installed. Install one, then run: sso enable <providerAgent>')}`);
+        }
         return;
     }
 
     console.log(`- ${styles.label('SSO')}: ${styles.success('enabled')}`);
-
-    const providerAgent = ssoStatus.config.providerAgent || ssoStatus.config.keycloakAgent;
-    const providerShort = ssoStatus.config.providerAgentShort || ssoStatus.config.keycloakAgentShort || providerAgent;
-    const providerLabel = providerShort && providerShort !== providerAgent
-        ? `${providerAgent} (${providerShort})`
-        : providerAgent;
+    const providerAgent = binding?.provider || ssoStatus.config.providerAgent || '-';
     const providerHost = ssoStatus.providerHostPort
         ? ` ${styles.muted(`(host port ${ssoStatus.providerHostPort})`)}`
         : '';
-    console.log(`  ${bulletSymbol} ${styles.label('Provider agent')}: ${styles.accent(providerLabel)}${providerHost}`);
-
-    const databaseAgent = ssoStatus.config.databaseAgent || ssoStatus.config.postgresAgent;
-    const databaseShort = ssoStatus.config.databaseAgentShort || ssoStatus.config.postgresAgentShort || databaseAgent;
-    const databaseLabel = databaseShort && databaseShort !== databaseAgent
-        ? `${databaseAgent} (${databaseShort})`
-        : databaseAgent;
-    console.log(`  ${bulletSymbol} ${styles.label('Database agent')}: ${styles.accent(databaseLabel)}`);
-
-    const baseUrl = ssoStatus.config.baseUrl || ssoStatus.secrets.baseUrl || '(unset)';
-    const redirectUri = ssoStatus.config.redirectUri || ssoStatus.secrets.redirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/auth/callback`;
-    const logoutRedirect = ssoStatus.config.logoutRedirectUri || ssoStatus.secrets.logoutRedirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/`;
-    const clientSecretState = ssoStatus.secrets.clientSecret
-        ? formatBadge('set', styles.success)
-        : formatBadge('unset', styles.danger);
-
-    console.log(`  ${bulletSymbol} ${styles.label('Realm / Client')}: ${ssoStatus.config.realm} / ${ssoStatus.config.clientId}`);
+    console.log(`  ${bulletSymbol} ${styles.label('Provider agent')}: ${styles.accent(providerAgent)}${providerHost}`);
+    console.log(`  ${bulletSymbol} ${styles.label('Contract')}: ${styles.muted('auth-provider/v1')}`);
+    if (Array.isArray(binding?.approvedScopes) && binding.approvedScopes.length) {
+        console.log(`  ${bulletSymbol} ${styles.label('Approved scopes')}: ${binding.approvedScopes.join(', ')}`);
+    }
+    const providerConfig = ssoStatus.config.providerConfig || {};
+    const baseUrl = providerConfig.baseUrl || '(unset)';
+    const redirectUri = providerConfig.redirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/auth/callback`;
     console.log(`  ${bulletSymbol} ${styles.label('Base URL')}: ${baseUrl}`);
     console.log(`  ${bulletSymbol} ${styles.label('Redirect URI')}: ${redirectUri}`);
-    console.log(`  ${bulletSymbol} ${styles.label('Logout redirect')}: ${logoutRedirect}`);
-    console.log(`  ${bulletSymbol} ${styles.label('Client secret')}: ${clientSecretState}`);
 }
 
 function printRouterStatus(routerPort, isListening) {

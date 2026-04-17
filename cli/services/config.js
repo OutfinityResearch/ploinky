@@ -22,10 +22,6 @@ export const AGENTS_FILE = path.join(PLOINKY_DIR, 'agents.json');
 export const SECRETS_FILE = path.join(PLOINKY_DIR, '.secrets');
 export const PROFILE_FILE = path.join(PLOINKY_DIR, 'profile');
 
-export const DPU_DATA_ROOT = process.env.DPU_DATA_ROOT
-    ? path.resolve(process.env.DPU_DATA_ROOT)
-    : path.join(process.env.HOME || process.env.USERPROFILE || '/tmp', '.ploinky', 'dpu-storage');
-
 // Workspace runtime structure lives under .ploinky/
 export const AGENTS_WORK_DIR = path.join(PLOINKY_DIR, 'agents');
 export const CODE_DIR = path.join(PLOINKY_DIR, 'code');

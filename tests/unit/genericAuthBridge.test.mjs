@@ -1,0 +1,199 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const originalCwd = process.cwd();
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-bridge-'));
+fs.mkdirSync(path.join(tempDir, '.ploinky'), { recursive: true });
+
+// Install a fake auth-provider/v1 agent under .ploinky/repos/fake/fakeProvider/
+const providerDir = path.join(tempDir, '.ploinky', 'repos', 'fake', 'fakeProvider');
+fs.mkdirSync(path.join(providerDir, 'runtime'), { recursive: true });
+fs.writeFileSync(
+    path.join(providerDir, 'manifest.json'),
+    JSON.stringify({
+        identity: { principalId: 'agent:fakeProvider', agentName: 'fakeProvider' },
+        provides: {
+            'auth-provider/v1': { operations: ['sso_begin_login'], supportedScopes: ['auth:login'] }
+        }
+    }, null, 2)
+);
+fs.writeFileSync(
+    path.join(providerDir, 'runtime', 'index.mjs'),
+    `
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+const CALL_LOG = process.env.__FAKE_PROVIDER_LOG;
+function recordCall(op, payload) {
+    try {
+        const existing = existsSync(CALL_LOG) ? JSON.parse(readFileSync(CALL_LOG, 'utf8')) : [];
+        existing.push({ op, payload });
+        writeFileSync(CALL_LOG, JSON.stringify(existing));
+    } catch {}
+}
+export function resolveProviderConfig({ providerConfig = {} } = {}) {
+    return {
+        issuerBaseUrl: providerConfig.issuerBaseUrl || 'https://fake.test',
+        clientId: providerConfig.clientId || 'fake-client'
+    };
+}
+export function createProvider({ getConfig }) {
+    return {
+        contract: 'auth-provider/v1',
+        name: 'fake/fakeProvider',
+        async sso_begin_login({ redirectUri, prompt }) {
+            const cfg = await getConfig();
+            recordCall('sso_begin_login', { redirectUri, prompt, config: cfg });
+            return {
+                authorizationUrl: 'https://fake.test/auth?state=PROVIDER_STATE',
+                providerState: 'PROVIDER_STATE',
+                expiresAt: Date.now() + 60_000
+            };
+        },
+        async sso_handle_callback({ redirectUri, query, providerState }) {
+            recordCall('sso_handle_callback', { redirectUri, query, providerState });
+            return {
+                user: { id: 'u1', sub: 'u1', username: 'alice', email: 'alice@test', roles: ['dev'], raw: {} },
+                providerSession: {
+                    provider: 'fake/fakeProvider',
+                    tokens: { accessToken: 'AT', idToken: 'ID', refreshToken: 'RT', scope: 'openid', tokenType: 'Bearer' },
+                    expiresAt: Date.now() + 60_000,
+                    refreshExpiresAt: Date.now() + 120_000
+                }
+            };
+        },
+        async sso_validate_session({ providerSession }) {
+            recordCall('sso_validate_session', { providerSession });
+            return { user: { id: 'u1', sub: 'u1', username: 'alice' }, providerSession };
+        },
+        async sso_refresh_session({ providerSession }) {
+            recordCall('sso_refresh_session', { providerSession });
+            return {
+                user: { id: 'u1', sub: 'u1', username: 'alice' },
+                providerSession: { ...providerSession, tokens: { ...providerSession.tokens, accessToken: 'AT2' } }
+            };
+        },
+        async sso_logout({ providerSession, postLogoutRedirectUri }) {
+            recordCall('sso_logout', { providerSession, postLogoutRedirectUri });
+            return { redirectUrl: 'https://fake.test/logout' };
+        },
+        invalidateCaches() {}
+    };
+}
+    `
+);
+
+process.chdir(tempDir);
+
+const callLogPath = path.join(tempDir, 'fake-provider-calls.json');
+process.env.__FAKE_PROVIDER_LOG = callLogPath;
+
+function readCalls() {
+    if (!fs.existsSync(callLogPath)) return [];
+    return JSON.parse(fs.readFileSync(callLogPath, 'utf8'));
+}
+
+function writeWorkspaceSsoConfig(nextSso) {
+    const agentsPath = path.join(tempDir, '.ploinky', 'agents.json');
+    const existing = fs.existsSync(agentsPath)
+        ? JSON.parse(fs.readFileSync(agentsPath, 'utf8'))
+        : {};
+    existing._config = {
+        ...(existing._config || {}),
+        sso: nextSso
+    };
+    fs.writeFileSync(agentsPath, JSON.stringify(existing, null, 2));
+}
+
+const moduleSuffix = `?test=${Date.now()}`;
+const { setCapabilityBinding, removeCapabilityBinding } = await import(`../../cli/services/capabilityRegistry.js${moduleSuffix}`);
+const bridgeModule = await import(`../../cli/server/auth/genericAuthBridge.js${moduleSuffix}`);
+const { createGenericAuthBridge } = bridgeModule;
+
+test.after(() => {
+    process.chdir(originalCwd);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('generic bridge requires a workspace:sso binding', async () => {
+    const bridge = createGenericAuthBridge();
+    await assert.rejects(
+        bridge.beginLogin({ baseUrl: 'http://127.0.0.1:8080' }),
+        /SSO is not configured/
+    );
+});
+
+test('generic bridge orchestrates begin/callback/refresh/logout through provider', async () => {
+    // Bind `workspace:sso` to our fake provider.
+    setCapabilityBinding({
+        consumer: 'workspace',
+        alias: 'sso',
+        provider: 'fake/fakeProvider',
+        contract: 'auth-provider/v1',
+        approvedScopes: ['auth:login']
+    });
+    writeWorkspaceSsoConfig({
+        enabled: true,
+        providerConfig: {
+            issuerBaseUrl: 'https://fake.test',
+            clientId: 'fake-client'
+        }
+    });
+
+    const bridge = createGenericAuthBridge();
+    const { redirectUrl, state } = await bridge.beginLogin({
+        baseUrl: 'http://127.0.0.1:8080',
+        returnTo: '/webchat/'
+    });
+    // The bridge replaces the provider's own `state` with a core-owned one
+    // so the browser presents our key on the callback.
+    assert.ok(redirectUrl.includes(`state=${state}`));
+
+    const callback = await bridge.handleCallback({
+        code: 'auth-code',
+        state,
+        baseUrl: 'http://127.0.0.1:8080'
+    });
+    assert.equal(callback.user.username, 'alice');
+    assert.equal(callback.redirectTo, '/webchat/');
+
+    const refreshed = await bridge.refreshSession(callback.sessionId);
+    assert.equal(refreshed.accessToken, 'AT2');
+
+    const loggedOut = await bridge.logout(callback.sessionId, { baseUrl: 'http://127.0.0.1:8080' });
+    assert.equal(loggedOut.redirect, 'https://fake.test/logout');
+
+    // Verify provider received each operation
+    const ops = readCalls().map((c) => c.op);
+    assert.ok(ops.includes('sso_begin_login'));
+    assert.ok(ops.includes('sso_handle_callback'));
+    assert.ok(ops.includes('sso_refresh_session'));
+    assert.ok(ops.includes('sso_logout'));
+
+    removeCapabilityBinding({ consumer: 'workspace', alias: 'sso' });
+});
+
+test('bridge rejects unknown state on callback', async () => {
+    setCapabilityBinding({
+        consumer: 'workspace',
+        alias: 'sso',
+        provider: 'fake/fakeProvider',
+        contract: 'auth-provider/v1',
+        approvedScopes: ['auth:login']
+    });
+    writeWorkspaceSsoConfig({
+        enabled: true,
+        providerConfig: {
+            issuerBaseUrl: 'https://fake.test',
+            clientId: 'fake-client'
+        }
+    });
+    const bridge = createGenericAuthBridge();
+    await assert.rejects(
+        bridge.handleCallback({ code: 'x', state: 'bogus', baseUrl: 'http://127.0.0.1:8080' }),
+        /Invalid or expired/
+    );
+    removeCapabilityBinding({ consumer: 'workspace', alias: 'sso' });
+});

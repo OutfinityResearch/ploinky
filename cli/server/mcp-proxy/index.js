@@ -2,10 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { sendJson, ensureAuthenticated } from '../authHandlers.js';
 import { createAgentClient } from '../AgentClient.js';
 import { waitForAgentReady } from '../utils/agentReadiness.js';
+import {
+    buildFirstPartyInvocation,
+    buildDelegatedInvocation,
+    resolveProviderForConsumerAlias
+} from './secureWire.js';
+import { getAgentDescriptorByPrincipal } from '../../services/capabilityRegistry.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
 const AGENT_PROXY_SERVER_INFO = { name: 'ploinky-router-proxy', version: '1.0.0' };
 const PLOINKY_AUTH_INFO_HEADER = 'x-ploinky-auth-info';
+const INVOCATION_TOKEN_HEADER = 'x-ploinky-invocation';
+const CALLER_ASSERTION_HEADER = 'x-ploinky-caller-assertion';
 
 // Session store for agent MCP connections
 const agentSessionStore = new Map();
@@ -36,6 +44,74 @@ function encodeAuthInfoHeader(authInfo = null) {
     } catch {
         return '';
     }
+}
+
+function isSecureWireEnabled() {
+    const flag = String(process.env.PLOINKY_SECURE_WIRE || '').trim().toLowerCase();
+    if (flag === '0' || flag === 'false' || flag === 'off') return false;
+    return true;
+}
+
+function isLegacyCompatibilityAllowed() {
+    const flag = String(process.env.PLOINKY_SECURE_WIRE_STRICT || '').trim().toLowerCase();
+    // When STRICT is 1/true/on, we stop emitting the legacy blob. Default:
+    // emit both during migration so old agents keep working.
+    if (flag === '1' || flag === 'true' || flag === 'on') return false;
+    return true;
+}
+
+function resolveProviderAgentRef(agentName) {
+    // agentName is typically the short route name. Find the full repo/agent
+    // reference so the capability registry can resolve principal/contract.
+    try {
+        const descriptor = getAgentDescriptorByPrincipal(`agent:${agentName}`);
+        if (descriptor) return descriptor.agentRef;
+    } catch (_) {}
+    return agentName;
+}
+
+function buildCallerAssertionInputs(req) {
+    const rawAssertion = req.headers?.[CALLER_ASSERTION_HEADER] || req.headers?.[CALLER_ASSERTION_HEADER.toLowerCase()];
+    if (typeof rawAssertion === 'string' && rawAssertion) {
+        return { callerAssertionToken: rawAssertion.trim() };
+    }
+    return null;
+}
+
+function buildInvocationContextForProviderCall({ req, agentName, toolName, toolArgs }) {
+    if (!isSecureWireEnabled()) return null;
+    const providerAgentRef = resolveProviderAgentRef(agentName);
+    const bodyObject = { tool: toolName, arguments: toolArgs || {} };
+    const delegatedUser = req.user && typeof req.user === 'object'
+        ? {
+            id: req.user.id || '',
+            username: req.user.username || req.user.name || req.user.email || '',
+            email: req.user.email || '',
+            roles: Array.isArray(req.user.roles) ? [...req.user.roles] : []
+        }
+        : null;
+
+    const assertionInput = buildCallerAssertionInputs(req);
+    if (assertionInput?.callerAssertionToken) {
+        return buildDelegatedInvocation({
+            callerAssertionToken: assertionInput.callerAssertionToken,
+            bodyObject,
+            providerAgentRef,
+            tool: toolName,
+            delegatedUser
+        });
+    }
+    return buildFirstPartyInvocation({
+        providerAgentRef,
+        tool: toolName,
+        bodyObject,
+        delegatedUser,
+        sessionId: req.sessionId,
+        // Scope/binding remain empty for direct browser/first-party calls
+        // (provider is expected to accept them based on audience + signed
+        // first-party issuer when no binding is involved).
+        scope: []
+    });
 }
 
 /**
@@ -101,8 +177,11 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
         return;
     }
 
-    let requestHeaders = null;
-    if (req.user && typeof req.user === 'object') {
+    // Build the shared legacy auth blob (used only during migration when
+    // PLOINKY_SECURE_WIRE_STRICT is not set). Downstream providers must not
+    // treat this as a trust source once secure mode is enforced.
+    let legacyAuthHeaders = null;
+    if (req.user && typeof req.user === 'object' && isLegacyCompatibilityAllowed()) {
         const authInfo = {
             user: {
                 id: req.user.id || '',
@@ -114,11 +193,26 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
         };
         const encoded = encodeAuthInfoHeader(authInfo);
         if (encoded) {
-            requestHeaders = { [PLOINKY_AUTH_INFO_HEADER]: encoded };
+            legacyAuthHeaders = { [PLOINKY_AUTH_INFO_HEADER]: encoded };
         }
     }
 
-    const agentClient = createAgentClient(baseUrl, requestHeaders ? { requestHeaders } : undefined);
+    function buildRequestHeadersForToolCall(toolName, toolArgs) {
+        const headers = legacyAuthHeaders ? { ...legacyAuthHeaders } : {};
+        const ctx = buildInvocationContextForProviderCall({
+            req,
+            agentName,
+            toolName,
+            toolArgs: toolArgs || {}
+        });
+        if (ctx?.token) {
+            headers[INVOCATION_TOKEN_HEADER] = ctx.token;
+        }
+        return Object.keys(headers).length ? headers : null;
+    }
+
+    const listHeaders = legacyAuthHeaders ? { ...legacyAuthHeaders } : null;
+    const agentClient = createAgentClient(baseUrl, listHeaders ? { requestHeaders: listHeaders } : undefined);
     try {
         switch (message.method) {
             case 'tools/list': {
@@ -142,32 +236,45 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                 const args = argPayload && typeof argPayload === 'object' && !Array.isArray(argPayload)
                     ? { ...argPayload }
                     : {};
-                if (req.user && typeof req.user === 'object') {
-                    const authMeta = {
-                        user: {
-                            id: req.user.id || '',
-                            username: req.user.username || req.user.name || req.user.email || '',
-                            email: req.user.email || '',
-                            roles: Array.isArray(req.user.roles) ? [...req.user.roles] : [],
-                        },
-                        sessionId: req.sessionId || '',
-                    };
-                    const nextMeta = args._meta && typeof args._meta === 'object' ? { ...args._meta } : {};
-                    nextMeta.auth = authMeta;
-                    args._meta = nextMeta;
 
-                    const nextParams = args.params && typeof args.params === 'object' && !Array.isArray(args.params)
-                        ? { ...args.params }
-                        : {};
-                    const nextParamsMeta = nextParams._meta && typeof nextParams._meta === 'object'
-                        ? { ...nextParams._meta }
-                        : {};
-                    nextParamsMeta.auth = authMeta;
-                    nextParams._meta = nextParamsMeta;
-                    args.params = nextParams;
+                // Mint a router-signed invocation token scoped to this tool call
+                // and open a short-lived client with that token in the header.
+                const toolHeaders = buildRequestHeadersForToolCall(name, args);
+                const toolClient = createAgentClient(baseUrl, toolHeaders ? { requestHeaders: toolHeaders } : undefined);
+
+                try {
+                    if (req.user && typeof req.user === 'object' && isLegacyCompatibilityAllowed()) {
+                        // Transitional: keep _meta.auth during migration for old tool
+                        // wrappers that still read it. This will be removed once all
+                        // providers verify invocation tokens.
+                        const authMeta = {
+                            user: {
+                                id: req.user.id || '',
+                                username: req.user.username || req.user.name || req.user.email || '',
+                                email: req.user.email || '',
+                                roles: Array.isArray(req.user.roles) ? [...req.user.roles] : [],
+                            },
+                            sessionId: req.sessionId || '',
+                        };
+                        const nextMeta = args._meta && typeof args._meta === 'object' ? { ...args._meta } : {};
+                        nextMeta.auth = authMeta;
+                        args._meta = nextMeta;
+
+                        const nextParams = args.params && typeof args.params === 'object' && !Array.isArray(args.params)
+                            ? { ...args.params }
+                            : {};
+                        const nextParamsMeta = nextParams._meta && typeof nextParams._meta === 'object'
+                            ? { ...nextParams._meta }
+                            : {};
+                        nextParamsMeta.auth = authMeta;
+                        nextParams._meta = nextParamsMeta;
+                        args.params = nextParams;
+                    }
+                    const result = await toolClient.callTool(name, args);
+                    sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
+                } finally {
+                    await toolClient.close().catch(() => {});
                 }
-                const result = await agentClient.callTool(name, args);
-                sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
                 break;
             }
             case 'resources/read': {
@@ -202,10 +309,12 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
  */
 async function handleAgentMcpRequest(req, res, route, agentName) {
     const method = (req.method || 'GET').toUpperCase();
+    const hasCallerAssertion = typeof req.headers?.[CALLER_ASSERTION_HEADER] === 'string'
+        || typeof req.headers?.[CALLER_ASSERTION_HEADER.toLowerCase()] === 'string';
 
     // Defensive auth attach for browser MCP calls. The router should already do this,
     // but the proxy must not rely on auth context being pre-populated if cookies exist.
-    if (!req.agent && !req.user) {
+    if (!req.agent && !req.user && !hasCallerAssertion) {
         const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
         const authResult = await ensureAuthenticated(req, res, parsedUrl);
         if (!authResult.ok) {

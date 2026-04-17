@@ -80,8 +80,13 @@ test('resolveWorkspaceDependencyGraph preserves the original enable spec for dep
     assert.equal(graph.nodes.get('demo/mode-target').enableSpec, 'mode-target global');
 });
 
-test('resolveWorkspaceDependencyGraph respects SSO gating for keycloak dependencies', () => {
-    writeManifest('basic', 'keycloak', { container: 'quay.io/keycloak/keycloak:24.0' });
+test('resolveWorkspaceDependencyGraph respects SSO gating for auth-provider dependencies', () => {
+    // New capability-based gating: any agent that declares `provides["auth-provider/v1"]`
+    // is skipped unless the parent manifest requests SSO mode. Name-based gating was removed.
+    writeManifest('basic', 'keycloak', {
+        container: 'quay.io/keycloak/keycloak:24.0',
+        provides: { 'auth-provider/v1': { operations: [] } }
+    });
     writeManifest('demo', 'plain-app', {
         container: 'node:20-alpine',
         enable: ['basic/keycloak']

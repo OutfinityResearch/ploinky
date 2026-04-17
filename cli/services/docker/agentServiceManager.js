@@ -4,7 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
     buildEnvFlags,
-    ensurePersistentSecret,
     formatEnvFlag,
     getExposedNames,
     getManifestEnvNames,
@@ -30,7 +29,17 @@ import {
 import { clearLivenessState } from './healthProbes.js';
 import { stopAndRemove } from './containerFleet.js';
 import { DEFAULT_AGENT_ENTRY, launchAgentSidecar, readManifestAgentCommand, readManifestStartCommand, splitCommandArgs } from './agentCommands.js';
-import { ROUTING_FILE, WORKSPACE_ROOT, DPU_DATA_ROOT } from '../config.js';
+import { ROUTING_FILE, WORKSPACE_ROOT } from '../config.js';
+import {
+    planRuntimeResources,
+    applyRuntimeResourceEnv,
+    ensurePersistentStorageHostDir
+} from '../runtimeResourcePlanner.js';
+import {
+    getRouterPublicKey as getRouterPublicKeyMaterial,
+    ensureAgentKeypair
+} from '../agentKeystore.js';
+import { resolveBindingsForConsumer, resolveBindingsForProvider } from '../capabilityRegistry.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
@@ -68,6 +77,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
+const AGENT_PRIVATE_KEY_CONTAINER_PATH = '/tmp/ploinky-agent.key';
 
 /**
  * Resolve a symlink path to its actual target.
@@ -89,27 +99,54 @@ function resolveSymlinkPath(symlinkPath) {
     return symlinkPath;
 }
 
-function ensureManifestVolumeHostPath(resolvedHostPath, containerPath) {
+function ensureManifestVolumeHostPath(resolvedHostPath, _containerPath, options = {}) {
     if (!resolvedHostPath) return;
     if (!fs.existsSync(resolvedHostPath)) {
         fs.mkdirSync(resolvedHostPath, { recursive: true });
     }
-    if (String(containerPath || '').replace(/\/+$/, '') === '/opt/keycloak/data') {
-        const tmpDir = path.join(resolvedHostPath, 'tmp');
-        fs.mkdirSync(tmpDir, { recursive: true });
-        fs.chmodSync(resolvedHostPath, 0o777);
-        fs.chmodSync(tmpDir, 0o777);
+    if (options && typeof options.chmod === 'number') {
+        try { fs.chmodSync(resolvedHostPath, options.chmod); } catch (_) {}
+        if (options.makeWorldWritableSubdirs && Array.isArray(options.makeWorldWritableSubdirs)) {
+            for (const sub of options.makeWorldWritableSubdirs) {
+                const subDir = path.join(resolvedHostPath, String(sub));
+                try {
+                    fs.mkdirSync(subDir, { recursive: true });
+                    fs.chmodSync(subDir, options.chmod);
+                } catch (_) {}
+            }
+        }
     }
+}
+
+function resolveRouterHostForRuntime(runtime) {
+    if (runtime === 'podman') {
+        return 'host.containers.internal';
+    }
+    if (runtime === 'docker') {
+        return 'host.docker.internal';
+    }
+    return '127.0.0.1';
+}
+
+function readManifestVolumeOptions(manifest) {
+    const volumeOptions = manifest?.volumeOptions && typeof manifest.volumeOptions === 'object'
+        ? manifest.volumeOptions
+        : {};
+    return volumeOptions;
 }
 
 function ensureManifestVolumeHostPaths(manifest) {
     if (!manifest?.volumes || typeof manifest.volumes !== 'object') return;
     const workspaceRoot = WORKSPACE_ROOT;
+    const volumeOptions = readManifestVolumeOptions(manifest);
     for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
         const resolvedHostPath = path.isAbsolute(hostPath)
             ? hostPath
             : path.resolve(workspaceRoot, hostPath);
-        ensureManifestVolumeHostPath(resolvedHostPath, containerPath);
+        const options = volumeOptions[containerPath]
+            || volumeOptions[String(containerPath || '').replace(/\/+$/, '')]
+            || {};
+        ensureManifestVolumeHostPath(resolvedHostPath, containerPath, options);
     }
 }
 
@@ -303,15 +340,21 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     if (runtime === 'podman') {
         args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
         args.splice(1, 0, '--replace');
+    } else if (runtime === 'docker') {
+        args.splice(1, 0, '--add-host', 'host.docker.internal:host-gateway');
     }
 
     if (manifest.volumes && typeof manifest.volumes === 'object') {
         const workspaceRoot = WORKSPACE_ROOT;
+        const volumeOptions = readManifestVolumeOptions(manifest);
         for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
             const resolvedHostPath = path.isAbsolute(hostPath)
                 ? hostPath
                 : path.resolve(workspaceRoot, hostPath);
-            ensureManifestVolumeHostPath(resolvedHostPath, containerPath);
+            const options = volumeOptions[containerPath]
+                || volumeOptions[String(containerPath || '').replace(/\/+$/, '')]
+                || {};
+            ensureManifestVolumeHostPath(resolvedHostPath, containerPath, options);
             args.push('-v', `${resolvedHostPath}:${containerPath}${runtime === 'podman' ? ':z' : ''}`);
         }
     }
@@ -324,23 +367,50 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         args.splice(1, 0, '-p', String(p));
     }
 
-    // DPU isolation: bind private storage for dpuAgent
-    if (agentName === 'dpuAgent') {
-        if (!fs.existsSync(DPU_DATA_ROOT)) {
-            fs.mkdirSync(DPU_DATA_ROOT, { recursive: true });
-        }
-        args.push('-v', `${DPU_DATA_ROOT}:/dpu-data${runtime === 'podman' ? ':z' : ''}`);
-        // Inject DPU_DATA_ROOT to point to the internal mount point
+    // Manifest-driven runtime resources (persistent storage + declared env).
+    // Replaces former agentName-specific runtime wiring with manifest-driven resources.
+    const resourcePlan = planRuntimeResources(manifest);
+    if (resourcePlan.persistentStorage) {
+        ensurePersistentStorageHostDir(resourcePlan);
+        args.push('-v', `${resourcePlan.persistentStorage.hostPath}:${resourcePlan.persistentStorage.containerPath}${runtime === 'podman' ? ':z' : ''}`);
     }
 
     const envStrings = [...buildEnvFlags(manifest, profileConfig), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
     envStrings.push(formatEnvFlag('AGENT_NAME', agentName));
     envStrings.push(formatEnvFlag('WORKSPACE_PATH', agentWorkDir));
     envStrings.push(formatEnvFlag('PLOINKY_WORKSPACE_ROOT', WORKSPACE_ROOT));
-    if (agentName === 'dpuAgent') {
-        envStrings.push(formatEnvFlag('DPU_WORKSPACE_ROOT', WORKSPACE_ROOT));
-        envStrings.push(formatEnvFlag('DPU_DATA_ROOT', '/dpu-data'));
-        envStrings.push(formatEnvFlag('DPU_MASTER_KEY', ensurePersistentSecret('DPU_MASTER_KEY')));
+    // Apply env from manifest.runtime.resources.env (templates expanded).
+    for (const [envKey, envValue] of Object.entries(applyRuntimeResourceEnv(resourcePlan))) {
+        envStrings.push(formatEnvFlag(envKey, envValue));
+    }
+
+    // Secure-wire plumbing: expose the router public key and this agent's
+    // principal id so the AgentServer can verify invocation tokens.
+    try {
+        const principalId = String(manifest?.identity?.principalId || '').trim() || `agent:${agentName}`;
+        const keypair = ensureAgentKeypair(principalId);
+        args.push('-v', `${keypair.privatePath}:${AGENT_PRIVATE_KEY_CONTAINER_PATH}${runtime === 'podman' ? ':ro,z' : ':ro'}`);
+        envStrings.push(formatEnvFlag('PLOINKY_AGENT_PRINCIPAL', principalId));
+        envStrings.push(formatEnvFlag('PLOINKY_AGENT_PRIVATE_KEY_PATH', AGENT_PRIVATE_KEY_CONTAINER_PATH));
+        const routerKey = getRouterPublicKeyMaterial();
+        if (routerKey?.publicKeyJwk) {
+            envStrings.push(formatEnvFlag('PLOINKY_ROUTER_PUBLIC_KEY_JWK', JSON.stringify(routerKey.publicKeyJwk)));
+        }
+        try {
+            const repoName = path.basename(path.dirname(agentPath));
+            const bindings = resolveBindingsForConsumer(`${repoName}/${agentName}`);
+            if (Object.keys(bindings).length) {
+                envStrings.push(formatEnvFlag('PLOINKY_CAPABILITY_BINDINGS_JSON', JSON.stringify(bindings)));
+            }
+            const providerBindings = resolveBindingsForProvider(`${repoName}/${agentName}`);
+            if (Object.keys(providerBindings).length) {
+                envStrings.push(formatEnvFlag('PLOINKY_PROVIDER_BINDINGS_JSON', JSON.stringify(providerBindings)));
+            }
+        } catch (bindingErr) {
+            debugLog(`[secureWire] could not resolve capability bindings for ${agentName}: ${bindingErr?.message || bindingErr}`);
+        }
+    } catch (err) {
+        debugLog(`[secureWire] could not propagate router key to ${agentName}: ${err?.message || err}`);
     }
 
     const profileEnv = normalizeProfileEnv(profileConfig?.env);
@@ -364,7 +434,10 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     } catch (_) {
         // ignore and keep default router port
     }
+    const routerHost = resolveRouterHostForRuntime(runtime);
     envStrings.push(formatEnvFlag('PLOINKY_ROUTER_PORT', routerPort));
+    envStrings.push(formatEnvFlag('PLOINKY_ROUTER_HOST', routerHost));
+    envStrings.push(formatEnvFlag('PLOINKY_ROUTER_URL', `http://${routerHost}:${routerPort}`));
 
     const agentClientIdVar = `PLOINKY_AGENT_${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_ID`;
     const agentClientSecretVar = `PLOINKY_AGENT_${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_SECRET`;

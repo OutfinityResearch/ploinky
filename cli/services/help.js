@@ -25,7 +25,7 @@ export function showHelp(args = []) {
   webchat [--rotate]             Show or rotate WebChat token and print access URL
   webmeet [moderatorAgent] [--rotate]  Show WebMeet token; --rotate mints a new one
   dashboard [--rotate]           Show or rotate Dashboard token and print access URL
-  sso enable|disable|status  Configure SSO (Keycloak) middleware and secrets
+  sso enable|disable|status  Bind or inspect SSO provider agents
   vars                           List all variable names (no values)
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
@@ -161,24 +161,25 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
         },
         'sso': {
-            description: 'Manage SSO middleware (OIDC providers such as Keycloak).',
+            description: 'Manage SSO provider bindings.',
             subcommands: {
                 'enable': {
-                    syntax: 'sso enable',
-                    description: 'Enable SSO using environment variables (for example KEYCLOAK_URL, KEYCLOAK_REALM). Set them ahead of time with `ploinky var <NAME> <value>`.',
+                    syntax: 'sso enable [providerAgent]',
+                    description: 'Bind workspace SSO to an installed auth-provider/v1 agent.',
                     examples: [
-                        'sso enable'
+                        'sso enable',
+                        'sso enable <providerAgent>'
                     ],
-                    notes: 'Once enabled, restart the router for changes to take effect.'
+                    notes: 'If no provider is passed, Ploinky reuses the existing binding, selects the sole installed provider, or requires an explicit choice when multiple providers are installed.'
                 },
                 'disable': {
                     syntax: 'sso disable',
-                    description: 'Disable SSO middleware and revert the router to legacy token-based auth. Does not delete stored secrets.',
+                    description: 'Remove the workspace SSO provider binding. Dev-only web-token auth remains unchanged.',
                     examples: [ 'sso disable' ]
                 },
                 'status': {
                     syntax: 'sso status',
-                    description: 'Show current SSO configuration, stored secrets, and detected ports.',
+                    description: 'Show the current SSO provider binding and detected ports.',
                     examples: [ 'sso status' ]
                 }
             }

@@ -2,31 +2,13 @@ import fs from 'fs';
 
 import * as workspaceSvc from './workspace.js';
 import { ROUTING_FILE } from './config.js';
-import { resolveVarValue } from './secretVars.js';
-
-// Standard SSO environment variable naming conventions
-// Used by auth/config.js and CLI commands for consistent variable resolution
-const SSO_ENV_ROLE_CANDIDATES = {
-    baseUrl: ['KEYCLOAK_URL', 'SSO_BASE_URL', 'SSO_URL', 'OIDC_BASE_URL'],
-    realm: ['KEYCLOAK_REALM', 'SSO_REALM', 'OIDC_REALM'],
-    clientId: ['KEYCLOAK_CLIENT_ID', 'SSO_CLIENT_ID', 'OIDC_CLIENT_ID'],
-    clientSecret: ['KEYCLOAK_CLIENT_SECRET', 'SSO_CLIENT_SECRET', 'OIDC_CLIENT_SECRET'],
-    scope: ['KEYCLOAK_SCOPE', 'SSO_SCOPE', 'OIDC_SCOPE'],
-    redirectUri: ['KEYCLOAK_REDIRECT_URI', 'SSO_REDIRECT_URI', 'OIDC_REDIRECT_URI'],
-    logoutRedirectUri: ['KEYCLOAK_LOGOUT_REDIRECT_URI', 'SSO_LOGOUT_REDIRECT_URI', 'OIDC_LOGOUT_REDIRECT_URI'],
-    adminUser: ['KEYCLOAK_ADMIN', 'SSO_ADMIN', 'OIDC_ADMIN'],
-    adminPassword: ['KEYCLOAK_ADMIN_PASSWORD', 'SSO_ADMIN_PASSWORD', 'OIDC_ADMIN_PASSWORD'],
-    hostname: ['KC_HOSTNAME', 'SSO_HOSTNAME', 'OIDC_HOSTNAME'],
-    hostnameStrict: ['KC_HOSTNAME_STRICT', 'SSO_HOSTNAME_STRICT', 'OIDC_HOSTNAME_STRICT'],
-    httpEnabled: ['KC_HTTP_ENABLED', 'SSO_HTTP_ENABLED', 'OIDC_HTTP_ENABLED'],
-    proxy: ['KC_PROXY', 'SSO_PROXY', 'OIDC_PROXY'],
-    dbEngine: ['KC_DB', 'SSO_DB_ENGINE', 'OIDC_DB_ENGINE'],
-    dbUrl: ['KC_DB_URL', 'SSO_DB_URL', 'OIDC_DB_URL'],
-    dbUsername: ['KC_DB_USERNAME', 'SSO_DB_USERNAME', 'OIDC_DB_USERNAME'],
-    dbPassword: ['KC_DB_PASSWORD', 'SSO_DB_PASSWORD', 'OIDC_DB_PASSWORD']
-};
-
-// Service discovery utilities
+import {
+    listProvidersForContract,
+    resolveAgentDescriptor,
+    setCapabilityBinding,
+    removeCapabilityBinding,
+    getCapabilityBinding
+} from './capabilityRegistry.js';
 
 function readRouting() {
     try {
@@ -81,235 +63,6 @@ function getAgentHostPort(agentName) {
     return null;
 }
 
-// Variable resolution - leverages secretVars.js for consistent resolution
-
-function readEnvValue(name) {
-    if (!name) return '';
-    try {
-        const fromSecrets = resolveVarValue(name);
-        if (fromSecrets && String(fromSecrets).trim()) {
-            return String(fromSecrets).trim();
-        }
-    } catch (_) {}
-    if (Object.prototype.hasOwnProperty.call(process.env, name)) {
-        const raw = process.env[name];
-        if (raw !== undefined && raw !== null) {
-            const str = String(raw).trim();
-            if (str) return str;
-        }
-    }
-    return '';
-}
-
-function resolveEnvRoleValues(overrides = {}) {
-    const normalizedOverrides = {};
-    if (overrides && typeof overrides === 'object') {
-        for (const [key, value] of Object.entries(overrides)) {
-            if (value === undefined || value === null) continue;
-            if (Array.isArray(value) || (value && typeof value === 'object' && key === 'roles')) {
-                normalizedOverrides[key] = value;
-                continue;
-            }
-            const str = String(value).trim();
-            if (str) normalizedOverrides[key] = str;
-        }
-    }
-
-    const valueFromCandidates = (candidates = [], overrideKeys = []) => {
-        for (const key of overrideKeys) {
-            if (key && normalizedOverrides[key]) {
-                return normalizedOverrides[key];
-            }
-        }
-        for (const name of candidates) {
-            if (!name) continue;
-            const val = readEnvValue(name);
-            if (val) return val;
-        }
-        return '';
-    };
-
-    const baseUrl = valueFromCandidates(
-        SSO_ENV_ROLE_CANDIDATES.baseUrl,
-        ['baseUrl', 'externalBaseUrl']
-    );
-    const realm = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.realm, ['realm']) || 'ploinky';
-    const clientId = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.clientId, ['clientId']) || 'ploinky-router';
-    const clientSecret = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.clientSecret, ['clientSecret']);
-    const scope = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.scope, ['scope']) || 'openid profile email';
-    const redirectUri = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.redirectUri, ['redirectUri']);
-    const logoutRedirectUri = valueFromCandidates(
-        SSO_ENV_ROLE_CANDIDATES.logoutRedirectUri,
-        ['logoutRedirectUri']
-    );
-    const adminUser = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminUser, ['adminUser']);
-    const adminPassword = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.adminPassword, ['adminPassword']);
-    const hostname = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.hostname, ['hostname']);
-    const hostnameStrict = valueFromCandidates(
-        SSO_ENV_ROLE_CANDIDATES.hostnameStrict,
-        ['hostnameStrict']
-    );
-    const httpEnabled = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.httpEnabled, ['httpEnabled']);
-    const proxy = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.proxy, ['proxy']);
-    const dbEngine = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbEngine, ['dbEngine']);
-    const dbUrl = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbUrl, ['dbUrl']);
-    const dbUsername = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbUsername, ['dbUsername']);
-    const dbPassword = valueFromCandidates(SSO_ENV_ROLE_CANDIDATES.dbPassword, ['dbPassword']);
-
-    const provider = normalizedOverrides.provider || readEnvValue('SSO_PROVIDER');
-    const externalBaseUrl = normalizedOverrides.externalBaseUrl || readEnvValue('SSO_EXTERNAL_BASE_URL');
-    const roles = Array.isArray(normalizedOverrides.roles) ? normalizedOverrides.roles : [];
-
-    const missing = [];
-    const pushMissing = (key, candidates, value, required = false) => {
-        const resolved = value === undefined || value === null ? '' : String(value).trim();
-        if (resolved) return;
-        const candidateList = Array.isArray(candidates)
-            ? Array.from(new Set(candidates.filter(Boolean)))
-            : [];
-        missing.push({ key, required, candidates: candidateList });
-    };
-
-    pushMissing('baseUrl', SSO_ENV_ROLE_CANDIDATES.baseUrl, baseUrl, true);
-    pushMissing('realm', SSO_ENV_ROLE_CANDIDATES.realm, realm, true);
-    pushMissing('clientId', SSO_ENV_ROLE_CANDIDATES.clientId, clientId, true);
-    pushMissing('clientSecret', SSO_ENV_ROLE_CANDIDATES.clientSecret, clientSecret, true);
-    pushMissing('redirectUri', SSO_ENV_ROLE_CANDIDATES.redirectUri, redirectUri, true);
-
-    pushMissing('logoutRedirectUri', SSO_ENV_ROLE_CANDIDATES.logoutRedirectUri, logoutRedirectUri);
-    pushMissing('adminUser', SSO_ENV_ROLE_CANDIDATES.adminUser, adminUser);
-    pushMissing('adminPassword', SSO_ENV_ROLE_CANDIDATES.adminPassword, adminPassword);
-
-    return {
-        baseUrl,
-        realm,
-        clientId,
-        clientSecret,
-        scope,
-        redirectUri,
-        logoutRedirectUri,
-        adminUser,
-        adminPassword,
-        hostname,
-        hostnameStrict,
-        httpEnabled,
-        proxy,
-        dbEngine,
-        dbUrl,
-        dbUsername,
-        dbPassword,
-        provider,
-        externalBaseUrl,
-        roles,
-        missing
-    };
-}
-
-function getSsoConfig() {
-    const cfg = workspaceSvc.getConfig() || {};
-    const sso = cfg.sso || {};
-    const providerAgent = sso.providerAgent || sso.keycloakAgent || 'keycloak';
-    const providerAgentShort = sso.providerAgentShort || sso.keycloakAgentShort || extractShortAgentName(providerAgent);
-    const databaseAgent = sso.databaseAgent || sso.postgresAgent || 'postgres';
-    const databaseAgentShort = sso.databaseAgentShort || sso.postgresAgentShort || extractShortAgentName(databaseAgent);
-    
-    return {
-        enabled: Boolean(sso.enabled),
-        providerAgent,
-        providerAgentShort,
-        keycloakAgent: providerAgent,
-        keycloakAgentShort: providerAgentShort,
-        databaseAgent,
-        databaseAgentShort,
-        postgresAgent: databaseAgent,
-        postgresAgentShort: databaseAgentShort,
-        realm: sso.realm || null,
-        clientId: sso.clientId || null,
-        redirectUri: sso.redirectUri || null,
-        logoutRedirectUri: sso.logoutRedirectUri || null,
-        baseUrl: sso.baseUrl || null,
-        scope: sso.scope || 'openid profile email'
-    };
-}
-
-function setSsoConfig(partial) {
-    const current = workspaceSvc.getConfig() || {};
-    const existing = getSsoConfig();
-    const merged = { ...existing, ...partial, enabled: true };
-
-    const providerAgent = partial.providerAgent || partial.keycloakAgent || merged.providerAgent || merged.keycloakAgent || 'keycloak';
-    merged.providerAgent = providerAgent;
-    merged.keycloakAgent = providerAgent;
-    const providerAgentShort = extractShortAgentName(providerAgent);
-    merged.providerAgentShort = providerAgentShort;
-    merged.keycloakAgentShort = providerAgentShort;
-
-    const databaseAgent = partial.databaseAgent || partial.postgresAgent || merged.databaseAgent || merged.postgresAgent || 'postgres';
-    merged.databaseAgent = databaseAgent;
-    merged.postgresAgent = databaseAgent;
-    const databaseAgentShort = extractShortAgentName(databaseAgent);
-    merged.databaseAgentShort = databaseAgentShort;
-    merged.postgresAgentShort = databaseAgentShort;
-
-    current.sso = merged;
-    workspaceSvc.setConfig(current);
-    return merged;
-}
-
-function setSsoEnabled(enabled = true) {
-    const current = workspaceSvc.getConfig() || {};
-    const existing = current.sso || {};
-    current.sso = { ...existing, enabled: Boolean(enabled) };
-    workspaceSvc.setConfig(current);
-    return current.sso;
-}
-
-function disableSsoConfig() {
-    const current = workspaceSvc.getConfig() || {};
-    const existing = current.sso || {};
-    current.sso = { ...existing, enabled: false };
-    workspaceSvc.setConfig(current);
-    return current.sso;
-}
-
-// Resolve SSO configuration with environment variable fallbacks
-
-function getSsoSecrets() {
-    const config = getSsoConfig();
-    const envValues = resolveEnvRoleValues();
-    
-    return {
-        baseUrl: config.baseUrl || envValues.baseUrl || '',
-        realm: config.realm || envValues.realm || '',
-        clientId: config.clientId || envValues.clientId || '',
-        clientSecret: envValues.clientSecret || '',
-        redirectUri: config.redirectUri || envValues.redirectUri || '',
-        logoutRedirectUri: config.logoutRedirectUri || envValues.logoutRedirectUri || '',
-        scope: config.scope || envValues.scope || 'openid profile email',
-        adminUser: envValues.adminUser || '',
-        adminPassword: envValues.adminPassword || '',
-        hostname: envValues.hostname || '',
-        hostnameStrict: envValues.hostnameStrict || '',
-        httpEnabled: envValues.httpEnabled || '',
-        proxy: envValues.proxy || '',
-        dbEngine: envValues.dbEngine || '',
-        dbUrl: envValues.dbUrl || '',
-        dbUsername: envValues.dbUsername || '',
-        dbPassword: envValues.dbPassword || ''
-    };
-}
-
-function gatherSsoStatus() {
-    const config = getSsoConfig();
-    const secrets = getSsoSecrets();
-    return {
-        config,
-        secrets,
-        routerPort: getRouterPort(),
-        providerHostPort: getAgentHostPort(config.providerAgentShort || config.keycloakAgentShort)
-    };
-}
-
 function normalizeBaseUrl(raw) {
     if (!raw) return '';
     let value = String(raw).trim();
@@ -326,6 +79,129 @@ function normalizeBaseUrl(raw) {
     }
 }
 
+function readWorkspaceSsoConfig() {
+    const cfg = workspaceSvc.getConfig() || {};
+    return cfg?.sso && typeof cfg.sso === 'object' ? cfg.sso : {};
+}
+
+function writeWorkspaceSsoConfig(nextSso) {
+    const current = workspaceSvc.getConfig() || {};
+    current.sso = nextSso || {};
+    workspaceSvc.setConfig(current);
+    return current.sso;
+}
+
+function getSsoConfig() {
+    const sso = readWorkspaceSsoConfig();
+    const binding = getCapabilityBinding({ consumer: 'workspace', alias: 'sso' }) || null;
+    const providerAgent = binding?.provider || sso.providerAgent || null;
+    const providerAgentShort = extractShortAgentName(providerAgent);
+    const providerConfig = sso.providerConfig && typeof sso.providerConfig === 'object'
+        ? { ...sso.providerConfig }
+        : {};
+
+    return {
+        enabled: Boolean(sso.enabled) && Boolean(providerAgent),
+        providerAgent,
+        providerAgentShort,
+        providerConfig
+    };
+}
+
+function setSsoConfig(partial = {}) {
+    const current = readWorkspaceSsoConfig();
+    const next = { ...current, ...partial };
+    if (partial.providerConfig && typeof partial.providerConfig === 'object') {
+        next.providerConfig = { ...(current.providerConfig || {}), ...partial.providerConfig };
+    }
+    if (partial.providerAgent !== undefined) {
+        next.providerAgentShort = extractShortAgentName(partial.providerAgent);
+    } else if (next.providerAgent) {
+        next.providerAgentShort = extractShortAgentName(next.providerAgent);
+    }
+    return writeWorkspaceSsoConfig(next);
+}
+
+function setSsoEnabled(enabled = true) {
+    const current = readWorkspaceSsoConfig();
+    return writeWorkspaceSsoConfig({
+        ...current,
+        enabled: Boolean(enabled)
+    });
+}
+
+function disableSsoConfig() {
+    return setSsoEnabled(false);
+}
+
+function getSsoSecrets() {
+    return { ...(getSsoConfig().providerConfig || {}) };
+}
+
+function gatherSsoStatus() {
+    const config = getSsoConfig();
+    return {
+        config,
+        secrets: getSsoSecrets(),
+        routerPort: getRouterPort(),
+        providerHostPort: getAgentHostPort(config.providerAgentShort)
+    };
+}
+
+function bindSsoProvider(providerAgentRef, options = {}) {
+    if (!providerAgentRef) {
+        throw new Error('bindSsoProvider: providerAgentRef is required');
+    }
+    const descriptor = resolveAgentDescriptor(providerAgentRef);
+    if (!descriptor) {
+        throw new Error(`bindSsoProvider: agent '${providerAgentRef}' is not installed.`);
+    }
+    const provides = descriptor.provides || {};
+    if (!provides['auth-provider/v1']) {
+        throw new Error(`bindSsoProvider: agent '${providerAgentRef}' does not implement auth-provider/v1.`);
+    }
+    const binding = setCapabilityBinding({
+        consumer: 'workspace',
+        alias: 'sso',
+        provider: descriptor.agentRef,
+        contract: 'auth-provider/v1',
+        approvedScopes: provides['auth-provider/v1'].supportedScopes || []
+    });
+    const current = readWorkspaceSsoConfig();
+    writeWorkspaceSsoConfig({
+        ...current,
+        enabled: true,
+        providerAgent: descriptor.agentRef,
+        providerAgentShort: extractShortAgentName(descriptor.agentRef),
+        providerConfig: options.providerConfig && typeof options.providerConfig === 'object'
+            ? { ...(current.providerConfig || {}), ...options.providerConfig }
+            : (current.providerConfig || {})
+    });
+    return binding;
+}
+
+function unbindSsoProvider() {
+    removeCapabilityBinding({ consumer: 'workspace', alias: 'sso' });
+    const current = readWorkspaceSsoConfig();
+    writeWorkspaceSsoConfig({
+        ...current,
+        enabled: false
+    });
+}
+
+function getSsoBinding() {
+    return getCapabilityBinding({ consumer: 'workspace', alias: 'sso' }) || null;
+}
+
+function listAuthProviders() {
+    return listProvidersForContract('auth-provider/v1').map((descriptor) => ({
+        agentRef: descriptor.agentRef,
+        repo: descriptor.repo,
+        agent: descriptor.agent,
+        principalId: descriptor.principalId
+    }));
+}
+
 export {
     getSsoConfig,
     setSsoConfig,
@@ -337,6 +213,8 @@ export {
     getAgentHostPort,
     normalizeBaseUrl,
     extractShortAgentName,
-    SSO_ENV_ROLE_CANDIDATES,
-    resolveEnvRoleValues
+    bindSsoProvider,
+    unbindSsoProvider,
+    getSsoBinding,
+    listAuthProviders
 };

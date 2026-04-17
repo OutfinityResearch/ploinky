@@ -588,7 +588,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     const routerPidFile = path.join(runningDir, 'router.pid');
     const child = spawn(process.execPath, [routerPath], {
       detached: true,
-      stdio: ['ignore', 'inherit', 'inherit'],
+      stdio: 'ignore',
       env: {
         ...process.env,
         PORT: String(staticPort),
@@ -839,7 +839,7 @@ async function reinstallAgent(agentName) {
                 const routerPidFile = path.join(runningDir, 'router.pid');
                 const child = spawn(process.execPath, [routerPath], {
                     detached: true,
-                    stdio: ['ignore', 'inherit', 'inherit'],
+                    stdio: 'ignore',
                     env: { ...process.env, PORT: String(cfg.port), PLOINKY_ROUTER_PID_FILE: routerPidFile }
                 });
                 try { fs.writeFileSync(routerPidFile, String(child.pid)); } catch(_) {}

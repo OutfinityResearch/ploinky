@@ -26,6 +26,16 @@ import {
     readManifestStartCommand
 } from '../docker/agentCommands.js';
 import { LOGS_DIR, ROUTING_FILE, WORKSPACE_ROOT } from '../config.js';
+import {
+    planRuntimeResources,
+    applyRuntimeResourceEnv,
+    ensurePersistentStorageHostDir
+} from '../runtimeResourcePlanner.js';
+import {
+    getRouterPublicKey as getRouterPublicKeyMaterial,
+    ensureAgentKeypair
+} from '../agentKeystore.js';
+import { resolveBindingsForConsumer, resolveBindingsForProvider } from '../capabilityRegistry.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {
     runPreContainerLifecycle,
@@ -63,20 +73,37 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
+const AGENT_PRIVATE_KEY_CONTAINER_PATH = '/tmp/ploinky-agent.key';
 
-function ensureManifestVolumeHostPath(resolvedHostPath, containerPath) {
+function ensureManifestVolumeHostPath(resolvedHostPath, _containerPath, options = {}) {
     if (!resolvedHostPath) return;
     if (!fs.existsSync(resolvedHostPath)) {
         fs.mkdirSync(resolvedHostPath, { recursive: true });
     }
-    if (String(containerPath || '').replace(/\/+$/, '') === '/opt/keycloak/data') {
-        const tmpDir = path.join(resolvedHostPath, 'tmp');
-        fs.mkdirSync(tmpDir, { recursive: true });
-        fs.chmodSync(resolvedHostPath, 0o777);
-        fs.chmodSync(tmpDir, 0o777);
+    if (options && typeof options.chmod === 'number') {
+        try { fs.chmodSync(resolvedHostPath, options.chmod); } catch (_) {}
+        if (Array.isArray(options.makeWorldWritableSubdirs)) {
+            for (const sub of options.makeWorldWritableSubdirs) {
+                const subDir = path.join(resolvedHostPath, String(sub));
+                try {
+                    fs.mkdirSync(subDir, { recursive: true });
+                    fs.chmodSync(subDir, options.chmod);
+                } catch (_) {}
+            }
+        }
     }
 }
+
+function readManifestVolumeOptions(manifest) {
+    return manifest?.volumeOptions && typeof manifest.volumeOptions === 'object'
+        ? manifest.volumeOptions
+        : {};
+}
 const BWRAP_PATH = '/usr/bin/bwrap';
+
+function resolveRouterHostForRuntime() {
+    return '127.0.0.1';
+}
 
 function resolveSymlinkPath(symlinkPath) {
     try {
@@ -122,7 +149,8 @@ function buildBwrapArgs(options) {
         envMap,
         codeReadOnly,
         skillsReadOnly,
-        volumes
+        volumes,
+        agentPrivateKeyPath
     } = options;
 
     const args = [];
@@ -191,6 +219,10 @@ function buildBwrapArgs(options) {
     // Shared directory
     args.push('--bind', sharedDir, '/shared');
 
+    if (agentPrivateKeyPath && fs.existsSync(agentPrivateKeyPath)) {
+        args.push('--ro-bind', agentPrivateKeyPath, AGENT_PRIVATE_KEY_CONTAINER_PATH);
+    }
+
     // CWD passthrough (workspace agent dir)
     args.push('--bind', cwd, cwd);
 
@@ -205,13 +237,24 @@ function buildBwrapArgs(options) {
 
     // Custom volumes from manifest
     if (volumes && typeof volumes === 'object') {
+        const volumeOptions = options.volumeOptions || {};
         for (const [hostPath, containerPath] of Object.entries(volumes)) {
             const resolvedHostPath = path.isAbsolute(hostPath)
                 ? hostPath
                 : path.resolve(WORKSPACE_ROOT, hostPath);
-            ensureManifestVolumeHostPath(resolvedHostPath, containerPath);
+            const mountOptions = volumeOptions[containerPath]
+                || volumeOptions[String(containerPath || '').replace(/\/+$/, '')]
+                || {};
+            ensureManifestVolumeHostPath(resolvedHostPath, containerPath, mountOptions);
             args.push('--bind', resolvedHostPath, containerPath);
         }
+    }
+
+    // Runtime-resources persistent storage (declarative, provider-agnostic)
+    if (options.runtimeResourcePlan && options.runtimeResourcePlan.persistentStorage) {
+        const ps = options.runtimeResourcePlan.persistentStorage;
+        ensurePersistentStorageHostDir(options.runtimeResourcePlan);
+        args.push('--bind', ps.hostPath, ps.containerPath);
     }
 
     // Process isolation — do NOT unshare network (agents need host network)
@@ -242,7 +285,7 @@ function buildBwrapArgs(options) {
  * Build the full environment map for a bwrap agent.
  * Mirrors the env construction in startAgentContainer.
  */
-function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, runtimeName = 'bwrap') {
+function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, runtimeName = 'bwrap', runtimeResourcePlan = null) {
     // Start with manifest env vars (resolved from secrets)
     const env = buildEnvMap(manifest, profileConfig);
 
@@ -252,6 +295,41 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
     env.WORKSPACE_PATH = agentWorkDir;
     env.PLOINKY_WORKSPACE_ROOT = WORKSPACE_ROOT;
     env.PLOINKY_RUNTIME = runtimeName;
+
+    // Manifest-declared runtime.resources.env (post template expansion).
+    if (runtimeResourcePlan) {
+        const resourceEnv = applyRuntimeResourceEnv(runtimeResourcePlan);
+        for (const [k, v] of Object.entries(resourceEnv)) {
+            env[k] = v;
+        }
+    }
+
+    // Secure-wire plumbing: expose router public key + agent principal id.
+    try {
+        const principalId = String(manifest?.identity?.principalId || '').trim() || `agent:${agentName}`;
+        const keypair = ensureAgentKeypair(principalId);
+        env.PLOINKY_AGENT_PRINCIPAL = principalId;
+        env.PLOINKY_AGENT_PRIVATE_KEY_PATH = AGENT_PRIVATE_KEY_CONTAINER_PATH;
+        const routerKey = getRouterPublicKeyMaterial();
+        if (routerKey?.publicKeyJwk) {
+            env.PLOINKY_ROUTER_PUBLIC_KEY_JWK = JSON.stringify(routerKey.publicKeyJwk);
+        }
+        try {
+            const bindings = resolveBindingsForConsumer(`${repoName}/${agentName}`);
+            if (Object.keys(bindings).length) {
+                env.PLOINKY_CAPABILITY_BINDINGS_JSON = JSON.stringify(bindings);
+            }
+            const providerBindings = resolveBindingsForProvider(`${repoName}/${agentName}`);
+            if (Object.keys(providerBindings).length) {
+                env.PLOINKY_PROVIDER_BINDINGS_JSON = JSON.stringify(providerBindings);
+            }
+        } catch (bindingErr) {
+            debugLog(`[secureWire/bwrap] could not resolve capability bindings for ${agentName}: ${bindingErr?.message || bindingErr}`);
+        }
+        env.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH = keypair.privatePath;
+    } catch (err) {
+        debugLog(`[secureWire/bwrap] could not propagate router key: ${err?.message || err}`);
+    }
 
     // Profile env vars
     const profileEnv = profileConfig?.env;
@@ -283,7 +361,10 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
             if (routing.port) routerPort = String(routing.port);
         }
     } catch (_) { }
+    const routerHost = resolveRouterHostForRuntime();
     env.PLOINKY_ROUTER_PORT = routerPort;
+    env.PLOINKY_ROUTER_HOST = routerHost;
+    env.PLOINKY_ROUTER_URL = `http://${routerHost}:${routerPort}`;
 
     // SSO client credentials
     const agentClientIdVar = `PLOINKY_AGENT_${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_ID`;
@@ -387,6 +468,7 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
     const agentCodePath = resolveSymlinkPath(getAgentCodePath(agentName));
     const agentSkillsPath = resolveSymlinkPath(getAgentSkillsPath(agentName));
     const agentWorkDir = getAgentWorkDir(agentName);
+    const runtimeResourcePlan = planRuntimeResources(manifest);
 
     // Pre-container lifecycle (workspace init, symlinks, preinstall HOST hook)
     const preLifecycle = runPreContainerLifecycle(agentName, repoName, agentPath, activeProfile);
@@ -426,7 +508,9 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
     const hostPort = allPortMappings[0]?.hostPort;
 
     // Build environment map
-    const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile);
+    const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'bwrap', runtimeResourcePlan);
+    const agentPrivateKeyPath = envMap.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH || '';
+    delete envMap.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH;
 
     // Set PORT env var so the agent binds to the correct host port
     if (hostPort) {
@@ -444,7 +528,10 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
         envMap,
         codeReadOnly,
         skillsReadOnly,
-        volumes: manifest.volumes
+        volumes: manifest.volumes,
+        volumeOptions: readManifestVolumeOptions(manifest),
+        runtimeResourcePlan,
+        agentPrivateKeyPath
     });
 
     // Build the entry command
@@ -679,7 +766,10 @@ function attachBwrapInteractive(agentName, manifest, agentPath, workdir, entryCo
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
     // Build environment (same as running agent)
-    const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile);
+    const runtimeResourcePlan = planRuntimeResources(manifest);
+    const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'bwrap', runtimeResourcePlan);
+    const agentPrivateKeyPath = envMap.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH || '';
+    delete envMap.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH;
     const hostPort = record.config?.ports?.[0]?.hostPort;
     if (hostPort) envMap.PORT = String(hostPort);
 
@@ -694,7 +784,10 @@ function attachBwrapInteractive(agentName, manifest, agentPath, workdir, entryCo
         envMap,
         codeReadOnly,
         skillsReadOnly,
-        volumes: manifest.volumes
+        volumes: manifest.volumes,
+        volumeOptions: readManifestVolumeOptions(manifest),
+        runtimeResourcePlan,
+        agentPrivateKeyPath
     });
 
     // For interactive sessions, die-with-parent IS appropriate
