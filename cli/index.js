@@ -13,6 +13,7 @@ import { debugLog } from './services/utils.js';
 import * as inputState from './services/inputState.js';
 import { bootstrap } from './services/ploinkyboot.js';
 import { enableMultilineNavigation } from './services/multilineNavigation.js';
+import { getPredefinedRepos } from './services/repos.js';
 
 const COMMANDS = getCommandRegistry();
 
@@ -57,6 +58,8 @@ function completer(line) {
             } else if (command === 'reinstall' && words.length === 1) {
                 context = 'args';
             } else if (command === 'update' && words.length === 1) {
+                context = 'args';
+            } else if (command === 'default-skills' && words.length === 1) {
                 context = 'args';
             } else if ((command === 'start') && words.length === 2) {
                 context = 'subcommands';
@@ -165,6 +168,9 @@ function completer(line) {
             } else if (command === 'add' && subcommand === 'repo') {
                 // For add repo, show predefined repo names
                 completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
+            } else if (command === 'default-skills') {
+                const predefined = Object.keys(getPredefinedRepos() || {});
+                completions = Array.from(new Set([...getRepoNames(), ...predefined])).sort();
             } else if (command === 'help' && subcommand) {
                 // For help <command>, show subcommands of that command
                 if (COMMANDS[subcommand]) {

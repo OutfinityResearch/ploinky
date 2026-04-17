@@ -45,19 +45,52 @@ export function getActiveRepos(REPOS_DIR) {
 }
 
 const PREDEFINED_REPOS = {
-    basic: { url: 'https://github.com/PloinkyRepos/Basic.git', description: 'Default base agents' },
-    cloud: { url: 'https://github.com/PloinkyRepos/cloud.git', description: 'Cloud infrastructure agents' },
-    vibe: { url: 'https://github.com/PloinkyRepos/vibe.git', description: 'Vibe coding agents' },
-    security: { url: 'https://github.com/PloinkyRepos/security.git', description: 'Security and scanning tools' },
-    extra: { url: 'https://github.com/PloinkyRepos/extra.git', description: 'Additional utility agents' },
-    AchillesIDE: { url: 'https://github.com/PloinkyRepos/AssistOSExplorer.git', description: 'Workspace IDE with Explorer UI, SOPLang editing and Git workflows' },
-    AchillesCLI: { url: 'https://github.com/OutfinityResearch/AchillesCLI.git', description: 'Workspace CLI for setup and management' },
-    demo: { url: 'https://github.com/PloinkyRepos/demo.git', description: 'Demo agents and examples' },
-    proxies: { url: 'https://github.com/PloinkyRepos/proxies.git', description: 'API proxy agents (Kiro Gateway)' }
+    basic: { url: 'https://github.com/PloinkyRepos/Basic.git', description: 'Default base agents', kind: 'agents' },
+    cloud: { url: 'https://github.com/PloinkyRepos/cloud.git', description: 'Cloud infrastructure agents', kind: 'agents' },
+    vibe: { url: 'https://github.com/PloinkyRepos/vibe.git', description: 'Vibe coding agents', kind: 'agents' },
+    security: { url: 'https://github.com/PloinkyRepos/security.git', description: 'Security and scanning tools', kind: 'agents' },
+    extra: { url: 'https://github.com/PloinkyRepos/extra.git', description: 'Additional utility agents', kind: 'agents' },
+    AchillesIDE: { url: 'https://github.com/PloinkyRepos/AssistOSExplorer.git', description: 'Workspace IDE with Explorer UI, SOPLang editing and Git workflows', kind: 'agents' },
+    AchillesCLI: { url: 'https://github.com/OutfinityResearch/AchillesCLI.git', description: 'Workspace CLI for setup and management', kind: 'agents' },
+    demo: { url: 'https://github.com/PloinkyRepos/demo.git', description: 'Demo agents and examples', kind: 'agents' },
+    proxies: { url: 'https://github.com/PloinkyRepos/proxies.git', description: 'API proxy agents (Kiro Gateway)', kind: 'agents' },
+    AchillesCopilotBasicSkills: { url: 'https://github.com/AssistOS-AI/AchillesCopilotBasicSkills.git', description: 'Default Anthropic-style skill catalog (SKILL.md folders)', kind: 'skills' }
 };
 
 export function getPredefinedRepos() {
     return PREDEFINED_REPOS;
+}
+
+export function classifyRepoKind(repoName) {
+    const declared = PREDEFINED_REPOS[repoName]?.kind;
+    if (declared) return declared;
+
+    const repoPath = path.join(PLOINKY_DIR, 'repos', repoName);
+    if (!fs.existsSync(repoPath)) return 'unknown';
+
+    let hasSkills = false;
+    const skillsDir = path.join(repoPath, 'skills');
+    try {
+        if (fs.statSync(skillsDir).isDirectory()) {
+            const subs = fs.readdirSync(skillsDir, { withFileTypes: true });
+            hasSkills = subs.some(entry => entry.isDirectory()
+                && fs.existsSync(path.join(skillsDir, entry.name, 'SKILL.md')));
+        }
+    } catch (_) {}
+
+    let hasAgents = false;
+    try {
+        const top = fs.readdirSync(repoPath, { withFileTypes: true });
+        hasAgents = top.some(entry => entry.isDirectory()
+            && entry.name !== 'skills'
+            && !entry.name.startsWith('.')
+            && fs.existsSync(path.join(repoPath, entry.name, 'manifest.json')));
+    } catch (_) {}
+
+    if (hasSkills && hasAgents) return 'mixed';
+    if (hasSkills) return 'skills';
+    if (hasAgents) return 'agents';
+    return 'unknown';
 }
 
 function ensureReposDir() {
@@ -96,11 +129,11 @@ export function addRepo(name, url, branch = null) {
 
 export function enableRepo(name, branch = null) {
     if (!name) throw new Error('Missing repository name.');
-    const list = loadEnabledRepos();
-    if (!list.includes(name)) {
-        list.push(name);
-        saveEnabledRepos(list);
+
+    if (PREDEFINED_REPOS[name]?.kind === 'skills') {
+        throw new Error(`Repo '${name}' is a skills-only repo (no agents). Use 'default-skills ${name}' to install its skills into the workspace.`);
     }
+
     const REPOS_DIR = ensureReposDir();
     const repoPath = path.join(REPOS_DIR, name);
     if (!fs.existsSync(repoPath)) {
@@ -111,6 +144,16 @@ export function enableRepo(name, branch = null) {
             cloneCmd = `git clone --branch ${branch} ${url} ${repoPath}`;
         }
         execSync(cloneCmd, { stdio: 'inherit' });
+    }
+
+    if (classifyRepoKind(name) === 'skills') {
+        throw new Error(`Repo '${name}' contains only skills (no agents found). Use 'default-skills ${name}' to install its skills into the workspace.`);
+    }
+
+    const list = loadEnabledRepos();
+    if (!list.includes(name)) {
+        list.push(name);
+        saveEnabledRepos(list);
     }
     return true;
 }

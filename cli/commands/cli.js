@@ -40,6 +40,7 @@ import {
     handleEchoCommand,
     handleExposeCommand,
 } from './envVarCommands.js';
+import { handleDefaultSkillsCommand } from './skillsCommands.js';
 import { runSettingsMenu } from '../services/settingsMenu.js';
 import { configureWebttyShell } from './webttyCommands.js';
 import { handleProfileCommand } from './profileCommands.js';
@@ -219,6 +220,9 @@ async function handleCommand(args) {
             break;
         case 'expose':
             handleExposeCommand(options);
+            break;
+        case 'default-skills':
+            handleDefaultSkillsCommand(options);
             break;
         case 'disable': {
             if (!options.length) {
