@@ -30,6 +30,7 @@ export function showHelp(args = []) {
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
   expose <ENV_NAME> [<$VAR|value>] [agent]  Expose to agent environment
+  default-skills <repoName>      Copy skills/ from .ploinky/repos/<repoName> into coding-agent skill dirs (gitignored)
   list agents | repos            List agents (manifests) or predefined repos
 
 
@@ -247,6 +248,21 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             syntax: 'echo <VAR|$VAR> ',
             examples: [ 'echo API_KEY', 'echo $PROD_KEY' ],
             notes: 'Resolves chained aliases like VAR=$OTHER.'
+        },
+        'default-skills': {
+            description: 'Copy each subdirectory of <repoName>/skills/ into per-agent discovery dirs so coding agents can find them. Writes to .claude/skills/ (Claude Code) and .agents/skills/ (the cross-tool convention read by Codex, OpenCode, GitHub Copilot, etc.). The repo is auto-cloned into .ploinky/repos/<repoName> on first use, and the target paths are written to .gitignore so the copies are not committed.',
+            syntax: 'default-skills <repoName> [--only agent[,agent...]] [--skip agent[,agent...]]',
+            params: {
+                '<repoName>': 'Predefined repo name (e.g. AchillesCopilotBasicSkills) or a repo already cloned under .ploinky/repos/',
+                '[--only]': 'Comma-separated target IDs to write to (claude-code, agents)',
+                '[--skip]': 'Comma-separated target IDs to exclude'
+            },
+            examples: [
+                'default-skills AchillesCopilotBasicSkills',
+                'default-skills AchillesCopilotBasicSkills --only claude-code',
+                'default-skills AchillesCopilotBasicSkills --skip agents'
+            ],
+            notes: 'Targets: .claude/skills, .agents/skills. Re-running the command overwrites existing skill files; the .gitignore marker block is updated idempotently.'
         },
         'start': {
             description: 'Start enabled agents and the local Router',

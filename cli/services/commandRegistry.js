@@ -26,7 +26,8 @@ const rawCommands = {
     vars: [],
     echo: [],
     help: [],
-    profile: ['list', 'validate', 'show']
+    profile: ['list', 'validate', 'show'],
+    'default-skills': []
 };
 
 for (const key of Object.keys(rawCommands)) {

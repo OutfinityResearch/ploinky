@@ -49,6 +49,16 @@ function formatBadge(text, formatter = (value) => value) {
     return formatter(`[${text}]`);
 }
 
+function kindBadge(kind) {
+    const formatter = ({
+        skills: styles.accent,
+        agents: styles.info,
+        mixed: styles.warn,
+        unknown: styles.muted
+    })[kind] || styles.muted;
+    return formatBadge(kind, formatter);
+}
+
 export function findAgentManifest(agentName) {
     const { manifestPath } = findAgent(agentName);
     return manifestPath;
@@ -69,9 +79,12 @@ export function listRepos() {
     for (const [name, info] of Object.entries(allRepos)) {
         const isInstalled = installed.has(name);
         const isEnabled = enabled.has(name);
-        const flags = `${isInstalled ? '[installed]' : ''}${isEnabled ? ' [enabled]' : ''}`.trim();
+        const kind = info.kind || reposSvc.classifyRepoKind(name);
+        const badges = [kindBadge(kind)];
+        if (isInstalled) badges.push('[installed]');
+        if (isEnabled) badges.push('[enabled]');
         const url = info.url === 'local' ? '(local)' : info.url;
-        console.log(`- ${name}: ${url}${flags ? ` ${flags}` : ''}`);
+        console.log(`- ${name}: ${url} ${badges.join(' ')}`);
     }
     console.log("\nTip: enable repos with 'enable repo <name>'. If none are enabled, installed repos are used by default for agent listings.");
 }
@@ -154,6 +167,11 @@ export function collectAgentsSummary({ includeInactive = true } = {}) {
     for (const repo of repoList) {
         const repoPath = path.join(REPOS_DIR, repo);
         const installed = fs.existsSync(repoPath);
+
+        if (installed && reposSvc.classifyRepoKind(repo) === 'skills') {
+            continue;
+        }
+
         const record = { repo, installed, agents: [] };
 
         if (installed) {
@@ -199,7 +217,14 @@ export function collectAgentsSummary({ includeInactive = true } = {}) {
 export function listAgents() {
     const summary = collectAgentsSummary();
     if (!summary.length) {
-        console.log('No repos installed. Use: add repo <name>');
+        const installedSkills = reposSvc.getInstalledRepos(REPOS_DIR)
+            .filter(r => reposSvc.classifyRepoKind(r) === 'skills');
+        if (installedSkills.length) {
+            console.log(`No agent repos installed. Skills-only repos installed: ${installedSkills.join(', ')}.`);
+            console.log("Use 'add repo <name>' to add an agents repo, or 'list repos' to see all available.");
+        } else {
+            console.log('No repos installed. Use: add repo <name>');
+        }
         return;
     }
 
@@ -306,12 +331,11 @@ function listReposForStatus() {
     }
     console.log(`- ${styles.label('Repos')}:`);
     for (const row of rows) {
-        const badges = [];
+        const badges = [kindBadge(reposSvc.classifyRepoKind(row.name))];
         if (row.enabled) badges.push(formatBadge('enabled', styles.success));
         if (!row.installed) badges.push(formatBadge('missing', styles.danger));
         else if (!row.predefined) badges.push(formatBadge('local', styles.info));
-        const badgeText = badges.length ? ` ${badges.join(' ')}` : '';
-        console.log(`  ${bulletSymbol} ${styles.name(row.name)}${badgeText}`);
+        console.log(`  ${bulletSymbol} ${styles.name(row.name)} ${badges.join(' ')}`);
     }
 }
 
