@@ -40,6 +40,7 @@ import {
     ensureAgentKeypair
 } from '../agentKeystore.js';
 import { listRegisteredAgentPublicKeys } from '../capabilityRegistry.js';
+import { deriveAgentPrincipalId } from '../agentIdentity.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
@@ -387,7 +388,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     // Secure-wire plumbing: expose the router public key and this agent's
     // principal id so the AgentServer can verify invocation tokens.
     try {
-        const principalId = String(manifest?.identity?.principalId || '').trim() || `agent:${agentName}`;
+        const repoName = path.basename(path.dirname(agentPath));
+        const principalId = deriveAgentPrincipalId(repoName, agentName);
         const keypair = ensureAgentKeypair(principalId);
         args.push('-v', `${keypair.privatePath}:${AGENT_PRIVATE_KEY_CONTAINER_PATH}${runtime === 'podman' ? ':ro,z' : ':ro'}`);
         envStrings.push(formatEnvFlag('PLOINKY_AGENT_PRINCIPAL', principalId));

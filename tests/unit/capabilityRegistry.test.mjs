@@ -44,7 +44,6 @@ test.after(() => {
 
 test('buildCapabilityIndex surfaces provides/requires/principal', () => {
     writeManifest('dpu', 'dpuAgent', {
-        identity: { principalId: 'agent:dpuAgent', agentName: 'dpuAgent' },
         provides: {
             'secret-store/v1': {
                 operations: ['secret_get', 'secret_put'],
@@ -58,7 +57,6 @@ test('buildCapabilityIndex surfaces provides/requires/principal', () => {
         }
     });
     writeManifest('git', 'gitAgent', {
-        identity: { principalId: 'agent:gitAgent', agentName: 'gitAgent' },
         requires: {
             secretStore: { contract: 'secret-store/v1', maxScopes: ['secret:read'] }
         }
@@ -68,13 +66,13 @@ test('buildCapabilityIndex surfaces provides/requires/principal', () => {
     assert.ok(index.agents.has('dpu/dpuAgent'));
     assert.ok(index.agents.has('git/gitAgent'));
     assert.deepEqual(index.byContract.get('secret-store/v1').map((d) => d.agentRef), ['dpu/dpuAgent']);
-    assert.equal(index.byPrincipal.get('agent:dpuAgent').agent, 'dpuAgent');
+    assert.equal(index.byPrincipal.get('agent:dpu/dpuAgent').agent, 'dpuAgent');
 });
 
 test('resolveAgentDescriptor finds by full ref or short name', () => {
     const fullDescriptor = resolveAgentDescriptor('dpu/dpuAgent');
     assert.equal(fullDescriptor.agentRef, 'dpu/dpuAgent');
-    const principalDescriptor = getAgentDescriptorByPrincipal('agent:gitAgent');
+    const principalDescriptor = getAgentDescriptorByPrincipal('agent:git/gitAgent');
     assert.equal(principalDescriptor.agentRef, 'git/gitAgent');
 });
 
@@ -132,7 +130,7 @@ test('resolveBindingsForConsumer returns launcher-facing binding metadata', () =
         id: 'git/gitAgent:secretStore',
         consumer: 'git/gitAgent',
         provider: 'dpu/dpuAgent',
-        providerPrincipal: 'agent:dpuAgent',
+        providerPrincipal: 'agent:dpu/dpuAgent',
         providerRouteName: 'dpuAgent',
         contract: 'secret-store/v1',
         approvedScopes: ['secret:read'],
@@ -147,10 +145,10 @@ test('resolveBindingsForProvider returns provider-facing binding metadata', () =
     assert.deepEqual(resolved['git/gitAgent:secretStore'], {
         id: 'git/gitAgent:secretStore',
         consumer: 'git/gitAgent',
-        consumerPrincipal: 'agent:gitAgent',
+        consumerPrincipal: 'agent:git/gitAgent',
         alias: 'secretStore',
         provider: 'dpu/dpuAgent',
-        providerPrincipal: 'agent:dpuAgent',
+        providerPrincipal: 'agent:dpu/dpuAgent',
         providerRouteName: 'dpuAgent',
         contract: 'secret-store/v1',
         approvedScopes: ['secret:read']
@@ -158,11 +156,11 @@ test('resolveBindingsForProvider returns provider-facing binding metadata', () =
 });
 
 test('registerAgentPublicKey persists in workspace config', () => {
-    registerAgentPublicKey('agent:gitAgent', {
+    registerAgentPublicKey('agent:git/gitAgent', {
         publicKeyJwk: { kty: 'OKP', crv: 'Ed25519', x: 'abc' },
         fingerprint: 'fp-123'
     });
-    const entry = getRegisteredAgentPublicKey('agent:gitAgent');
+    const entry = getRegisteredAgentPublicKey('agent:git/gitAgent');
     assert.equal(entry.fingerprint, 'fp-123');
     assert.equal(entry.publicKeyJwk.x, 'abc');
 });

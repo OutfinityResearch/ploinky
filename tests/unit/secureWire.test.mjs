@@ -38,7 +38,7 @@ const EXAMPLE_BODY = { tool: 'secret_get', arguments: { key: 'X' } };
 test('signCallerAssertion / verifyCallerAssertion round-trip', () => {
     const caller = ed25519Pair();
     const { token, payload } = signCallerAssertion({
-        callerPrincipal: 'agent:gitAgent',
+        callerPrincipal: 'agent:AssistOSExplorer/gitAgent',
         bindingId: 'gitAgent:secretStore',
         alias: 'secretStore',
         tool: 'secret_get',
@@ -46,7 +46,7 @@ test('signCallerAssertion / verifyCallerAssertion round-trip', () => {
         bodyObject: EXAMPLE_BODY,
         privatePem: pemPrivate(caller)
     });
-    assert.equal(payload.iss, 'agent:gitAgent');
+    assert.equal(payload.iss, 'agent:AssistOSExplorer/gitAgent');
 
     const replay = createMemoryReplayCache();
     const verified = verifyCallerAssertion(token, {
@@ -61,8 +61,8 @@ test('verifyInvocationToken enforces audience', () => {
     const router = ed25519Pair();
     const payload = {
         iss: 'ploinky-router',
-        sub: 'agent:gitAgent',
-        aud: 'agent:dpuAgent',
+        sub: 'agent:AssistOSExplorer/gitAgent',
+        aud: 'agent:AssistOSExplorer/dpuAgent',
         tool: 'secret_get',
         scope: ['secret:read'],
         body_hash: bodyHashForRequest(EXAMPLE_BODY),
@@ -75,7 +75,7 @@ test('verifyInvocationToken enforces audience', () => {
     // Correct audience OK
     verifyInvocationToken(token, {
         routerPublicPem: pemPublic(router),
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY,
         replayCache: createMemoryReplayCache()
     });
@@ -98,23 +98,23 @@ test('issueUserContextToken pins delegated user context to the immediate caller 
             roles: ['developer']
         },
         sessionId: 'session-a',
-        audience: 'agent:gitAgent'
+        audience: 'agent:AssistOSExplorer/gitAgent'
     });
 
     verifyJws(token, {
         publicKeyJwk: getRouterPublicKeyJwk(),
-        expectedAudience: 'agent:gitAgent'
+        expectedAudience: 'agent:AssistOSExplorer/gitAgent'
     });
 
     assert.throws(() => verifyJws(token, {
         publicKeyJwk: getRouterPublicKeyJwk(),
-        expectedAudience: 'agent:dpuAgent'
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent'
     }), /audience mismatch/);
 });
 
 test('buildFirstPartyInvocation embeds a user-context token scoped to the first-hop provider', () => {
     const { payload } = buildFirstPartyInvocation({
-        providerPrincipal: 'agent:gitAgent',
+        providerPrincipal: 'agent:AssistOSExplorer/gitAgent',
         tool: 'git_auth_status',
         bodyObject: { tool: 'git_auth_status', arguments: {} },
         delegatedUser: {
@@ -129,7 +129,7 @@ test('buildFirstPartyInvocation embeds a user-context token scoped to the first-
     assert.ok(payload.user_context_token);
     verifyJws(payload.user_context_token, {
         publicKeyJwk: getRouterPublicKeyJwk(),
-        expectedAudience: 'agent:gitAgent'
+        expectedAudience: 'agent:AssistOSExplorer/gitAgent'
     });
 });
 
@@ -137,8 +137,8 @@ test('verifyInvocationToken rejects mutated body', () => {
     const router = ed25519Pair();
     const payload = {
         iss: 'ploinky-router',
-        sub: 'agent:gitAgent',
-        aud: 'agent:dpuAgent',
+        sub: 'agent:AssistOSExplorer/gitAgent',
+        aud: 'agent:AssistOSExplorer/dpuAgent',
         tool: 'secret_get',
         body_hash: bodyHashForRequest(EXAMPLE_BODY),
         iat: Math.floor(Date.now() / 1000),
@@ -148,7 +148,7 @@ test('verifyInvocationToken rejects mutated body', () => {
     const token = signRouterToken({ payload, privateKey: router.privateKey });
     assert.throws(() => verifyInvocationToken(token, {
         routerPublicPem: pemPublic(router),
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: { tool: 'secret_get', arguments: { key: 'Y' } },
         replayCache: createMemoryReplayCache()
     }), /body_hash mismatch/);
@@ -158,8 +158,8 @@ test('verifyInvocationToken rejects replay within ttl window', () => {
     const router = ed25519Pair();
     const payload = {
         iss: 'ploinky-router',
-        sub: 'agent:gitAgent',
-        aud: 'agent:dpuAgent',
+        sub: 'agent:AssistOSExplorer/gitAgent',
+        aud: 'agent:AssistOSExplorer/dpuAgent',
         tool: 'secret_get',
         body_hash: bodyHashForRequest(EXAMPLE_BODY),
         iat: Math.floor(Date.now() / 1000),
@@ -170,13 +170,13 @@ test('verifyInvocationToken rejects replay within ttl window', () => {
     const cache = createMemoryReplayCache();
     verifyInvocationToken(token, {
         routerPublicPem: pemPublic(router),
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY,
         replayCache: cache
     });
     assert.throws(() => verifyInvocationToken(token, {
         routerPublicPem: pemPublic(router),
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY,
         replayCache: cache
     }), /jti has already been consumed/);
@@ -186,8 +186,8 @@ test('verifyInvocationToken rejects token without jti', () => {
     const router = ed25519Pair();
     const payload = {
         iss: 'ploinky-router',
-        sub: 'agent:gitAgent',
-        aud: 'agent:dpuAgent',
+        sub: 'agent:AssistOSExplorer/gitAgent',
+        aud: 'agent:AssistOSExplorer/dpuAgent',
         tool: 'secret_get',
         body_hash: bodyHashForRequest(EXAMPLE_BODY),
         iat: Math.floor(Date.now() / 1000),
@@ -196,7 +196,7 @@ test('verifyInvocationToken rejects token without jti', () => {
     const token = signRouterToken({ payload, privateKey: router.privateKey });
     assert.throws(() => verifyInvocationToken(token, {
         routerPublicPem: pemPublic(router),
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY,
         replayCache: createMemoryReplayCache()
     }), /jti missing/);
@@ -207,8 +207,8 @@ test('verifyInvocationToken rejects token with excessive lifetime', () => {
     const now = Math.floor(Date.now() / 1000);
     const payload = {
         iss: 'ploinky-router',
-        sub: 'agent:gitAgent',
-        aud: 'agent:dpuAgent',
+        sub: 'agent:AssistOSExplorer/gitAgent',
+        aud: 'agent:AssistOSExplorer/dpuAgent',
         tool: 'secret_get',
         body_hash: bodyHashForRequest(EXAMPLE_BODY),
         iat: now,
@@ -218,7 +218,7 @@ test('verifyInvocationToken rejects token with excessive lifetime', () => {
     const token = signRouterToken({ payload, privateKey: router.privateKey });
     assert.throws(() => verifyInvocationToken(token, {
         routerPublicPem: pemPublic(router),
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY,
         replayCache: createMemoryReplayCache()
     }), /lifetime exceeds max/);
@@ -229,8 +229,8 @@ test('verifyJws rejects invalid signature', () => {
     const other = ed25519Pair();
     const payload = {
         iss: 'ploinky-router',
-        sub: 'agent:gitAgent',
-        aud: 'agent:dpuAgent',
+        sub: 'agent:AssistOSExplorer/gitAgent',
+        aud: 'agent:AssistOSExplorer/dpuAgent',
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 60,
         tool: 'secret_get',
@@ -240,7 +240,7 @@ test('verifyJws rejects invalid signature', () => {
     const tokenSignedByOther = signRouterToken({ payload, privateKey: other.privateKey });
     assert.throws(() => verifyJws(tokenSignedByOther, {
         publicPem: pemPublic(router),
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY
     }), /signature invalid/);
 });
@@ -267,12 +267,12 @@ test('signCallerAssertion / verifyCallerAssertion work without binding metadata 
     const caller = ed25519Pair();
     const replay = createMemoryReplayCache();
     const { token, payload } = signCallerAssertion({
-        callerPrincipal: 'agent:gitAgent',
+        callerPrincipal: 'agent:AssistOSExplorer/gitAgent',
         tool: 'secret_get',
         scope: ['secret:read'],
         bodyObject: EXAMPLE_BODY,
         privatePem: pemPrivate(caller),
-        audience: 'agent:dpuAgent'
+        audience: 'agent:AssistOSExplorer/dpuAgent'
     });
 
     assert.equal(payload.binding_id, undefined);
@@ -282,17 +282,17 @@ test('signCallerAssertion / verifyCallerAssertion work without binding metadata 
     const verified = verifyCallerAssertion(token, {
         resolveCallerPublicKey: () => ({ publicPem: pemPublic(caller) }),
         replayCache: replay,
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY
     });
 
-    assert.equal(verified.payload.iss, 'agent:gitAgent');
+    assert.equal(verified.payload.iss, 'agent:AssistOSExplorer/gitAgent');
     assert.equal(verified.payload.tool, 'secret_get');
 
     assert.throws(() => verifyCallerAssertion(token, {
         resolveCallerPublicKey: () => ({ publicPem: pemPublic(caller) }),
         replayCache: replay,
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY
     }), /jti has already been consumed/);
 });
@@ -300,19 +300,19 @@ test('signCallerAssertion / verifyCallerAssertion work without binding metadata 
 test('verifyCallerAssertion rejects assertion without jti', () => {
     const caller = ed25519Pair();
     const payload = {
-        iss: 'agent:gitAgent',
-        aud: 'agent:dpuAgent',
+        iss: 'agent:AssistOSExplorer/gitAgent',
+        aud: 'agent:AssistOSExplorer/dpuAgent',
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 60,
         tool: 'secret_get',
         scope: ['secret:read'],
         body_hash: bodyHashForRequest(EXAMPLE_BODY)
     };
-    const token = signRouterToken({ payload, privateKey: caller.privateKey, kid: 'agent:gitAgent' });
+    const token = signRouterToken({ payload, privateKey: caller.privateKey, kid: 'agent:AssistOSExplorer/gitAgent' });
     assert.throws(() => verifyCallerAssertion(token, {
         resolveCallerPublicKey: () => ({ publicPem: pemPublic(caller) }),
         replayCache: createMemoryReplayCache(),
-        expectedAudience: 'agent:dpuAgent',
+        expectedAudience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: EXAMPLE_BODY
     }), /jti missing/);
 });

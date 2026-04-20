@@ -1,14 +1,16 @@
 # Capability, Secure Wire, and Pluggable SSO
 
-Status: implemented (2026-04-17)
+Status: implemented (2026-04-20)
 
 ## 1. Capabilities are manifest-driven
 
-Agent manifests declare capability contracts and runtime needs:
+Agent manifests declare capability contracts and runtime needs. Agent
+**identity** is derived deterministically by Ploinky from the installed
+agent ref as `agent:<repo>/<agent>` — manifests must **not** declare an
+`identity` block, and any `identity` field will be ignored.
 
 ```json
 {
-  "identity": { "principalId": "agent:<name>", "agentName": "<name>" },
   "provides": {
     "<contract-name>/v1": {
       "operations": [...],
@@ -26,6 +28,11 @@ Agent manifests declare capability contracts and runtime needs:
   }
 }
 ```
+
+Principal derivation lives in `ploinky/cli/services/agentIdentity.js`
+(`deriveAgentPrincipalId(repo, agent) -> "agent:<repo>/<agent>"`). All
+launcher and registry code paths use that helper; there is no short-form
+fallback like `agent:<agentName>`.
 
 Ploinky core no longer branches on concrete agent names (`dpuAgent`,
 `gitAgent`, `keycloak`, `postgres`). The runtime loads each agent's
@@ -69,34 +76,22 @@ First-party bindings use the reserved consumer id `workspace` (for example
 
 ## 3. Secure routed invocation
 
-Three tokens flow through the router:
+There are now two routed call modes.
 
-1. **user_context_token** — short-lived JWS minted by core after an
-   authenticated workspace session. Opaque to consumers; providers trust
-   it only via (3).
-2. **caller_assertion** — Ed25519 JWS signed by the caller agent's
-   private key. Submitted to the router on delegated calls. Payload binds
-   the caller to a `binding_id`, `tool`, `scope`, and `body_hash`.
-3. **invocation_token** — Ed25519 JWS signed by the router. Emitted per
-   routed request. This is the only token a provider trusts for
-   authorization.
+### 3.1 First-party routed calls
 
-For nested delegated calls, the router embeds the current
-`user_context_token` inside the provider-facing invocation grant. A
-capability agent may forward that token in its next caller assertion, but
-it must not mint or rewrite delegated user claims on its own.
+Ploinky still mints a router-signed **invocation token** for first-party
+calls that originate from an authenticated browser/session and go
+directly to a target agent.
 
 Invocation token payload:
 
 ```
 iss         = "ploinky-router"
-sub         = <caller agent principal> | "router:first-party"
+sub         = "router:first-party"
 aud         = <provider agent principal>
-workspace_id
-binding_id
-contract
-scope[]
 tool
+scope[]
 body_hash   = SHA-256 over canonical JSON of the request body
 jti
 iat, exp    (exp - iat <= 120s)
@@ -111,45 +106,31 @@ Provider verification steps (`ploinky/Agent/lib/wireVerify.mjs`):
 3. `iat` and `exp` within skew window; lifetime `<= 120s`
 4. `jti` not seen within TTL (in-memory replay cache)
 5. `body_hash` matches canonical request body
-6. `binding_id` resolves to a live workspace binding (enforced at core)
-7. `tool` allowed by contract / provider operation policy
-8. `scope` is a subset of the consumer's `requires.*.maxScopes`,
-   binding-approved scopes, and provider-supported scopes
 
-Providers may also receive `PLOINKY_PROVIDER_BINDINGS_JSON`, a launcher-injected
-view of the bindings they are currently allowed to serve. Provider runtimes can
-use it as an additional binding allowlist after verifying the signed
-invocation token.
+### 3.2 Direct delegated agent calls
 
-Headers on the wire:
+The Git/DPU path no longer uses capability bindings or provider-neutral
+secret-store routing. Instead, `gitAgent` calls `dpuAgent` explicitly
+through the router with two signed artifacts:
 
-- `x-ploinky-invocation` — the router-issued `invocation_token`
-- `x-ploinky-caller-assertion` — the caller assertion (agent-to-agent)
-- `x-ploinky-auth-info` — **deprecated**; accepted only when
-  `PLOINKY_SECURE_WIRE_STRICT` is not `1`. Scheduled for removal.
+1. **user_context_token** — short-lived JWS minted by core after an
+   authenticated workspace session, audience-pinned to the immediate
+   caller agent
+2. **caller_assertion** — Ed25519 JWS signed by the caller agent's
+   private key, binding the caller to a target audience, tool, scope,
+   body hash, and forwarded `user_context_token`
+
+The router verifies the delegated `tools/call` request before forwarding
+it, then relays:
+
+- `x-ploinky-caller-assertion`
+- `x-ploinky-user-context`
+
+The receiving agent runtime verifies both headers again and reconstructs
+`metadata.invocation` for the tool entrypoint. No unsigned
+`x-ploinky-auth-info` fallback remains in the active Git/DPU runtime path.
 
 ## 4. Contracts in the first wave
-
-### `secret-store/v1`
-
-Operations: `secret_get`, `secret_put`, `secret_delete`, `secret_grant`,
-`secret_revoke`, `secret_list`.
-
-Scope mapping (enforced at call time in
-`AssistOSExplorer/dpuAgent/lib/dpu-store.mjs`):
-
-| operation       | required scope(s)                       |
-|-----------------|-----------------------------------------|
-| `secret_get`    | `secret:read`                           |
-| `secret_put`    | `secret:write`                          |
-| `secret_delete` | `secret:write`                          |
-| `secret_grant`  | `secret:grant` or `secret:write`        |
-| `secret_revoke` | `secret:revoke` or `secret:write`       |
-| `secret_list`   | `secret:access` or `secret:read`        |
-
-Consumers must not call DPU-specific MCP tool names directly; the generic
-client `AssistOSExplorer/gitAgent/lib/secret-store-client.mjs` maps
-contract operations onto provider tools behind the scenes.
 
 ### `auth-provider/v1`
 
@@ -197,3 +178,12 @@ choice when multiple providers are installed.
 Core no longer carries a provider-specific SSO fallback. When no
 `workspace:sso` binding exists, SSO is simply unconfigured and the existing
 dev-only web-token auth remains the fallback path.
+
+## 6. Current boundary
+
+- Capability bindings remain live for generic contracts such as
+  `auth-provider/v1`.
+- Agent identity is always derived by Ploinky as `agent:<repo>/<agent>`.
+- The Git/DPU secret path is intentionally not provider-neutral anymore:
+  `gitAgent` is explicitly DPU-aware and `dpuAgent` is the authority for
+  secret scopes, ACLs, and agent secret-role ceilings.

@@ -6,6 +6,7 @@ import * as workspaceSvc from './workspace.js';
 import * as reposSvc from './repos.js';
 import { PLOINKY_DIR, REPOS_DIR } from './config.js';
 import { findAgent } from './utils.js';
+import { deriveAgentPrincipalId } from './agentIdentity.js';
 
 /**
  * capabilityRegistry.js
@@ -152,7 +153,7 @@ function buildAgentDescriptor(repoName, agentName, manifest) {
     const provides = normalizeProvidesBlock(manifest?.provides);
     const requires = normalizeRequiresBlock(manifest?.requires);
     const runtimeResources = normalizeRuntimeResources(manifest?.runtime);
-    const principalId = toNonEmptyString(manifest?.identity?.principalId) || `agent:${agentName}`;
+    const principalId = deriveAgentPrincipalId(repoName, agentName);
     return {
         repo: repoName,
         agent: agentName,

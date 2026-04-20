@@ -36,6 +36,7 @@ import {
     ensureAgentKeypair
 } from '../agentKeystore.js';
 import { listRegisteredAgentPublicKeys } from '../capabilityRegistry.js';
+import { deriveAgentPrincipalId } from '../agentIdentity.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {
     runPreContainerLifecycle,
@@ -306,7 +307,7 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
 
     // Secure-wire plumbing: expose router public key + agent principal id.
     try {
-        const principalId = String(manifest?.identity?.principalId || '').trim() || `agent:${agentName}`;
+        const principalId = deriveAgentPrincipalId(repoName, agentName);
         const keypair = ensureAgentKeypair(principalId);
         env.PLOINKY_AGENT_PRINCIPAL = principalId;
         env.PLOINKY_AGENT_PRIVATE_KEY_PATH = AGENT_PRIVATE_KEY_CONTAINER_PATH;

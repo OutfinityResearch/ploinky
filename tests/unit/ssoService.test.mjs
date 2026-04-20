@@ -12,7 +12,6 @@ fs.mkdirSync(path.join(providerDir, 'runtime'), { recursive: true });
 fs.writeFileSync(
     path.join(providerDir, 'manifest.json'),
     JSON.stringify({
-        identity: { principalId: 'agent:fakeProvider', agentName: 'fakeProvider' },
         provides: {
             'auth-provider/v1': {
                 operations: ['sso_begin_login'],

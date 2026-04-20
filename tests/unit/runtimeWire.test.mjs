@@ -31,7 +31,7 @@ test('verifyDirectAgentRequest accepts signed delegated agent call', () => {
     const bodyObject = { tool: 'secret_put', arguments: { key: 'GIT_GITHUB_TOKEN', value: 'x' } };
     const userPayload = {
         iss: 'ploinky-router',
-        aud: 'agent:gitAgent',
+        aud: 'agent:AssistOSExplorer/gitAgent',
         sid: 'session-1',
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 60,
@@ -48,20 +48,20 @@ test('verifyDirectAgentRequest accepts signed delegated agent call', () => {
         privateKey: router.privateKey
     });
     const { token: callerAssertion } = signCallerAssertion({
-        callerPrincipal: 'agent:gitAgent',
+        callerPrincipal: 'agent:AssistOSExplorer/gitAgent',
         tool: 'secret_put',
         scope: ['secret:write'],
-        audience: 'agent:dpuAgent',
+        audience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject,
         userContextToken,
         privatePem: privatePem(caller)
     });
 
     const env = {
-        PLOINKY_AGENT_PRINCIPAL: 'agent:dpuAgent',
+        PLOINKY_AGENT_PRINCIPAL: 'agent:AssistOSExplorer/dpuAgent',
         PLOINKY_ROUTER_PUBLIC_KEY_JWK: JSON.stringify(publicJwk(router)),
         PLOINKY_AGENT_PUBLIC_KEYS_JSON: JSON.stringify({
-            'agent:gitAgent': { publicKeyJwk: publicJwk(caller) }
+            'agent:AssistOSExplorer/gitAgent': { publicKeyJwk: publicJwk(caller) }
         })
     };
     const result = verifyDirectAgentRequest({
@@ -73,7 +73,7 @@ test('verifyDirectAgentRequest accepts signed delegated agent call', () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.payload.sub, 'agent:gitAgent');
+    assert.equal(result.payload.sub, 'agent:AssistOSExplorer/gitAgent');
     assert.deepEqual(result.payload.scope, ['secret:write']);
     assert.equal(result.payload.user.username, 'alice');
     assert.equal(result.payload.user_context_token, userContextToken);
@@ -86,7 +86,7 @@ test('verifyDirectAgentRequest rejects tampered body', () => {
     const actualBody = { tool: 'secret_get', arguments: { key: 'OTHER_TOKEN' } };
     const userPayload = {
         iss: 'ploinky-router',
-        aud: 'agent:gitAgent',
+        aud: 'agent:AssistOSExplorer/gitAgent',
         sid: 'session-2',
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 60,
@@ -103,20 +103,20 @@ test('verifyDirectAgentRequest rejects tampered body', () => {
         privateKey: router.privateKey
     });
     const { token: callerAssertion } = signCallerAssertion({
-        callerPrincipal: 'agent:gitAgent',
+        callerPrincipal: 'agent:AssistOSExplorer/gitAgent',
         tool: 'secret_get',
         scope: ['secret:read'],
-        audience: 'agent:dpuAgent',
+        audience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject: signedBody,
         userContextToken,
         privatePem: privatePem(caller)
     });
 
     const env = {
-        PLOINKY_AGENT_PRINCIPAL: 'agent:dpuAgent',
+        PLOINKY_AGENT_PRINCIPAL: 'agent:AssistOSExplorer/dpuAgent',
         PLOINKY_ROUTER_PUBLIC_KEY_JWK: JSON.stringify(publicJwk(router)),
         PLOINKY_AGENT_PUBLIC_KEYS_JSON: JSON.stringify({
-            'agent:gitAgent': { publicKeyJwk: publicJwk(caller) }
+            'agent:AssistOSExplorer/gitAgent': { publicKeyJwk: publicJwk(caller) }
         })
     };
     const result = verifyDirectAgentRequest({
@@ -154,20 +154,20 @@ test('verifyDirectAgentRequest rejects user context minted for a different calle
         privateKey: router.privateKey
     });
     const { token: callerAssertion } = signCallerAssertion({
-        callerPrincipal: 'agent:gitAgent',
+        callerPrincipal: 'agent:AssistOSExplorer/gitAgent',
         tool: 'secret_get',
         scope: ['secret:read'],
-        audience: 'agent:dpuAgent',
+        audience: 'agent:AssistOSExplorer/dpuAgent',
         bodyObject,
         userContextToken,
         privatePem: privatePem(caller)
     });
 
     const env = {
-        PLOINKY_AGENT_PRINCIPAL: 'agent:dpuAgent',
+        PLOINKY_AGENT_PRINCIPAL: 'agent:AssistOSExplorer/dpuAgent',
         PLOINKY_ROUTER_PUBLIC_KEY_JWK: JSON.stringify(publicJwk(router)),
         PLOINKY_AGENT_PUBLIC_KEYS_JSON: JSON.stringify({
-            'agent:gitAgent': { publicKeyJwk: publicJwk(caller) }
+            'agent:AssistOSExplorer/gitAgent': { publicKeyJwk: publicJwk(caller) }
         })
     };
     const result = verifyDirectAgentRequest({
