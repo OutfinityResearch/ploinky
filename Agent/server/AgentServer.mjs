@@ -114,6 +114,11 @@ function buildCommandSpec(entry, defaultCwd) {
     const commandValue = typeof entry?.command === 'string' ? entry.command.trim() : null;
     if (!commandValue) return null;
     const command = path.isAbsolute(commandValue) ? commandValue : path.resolve(defaultCwd, commandValue);
+    const args = Array.isArray(entry?.args)
+        ? entry.args
+            .map((value) => (typeof value === 'string' ? value : String(value ?? '')))
+            .filter((value) => value.length > 0)
+        : [];
     if (entry.cwd === "workspace") {
         defaultCwd = process.cwd();
     } else {
@@ -122,7 +127,7 @@ function buildCommandSpec(entry, defaultCwd) {
     const cwd = defaultCwd;
     const env = entry?.env && typeof entry.env === 'object' ? entry.env : {};
     const timeoutMs = Number.isFinite(entry?.timeoutMs) ? entry.timeoutMs : undefined;
-    return { command, cwd, env, timeoutMs };
+    return { command, args, cwd, env, timeoutMs };
 }
 
 function createLiteralUnionSchema(values) {
@@ -249,8 +254,8 @@ function createFieldSchema(fieldSpec) {
 
 function executeShell(spec, payload, options = {}) {
     return new Promise((resolve, reject) => {
-        const { command, cwd, env, timeoutMs } = spec;
-        const child = spawn(command, [], {
+        const { command, args = [], cwd, env, timeoutMs } = spec;
+        const child = spawn(command, args, {
             cwd,
             env: { ...process.env, ...env },
             stdio: ['pipe', 'pipe', 'pipe'],
