@@ -6,86 +6,27 @@ import { spawn } from 'node:child_process';
 import { zod } from 'mcp-sdk';
 import { TaskQueue } from './TaskQueue.mjs';
 import {
-    verifyInvocationToken,
     createMemoryReplayCache
 } from '../lib/wireVerify.mjs';
+import {
+    hasInvocationTokenHeader,
+    hasDirectAgentHeaders,
+    verifyInvocationFromHeaders,
+    verifyDirectAgentRequest
+} from '../lib/runtimeWire.mjs';
 const { z } = zod;
 
 const DEFAULT_MAX_CONCURRENT_TASKS = 10;
 const DEFAULT_TASK_LOG_TAIL_BYTES = 128 * 1024;
 const TASK_QUEUE_FILE = path.resolve(process.cwd(), '.tasksQueue');
-const PLOINKY_AUTH_INFO_HEADER = 'x-ploinky-auth-info';
-const INVOCATION_TOKEN_HEADER = 'x-ploinky-invocation';
-
 const invocationReplayCache = createMemoryReplayCache({ maxSize: 4096 });
-
-function strictSecureWire() {
-    const flag = String(process.env.PLOINKY_SECURE_WIRE_STRICT || '').trim().toLowerCase();
-    return flag === '1' || flag === 'true' || flag === 'on';
-}
-
-function readRouterPublicKeyMaterial() {
-    const jwkEnv = process.env.PLOINKY_ROUTER_PUBLIC_KEY_JWK;
-    if (jwkEnv && jwkEnv.trim()) {
-        try {
-            return { publicKeyJwk: JSON.parse(jwkEnv) };
-        } catch (err) {
-            console.warn('[AgentServer/MCP] invalid PLOINKY_ROUTER_PUBLIC_KEY_JWK:', err.message);
-        }
-    }
-    const pemPath = process.env.PLOINKY_ROUTER_PUBLIC_KEY_PATH;
-    if (pemPath) {
-        try {
-            const pem = fs.readFileSync(pemPath, 'utf8');
-            return { publicPem: pem };
-        } catch (err) {
-            console.warn('[AgentServer/MCP] cannot read router pub key at', pemPath, err.message);
-        }
-    }
-    const candidates = [
-        '/Agent/router-session.pub',
-        '/shared/router-session.pub'
-    ];
-    for (const candidate of candidates) {
-        try {
-            if (fs.existsSync(candidate)) {
-                return { publicPem: fs.readFileSync(candidate, 'utf8') };
-            }
-        } catch (_) {}
-    }
-    return null;
-}
-
-function expectedAudienceForSelf() {
-    const principal = process.env.PLOINKY_AGENT_PRINCIPAL;
-    if (principal && principal.trim()) return principal.trim();
-    const agentName = process.env.AGENT_NAME || '';
-    return agentName ? `agent:${agentName}` : '';
-}
+const directCallerReplayCache = createMemoryReplayCache({ maxSize: 4096 });
 
 function verifyInvocationForRequest({ requestHeaders, bodyObject }) {
-    const rawToken = requestHeaders?.[INVOCATION_TOKEN_HEADER]
-        || requestHeaders?.[INVOCATION_TOKEN_HEADER.toLowerCase()];
-    if (!rawToken || typeof rawToken !== 'string') {
-        return { ok: false, reason: 'missing invocation token' };
-    }
-    const keyMaterial = readRouterPublicKeyMaterial();
-    if (!keyMaterial) {
-        return { ok: false, reason: 'router public key not configured' };
-    }
-    const audience = expectedAudienceForSelf();
-    try {
-        const { payload } = verifyInvocationToken(rawToken.trim(), {
-            routerPublicPem: keyMaterial.publicPem,
-            routerPublicKeyJwk: keyMaterial.publicKeyJwk,
-            expectedAudience: audience || undefined,
-            bodyObject,
-            replayCache: invocationReplayCache
-        });
-        return { ok: true, payload };
-    } catch (err) {
-        return { ok: false, reason: err.message || String(err) };
-    }
+    return verifyInvocationFromHeaders(requestHeaders, bodyObject, {
+        env: process.env,
+        replayCache: invocationReplayCache
+    });
 }
 
 // AgentServer (MCP over HTTP): exposes tools/resources via Streamable HTTP transport on PORT (default 7000) at /mcp.
@@ -367,19 +308,6 @@ function executeShell(spec, payload, options = {}) {
     });
 }
 
-function decodeAuthInfoFromHeaders(headers = null) {
-    if (!headers || typeof headers !== 'object') return null;
-    const raw = headers[PLOINKY_AUTH_INFO_HEADER] || headers[PLOINKY_AUTH_INFO_HEADER.toLowerCase()] || null;
-    if (!raw || typeof raw !== 'string') return null;
-    try {
-        const decoded = Buffer.from(raw, 'base64').toString('utf8');
-        const parsed = JSON.parse(decoded);
-        return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-        return null;
-    }
-}
-
 function sanitizeAuthInfoForLog(authInfo = null) {
     if (!authInfo || typeof authInfo !== 'object') return null;
     const github = authInfo.github && typeof authInfo.github === 'object'
@@ -485,31 +413,25 @@ async function registerFromConfig(server, config, helpers) {
                 // exposing any caller context. On success, attach the verified
                 // grant to the metadata so tools can rely on it.
                 const bodyObject = { tool: name, arguments: args || {} };
-                const invocationResult = verifyInvocationForRequest({
-                    requestHeaders,
-                    bodyObject
-                });
+                const hasInvocationHeader = hasInvocationTokenHeader(requestHeaders);
+                const hasDirectHeaders = hasDirectAgentHeaders(requestHeaders);
+                const invocationResult = hasInvocationHeader
+                    ? verifyInvocationForRequest({
+                        requestHeaders,
+                        bodyObject
+                    })
+                    : hasDirectHeaders
+                        ? verifyDirectAgentRequest(requestHeaders, bodyObject, {
+                            env: process.env,
+                            callerReplayCache: directCallerReplayCache
+                        })
+                        : { ok: false, reason: 'missing secure wire headers' };
                 if (invocationResult.ok) {
                     context = { ...context, invocation: invocationResult.payload };
-                } else if (strictSecureWire()) {
+                } else {
                     const ErrorCtor = helpers?.McpError || Error;
                     const code = helpers?.ErrorCode?.InvalidRequest ?? -32600;
                     throw new ErrorCtor(code, `Invocation rejected: ${invocationResult.reason}`);
-                }
-
-                // Legacy fallback (deprecated, scheduled for removal): decode
-                // x-ploinky-auth-info only when secure wire is not strict.
-                // Emits a single warning per process once a legacy call is
-                // observed so operators can migrate consumers.
-                const authInfo = !strictSecureWire()
-                    ? decodeAuthInfoFromHeaders(requestHeaders)
-                    : null;
-                if (authInfo) {
-                    if (!globalThis.__ploinkyLegacyAuthWarned) {
-                        console.warn('[AgentServer/MCP] legacy x-ploinky-auth-info detected; this path will be removed. Migrate callers to router-issued invocation tokens.');
-                        globalThis.__ploinkyLegacyAuthWarned = true;
-                    }
-                    context = { ...context, authInfo };
                 }
                 console.log(`[AgentServer/MCP] Tool '${name}' args:`, args);
                 console.log(`[AgentServer/MCP] Tool '${name}' context:`, sanitizeContextForLog(context));

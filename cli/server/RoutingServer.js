@@ -135,6 +135,14 @@ function proxyAgentTaskStatus(req, res, route, parsedUrl, agentName) {
     upstream.end();
 }
 
+function isAgentMcpProxyRoute(pathname) {
+    if (!(pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/'))) {
+        return false;
+    }
+    const parts = pathname.split('/');
+    return parts[3] === 'mcp' || String(parts[3] || '').startsWith('mcp/');
+}
+
 /**
  * Main request processor
  */
@@ -185,27 +193,16 @@ async function processRequest(req, res) {
     }
 
     const isPublicServiceRoute = isPublicHttpServiceRoute(pathname);
+    const isDelegatedAgentMcpRoute = isAgentMcpProxyRoute(pathname);
 
-    // For /mcps/ routes, check agent auth first, then fall back to user auth
-    if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/') || pathname === '/mcp') {
-        const hasCallerAssertion = typeof req.headers?.['x-ploinky-caller-assertion'] === 'string'
-            || typeof req.headers?.['X-PLOINKY-CALLER-ASSERTION'] === 'string';
-        const hasUserContext = typeof req.headers?.['x-ploinky-user-context'] === 'string'
-            || typeof req.headers?.['X-PLOINKY-USER-CONTEXT'] === 'string';
-        if (hasCallerAssertion || hasUserContext) {
-            if (!(hasCallerAssertion && hasUserContext)) {
-                res.writeHead(401, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({
-                    ok: false,
-                    error: 'incomplete_agent_auth',
-                    detail: 'Delegated agent calls must provide both x-ploinky-caller-assertion and x-ploinky-user-context.'
-                }));
-                return;
-            }
-        } else {
-            const authResult = await ensureAuthenticated(req, res, parsedUrl);
-            if (!authResult.ok) return;
-        }
+    // Agent MCP proxy routes authenticate inside handleAgentMcpRequest after the
+    // JSON-RPC payload is available, so direct signed requests can be verified
+    // against the exact tool body they signed.
+    if (isDelegatedAgentMcpRoute) {
+        // no-op; handled downstream
+    } else if (pathname === '/mcp' || pathname === '/mcp/') {
+        const authResult = await ensureAuthenticated(req, res, parsedUrl);
+        if (!authResult.ok) return;
     } else if (isPublicServiceRoute) {
         // Tokenized public service routes are intentionally public.
     } else {

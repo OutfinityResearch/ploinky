@@ -110,15 +110,18 @@ function assertBodyHash(payload, bodyObject) {
 }
 
 function assertReplayProtected(payload, replayCache) {
-    if (!payload.jti) return;
+    const jti = String(payload?.jti || '').trim();
+    if (!jti) {
+        throw new Error('wireVerify: jti missing');
+    }
     if (!replayCache) return;
     if (typeof replayCache.seen === 'function') {
-        if (replayCache.seen(payload.jti)) {
+        if (replayCache.seen(jti)) {
             throw new Error('wireVerify: jti has already been consumed');
         }
         if (typeof replayCache.remember === 'function') {
             const ttlMs = Math.max(1, (Number(payload.exp) * 1000) - Date.now()) + 1000;
-            replayCache.remember(payload.jti, ttlMs);
+            replayCache.remember(jti, ttlMs);
         }
     }
 }

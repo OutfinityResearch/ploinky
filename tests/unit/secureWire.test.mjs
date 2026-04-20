@@ -15,6 +15,11 @@ import {
     verifyJws,
     MAX_TTL_SECONDS
 } from '../../Agent/lib/wireVerify.mjs';
+import {
+    issueUserContextToken,
+    buildFirstPartyInvocation,
+    getRouterPublicKeyJwk
+} from '../../cli/server/mcp-proxy/secureWire.js';
 
 function ed25519Pair() {
     return crypto.generateKeyPairSync('ed25519');
@@ -84,6 +89,50 @@ test('verifyInvocationToken enforces audience', () => {
     }), /audience mismatch/);
 });
 
+test('issueUserContextToken pins delegated user context to the immediate caller agent', () => {
+    const token = issueUserContextToken({
+        user: {
+            id: 'user-1',
+            username: 'alice',
+            email: 'alice@example.com',
+            roles: ['developer']
+        },
+        sessionId: 'session-a',
+        audience: 'agent:gitAgent'
+    });
+
+    verifyJws(token, {
+        publicKeyJwk: getRouterPublicKeyJwk(),
+        expectedAudience: 'agent:gitAgent'
+    });
+
+    assert.throws(() => verifyJws(token, {
+        publicKeyJwk: getRouterPublicKeyJwk(),
+        expectedAudience: 'agent:dpuAgent'
+    }), /audience mismatch/);
+});
+
+test('buildFirstPartyInvocation embeds a user-context token scoped to the first-hop provider', () => {
+    const { payload } = buildFirstPartyInvocation({
+        providerPrincipal: 'agent:gitAgent',
+        tool: 'git_auth_status',
+        bodyObject: { tool: 'git_auth_status', arguments: {} },
+        delegatedUser: {
+            id: 'user-2',
+            username: 'bob',
+            email: 'bob@example.com',
+            roles: ['developer']
+        },
+        sessionId: 'session-b'
+    });
+
+    assert.ok(payload.user_context_token);
+    verifyJws(payload.user_context_token, {
+        publicKeyJwk: getRouterPublicKeyJwk(),
+        expectedAudience: 'agent:gitAgent'
+    });
+});
+
 test('verifyInvocationToken rejects mutated body', () => {
     const router = ed25519Pair();
     const payload = {
@@ -131,6 +180,26 @@ test('verifyInvocationToken rejects replay within ttl window', () => {
         bodyObject: EXAMPLE_BODY,
         replayCache: cache
     }), /jti has already been consumed/);
+});
+
+test('verifyInvocationToken rejects token without jti', () => {
+    const router = ed25519Pair();
+    const payload = {
+        iss: 'ploinky-router',
+        sub: 'agent:gitAgent',
+        aud: 'agent:dpuAgent',
+        tool: 'secret_get',
+        body_hash: bodyHashForRequest(EXAMPLE_BODY),
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 60
+    };
+    const token = signRouterToken({ payload, privateKey: router.privateKey });
+    assert.throws(() => verifyInvocationToken(token, {
+        routerPublicPem: pemPublic(router),
+        expectedAudience: 'agent:dpuAgent',
+        bodyObject: EXAMPLE_BODY,
+        replayCache: createMemoryReplayCache()
+    }), /jti missing/);
 });
 
 test('verifyInvocationToken rejects token with excessive lifetime', () => {
@@ -226,6 +295,26 @@ test('signCallerAssertion / verifyCallerAssertion work without binding metadata 
         expectedAudience: 'agent:dpuAgent',
         bodyObject: EXAMPLE_BODY
     }), /jti has already been consumed/);
+});
+
+test('verifyCallerAssertion rejects assertion without jti', () => {
+    const caller = ed25519Pair();
+    const payload = {
+        iss: 'agent:gitAgent',
+        aud: 'agent:dpuAgent',
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 60,
+        tool: 'secret_get',
+        scope: ['secret:read'],
+        body_hash: bodyHashForRequest(EXAMPLE_BODY)
+    };
+    const token = signRouterToken({ payload, privateKey: caller.privateKey, kid: 'agent:gitAgent' });
+    assert.throws(() => verifyCallerAssertion(token, {
+        resolveCallerPublicKey: () => ({ publicPem: pemPublic(caller) }),
+        replayCache: createMemoryReplayCache(),
+        expectedAudience: 'agent:dpuAgent',
+        bodyObject: EXAMPLE_BODY
+    }), /jti missing/);
 });
 
 test('canonicalJson sorts keys deterministically', () => {

@@ -73,7 +73,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
-const AGENT_PRIVATE_KEY_CONTAINER_PATH = '/tmp/ploinky-agent.key';
+const AGENT_PRIVATE_KEY_CONTAINER_PATH = '/run/ploinky-agent.key';
 
 function ensureManifestVolumeHostPath(resolvedHostPath, _containerPath, options = {}) {
     if (!resolvedHostPath) return;

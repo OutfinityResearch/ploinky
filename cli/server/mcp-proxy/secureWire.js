@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 
 import { signRouterToken, bodyHashForRequest } from '../../../Agent/lib/wireSign.mjs';
-import { verifyJws } from '../../../Agent/lib/wireVerify.mjs';
+import { createMemoryReplayCache, verifyCallerAssertion, verifyJws } from '../../../Agent/lib/wireVerify.mjs';
 import { ensureRouterSigningKey, getRouterPublicKey } from '../../services/agentKeystore.js';
-import { resolveAgentDescriptor } from '../../services/capabilityRegistry.js';
+import { listRegisteredAgentPublicKeys, resolveAgentDescriptor } from '../../services/capabilityRegistry.js';
 
 /**
  * secureWire.js (router side)
@@ -22,6 +22,7 @@ import { resolveAgentDescriptor } from '../../services/capabilityRegistry.js';
 
 const ROUTER_AUDIENCE = 'ploinky-router';
 const DEFAULT_INVOCATION_TTL_SECONDS = 60;
+const delegatedCallerReplayCache = createMemoryReplayCache({ maxSize: 4096 });
 
 function nowSec() { return Math.floor(Date.now() / 1000); }
 
@@ -50,12 +51,16 @@ function normalizeDelegatedUser(user) {
     };
 }
 
-export function issueUserContextToken({ user, sessionId, extraClaims }) {
+export function issueUserContextToken({ user, sessionId, extraClaims, audience }) {
+    const resolvedAudience = String(audience || '').trim();
+    if (!resolvedAudience) {
+        throw new Error('secureWire: user-context token audience required');
+    }
     const key = ensureRouterSigningKey();
     const iat = nowSec();
     const payload = {
         iss: 'ploinky-router',
-        aud: 'ploinky-agents',
+        aud: resolvedAudience,
         sid: String(sessionId || ''),
         iat,
         exp: iat + 60,
@@ -133,7 +138,11 @@ export function buildFirstPartyInvocation({
     const router = ensureRouterSigningKey();
     const resolvedProvider = resolveProviderPrincipal({ providerAgentRef, providerPrincipal });
     const forwardedUserContextToken = userContextToken
-        || (delegatedUser ? issueUserContextToken({ user: delegatedUser, sessionId }) : null);
+        || (delegatedUser ? issueUserContextToken({
+            user: delegatedUser,
+            sessionId,
+            audience: resolvedProvider
+        }) : null);
     const payload = buildInvocationPayload({
         callerPrincipal: 'router:first-party',
         workspaceId,
@@ -155,8 +164,62 @@ export function getRouterPublicKeyJwk() {
     return getRouterPublicKey().publicKeyJwk;
 }
 
+export function verifyDelegatedToolCall({
+    providerAgentRef,
+    providerPrincipal,
+    tool,
+    args = {},
+    callerAssertionToken,
+    userContextToken
+}) {
+    const resolvedProvider = resolveProviderPrincipal({ providerAgentRef, providerPrincipal });
+    // Delegated JSON-RPC tool calls are expected to carry object arguments.
+    // Normalizing non-object payloads to {} keeps body hashing deterministic.
+    const bodyObject = {
+        tool: String(tool || ''),
+        arguments: args && typeof args === 'object' && !Array.isArray(args) ? args : {}
+    };
+    const agentPublicKeys = listRegisteredAgentPublicKeys();
+    const callerAssertion = verifyCallerAssertion(String(callerAssertionToken || ''), {
+        resolveCallerPublicKey: (principalId) => {
+            const entry = agentPublicKeys[String(principalId || '').trim()];
+            return entry?.publicKeyJwk ? { publicKeyJwk: entry.publicKeyJwk } : null;
+        },
+        replayCache: delegatedCallerReplayCache,
+        expectedAudience: resolvedProvider,
+        bodyObject
+    });
+    const embeddedUserToken = String(callerAssertion?.payload?.user_context_token || '').trim();
+    const forwardedUserToken = String(userContextToken || '').trim();
+    if (!forwardedUserToken) {
+        throw new Error('Missing delegated user context token.');
+    }
+    if (embeddedUserToken && embeddedUserToken !== forwardedUserToken) {
+        throw new Error('Delegated user context token does not match the caller assertion.');
+    }
+
+    const routerKey = getRouterPublicKey();
+    const callerPrincipal = String(callerAssertion?.payload?.iss || '').trim();
+    if (!callerPrincipal) {
+        throw new Error('Delegated caller assertion missing issuer.');
+    }
+    const verifiedUserContext = verifyJws(forwardedUserToken, {
+        publicPem: routerKey.publicPem,
+        publicKeyJwk: routerKey.publicKeyJwk,
+        expectedAudience: callerPrincipal
+    });
+
+    return {
+        providerPrincipal: resolvedProvider,
+        callerAssertion: callerAssertion.payload,
+        userContext: verifiedUserContext.payload,
+        bodyObject
+    };
+}
+
 export default {
     issueUserContextToken,
     buildFirstPartyInvocation,
-    getRouterPublicKeyJwk
+    getRouterPublicKeyJwk,
+    verifyDelegatedToolCall
 };

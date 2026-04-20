@@ -3,7 +3,8 @@ import { sendJson, ensureAuthenticated } from '../authHandlers.js';
 import { createAgentClient } from '../AgentClient.js';
 import { waitForAgentReady } from '../utils/agentReadiness.js';
 import {
-    buildFirstPartyInvocation
+    buildFirstPartyInvocation,
+    verifyDelegatedToolCall
 } from './secureWire.js';
 import { getAgentDescriptorByPrincipal } from '../../services/capabilityRegistry.js';
 
@@ -157,7 +158,8 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
         return;
     }
 
-    if (!sessionEntry || sessionEntry.agentName !== agentName) {
+    const isVerifiedDelegatedToolCall = Boolean(req.delegatedAgentVerified && message.method === 'tools/call');
+    if ((!sessionEntry || sessionEntry.agentName !== agentName) && !isVerifiedDelegatedToolCall) {
         sendResponse(200, {
             jsonrpc: '2.0',
             id: message.id ?? null,
@@ -255,30 +257,9 @@ async function handleAgentMcpRequest(req, res, route, agentName) {
     const method = (req.method || 'GET').toUpperCase();
     const hasCallerAssertion = typeof req.headers?.[CALLER_ASSERTION_HEADER] === 'string'
         || typeof req.headers?.[CALLER_ASSERTION_HEADER.toLowerCase()] === 'string';
-
-    // Defensive auth attach for browser MCP calls. The router should already do this,
-    // but the proxy must not rely on auth context being pre-populated if cookies exist.
-    if (!req.agent && !req.user && !hasCallerAssertion) {
-        const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-        const authResult = await ensureAuthenticated(req, res, parsedUrl);
-        if (!authResult.ok) {
-            return;
-        }
-    }
-
-    // Check agent authorization if agent authentication was used
-    if (req.agent) {
-        const allowedTargets = req.agent.allowedTargets || [];
-        const isAllowed = allowedTargets.includes('*') || allowedTargets.includes(agentName);
-        if (!isAllowed) {
-            res.writeHead(403, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-                error: 'forbidden',
-                detail: `Agent '${req.agent.name}' is not authorized to access agent '${agentName}'`
-            }));
-            return;
-        }
-    }
+    const hasUserContext = typeof req.headers?.[USER_CONTEXT_HEADER] === 'string'
+        || typeof req.headers?.[USER_CONTEXT_HEADER.toLowerCase()] === 'string';
+    const isDelegatedAgentRequest = hasCallerAssertion || hasUserContext;
 
     if (method === 'GET') {
         res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'POST, DELETE' });
@@ -313,6 +294,101 @@ async function handleAgentMcpRequest(req, res, route, agentName) {
         }
 
         const isJsonRpc = isJsonRpcPayload(payload);
+        const message = Array.isArray(payload) ? payload[0] : payload;
+        const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+
+        if (isDelegatedAgentRequest) {
+            if (!(hasCallerAssertion && hasUserContext)) {
+                if (isJsonRpc) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: message?.id ?? null,
+                        error: {
+                            code: -32600,
+                            message: 'Delegated agent calls must provide both x-ploinky-caller-assertion and x-ploinky-user-context.'
+                        }
+                    }));
+                    return;
+                }
+                res.writeHead(401, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    ok: false,
+                    error: 'incomplete_agent_auth',
+                    detail: 'Delegated agent calls must provide both x-ploinky-caller-assertion and x-ploinky-user-context.'
+                }));
+                return;
+            }
+            if (!isJsonRpc || message?.method !== 'tools/call') {
+                const errorMessage = 'Delegated agent calls must use a direct tools/call request.';
+                if (isJsonRpc) {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: message?.id ?? null,
+                        error: { code: -32600, message: errorMessage }
+                    }));
+                    return;
+                }
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'invalid_agent_request', detail: errorMessage }));
+                return;
+            }
+            const params = message?.params && typeof message.params === 'object' ? message.params : {};
+            const toolName = typeof params.name === 'string'
+                ? params.name
+                : typeof params.tool === 'string'
+                    ? params.tool
+                    : '';
+            const toolArgs = params && typeof params.arguments === 'object' && params.arguments && !Array.isArray(params.arguments)
+                ? { ...params.arguments }
+                : {};
+            try {
+                verifyDelegatedToolCall({
+                    providerAgentRef: agentName,
+                    tool: toolName,
+                    args: toolArgs,
+                    callerAssertionToken: req.headers?.[CALLER_ASSERTION_HEADER] || req.headers?.[CALLER_ASSERTION_HEADER.toLowerCase()],
+                    userContextToken: req.headers?.[USER_CONTEXT_HEADER] || req.headers?.[USER_CONTEXT_HEADER.toLowerCase()]
+                });
+                req.delegatedAgentVerified = true;
+            } catch (error) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: message?.id ?? null,
+                    error: {
+                        code: -32600,
+                        message: error?.message || 'Delegated agent verification failed.'
+                    }
+                }));
+                return;
+            }
+        } else {
+            // Defensive auth attach for browser MCP calls. The router should already do this,
+            // but the proxy must not rely on auth context being pre-populated if cookies exist.
+            if (!req.agent && !req.user) {
+                const authResult = await ensureAuthenticated(req, res, parsedUrl);
+                if (!authResult.ok) {
+                    return;
+                }
+            }
+
+            // Check agent authorization if agent authentication was used
+            if (req.agent) {
+                const allowedTargets = req.agent.allowedTargets || [];
+                const isAllowed = allowedTargets.includes('*') || allowedTargets.includes(agentName);
+                if (!isAllowed) {
+                    res.writeHead(403, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        error: 'forbidden',
+                        detail: `Agent '${req.agent.name}' is not authorized to access agent '${agentName}'`
+                    }));
+                    return;
+                }
+            }
+        }
+
         const isReady = await waitForAgentReady(route, {
             timeoutMs: 5000,
             intervalMs: 125,
@@ -320,7 +396,6 @@ async function handleAgentMcpRequest(req, res, route, agentName) {
         });
         if (!isReady) {
             if (isJsonRpc) {
-                const message = Array.isArray(payload) ? payload[0] : payload;
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     jsonrpc: '2.0',
