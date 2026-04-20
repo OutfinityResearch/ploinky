@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { WORKSPACE_ROOT, PLOINKY_DIR, AGENTS_WORK_DIR, CODE_DIR, SKILLS_DIR } from './config.js';
+import { WORKSPACE_ROOT, PLOINKY_DIR, AGENTS_WORK_DIR, CODE_DIR, SKILLS_DIR, REPOS_DIR } from './config.js';
 
 /**
  * Initialize the workspace directory structure.
@@ -148,6 +148,31 @@ export function getAgentWorkDir(agentName) {
  */
 export function getAgentCodePath(agentName) {
     return path.join(CODE_DIR, agentName);
+}
+
+/**
+ * Get the canonical repo-scoped agent root path.
+ * @param {string} repoName - The repository name
+ * @param {string} agentName - The agent name
+ * @returns {string} The path to $WORKSPACE_ROOT/.ploinky/repos/<repo>/<agent>/
+ */
+export function getRepoAgentRootPath(repoName, agentName) {
+    return path.join(REPOS_DIR, repoName, agentName);
+}
+
+/**
+ * Get the canonical repo-scoped code path for an agent.
+ * If the agent has a `code/` subfolder, return that; otherwise return the
+ * agent root itself.
+ *
+ * @param {string} repoName - The repository name
+ * @param {string} agentName - The agent name
+ * @returns {string} The repo-scoped code path
+ */
+export function getRepoAgentCodePath(repoName, agentName) {
+    const agentRootPath = getRepoAgentRootPath(repoName, agentName);
+    const codePath = path.join(agentRootPath, 'code');
+    return fs.existsSync(codePath) ? codePath : agentRootPath;
 }
 
 /**

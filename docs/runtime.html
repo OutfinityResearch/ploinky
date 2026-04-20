@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ploinky Documentation</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="partials-loader.js" defer></script>
+</head>
+<body data-page="runtime">
+  <div data-include="partials/header.html"></div>
+  <main class="doc-main">
+    <div class="doc-shell">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <a href="index.html">Home</a>
+        <span>/</span>
+        <span>Runtime</span>
+      </nav>
+
+      <article class="chapter">
+        <header class="chapter-header">
+          <p class="eyebrow">Execution Model</p>
+          <h1>Ploinky Documentation</h1>
+          <p>The runtime layer is responsible for workspace discovery, repository-backed agent discovery, per-agent workspace state, execution-backend selection, and the wave-based startup sequence that feeds the router’s route table.</p>
+        </header>
+
+        <section class="chapter-section">
+          <h2>Workspace State Under <code>.ploinky/</code></h2>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>.ploinky/agents.json</code></td>
+                <td>Enabled-agent registry plus workspace configuration under the reserved <code>_config</code> key.</td>
+              </tr>
+              <tr>
+                <td><code>.ploinky/repos/</code></td>
+                <td>Cloned agent and skills repositories managed by <code>add repo</code> and <code>enable repo</code>.</td>
+              </tr>
+              <tr>
+                <td><code>.ploinky/agents/</code></td>
+                <td>Isolated per-agent working directories used by the default run mode.</td>
+              </tr>
+              <tr>
+                <td><code>.ploinky/code/</code> and <code>.ploinky/skills/</code></td>
+                <td>Symlink layer exposing each enabled agent’s source tree and optional skills folder.</td>
+              </tr>
+              <tr>
+                <td><code>.ploinky/deps/</code></td>
+                <td>Runtime-keyed global and per-agent Node dependency caches.</td>
+              </tr>
+              <tr>
+                <td><code>.ploinky/keys/</code></td>
+                <td>Router and agent Ed25519 key material for secure delegated calls.</td>
+              </tr>
+              <tr>
+                <td><code>.ploinky/logs/</code></td>
+                <td>Router, watchdog, and command logs used by status surfaces and debugging workflows.</td>
+              </tr>
+              <tr>
+                <td><code>.ploinky/transcripts/</code></td>
+                <td>Encrypted WebChat transcript store with retention and turn-level feedback metadata.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="chapter-section">
+          <h2>Agent Enablement and Run Modes</h2>
+          <p><code>enable agent</code> resolves a manifest through repository discovery, enforces alias uniqueness, chooses an auth mode, and stores a normalized record in <code>.ploinky/agents.json</code>. If the static agent passed to <code>start</code> is not already enabled, the CLI enables it automatically before booting the workspace.</p>
+          <div class="grid-two">
+            <div class="mini-panel">
+              <h3><code>isolated</code></h3>
+              <p>The default mode creates a working directory under <code>.ploinky/agents/&lt;agent&gt;/</code>. The path must stay inside the workspace root.</p>
+            </div>
+            <div class="mini-panel">
+              <h3><code>global</code> and <code>devel</code></h3>
+              <p><code>global</code> points the agent at the workspace root. <code>devel</code> points the agent at a repository checkout under <code>.ploinky/repos/&lt;repo&gt;/</code>, enabling live development against a cloned repository.</p>
+            </div>
+          </div>
+          <p>Aliases become route keys and container names. This is how Ploinky supports multiple instances of the same agent in one workspace without overwriting the registry entry for the canonical instance.</p>
+        </section>
+
+        <section class="chapter-section">
+          <h2>Runtime Backends and Mount Policy</h2>
+          <p>The container path is the default backend and auto-detects <code>podman</code> before <code>docker</code>. Agents may also run through sandbox backends such as <code>bwrap</code> or <code>seatbelt</code>. The actual runtime is recorded in the registry, because sandbox attempts may fall back to a container runtime during service startup.</p>
+          <p>Profile handling is merged from manifest <code>profiles.default</code> plus the active profile from <code>.ploinky/profile</code>. In <code>dev</code>, code and skills mounts default to read-write. In <code>qa</code> and <code>prod</code>, they default to read-only unless the profile explicitly overrides them.</p>
+          <div class="callout callout--warm">
+            <p>Manifest volumes are resolved relative to the workspace root unless the manifest provides an absolute host path. Runtime resource planning can also create persistent storage directories under <code>.ploinky/data/</code> and template environment values from workspace roots, storage paths, secrets, and variables.</p>
+          </div>
+        </section>
+
+        <section class="chapter-section">
+          <h2>Dependency Waves and Readiness Gating</h2>
+          <p>The static agent is expanded into a dependency graph through manifest <code>enable</code> directives. The graph is topologically grouped into waves. Each wave is started, routed, and then blocked on readiness before the next wave is allowed to boot. This guarantees that a dependent agent does not start before its prerequisites are reachable.</p>
+          <p>Readiness protocol defaults are derived from the manifest: <code>start</code>-only agents default to TCP readiness, while agents exposing an MCP server default to an MCP handshake. Manifests may override the protocol explicitly through <code>readiness.protocol</code>.</p>
+        </section>
+
+        <section class="chapter-section">
+          <h2>Static Agent Responsibilities</h2>
+          <p>The static agent determines the router port and the static asset host path recorded in <code>.ploinky/routing.json</code>. Requests for <code>/</code>, <code>/index.html</code>, and the static agent alias resolve against that host root, while the router also keeps serving first-party management surfaces under their fixed prefixes.</p>
+          <p>If the static site is requested before the agent is ready, the router serves a short bootstrap page that retries automatically rather than exposing a broken asset path.</p>
+        </section>
+      </article>
+    </div>
+  </main>
+  <div data-include="partials/footer.html"></div>
+</body>
+</html>

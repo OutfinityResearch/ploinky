@@ -52,6 +52,7 @@ import {
     shutdownSession,
 } from './sessionControl.js';
 import { handleSsoCommand } from './ssoCommands.js';
+import { handleDepsCommand } from './depsCommands.js';
 import ClientCommands from './client.js';
 
 let llmAgentsLoadPromise = null;
@@ -324,6 +325,9 @@ async function handleCommand(args) {
         }
         case 'sso':
             await handleSsoCommand(options);
+            break;
+        case 'deps':
+            await handleDepsCommand(options);
             break;
         case 'webtty': {
             const argsList = (options || []).filter(Boolean);

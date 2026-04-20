@@ -1,0 +1,19 @@
+# Specification Matrix
+
+Generated from DS frontmatter by `skills/gamp_specs/scripts/generate_specs_matrix.mjs`. Edit the DS files and rerun the generator instead of editing this file manually.
+
+Current repository-local skills: `achilles_specs`, `antropic_skill_build`, `article_build`, `cskill_build`, `dgskill_build`, `gamp_specs`, `oskill_build`, `review_specs`. These skills are maintenance tooling; the DS set below remains focused on the host project.
+
+| Specification | Title | Status | Owner | Summary |
+| --- | --- | --- | --- | --- |
+| [DS000](/specsLoader.html?spec=DS000-vision.md) | Vision | [[status:implemented]] | ploinky-team | Defines Ploinky as a workspace-local runtime for repository-backed agents, supervised routing, web surfaces, and synchronized documentation. |
+| [DS001](/specsLoader.html?spec=DS001-coding-style.md) | Coding Style | [[status:implemented]] | ploinky-team | Defines the authoritative coding, layout, documentation, and test-organization rules for this repository. |
+| [DS002](/specsLoader.html?spec=DS002-workspace-and-repository-model.md) | Workspace and Repository Model | [[status:implemented]] | ploinky-team | Defines how Ploinky discovers the workspace root, stores runtime state under .ploinky, and manages cloned and enabled repositories. |
+| [DS003](/specsLoader.html?spec=DS003-agent-manifest-and-registry.md) | Agent Manifest and Registry | [[status:implemented]] | ploinky-team | Defines how Ploinky discovers agent manifests, records enabled agents, and interprets manifest directives that affect workspace composition. |
+| [DS004](/specsLoader.html?spec=DS004-runtime-execution-and-isolation.md) | Runtime Execution and Isolation | [[status:implemented]] | ploinky-team | Defines how Ploinky selects execution backends, mounts code and skills, supervises agent services, and applies runtime resources. |
+| [DS005](/specsLoader.html?spec=DS005-routing-and-web-surfaces.md) | Routing and Web Surfaces | [[status:implemented]] | ploinky-team | Defines the router, watchdog, route table, static serving rules, and browser surfaces exposed by Ploinky. |
+| [DS006](/specsLoader.html?spec=DS006-auth-capabilities-and-secure-wire.md) | Auth, Capabilities, and Secure Wire | [[status:implemented]] | ploinky-team | Defines local auth, SSO provider binding, capability discovery, and the signed secure-wire path for delegated agent calls. |
+| [DS007](/specsLoader.html?spec=DS007-dependency-caches-and-startup-readiness.md) | Dependency Caches and Startup Readiness | [[status:implemented]] | ploinky-team | Defines runtime-keyed dependency caches, manifest-aware startup preparation, and readiness gating across dependency waves. |
+| [DS008](/specsLoader.html?spec=DS008-secrets-skills-and-llm-assistance.md) | Secrets, Skills, and LLM Assistance | [[status:implemented]] | ploinky-team | Defines secret resolution, wildcard exposure rules, default-skills installation, repository-local skill boundaries, and the LLM helper inputs. |
+| [DS009](/specsLoader.html?spec=DS009-observability-and-transcripts.md) | Observability and Transcripts | [[status:implemented]] | ploinky-team | Defines router and watchdog observability, encrypted WebChat transcript storage, retention, and feedback aggregation rules. |
+| [DS010](/specsLoader.html?spec=DS010-testing-and-verification.md) | Testing and Verification | [[status:implemented]] | ploinky-team | Defines the active regression harness, unit-test layout, failing-fast replay flow, and required documentation verification steps. |

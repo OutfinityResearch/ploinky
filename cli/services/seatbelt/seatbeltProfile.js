@@ -58,7 +58,9 @@ function buildSeatbeltProfile(options) {
 
     // Process operations + Mach IPC (required on macOS)
     lines.push('; Process and IPC');
-    lines.push('(allow process-fork process-exec process-exec*)');
+    // `process-exec*` already covers exec, and newer macOS sandboxes reject
+    // declaring both `process-exec` and `process-exec*` in the same rule.
+    lines.push('(allow process-fork process-exec*)');
     lines.push('(allow mach-lookup mach-register)');
     lines.push('(allow ipc-posix* signal sysctl-read)');
     lines.push('');
@@ -76,9 +78,9 @@ function buildSeatbeltProfile(options) {
     }
     lines.push('');
 
-    // node_modules — always rw
-    lines.push('; node_modules (read-write)');
-    lines.push(`(allow file-read* file-write* (subpath ${sbplQuote(nodeModulesDir)}))`);
+    // node_modules — read-only prepared cache (see dependencyCache.js)
+    lines.push('; node_modules (read-only prepared cache)');
+    lines.push(`(allow file-read* (subpath ${sbplQuote(nodeModulesDir)}))`);
     lines.push('');
 
     // Shared directory

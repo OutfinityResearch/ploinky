@@ -42,6 +42,48 @@ function getStaticAgentName() {
     return typeof agent === 'string' && agent.trim() ? agent.trim() : null;
 }
 
+function getStaticRouteRecord() {
+    const cfg = readRouting();
+    const routes = cfg?.routes && typeof cfg.routes === 'object' ? cfg.routes : {};
+    const staticCfg = cfg?.static && typeof cfg.static === 'object' ? cfg.static : {};
+    const staticAgent = typeof staticCfg.agent === 'string' ? staticCfg.agent.trim() : '';
+    const staticHostPath = typeof staticCfg.hostPath === 'string' ? path.resolve(staticCfg.hostPath) : '';
+    const staticContainer = typeof staticCfg.container === 'string' ? staticCfg.container.trim() : '';
+    const staticAgentShortName = staticAgent.includes('/') ? staticAgent.split('/').pop() : staticAgent;
+
+    for (const [routeName, route] of Object.entries(routes)) {
+        if (!route || typeof route !== 'object') continue;
+        const routeHostPath = typeof route.hostPath === 'string' ? path.resolve(route.hostPath) : '';
+        const routeContainer = typeof route.container === 'string' ? route.container.trim() : '';
+        const routeAgent = typeof route.agent === 'string' ? route.agent.trim() : '';
+        const routeRepo = typeof route.repo === 'string' ? route.repo.trim() : '';
+        const routeRef = routeRepo && routeAgent ? `${routeRepo}/${routeAgent}` : '';
+        if (staticHostPath && routeHostPath && routeHostPath === staticHostPath) {
+            return { routeName, route };
+        }
+        if (staticContainer && routeContainer && routeContainer === staticContainer) {
+            return { routeName, route };
+        }
+        if (staticAgent && (routeName === staticAgent || routeRef === staticAgent)) {
+            return { routeName, route };
+        }
+        if (staticAgentShortName && routeName === staticAgentShortName) {
+            return { routeName, route };
+        }
+    }
+    return null;
+}
+
+function getStaticEntrypointRouteName() {
+    return getStaticRouteRecord()?.routeName || null;
+}
+
+function getStaticEntrypointUrl() {
+    const routeName = getStaticEntrypointRouteName();
+    if (!routeName) return null;
+    return `/${encodeURIComponent(routeName)}/index.html`;
+}
+
 function dedupe(paths) {
     const seen = new Set();
     const out = [];
@@ -159,15 +201,21 @@ function resolveStaticFile(requestPath) {
 function isStaticEntrypointPath(pathname) {
     const normalized = typeof pathname === 'string' && pathname.trim() ? pathname.trim() : '/';
     const staticAgent = getStaticAgentName();
+    const staticRouteName = getStaticEntrypointRouteName();
     if (normalized === '/' || normalized === '/index.html') {
         return true;
     }
-    if (!staticAgent) {
+    if (!staticAgent && !staticRouteName) {
         return false;
     }
-    return normalized === `/${staticAgent}`
-        || normalized === `/${staticAgent}/`
-        || normalized === `/${staticAgent}/index.html`;
+    const aliases = Array.from(new Set([
+        staticAgent,
+        staticRouteName,
+        staticAgent && staticAgent.includes('/') ? staticAgent.split('/').pop() : null
+    ].filter(Boolean)));
+    return aliases.some((alias) => normalized === `/${alias}`
+        || normalized === `/${alias}/`
+        || normalized === `/${alias}/index.html`);
 }
 
 function renderStaticBootstrapHtml(agentName) {
@@ -263,8 +311,10 @@ async function serveStaticRequest(req, res) {
 
         if (isStaticEntrypointPath(pathname)) {
             const staticAgent = getStaticAgentName();
-            if (staticAgent) {
-                const ready = await waitForAgentReady(staticAgent, {
+            const staticRouteName = getStaticEntrypointRouteName();
+            const readinessTarget = staticRouteName || staticAgent;
+            if (readinessTarget) {
+                const ready = await waitForAgentReady(readinessTarget, {
                     timeoutMs: 15000,
                     intervalMs: 150,
                     probeTimeoutMs: 350
@@ -274,7 +324,18 @@ async function serveStaticRequest(req, res) {
                         'Content-Type': 'text/html; charset=utf-8',
                         'Cache-Control': 'no-store'
                     });
-                    res.end(renderStaticBootstrapHtml(staticAgent));
+                    res.end(renderStaticBootstrapHtml(staticAgent || staticRouteName));
+                    return true;
+                }
+            }
+            if (pathname === '/' || pathname === '/index.html') {
+                const entrypointUrl = getStaticEntrypointUrl();
+                if (entrypointUrl) {
+                    res.writeHead(302, {
+                        Location: entrypointUrl,
+                        'Cache-Control': 'no-store'
+                    });
+                    res.end();
                     return true;
                 }
             }

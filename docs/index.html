@@ -1,428 +1,129 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ploinky - AI Agent Deployment System</title>
-    <link rel="stylesheet" href="style.css">
-    <style>
-        /* Compact header */
-        header { padding: 0.75rem 0; }
-        .hero { padding: 0.5rem 1rem 1rem 1rem; }
-        .hero h1 { font-size: 2.2rem; margin-bottom: 0.2rem; }
-        .hero .subtitle { font-size: 1rem; margin-bottom: 0.3rem; }
-        .hero p { margin-bottom: 0.5rem; font-size: 0.95rem; }
-        
-        /* Demo tabs */
-        .demo-tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            flex-wrap: wrap;
-        }
-        .demo-tab {
-            padding: 0.5rem 1rem;
-            background: var(--bg-tertiary);
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
-        }
-        .demo-tab.active {
-            background: var(--bg-header);
-            color: white;
-        }
-        .demo-tab:hover {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-        }
-        .demo-tab.active:hover {
-            background: var(--bg-header-dark);
-        }
-        
-        /* Terminal adjustments */
-        .terminal {
-            max-height: 400px;
-            overflow-y: auto;
-            font-size: 13px;
-            position: relative;
-        }
-        .terminal-header {
-            position: sticky;
-            top: 0;
-            background: #1e1e1e;
-            z-index: 10;
-        }
-        #terminal-content {
-            padding: 1.5rem;
-        }
-        .demo-content {
-            display: none;
-        }
-        .demo-content.active {
-            display: block;
-        }
-
-        /* Custom Scrollbar for Terminal */
-        .terminal::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .terminal::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .terminal::-webkit-scrollbar-thumb {
-            background-color: var(--bg-tertiary);
-            border-radius: 4px;
-        }
-
-        .terminal::-webkit-scrollbar-thumb:hover {
-            background-color: var(--text-secondary);
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ploinky Documentation</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="partials-loader.js" defer></script>
 </head>
-<body>
-    <header>
-        <div class="container">
-            <div class="header-content">
-                <a href="index.html" class="logo">
-                    <div class="logo-icon">🚀</div>
-                    <span>Ploinky</span>
-                </a>
-                <nav>
-                    <ul>
-                        <li><a href="index.html" class="active">Home</a></li>
-                        <li><a href="cli-reference.html">CLI Reference</a></li>
-                        <li><a href="architecture.html">Architecture</a></li>
-                        <li><a href="specs.html">Specs</a></li>
-                        <li><a href="webchat.html">WebChat</a></li>
-                        <li><a href="spec-webmeet.html">WebMeet</a></li>
-                        <li><button class="theme-toggle" id="themeToggle">🌙</button></li>
-                    </ul>
-                </nav>
+<body data-page="index">
+  <div data-include="partials/header.html"></div>
+  <main class="doc-main">
+    <div class="doc-shell">
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <a href="index.html">Home</a>
+        <span>/</span>
+        <span>Overview</span>
+      </nav>
+
+      <article class="chapter">
+        <header class="chapter-header">
+          <p class="eyebrow">Host Project</p>
+          <h1>Ploinky Documentation</h1>
+          <p>Ploinky is a workspace-local runtime that discovers agent repositories under <code>.ploinky/repos/</code>, launches enabled agents across multiple execution backends, builds a routing table, and serves token- or identity-gated browser surfaces through a supervised local router.</p>
+        </header>
+
+        <section class="chapter-section">
+          <h2>Documentation Contract</h2>
+          <p>The current branch implementation is the only valid authority for this documentation set. The HTML pages explain how the system behaves in practice, while the DS files under <a href="specsLoader.html?spec=matrix.md">the specifications matrix</a> define the normative contract. The coding-style authority is <a href="specsLoader.html?spec=DS001-coding-style.md">DS001 Coding Style</a>.</p>
+          <div class="callout">
+            <p>When code changes behavior, interfaces, workflows, or constraints, update the affected HTML pages, <code>docs/ploinky-overview.md</code>, and the affected DS files in the same change. The specs must remain thorough and in sync with the code.</p>
+          </div>
+        </section>
+
+        <section class="chapter-section">
+          <h2>How the Runtime Starts</h2>
+          <ol>
+            <li>The CLI initializes <code>.ploinky/</code>, ensures a default repository is available when possible, and records workspace configuration in <code>.ploinky/agents.json</code>.</li>
+            <li><code>start &lt;staticAgent&gt; &lt;port&gt;</code> enables the requested static agent if necessary, resolves manifest-driven dependencies, and expands the dependency graph into wave-based startup groups.</li>
+            <li>Each wave is started through the selected runtime backend, then gated by readiness checks that probe either raw TCP or an MCP handshake, depending on the manifest.</li>
+            <li>The resulting routes are written to <code>.ploinky/routing.json</code> and the static agent’s source tree becomes the static host root served by the router.</li>
+            <li>The router is launched through <code>cli/server/Watchdog.js</code>, which supervises <code>RoutingServer.js</code>, manages health-check restarts, and writes router and watchdog logs under <code>.ploinky/logs/</code>.</li>
+          </ol>
+        </section>
+
+        <section class="chapter-section">
+          <h2>Repository Map</h2>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Current Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>cli/</code></td>
+                <td>Primary implementation for the CLI, workspace services, router, auth bridge, runtime managers, and browser-surface handlers.</td>
+              </tr>
+              <tr>
+                <td><code>Agent/</code></td>
+                <td>Shared runtime payload mounted into agents, including <code>AgentServer</code>, wire-signing helpers, and the default CLI wrapper.</td>
+              </tr>
+              <tr>
+                <td><code>bin/</code></td>
+                <td>Entry points such as <code>ploinky</code>, <code>p-cli</code>, <code>ploinky-shell</code>, and helper scripts used by operators and tests.</td>
+              </tr>
+              <tr>
+                <td><code>tests/</code></td>
+                <td>Stage-oriented end-to-end harness, reusable verification functions, and Node unit tests for runtime services and protocol helpers.</td>
+              </tr>
+              <tr>
+                <td><code>globalDeps/</code></td>
+                <td>Global Node dependency baseline merged into per-agent dependency caches.</td>
+              </tr>
+              <tr>
+                <td><code>.agents/skills/</code></td>
+                <td>Repository-local maintenance skills. These are part of the repository workflow, not part of the Ploinky runtime contract.</td>
+              </tr>
+              <tr>
+                <td><code>dashboard/</code></td>
+                <td>Legacy standalone dashboard assets. The active routed <code>/dashboard</code> fallback lives under <code>cli/server/dashboard/</code>.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="chapter-section" id="skills-catalog">
+          <h2>Current Skill Catalog</h2>
+          <p>The repository includes local maintenance skills that shape documentation, spec review, and skill-generation workflows. Ploinky is documented here as a host runtime, so these skills are summarized for orientation but do not get standalone host-product pages or standalone DS files.</p>
+          <ul class="skill-list">
+            <li><strong><code>achilles_specs</code></strong> Extends bootstrap guidance with AchillesAgentLib requirements and coding-style additions.</li>
+            <li><strong><code>antropic_skill_build</code></strong> Defines the portability baseline for Anthropic-style skills.</li>
+            <li><strong><code>article_build</code></strong> Rebuilds article folders, generated chapters, SVG assets, and bibliography material.</li>
+            <li><strong><code>cskill_build</code></strong> Defines conventions for C-Skills with stable specs and generated JavaScript.</li>
+            <li><strong><code>dgskill_build</code></strong> Defines conventions for dynamic code-generation skills.</li>
+            <li><strong><code>gamp_specs</code></strong> Rebuilds canonical repository docs, specs, and root guidance.</li>
+            <li><strong><code>oskill_build</code></strong> Defines orchestration-skill preparation and execution loops.</li>
+            <li><strong><code>review_specs</code></strong> Reviews and updates DS files against the current implementation.</li>
+          </ul>
+        </section>
+
+        <section class="chapter-section">
+          <h2>Runtime Defaults and Operator Touchpoints</h2>
+          <div class="grid-two">
+            <div class="mini-panel">
+              <h3>Defaults</h3>
+              <p>The workspace root is discovered by locating <code>.ploinky/</code>. The active profile defaults to <code>dev</code>. Container runtime detection prefers <code>podman</code> and falls back to <code>docker</code>.</p>
+              <p>The router-managed surfaces are <code>/webtty</code>, <code>/webchat</code>, <code>/webmeet</code>, <code>/dashboard</code>, and <code>/status</code>.</p>
             </div>
-        </div>
-    </header>
-
-    <main>
-        <div class="container">
-            <div class="hero">
-                <h1>Ploinky</h1>
-                <p class="subtitle">Secure AI Agent Deployment & Development Platform</p>
-                <p>Deploy AI agents in isolated Linux containers. Perfect for running untrusted code safely.</p>
+            <div class="mini-panel">
+              <h3>Primary Entry Points</h3>
+              <p>Use <code>ploinky</code> or <code>p-cli</code> for workspace operations, <code>ploinky-shell</code> for LLM-driven command suggestions, <code>ploinky deps ...</code> for dependency caches, and <code>ploinky profile ...</code> for runtime mount-policy changes.</p>
+              <p>The LLM suggestion layer consumes <code>docs/ploinky-overview.md</code>, so CLI and model-selection changes must keep that file accurate.</p>
             </div>
+          </div>
+        </section>
 
-            <div class="demo-container" style="margin-top: 0;">
-                <h2 style="text-align: center; margin-bottom: 1rem; margin-top: 0;">Quick Start Demos</h2>
-                
-                <div class="demo-tabs">
-                    <button class="demo-tab active" data-demo="init">🚀 Initialize</button>
-                    <button class="demo-tab" data-demo="repos">📦 List Repos</button>
-                    <button class="demo-tab" data-demo="enable">✅ Enable Demo</button>
-                    <button class="demo-tab" data-demo="start">▶️ Start Agent</button>
-                    <button class="demo-tab" data-demo="status">📊 Status</button>
-                </div>
-
-                <div class="terminal">
-                    <div class="terminal-header">
-                        <span class="terminal-dot red"></span>
-                        <span class="terminal-dot yellow"></span>
-                        <span class="terminal-dot green"></span>
-                        <span class="terminal-title">ploinky@workspace</span>
-                    </div>
-                    <div id="terminal-content">
-                        <!-- Demo content will be shown here -->
-                    </div>
-                </div>
-            </div>
-
-            <div class="features">
-                <div class="feature-card">
-                    <div class="feature-icon">🔒</div>
-                    <h3>Isolated Containers</h3>
-                    <p>Each agent runs in its own container with restricted access to ensure complete isolation.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">📦</div>
-                    <h3>Repository System</h3>
-                    <p>Organize agents in repositories. Enable/disable repos as needed.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🌐</div>
-                    <h3>Web Interfaces</h3>
-                    <p>Transform any CLI tool into a modern web interface with WebConsole, WebChat, and Dashboard.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🔧</div>
-                    <h3>Easy Configuration</h3>
-                    <p>Simple manifest.json defines container image, dependencies, and commands.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🚀</div>
-                    <h3>Development Workflow</h3>
-                    <p>Seamless development with hot-reload support and integrated debugging tools.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🔄</div>
-                    <h3>Production Ready</h3>
-                    <p>Deploy the same containerized agents to production with built-in health checks.</p>
-                </div>
-            </div>
-
-            <div class="content-wrapper">
-                <div class="doc-section">
-                    <h2>Introduction to Agents</h2>
-                    <p>In Ploinky, an "agent" is a tool that you can use and modify. It's an abstract concept and doesn't necessarily refer to a Large Language Model (LLM). Agents can be anything from a simple script to a complex application.</p>
-                    <p>Agents are organized in repositories, which can contain multiple agents. You can easily add new repositories, and modify existing agents to fit your needs.</p>
-
-                    <h3>Using Agents</h3>
-                    <p>You can interact with agents in two main ways:</p>
-                    <ol style="margin-left: 2rem; line-height: 2;">
-                        <li><strong>Individually:</strong> You can run an agent's command-line interface directly using the <code>cli</code> command. For example: <code>cli my-agent --input "some data"</code>. Agents can be designed to accept various input formats, such as JSON, natural language, or any other convention.</li>
-                        <li><strong>Integrated with Ploinky:</strong> By enabling an agent, it becomes part of the Ploinky workspace. The Ploinky server will expose the agent on a local port, which allows you to build applications that interact with your agents through a simple API on localhost. When you open the web interface, you will need to provide a token, which can be found in <code>/.ploinky/.secrets</code>.</li>
-                    </ol>
-                </div>
-
-                <div class="doc-section">
-                    <h2>Getting Started</h2>
-
-                    <h3>Prerequisites</h3>
-                    <p>Ploinky uses containers to run agents in isolated environments. Therefore, you need to have a container runtime installed on your system. Ploinky supports both Docker and Podman.</p>
-                    
-                    <h4>Docker</h4>
-                    <p>On Debian-based Linux distributions (like Ubuntu), you can install Docker with:</p>
-                    <pre><code>sudo apt-get update && sudo apt-get install docker-ce docker-ce-cli containerd.io</code></pre>
-                    <p>For other operating systems or more detailed instructions, please refer to the <a href="https://docs.docker.com/get-docker/" target="_blank" rel="noopener noreferrer">official Docker documentation</a>.</p>
-
-                    <h4>Podman</h4>
-                    <p>On Debian-based Linux distributions (like Ubuntu), you can install Podman with:</p>
-                    <pre><code>sudo apt-get update && sudo apt-get install podman</code></pre>
-                    <p>For other operating systems or more detailed instructions, please refer to the <a href="https://podman.io/getting-started/installation" target="_blank" rel="noopener noreferrer">official Podman documentation</a>.</p>
-
-                    <h3>Installation</h3>
-                    <pre><code>$ git clone https://github.com/ploinkyRepos/ploinky.git
-$ cd ploinky
-$ npm install
-</code></pre>
-
-                    <div style="text-align: center; margin-top: 3rem;">
-                        <a href="cli-reference.html" class="btn btn-primary">View CLI Reference</a>
-                        <a href="architecture.html" class="btn btn-secondary">Learn Architecture</a>
-                    </div>
-                </div>
-
-                <div class="doc-section">
-                    <h2>Usage</h2>
-
-                    <h3>From within the project directory</h3>
-                    <p>When you are in the project directory, you can use the <code>ploinky</code> command directly. Here are the first steps to get you started:</p>
-                    <ol style="margin-left: 2rem; line-height: 2;">
-                        <li>Run <code>ploinky</code> to initialize your workspace</li>
-                        <li>Enable the demo repository: <code>enable repo demo</code></li>
-                        <li>Start demo agent: <code>start demo</code></li>
-                    </ol>
-
-                    <h3>Globally from any directory</h3>
-                    <p>To use <code>ploinky</code> from anywhere, you need to add its location to your shell's configuration file (e.g., <code>.bashrc</code>, <code>.zshrc</code>).</p>
-                    <p>Add the following line to your <code>~/.bashrc</code> or <code>~/.zshrc</code> file, replacing <code>~/path/to/ploinky</code> with the actual path to your ploinky directory:</p>
-                    <pre><code>export PATH="$PATH:~/path/to/ploinky/bin"</code></pre>
-                    <p>After adding the line, restart your shell or run <code>source ~/.bashrc</code> (or <code>source ~/.zshrc</code>). You can then use <code>p-cli</code> or <code>ploinky</code> from any directory. For example:</p>
-                    <pre><code>ploinky list agents</code></pre>
-                </div>
-
-                <div class="doc-section">
-                    <h2>Ploinky Shell (LLM-only)</h2>
-                    <p>Use Ploinky Shell for quick LLM command recommendations without initializing the full workspace. No <code>.ploinky</code> folder is created, no repos are cloned, and Ploinky commands are rejected in this mode.</p>
-                    <pre><code>ploinky -l            # interactive shell (also: ploinky shell, ploinky sh, psh)
-ploinky shell        # same as -l
-ploinky sh           # alias for Ploinky Shell
-psh                  # alias for Ploinky Shell
-ploinky -l &lt;text&gt;         # single-shot suggestion and exit</code></pre>
-                    <ul style="line-height: 1.6;">
-                        <li>Single-command suggestions ask <code>Execute? (y/n)</code> before running.</li>
-                        <li>API keys are read from <code>.env</code> found upward from the current directory and from your environment variables.</li>
-                        <li>Startup logs show the <code>.env</code> path used and available LLM model names.</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <footer>
-        <div class="container">
-            <p>&copy; 2024 Ploinky Project. Built with security and simplicity in mind.</p>
-            <p>
-                <a href="https://github.com/ploinkyRepos">GitHub</a> • 
-                <a href="cli-reference.html">Documentation</a> • 
-                <a href="architecture.html">Architecture</a>
-            </p>
-        </div>
-    </footer>
-
-    <script>
-        // Theme toggle
-        const themeToggle = document.getElementById('themeToggle');
-        const body = document.body;
-        
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        body.setAttribute('data-theme', savedTheme);
-        themeToggle.textContent = savedTheme === 'dark' ? '☀️' : '🌙';
-        
-        themeToggle.addEventListener('click', () => {
-            const currentTheme = body.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            body.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-            themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
-        });
-
-        // Demo content for each tab
-        const demos = {
-            init: [
-                { type: 'command', text: 'user@host:~/Desktop/work$ ploinky' },
-                { type: 'output', text: 'Initializing Ploinky environment in ~/Desktop/work/.ploinky...' },
-                { type: 'output', text: 'Default \'basic\' repository not found. Cloning...' },
-                { type: 'output', text: 'Cloning into \'.ploinky/repos/basic\'...' },
-                { type: 'output', text: 'remote: Enumerating objects: 102, done.' },
-                { type: 'output', text: 'remote: Counting objects: 100% (102/102), done.' },
-                { type: 'output', text: 'remote: Compressing objects: 100% (61/61), done.' },
-                { type: 'output', text: 'remote: Total 102 (delta 25), reused 64 (delta 7), pack-reused 0 (from 0)' },
-                { type: 'output', text: 'Receiving objects: 100% (102/102), 15.88 KiB | 15.88 MiB/s, done.' },
-                { type: 'output', text: 'Resolving deltas: 100% (25/25), done.' },
-                { type: 'output', text: 'Default repository cloned successfully.' },
-                { type: 'output', text: 'Welcome to Ploinky interactive mode.' },
-                { type: 'output', text: 'Type \'help\' for a list of commands. Use \'exit\' to leave, \'shutdown\' to close session containers, or \'destroy\' to remove all Ploinky containers and clear .ploinky/agents.' },
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
-            ],
-            repos: [
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' },
-                { type: 'command', text: 'list repos' },
-                { type: 'output', text: 'Available repositories:' },
-                { type: 'output', text: '- basic: https://github.com/PloinkyRepos/Basic.git  [installed] [enabled]' },
-                { type: 'output', text: '- cloud: https://github.com/PloinkyRepos/cloud.git' },
-                { type: 'output', text: '- vibe: https://github.com/PloinkyRepos/vibe.git' },
-                { type: 'output', text: '- security: https://github.com/PloinkyRepos/security.git' },
-                { type: 'output', text: '- extra: https://github.com/PloinkyRepos/extra.git' },
-                { type: 'output', text: '- demo: https://github.com/PloinkyRepos/demo.git' },
-                { type: 'output', text: '' },
-                { type: 'output', text: 'Tip: enable repos with \'enable repo <name>\'.' },
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
-            ],
-            enable: [
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' },
-                { type: 'command', text: 'enable repo demo' },
-                { type: 'output', text: 'Cloning into \'.ploinky/repos/demo\'...' },
-                { type: 'output', text: 'remote: Enumerating objects: 131, done.' },
-                { type: 'output', text: 'remote: Counting objects: 100% (131/131), done.' },
-                { type: 'output', text: 'remote: Compressing objects: 100% (116/116), done.' },
-                { type: 'output', text: 'Receiving objects: 100% (131/131), 33.09 KiB | 2.54 MiB/s, done.' },
-                { type: 'output', text: 'Resolving deltas: 100% (29/29), done.' },
-                { type: 'success', text: '✓ Repo \'demo\' enabled. Use \'list agents\' to view agents.' },
-                { type: 'output', text: '' },
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
-            ],
-            admin: [
-            ],
-            start: [
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' },
-                { type: 'command', text: 'start demo' },
-                { type: 'success', text: '✓ Agent \'demo\' from repo \'demo\' enabled. Use \'start\' to start all configured agents.' },
-                { type: 'output', text: 'Cloning into \'.ploinky/repos/vibe\'...' },
-                { type: 'output', text: 'remote: Enumerating objects: 19, done.' },
-                { type: 'output', text: 'remote: Counting objects: 100% (19/19), done.' },
-                { type: 'output', text: 'remote: Compressing objects: 100% (11/11), done.' },
-                { type: 'output', text: 'remote: Total 19 (delta 0), reused 16 (delta 0), pack-reused 0 (from 0)' },
-                { type: 'output', text: 'Receiving objects: 100% (19/19), done.' },
-                { type: 'output', text: 'Cloning into \'.ploinky/repos/webmeet\'...' },
-                { type: 'output', text: 'remote: Enumerating objects: 8, done.' },
-                { type: 'output', text: 'remote: Counting objects: 100% (8/8), done.' },
-                { type: 'output', text: 'remote: Compressing objects: 100% (7/7), done.' },
-                { type: 'output', text: 'remote: Total 8 (delta 0), reused 5 (delta 0), pack-reused 0 (from 0)' },
-                { type: 'output', text: 'Receiving objects: 100% (8/8), done.' },
-                { type: 'info', text: 'Static: agent=demo port=8080' },
-                { type: 'output', text: 'f50f3026bfac2a027ad86fc51627318b994604796faa6dcece502afcd3b0f9d2' },
-                { type: 'output', text: '[install] running for \'demo\'...' },
-                { type: 'output', text: 'No installation needed.' },
-                { type: 'output', text: 'ploinky_agent_simulator_work_xxxxxx' },
-                { type: 'output', text: 'ploinky_agent_moderator_work_xxxxxx' },
-                { type: 'info', text: '[start] RoutingServer launched in background (pid xxxxx).' },
-                { type: 'info', text: '[start] Logs: ~/Desktop/work/.ploinky/logs/router.log' },
-                { type: 'info', text: '[start] Dashboard: http://127.0.0.1:8080/dashboard' },
-                { type: 'output', text: '[RoutingServer] Ploinky server running on http://127.0.0.1:8080' },
-                { type: 'output', text: '  Dashboard: /dashboard' },
-                { type: 'output', text: '  WebTTY:    /webtty' },
-                { type: 'output', text: '  WebChat:   /webchat' },
-                { type: 'output', text: '  WebMeet:   /webmeet' },
-                { type: 'output', text: '  Status:    /status' },
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
-            ],
-            status: [
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' },
-                { type: 'command', text: 'status' },
-                { type: 'info', text: 'Workspace status' },
-                { type: 'output', text: '- Workspace: work [xxxxxx]' },
-                { type: 'output', text: '- Static: agent=demo port=8080' },
-                { type: 'output', text: '- Interfaces:' },
-                { type: 'output', text: '  • Dashboard: served via router (configured)' },
-                { type: 'output', text: '  • Web Console: served via router (configured)' },
-                { type: 'output', text: '  • WebChat: served via router (configured)' },
-                { type: 'output', text: '  • WebMeet: served via router (run "webmeet <agent>" to set moderator)' },
-                { type: 'output', text: '- Router: running (pid xxxxx)' },
-                { type: 'output', text: '- Agents:' },
-                { type: 'success', text: '  • demo [static]  [container: ploinky_agent_demo_work_xxxxxx] (running)' },
-                { type: 'output', text: '    image: node:18-alpine  repo: demo  cwd: ~/Desktop/work' },
-                { type: 'success', text: '  • simulator  [container: ploinky_agent_simulator_work_xxxxxx] (running)' },
-                { type: 'output', text: '    image: node:18-alpine  repo: demo  cwd: ~/Desktop/work' },
-                { type: 'success', text: '  • moderator  [container: ploinky_agent_moderator_work_xxxxxx] (running)' },
-                { type: 'output', text: '    image: node:18-alpine  repo: webmeet  cwd: ~/Desktop/work' },
-                { type: 'prompt', text: 'ploinky ~/Desktop/work> ' }
-            ]
-        };
-
-        // Tab switching
-        const tabs = document.querySelectorAll('.demo-tab');
-        const terminalContent = document.getElementById('terminal-content');
-        
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                // Update active tab
-                tabs.forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                
-                // Show corresponding demo
-                const demoName = tab.dataset.demo;
-                showDemo(demoName);
-            });
-        });
-
-        function showDemo(name) {
-            const lines = demos[name];
-            terminalContent.innerHTML = '';
-            
-            lines.forEach((line, index) => {
-                setTimeout(() => {
-                    const div = document.createElement('div');
-                    div.className = `terminal-line ${line.type}`;
-                    div.textContent = line.text;
-                    div.style.opacity = '0';
-                    terminalContent.appendChild(div);
-                    
-                    // Animate appearance
-                    setTimeout(() => {
-                        div.style.opacity = '1';
-                        terminalContent.scrollTop = terminalContent.scrollHeight;
-                    }, 50);
-                }, index * 100); // Stagger the appearance
-            });
-        }
-
-        // Show initial demo
-        window.addEventListener('load', () => {
-            setTimeout(() => showDemo('init'), 500);
-        });
-    </script>
+        <section class="chapter-section">
+          <h2>Testing Entry Points</h2>
+          <p>The main regression harness is <code>tests/test_all.sh</code>, which orchestrates prepare, start, stop, start-again, restart, destroy, and unit-test phases. <code>tests/run-all.sh</code> simply dispatches to that script. <code>tests/runFailingFast.sh</code> replays only the most recent failing checks after a fresh prepare-and-start cycle.</p>
+          <p>Stage actions live in <code>tests/do*.sh</code>, stage verifications live in <code>tests/testsAfter*.sh</code>, reusable shell assertions live in <code>tests/test-functions/</code>, and Node unit tests live in <code>tests/unit/</code>.</p>
+        </section>
+      </article>
+    </div>
+  </main>
+  <div data-include="partials/footer.html"></div>
 </body>
 </html>

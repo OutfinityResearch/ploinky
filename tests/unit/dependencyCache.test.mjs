@@ -1,0 +1,187 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+
+import {
+    STAMP_VERSION,
+    STAMP_FILENAME,
+    CORE_MARKER_MODULE,
+    sha256,
+    hashFile,
+    hashMergedPackage,
+    hashObject,
+    stampPath,
+    readStamp,
+    writeStamp,
+    isGlobalCacheValid,
+    isAgentCacheValid,
+    getGlobalCachePath,
+    getAgentCachePath,
+    ensureCacheDir,
+    nodeModulesDir,
+} from '../../cli/services/dependencyCache.js';
+
+function tempDir(prefix = 'deps-cache-test-') {
+    return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function seedCoreMarker(cachePath) {
+    ensureCacheDir(cachePath);
+    const markerDir = path.join(nodeModulesDir(cachePath), CORE_MARKER_MODULE);
+    fs.mkdirSync(markerDir, { recursive: true });
+    fs.writeFileSync(path.join(markerDir, 'package.json'), '{"name":"mcp-sdk"}');
+}
+
+test('sha256 produces deterministic digest', () => {
+    assert.equal(sha256('hello'), sha256('hello'));
+    assert.notEqual(sha256('hello'), sha256('world'));
+});
+
+test('hashFile returns null for missing file', () => {
+    assert.equal(hashFile('/nonexistent-' + Date.now()), null);
+});
+
+test('hashObject is stable under key order', () => {
+    const a = { b: 1, a: 2 };
+    const b = { a: 2, b: 1 };
+    assert.equal(hashObject(a), hashObject(b));
+});
+
+test('hashMergedPackage is stable across dep-ordering', () => {
+    const a = { name: 'x', dependencies: { b: '1', a: '2' }, devDependencies: { d: '3' } };
+    const b = { name: 'x', dependencies: { a: '2', b: '1' }, devDependencies: { d: '3' } };
+    assert.equal(hashMergedPackage(a), hashMergedPackage(b));
+});
+
+test('hashMergedPackage changes when deps change', () => {
+    const a = { name: 'x', dependencies: { a: '1' } };
+    const b = { name: 'x', dependencies: { a: '2' } };
+    assert.notEqual(hashMergedPackage(a), hashMergedPackage(b));
+});
+
+test('writeStamp + readStamp round-trip', () => {
+    const dir = tempDir();
+    try {
+        const stamp = writeStamp(dir, { runtimeKey: 'bwrap-linux-x64-node20', globalPackageHash: 'abc' });
+        assert.equal(stamp.version, STAMP_VERSION);
+        assert.ok(stamp.preparedAt, 'preparedAt present');
+        const read = readStamp(dir);
+        assert.deepEqual(read, stamp);
+        assert.equal(path.basename(stampPath(dir)), STAMP_FILENAME);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('readStamp returns null for missing stamp', () => {
+    const dir = tempDir();
+    try {
+        assert.equal(readStamp(dir), null);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('isGlobalCacheValid: valid when stamp + marker + hash match', () => {
+    const dir = tempDir();
+    try {
+        seedCoreMarker(dir);
+        writeStamp(dir, { runtimeKey: 'bwrap-linux-x64-node20', globalPackageHash: 'h1' });
+        const check = isGlobalCacheValid(dir, { runtimeKey: 'bwrap-linux-x64-node20', globalPackageHash: 'h1' });
+        assert.equal(check.valid, true, check.reason);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('isGlobalCacheValid: stale when globalPackageHash changes', () => {
+    const dir = tempDir();
+    try {
+        seedCoreMarker(dir);
+        writeStamp(dir, { runtimeKey: 'bwrap-linux-x64-node20', globalPackageHash: 'h1' });
+        const check = isGlobalCacheValid(dir, { runtimeKey: 'bwrap-linux-x64-node20', globalPackageHash: 'h2' });
+        assert.equal(check.valid, false);
+        assert.match(check.reason, /globalPackageHash/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('isGlobalCacheValid: stale when runtimeKey changes', () => {
+    const dir = tempDir();
+    try {
+        seedCoreMarker(dir);
+        writeStamp(dir, { runtimeKey: 'bwrap-linux-x64-node20', globalPackageHash: 'h1' });
+        const check = isGlobalCacheValid(dir, { runtimeKey: 'bwrap-linux-x64-node22', globalPackageHash: 'h1' });
+        assert.equal(check.valid, false);
+        assert.match(check.reason, /runtime key mismatch/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('isGlobalCacheValid: stale when core marker missing', () => {
+    const dir = tempDir();
+    try {
+        ensureCacheDir(dir);
+        writeStamp(dir, { runtimeKey: 'bwrap-linux-x64-node20', globalPackageHash: 'h1' });
+        const check = isGlobalCacheValid(dir, { runtimeKey: 'bwrap-linux-x64-node20', globalPackageHash: 'h1' });
+        assert.equal(check.valid, false);
+        assert.match(check.reason, /core marker/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('isAgentCacheValid: valid when mergedPackageHash matches', () => {
+    const dir = tempDir();
+    try {
+        seedCoreMarker(dir);
+        writeStamp(dir, {
+            runtimeKey: 'bwrap-linux-x64-node20',
+            mergedPackageHash: 'm1',
+        });
+        const check = isAgentCacheValid(dir, { runtimeKey: 'bwrap-linux-x64-node20', mergedPackageHash: 'm1' });
+        assert.equal(check.valid, true, check.reason);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('isAgentCacheValid: stale when mergedPackageHash changes', () => {
+    const dir = tempDir();
+    try {
+        seedCoreMarker(dir);
+        writeStamp(dir, { runtimeKey: 'bwrap-linux-x64-node20', mergedPackageHash: 'm1' });
+        const check = isAgentCacheValid(dir, { runtimeKey: 'bwrap-linux-x64-node20', mergedPackageHash: 'm2' });
+        assert.equal(check.valid, false);
+        assert.match(check.reason, /mergedPackageHash/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('getGlobalCachePath rejects bad runtime key', () => {
+    assert.throws(() => getGlobalCachePath('not-a-key'), /Invalid runtime key/);
+});
+
+test('getAgentCachePath requires repo+agent', () => {
+    assert.throws(
+        () => getAgentCachePath('', 'agent', 'bwrap-linux-x64-node20'),
+        /repoName and agentName/,
+    );
+    assert.throws(
+        () => getAgentCachePath('repo', '', 'bwrap-linux-x64-node20'),
+        /repoName and agentName/,
+    );
+});
+
+test('cache paths follow .ploinky/deps layout', () => {
+    const rk = 'bwrap-linux-x64-node20';
+    const globalPath = getGlobalCachePath(rk);
+    assert.ok(globalPath.includes(path.join('.ploinky', 'deps', 'global', rk)));
+    const agentPath = getAgentCachePath('repoX', 'agentY', rk);
+    assert.ok(agentPath.includes(path.join('.ploinky', 'deps', 'agents', 'repoX', 'agentY', rk)));
+});

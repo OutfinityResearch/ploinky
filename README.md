@@ -64,6 +64,19 @@ You can use Ploinky in two ways:
 - `client status <agent>`: check agent health status.
 - `stop`: stop containers recorded in `.ploinky/agents.json` (do not remove).
 - `shutdown`: stop and remove containers recorded in `.ploinky/agents.json`.
+- `deps prepare [<repo>/<agent>]`: build the prepared node_modules cache for the current runtime.
+- `deps status`: list prepared global and per-agent caches with their runtime keys and validity.
+- `deps clean <repo>/<agent>|--global|--all`: remove a cache directory.
+
+## Dependency caches
+
+Node-based agents consume a prepared, runtime-keyed dependency cache instead of running `npm install` during normal startup.
+
+- Global deps come from `ploinky/globalDeps/package.json` and land in `.ploinky/deps/global/<runtime-key>/node_modules/`.
+- Per-agent deps merge global + `<agent>/package.json` and land in `.ploinky/deps/agents/<repo>/<agent>/<runtime-key>/node_modules/`.
+- The runtime key is `<family>-<platform>-<arch>-node<major>` for host runtimes and may include a Linux container libc variant when needed, for example `container-linux-x64-musl-node20` or `container-linux-x64-glibc-node20`.
+- Agents mount the cache read-only. Startup verifies the cache stamp (runtime key + merged-package hash) and refuses to boot if stale — run `ploinky deps prepare <repo>/<agent>` to refresh.
+- `bwrap`, `seatbelt`, and container runtimes all consume prepared caches now. Container caches are prepared in a short-lived install container that matches the target runtime image, then mounted read-only into the runtime container.
 
 ## Notes
 

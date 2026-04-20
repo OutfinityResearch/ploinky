@@ -46,6 +46,8 @@ import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
 import { ensureSeatbeltService } from '../seatbelt/seatbeltServiceManager.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './shellDetection.js';
+import { detectRuntimeKeyForAgent } from '../dependencyRuntimeKey.js';
+import { nodeModulesDir, prepareAgentCache } from '../dependencyCache.js';
 import {
     runPreContainerLifecycle,
     runProfileLifecycle
@@ -68,12 +70,6 @@ import {
     getAgentSkillsPath,
     createAgentWorkDir
 } from '../workspaceStructure.js';
-import {
-    runPersistentInstall,
-    installDependenciesInContainer,
-    prepareAgentPackageJson,
-    buildEntrypointInstallScript,
-} from '../dependencyInstaller.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -269,45 +265,41 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     // Ensure MCP config is staged in the agent work dir before container start
     syncAgentMcpConfig(containerName, path.resolve(agentPath), agentName);
 
-    // INSTALL PHASE — deps install runs inside the main container entrypoint,
-    // not in a throwaway temp container.  The host-side prep (package.json merge)
-    // still happens here so the file is ready when the container starts.
+    // INSTALL PHASE — runtime containers never run npm install. Dependency
+    // preparation happens here, before runtime boot, via a dedicated cache.
     const agentHasPackageJson = fs.existsSync(path.join(agentCodePath, 'package.json'));
     const needsCoreDeps = !useStartEntry || agentHasPackageJson;
-
+    let preparedNodeModulesDir = path.join(agentWorkDir, 'node_modules');
     if (needsCoreDeps) {
-        // Merge global + agent package.json on the host (written to agentWorkDir/package.json)
-        prepareAgentPackageJson(agentName);
+        const runtimeKey = detectRuntimeKeyForAgent(manifest, repoName, agentName);
+        const agentPackagePath = agentHasPackageJson ? path.join(agentCodePath, 'package.json') : null;
+        const prepared = prepareAgentCache({
+            repoName,
+            agentName,
+            runtimeKey,
+            agentPackagePath,
+            image,
+            runtime,
+        });
+        preparedNodeModulesDir = nodeModulesDir(prepared.cachePath);
+        debugLog(`[deps] ${agentName}: prepared dependency cache ready at ${preparedNodeModulesDir}`);
     } else {
-        debugLog(`[deps] ${agentName}: Skipping npm install (uses start command, no package.json)`);
+        debugLog(`[deps] ${agentName}: Skipping dependency cache prep (uses start command, no package.json)`);
+        if (!fs.existsSync(preparedNodeModulesDir)) {
+            fs.mkdirSync(preparedNodeModulesDir, { recursive: true });
+        }
     }
-
-    // Build the shell snippet that runs inside the container before the agent command.
-    // It installs build tools + npm deps (if not cached) and copies LLMConfig.json.
-    const entrypointInstallSnippet = needsCoreDeps
-        ? buildEntrypointInstallScript(agentName)
-        : '';
 
     // Manifest / profile install hook (e.g. coral-agent's installPrerequisites.sh)
     const manifestInstallCmd = String(profileConfig?.install || manifest?.install || '').trim();
-
-    // Combine: entrypoint deps install first, then manifest install hook
-    const combinedInstallCmd = [entrypointInstallSnippet, manifestInstallCmd]
-        .filter(Boolean)
-        .join(' && ');
+    const combinedInstallCmd = manifestInstallCmd;
 
     // Ensure the agent work directory exists on host
     createAgentWorkDir(agentName);
 
-    // Ensure node_modules directory exists before mounting
-    const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
-    if (!fs.existsSync(nodeModulesDir)) {
-        fs.mkdirSync(nodeModulesDir, { recursive: true });
-    }
-
     // Build volume mount arguments using new workspace structure
-    // node_modules are rw so npm install can run inside the main container entrypoint
-    const nodeModulesMount = runtime === 'podman' ? ':z' : '';
+    // Prepared node_modules are mounted read-only; runtime containers never mutate deps.
+    const nodeModulesMount = runtime === 'podman' ? ':ro,z' : ':ro';
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', '/code',
         // Agent library (always ro)
         '-v', `${AGENT_LIB_PATH}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
@@ -315,8 +307,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         '-v', `${agentCodePath}:/code${codeMountMode}`,
         // node_modules mounts - ESM resolution walks up from script location
         // Mount at both /code/node_modules (for agent code) and /Agent/node_modules (for AgentServer.mjs)
-        '-v', `${nodeModulesDir}:/code/node_modules${nodeModulesMount}`,
-        '-v', `${nodeModulesDir}:/Agent/node_modules${nodeModulesMount}`,
+        '-v', `${preparedNodeModulesDir}:/code/node_modules${nodeModulesMount}`,
+        '-v', `${preparedNodeModulesDir}:/Agent/node_modules${nodeModulesMount}`,
         // Shared directory
         '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`,
         // CWD passthrough - provides access to agents/<name>/ for runtime data
@@ -526,6 +518,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             binds: [
                 { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
                 { source: agentCodePath, target: '/code', ro: codeReadOnly },
+                { source: preparedNodeModulesDir, target: '/code/node_modules', ro: true },
+                { source: preparedNodeModulesDir, target: '/Agent/node_modules', ro: true },
                 { source: sharedDir, target: '/shared' },
                 ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/skills', ro: skillsReadOnly }] : []),
                 { source: cwd, target: cwd }
@@ -545,19 +539,19 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     try {
         if (useProfileLifecycle) {
             const lifecycleResult = runProfileLifecycle(agentName, activeProfile, {
-                containerName,
-                agentPath,
-                repoName,
-                manifest,
-                skipInstallHooks: true  // Install runs in main container entrypoint (deps + manifest hook)
-            });
+                    containerName,
+                    agentPath,
+                    repoName,
+                    manifest,
+                    skipInstallHooks: true
+                });
             if (!lifecycleResult.success) {
                 const details = lifecycleResult.errors.join('; ');
                 throw new Error(`[profile] ${agentName}: lifecycle failed (${details})`);
             }
         } else {
-            // Preinstall already ran before container start (installs deps to $cwd/node_modules)
-            // Run postinstall after container is running
+            // Preinstall already ran before container start. Runtime containers no
+            // longer install dependencies; only postinstall hooks run after boot.
             runPostinstallHook(agentName, containerName, manifest, cwd);
         }
     } catch (error) {
@@ -616,14 +610,14 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         try {
             return ensureBwrapService(agentName, manifest, agentPath, options);
         } catch (err) {
-            console.warn(`[bwrap] ${agentName}: sandbox failed (${err.message}), falling back to container`);
+            console.warn(`[bwrap] ${agentName}: sandbox failed (${err.message}), falling back to ${containerRuntime}`);
         }
     }
     if (agentRuntime === 'seatbelt') {
         try {
             return ensureSeatbeltService(agentName, manifest, agentPath, options);
         } catch (err) {
-            console.warn(`[seatbelt] ${agentName}: sandbox failed (${err.message}), falling back to container`);
+            console.warn(`[seatbelt] ${agentName}: sandbox failed (${err.message}), falling back to ${containerRuntime}`);
         }
     }
 

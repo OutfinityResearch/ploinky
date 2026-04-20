@@ -42,9 +42,7 @@ import {
     getAgentSkillsPath,
     createAgentWorkDir
 } from '../workspaceStructure.js';
-import {
-    prepareAgentPackageJson
-} from '../dependencyInstaller.js';
+import { verifyAgentCacheForFamily } from '../dependencyCache.js';
 import {
     getExposedNames,
     getManifestEnvNames
@@ -123,22 +121,16 @@ function rewriteMcpConfig(agentName, agentCodePath, agentWorkDir) {
  * Build the shell command that runs inside the seatbelt sandbox.
  * Like buildBwrapEntryCommand but replaces /code/ and /Agent/ with real paths.
  */
-function buildSeatbeltEntryCommand(agentName, manifest, profileConfig, needsCoreDeps, realPaths) {
-    const { agentCodePath, agentLibPath, agentWorkDir } = realPaths;
+function buildSeatbeltEntryCommand(agentName, manifest, profileConfig, realPaths) {
+    const { agentCodePath, agentLibPath } = realPaths;
     const { raw: explicitAgentCmd } = readManifestAgentCommand(manifest);
     const startCmd = readManifestStartCommand(manifest);
     const useStartEntry = Boolean(startCmd);
 
-    // Build install snippet — npm install with real paths
-    const installSnippet = needsCoreDeps
-        ? `( echo "[deps] ${agentName}: Installing dependencies (seatbelt)..."; npm install --no-package-lock --prefix "$WORKSPACE_PATH"; )`
-        : '';
-
-    // Manifest install hook
+    // Dependencies are prepared on the host via `ploinky deps prepare` and
+    // exposed read-only via the seatbelt profile — no runtime npm install.
     const manifestInstallCmd = String(profileConfig?.install || manifest?.install || '').trim();
-    const combinedInstallCmd = [installSnippet, manifestInstallCmd].filter(Boolean).join(' && ');
 
-    // Rewrite /code/ and /Agent/ references to real paths
     const rewritePath = (cmd) => {
         if (!cmd) return cmd;
         return cmd
@@ -148,26 +140,48 @@ function buildSeatbeltEntryCommand(agentName, manifest, profileConfig, needsCore
             .replace(/\/Agent(?=["'\s;|&$]|$)/g, agentLibPath);
     };
 
+    const rewrittenInstall = manifestInstallCmd ? rewritePath(manifestInstallCmd) : '';
+
     let entryCmd;
     if (useStartEntry) {
         const rewrittenStart = rewritePath(startCmd);
-        entryCmd = combinedInstallCmd
-            ? `cd ${agentCodePath} && ${rewritePath(combinedInstallCmd)} && ${rewrittenStart}`
+        entryCmd = rewrittenInstall
+            ? `cd ${agentCodePath} && ${rewrittenInstall} && ${rewrittenStart}`
             : `cd ${agentCodePath} && ${rewrittenStart}`;
     } else if (explicitAgentCmd) {
         const rewrittenAgent = rewritePath(explicitAgentCmd);
-        entryCmd = combinedInstallCmd
-            ? `cd ${agentCodePath} && ${rewritePath(combinedInstallCmd)} && ${rewrittenAgent}`
+        entryCmd = rewrittenInstall
+            ? `cd ${agentCodePath} && ${rewrittenInstall} && ${rewrittenAgent}`
             : `cd ${agentCodePath} && ${rewrittenAgent}`;
     } else {
-        // Default: run AgentServer.sh
-        const rewrittenInstall = combinedInstallCmd ? rewritePath(combinedInstallCmd) : '';
         entryCmd = rewrittenInstall
             ? `${rewrittenInstall} && sh ${agentLibPath}/server/AgentServer.sh`
             : `sh ${agentLibPath}/server/AgentServer.sh`;
     }
 
     return entryCmd;
+}
+
+function resolveSeatbeltAgentNodeModules({
+    repoName,
+    agentName,
+    agentCodePath,
+    agentWorkDir,
+    needsCoreDeps,
+}) {
+    if (!needsCoreDeps) {
+        const fallback = path.join(agentWorkDir, 'node_modules');
+        if (!fs.existsSync(fallback)) {
+            fs.mkdirSync(fallback, { recursive: true });
+        }
+        return fallback;
+    }
+    return verifyAgentCacheForFamily({
+        family: 'seatbelt',
+        repoName,
+        agentName,
+        agentCodePath,
+    });
 }
 
 /**
@@ -208,19 +222,17 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     createAgentWorkDir(agentName);
     syncAgentMcpConfig(`seatbelt_${agentName}`, path.resolve(agentPath), agentName);
 
-    // Prepare package.json
+    // Verify prepared dependency cache (see dependencyCache.js).
     const agentHasPackageJson = fs.existsSync(path.join(agentCodePath, 'package.json'));
     const startCmd = readManifestStartCommand(manifest);
     const needsCoreDeps = !startCmd || agentHasPackageJson;
-    if (needsCoreDeps) {
-        prepareAgentPackageJson(agentName);
-    }
-
-    // Ensure node_modules directory exists
-    const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
-    if (!fs.existsSync(nodeModulesDir)) {
-        fs.mkdirSync(nodeModulesDir, { recursive: true });
-    }
+    const nodeModulesDir = resolveSeatbeltAgentNodeModules({
+        repoName,
+        agentName,
+        agentCodePath,
+        agentWorkDir,
+        needsCoreDeps,
+    });
 
     // Port resolution — with shared host network, hostPort === containerPort
     const { portMappings } = parseManifestPorts(manifest, profileConfig);
@@ -272,7 +284,7 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     const profilePath = writeSeatbeltProfile(agentName, profileContent);
 
     // Build entry command with real paths
-    const entryCmd = buildSeatbeltEntryCommand(agentName, manifest, profileConfig, needsCoreDeps, {
+    const entryCmd = buildSeatbeltEntryCommand(agentName, manifest, profileConfig, {
         agentCodePath,
         agentLibPath: AGENT_LIB_PATH,
         agentWorkDir
@@ -496,7 +508,16 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
     const agentSkillsPath = resolveSymlinkPath(getAgentSkillsPath(agentName));
     const agentWorkDir = getAgentWorkDir(agentName);
     const sharedDir = ensureSharedHostDir();
-    const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
+    const agentHasPackageJson = fs.existsSync(path.join(agentCodePath, 'package.json'));
+    const startCmd = readManifestStartCommand(manifest);
+    const needsCoreDeps = !startCmd || agentHasPackageJson;
+    const nodeModulesDir = resolveSeatbeltAgentNodeModules({
+        repoName,
+        agentName,
+        agentCodePath,
+        agentWorkDir,
+        needsCoreDeps,
+    });
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
     // Build environment (same as running agent)

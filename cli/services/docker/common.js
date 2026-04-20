@@ -316,6 +316,12 @@ function isSandboxRuntime(runtime) {
     return runtime === 'bwrap' || runtime === 'seatbelt';
 }
 
+function runtimeFamilyName(runtime) {
+    if (runtime === 'bwrap' || runtime === 'seatbelt') return runtime;
+    if (runtime === 'docker' || runtime === 'podman') return 'container';
+    return runtime || 'unknown';
+}
+
 export {
     CONTAINER_CONFIG_DIR,
     CONTAINER_CONFIG_PATH,
@@ -332,6 +338,7 @@ export {
     getSecretsForAgent,
     isContainerRunning,
     isSandboxRuntime,
+    runtimeFamilyName,
     loadAgentsMap,
     parseHostPort,
     parseManifestPorts,
@@ -355,7 +362,7 @@ function getRuntimeForAgent(manifest) {
                 execSync('command -v bwrap', { stdio: 'ignore' });
                 return 'bwrap';
             } catch {
-                console.warn('[bwrap] bwrap not found in PATH, falling back to container runtime');
+                console.warn(`[bwrap] bwrap not found in PATH, falling back to ${containerRuntime}`);
                 return containerRuntime;
             }
         }
@@ -365,11 +372,11 @@ function getRuntimeForAgent(manifest) {
                     execSync('command -v sandbox-exec', { stdio: 'ignore' });
                     return 'seatbelt';
                 } catch {
-                    console.warn('[seatbelt] sandbox-exec not found, falling back to container runtime');
+                    console.warn(`[seatbelt] sandbox-exec not found, falling back to ${containerRuntime}`);
                     return containerRuntime;
                 }
             }
-            console.warn('[seatbelt] seatbelt runtime requires macOS, falling back to container runtime');
+            console.warn(`[seatbelt] seatbelt runtime requires macOS, falling back to ${containerRuntime}`);
             return containerRuntime;
         }
 
@@ -384,7 +391,7 @@ function getRuntimeForAgent(manifest) {
             execSync('command -v bwrap', { stdio: 'ignore' });
             return 'bwrap';
         } catch {
-            console.warn('[sandbox] No sandbox runtime found (bwrap/sandbox-exec), falling back to container runtime');
+            console.warn(`[sandbox] No sandbox runtime found (bwrap/sandbox-exec), falling back to ${containerRuntime}`);
             return containerRuntime;
         }
     }

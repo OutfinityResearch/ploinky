@@ -60,9 +60,7 @@ import {
     getAgentSkillsPath,
     createAgentWorkDir
 } from '../workspaceStructure.js';
-import {
-    prepareAgentPackageJson
-} from '../dependencyInstaller.js';
+import { verifyAgentCacheForFamily } from '../dependencyCache.js';
 import {
     isBwrapProcessRunning,
     stopBwrapProcess,
@@ -104,6 +102,28 @@ const BWRAP_PATH = '/usr/bin/bwrap';
 
 function resolveRouterHostForRuntime() {
     return '127.0.0.1';
+}
+
+function resolveBwrapAgentNodeModules({
+    repoName,
+    agentName,
+    agentCodePath,
+    agentWorkDir,
+    needsCoreDeps,
+}) {
+    if (!needsCoreDeps) {
+        const fallback = path.join(agentWorkDir, 'node_modules');
+        if (!fs.existsSync(fallback)) {
+            fs.mkdirSync(fallback, { recursive: true });
+        }
+        return fallback;
+    }
+    return verifyAgentCacheForFamily({
+        family: 'bwrap',
+        repoName,
+        agentName,
+        agentCodePath,
+    });
 }
 
 function resolveSymlinkPath(symlinkPath) {
@@ -212,10 +232,10 @@ function buildBwrapArgs(options) {
         args.push('--bind', agentCodePath, '/code');
     }
 
-    // node_modules — always rw (for npm install)
-    // Mounted at both paths so AgentServer.mjs (/Agent/server/) can resolve modules
-    args.push('--bind', nodeModulesDir, '/code/node_modules');
-    args.push('--bind', nodeModulesDir, '/Agent/node_modules');
+    // node_modules — read-only prepared cache (see ploinky/cli/services/dependencyCache.js).
+    // Mounted at both paths so AgentServer.mjs (/Agent/server/) can resolve modules.
+    args.push('--ro-bind', nodeModulesDir, '/code/node_modules');
+    args.push('--ro-bind', nodeModulesDir, '/Agent/node_modules');
 
     // Shared directory
     args.push('--bind', sharedDir, '/shared');
@@ -391,43 +411,34 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
 
 /**
  * Build the shell command that runs inside the bwrap sandbox.
- * Mirrors the entrypoint construction in startAgentContainer.
+ *
+ * No runtime `npm install` — dependencies are prepared on the host
+ * via `prepareAgentCache` and mounted read-only at /code/node_modules.
+ * Only manifest-declared install hooks run here.
  */
-function buildBwrapEntryCommand(agentName, manifest, profileConfig, needsCoreDeps) {
-    const { raw: explicitAgentCmd, resolved: resolvedAgentCmd } = readManifestAgentCommand(manifest);
+function buildBwrapEntryCommand(agentName, manifest, profileConfig) {
+    const { raw: explicitAgentCmd } = readManifestAgentCommand(manifest);
     const startCmd = readManifestStartCommand(manifest);
     const useStartEntry = Boolean(startCmd);
 
-    // Build install snippet — skip apk (host deps pre-installed), just npm install
-    const installSnippet = needsCoreDeps
-        ? `( echo "[deps] ${agentName}: Installing dependencies (bwrap)..."; npm install --no-package-lock --prefix "$WORKSPACE_PATH"; )`
-        : '';
-
-    // Manifest install hook (e.g. installPrerequisites.sh, installPersisto.sh)
     const manifestInstallCmd = String(profileConfig?.install || manifest?.install || '').trim();
-    const combinedInstallCmd = [installSnippet, manifestInstallCmd].filter(Boolean).join(' && ');
 
     let entryCmd;
     if (useStartEntry && explicitAgentCmd) {
-        // Both start and agent defined — mirror docker's sidecar pattern:
-        // background the start command, run agent in the foreground.
-        entryCmd = combinedInstallCmd
-            ? `cd /code && ${combinedInstallCmd} && (${startCmd} &) && exec ${explicitAgentCmd}`
+        entryCmd = manifestInstallCmd
+            ? `cd /code && ${manifestInstallCmd} && (${startCmd} &) && exec ${explicitAgentCmd}`
             : `cd /code && (${startCmd} &) && exec ${explicitAgentCmd}`;
     } else if (useStartEntry) {
-        // manifest.start only — run the start command as the main process
-        entryCmd = combinedInstallCmd
-            ? `cd /code && ${combinedInstallCmd} && ${startCmd}`
+        entryCmd = manifestInstallCmd
+            ? `cd /code && ${manifestInstallCmd} && ${startCmd}`
             : `cd /code && ${startCmd}`;
     } else if (explicitAgentCmd) {
-        // manifest.agent is set
-        entryCmd = combinedInstallCmd
-            ? `cd /code && ${combinedInstallCmd} && ${explicitAgentCmd}`
+        entryCmd = manifestInstallCmd
+            ? `cd /code && ${manifestInstallCmd} && ${explicitAgentCmd}`
             : `cd /code && ${explicitAgentCmd}`;
     } else {
-        // Default: run AgentServer.sh
-        entryCmd = combinedInstallCmd
-            ? `${combinedInstallCmd} && sh /Agent/server/AgentServer.sh`
+        entryCmd = manifestInstallCmd
+            ? `${manifestInstallCmd} && sh /Agent/server/AgentServer.sh`
             : 'sh /Agent/server/AgentServer.sh';
     }
 
@@ -473,19 +484,19 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
     createAgentWorkDir(agentName);
     syncAgentMcpConfig(`bwrap_${agentName}`, path.resolve(agentPath), agentName);
 
-    // Prepare package.json (merge global + agent)
+    // Prepare node dependencies via prepared cache (see dependencyCache.js).
+    // Non-Node agents (start-only, no package.json) still get an empty
+    // node_modules so the mount resolves.
     const agentHasPackageJson = fs.existsSync(path.join(agentCodePath, 'package.json'));
     const startCmd = readManifestStartCommand(manifest);
     const needsCoreDeps = !startCmd || agentHasPackageJson;
-    if (needsCoreDeps) {
-        prepareAgentPackageJson(agentName);
-    }
-
-    // Ensure node_modules directory exists
-    const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
-    if (!fs.existsSync(nodeModulesDir)) {
-        fs.mkdirSync(nodeModulesDir, { recursive: true });
-    }
+    const nodeModulesDir = resolveBwrapAgentNodeModules({
+        repoName,
+        agentName,
+        agentCodePath,
+        agentWorkDir,
+        needsCoreDeps,
+    });
 
     // Port resolution — with shared host network, hostPort === containerPort
     // Must happen before env map so PORT is set correctly
@@ -528,7 +539,7 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
     });
 
     // Build the entry command
-    const entryCmd = buildBwrapEntryCommand(agentName, manifest, profileConfig, needsCoreDeps);
+    const entryCmd = buildBwrapEntryCommand(agentName, manifest, profileConfig);
 
     // Add the command to run
     bwrapArgs.push('--', 'sh', '-c', entryCmd);
@@ -755,7 +766,16 @@ function attachBwrapInteractive(agentName, manifest, agentPath, workdir, entryCo
     const agentSkillsPath = resolveSymlinkPath(getAgentSkillsPath(agentName));
     const agentWorkDir = getAgentWorkDir(agentName);
     const sharedDir = ensureSharedHostDir();
-    const nodeModulesDir = path.join(agentWorkDir, 'node_modules');
+    const agentHasPackageJson = fs.existsSync(path.join(agentCodePath, 'package.json'));
+    const startCmd = readManifestStartCommand(manifest);
+    const needsCoreDeps = !startCmd || agentHasPackageJson;
+    const nodeModulesDir = resolveBwrapAgentNodeModules({
+        repoName,
+        agentName,
+        agentCodePath,
+        agentWorkDir,
+        needsCoreDeps,
+    });
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
     // Build environment (same as running agent)
