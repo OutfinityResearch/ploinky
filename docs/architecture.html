@@ -448,7 +448,7 @@ observability.js    // Monitoring views</code></pre>
                         </ul>
 
                         <h3>Tools and Resources</h3>
-                        <p>Agents declare their MCP surface through a JSON file committed alongside the agent source code: <code>.ploinky/repos/&lt;repo&gt;/&lt;agent&gt;/mcp-config.json</code>. When the CLI boots an agent container it copies this file to <code>/tmp/ploinky/mcp-config.json</code> (also keeping <code>/code/mcp-config.json</code> for reference). The file can expose tools, resources, and prompts, and each tool is executed by spawning a shell command. AgentServer does not register anything if the configuration file is missing.</p>
+                        <p>Agents declare their MCP surface through a JSON file committed alongside the agent source code: <code>.ploinky/repos/&lt;repo&gt;/&lt;agent&gt;/mcp-config.json</code>. When the CLI boots an agent container it copies this file to <code>/tmp/ploinky/mcp-config.json</code> (also keeping <code>/code/mcp-config.json</code> for reference). The file can expose tools, resources, and prompts, and each tool is executed by spawning a configured executable command (optionally with explicit argument arrays) without shell interpolation. AgentServer does not register anything if the configuration file is missing.</p>
                         <pre><code>{
   "tools": [
     {
@@ -456,6 +456,7 @@ observability.js    // Monitoring views</code></pre>
       "title": "List Things",
       "description": "Enumerate items in a category",
       "command": "node scripts/list-things.js",
+      "args": ["--mode", "mcp"],
       "input": {
         "type": "object",
         "properties": {
@@ -489,7 +490,7 @@ observability.js    // Monitoring views</code></pre>
     }
   ]
 }</code></pre>
-                        <p>AgentServer pipes a JSON payload to each command via stdin. Tool invocations receive <code>{ tool, input, metadata }</code>; resources receive <code>{ resource, uri, params }</code>. Command stdout is forwarded to the MCP response, while non-zero exit codes surface as MCP errors.</p>
+                        <p>AgentServer pipes a JSON payload to each command via stdin. Tool invocations receive <code>{ tool, input, metadata }</code>; resources receive <code>{ resource, uri, params }</code>. Command stdout is forwarded to the MCP response, while non-zero exit codes surface as MCP errors. For tools/resources, the command process is started as <code>spawn(command, args)</code> when <code>args</code> is provided in configuration.</p>
 
                         <h3>MCP Task Queue</h3>
                         <p>Longer running MCP tools are orchestrated through <code>Agent/server/TaskQueue.mjs</code>. Every tool execution is wrapped in a task object that captures the command, input payload, timeout hints, timestamps, and eventual result/error.</p>
