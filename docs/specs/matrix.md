@@ -1,6 +1,6 @@
 # Specification Matrix
 
-Generated from DS frontmatter by `skills/gamp_specs/scripts/generate_specs_matrix.mjs`. Edit the DS files and rerun the generator instead of editing this file manually.
+Generated from DS frontmatter by `.agents/skills/gamp_specs/scripts/generate_specs_matrix.mjs`. Edit the DS files and rerun the generator instead of editing this file manually.
 
 Current repository-local skills: `achilles_specs`, `antropic_skill_build`, `article_build`, `cskill_build`, `dgskill_build`, `gamp_specs`, `oskill_build`, `review_specs`. These skills are maintenance tooling; the DS set below remains focused on the host project.
 
