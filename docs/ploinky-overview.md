@@ -15,13 +15,21 @@ Ploinky is a workspace-local runtime for repository-backed agents.
 - `ploinky enable repo <name> [branch]`: enable a repository for discovery and listings.
 - `ploinky enable agent <name|repo/name> [global|devel [repo]] [--auth none|pwd|sso] [as <alias>]`: register an agent in `.ploinky/agents.json`.
 - `ploinky start [staticAgent] [port]`: resolve dependency waves, start enabled agents, write `routing.json`, and launch the router under the watchdog.
-- `ploinky status`: show router, route, repo, and enabled-agent state.
+- `ploinky status`: show SSO state, router listening state, installed and enabled repositories, and running agent containers.
+- `ploinky list routes`: inspect the current `.ploinky/routing.json` route table.
 - `ploinky restart`: restart enabled agents and the router.
 - `ploinky shell <agent>`: open `/bin/sh` inside the running agent backend.
 - `ploinky cli <agent> [args...]`: run the manifest CLI command interactively.
 - `ploinky stop`: stop enabled agents and the router without removing runtime state.
-- `ploinky shutdown`: stop and remove enabled agent containers.
-- `ploinky destroy`: stop the router, remove runtime containers, and clear workspace runtime state for the active workspace.
+- `ploinky shutdown`: stop the router and remove containers recorded for this workspace in `.ploinky/agents.json`.
+- `ploinky destroy`: stop the router, remove all Ploinky containers for the workspace, and clear `.ploinky/agents/`.
+- `ploinky clean`: alias for `destroy`.
+- `ploinky logs tail [router]` and `ploinky logs last <N> [router]`: inspect router logs. Router logs are the only logs exposed through the CLI.
+- `ploinky webtty [shell] [--rotate]` and `ploinky webconsole [shell] [--rotate]`: show or rotate the WebTTY token and optionally set the interactive shell.
+- `ploinky webchat [--rotate]`: show or rotate the WebChat token.
+- `ploinky webmeet [moderatorAgent] [--rotate]`: show or rotate the WebMeet token and optionally persist the moderator agent.
+- `ploinky dashboard [--rotate]`: show or rotate the dashboard token used for `/dashboard` and invitation-style `/status` access.
+- `ploinky client list tools|resources`, `ploinky client status <agent>`, and `ploinky client tool <name>`: inspect or call MCP surfaces through the router.
 
 ## Web surfaces
 
@@ -29,9 +37,9 @@ Ploinky is a workspace-local runtime for repository-backed agents.
 - `/webchat`: chat surface over the same TTY stream, with encrypted transcript storage.
 - `/webmeet`: meeting and moderator UI.
 - `/dashboard`: management surface, including transcript and feedback views.
-- `/status`: browser view over `ploinky status`.
+- `/status`: read-only browser view that shells out to `ploinky status` and adds router-side server and agent summaries.
 
-These surfaces usually require per-surface tokens unless an authenticated user session already exists through local auth or SSO.
+Token-based local access is managed through `WEBTTY_TOKEN`, `WEBCHAT_TOKEN`, `WEBMEET_TOKEN`, and `WEBDASHBOARD_TOKEN`. The `/status` surface reuses the dashboard token or dashboard invitation link for read-only access. An authenticated local-auth or SSO session can also satisfy surface access checks.
 
 ## Auth and capabilities
 

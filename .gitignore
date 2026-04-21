@@ -150,3 +150,7 @@ test_run_dir/
 
 /.claude/
 CLAUDE.md
+# >>> ploinky default-skills >>>
+.claude/skills/
+.agents/skills/
+# <<< ploinky default-skills <<<
