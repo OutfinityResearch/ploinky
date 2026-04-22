@@ -75,15 +75,9 @@ export async function ensureServerConfig(serverName, options = {}) {
     }
 
     try {
-        const tokenName = serverName === 'webtty'
-            ? 'WEBTTY_TOKEN'
-            : serverName === 'webchat'
-                ? 'WEBCHAT_TOKEN'
-                : serverName === 'webmeet'
-                    ? 'WEBMEET_TOKEN'
-                    : serverName === 'dashboard'
-                        ? 'WEBDASHBOARD_TOKEN'
-                        : null;
+        const tokenName = serverName === 'dashboard'
+            ? 'WEBDASHBOARD_TOKEN'
+            : null;
         if (tokenName) setEnvVar(tokenName, server.token);
     } catch (_) {}
 

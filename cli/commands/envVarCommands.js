@@ -47,14 +47,14 @@ function handleVarsCommand() {
         if (!secrets.APP_NAME || !String(secrets.APP_NAME).trim()) {
             try { env.setEnvVar('APP_NAME', path.basename(process.cwd())); } catch (_) { }
         }
-        const tokens = ['WEBTTY_TOKEN', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN'];
+        const tokens = ['WEBDASHBOARD_TOKEN'];
         for (const t of tokens) {
             if (!secrets[t] || !String(secrets[t]).trim()) {
                 try { env.setEnvVar(t, crypto.randomBytes(32).toString('hex')); } catch (_) { }
             }
         }
         const merged = env.parseSecrets();
-        const printOrder = ['APP_NAME', 'WEBCHAT_TOKEN', 'WEBDASHBOARD_TOKEN', 'WEBTTY_TOKEN'];
+        const printOrder = ['APP_NAME', 'WEBDASHBOARD_TOKEN'];
         const keys = Array.from(new Set([...printOrder, ...Object.keys(merged).sort()]));
         keys.forEach(k => console.log(`${k}=${merged[k] ?? ''}`));
     } catch (e) { console.error('Failed to list variables:', e.message); }

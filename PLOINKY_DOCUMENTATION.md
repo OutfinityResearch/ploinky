@@ -656,8 +656,7 @@ Behavior:
 ```bash
 # Secrets and variables
 API_KEY=sk-12345...
-WEBTTY_TOKEN=abc123def456...
-WEBCHAT_TOKEN=xyz789...
+WEBDASHBOARD_TOKEN=abc123def456...
 ```
 
 ### `.ploinky/routing.json` (Runtime Generated)
@@ -812,13 +811,12 @@ vars
 
 ## Authentication
 
-### Token-Based Security
+### Router Login and Surface Access
 
-Web interfaces use 32-byte random tokens stored in `.ploinky/.secrets`:
+`/webtty`, `/webchat`, and `/webmeet` use the normal router login flow.
+`/dashboard` and the read-only `/status` surface still use a dashboard token stored in `.ploinky/.secrets`:
 
-- `WEBTTY_TOKEN` - WebTTY access
-- `WEBCHAT_TOKEN` - Webchat access
-- `DASHBOARD_TOKEN` - Dashboard access
+- `WEBDASHBOARD_TOKEN` - Dashboard and status access
 
 ### SSO Integration
 

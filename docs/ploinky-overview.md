@@ -39,7 +39,7 @@ Ploinky is a workspace-local runtime for repository-backed agents.
 - `/dashboard`: management surface, including transcript and feedback views.
 - `/status`: read-only browser view that shells out to `ploinky status` and adds router-side server and agent summaries.
 
-Token-based local access is managed through `WEBTTY_TOKEN`, `WEBCHAT_TOKEN`, `WEBMEET_TOKEN`, and `WEBDASHBOARD_TOKEN`. The `/status` surface reuses the dashboard token or dashboard invitation link for read-only access. An authenticated local-auth or SSO session can also satisfy surface access checks.
+`/webtty`, `/webchat`, and `/webmeet` use the normal router login flow. `/dashboard` still supports `WEBDASHBOARD_TOKEN`, and `/status` reuses the dashboard token or dashboard invitation link for read-only access.
 
 ## Auth and capabilities
 

@@ -18,7 +18,7 @@ The router must be supervised by `cli/server/Watchdog.js`, which launches and re
 
 The route table must be persisted in `.ploinky/routing.json`. It must contain the router port, the static agent metadata, and the current per-agent route entries resolved during startup. Static requests for `/`, `/index.html`, and static-agent entry aliases must resolve against the configured static host path from that file.
 
-The router must provide first-party browser surfaces at `/webtty`, `/webchat`, `/webmeet`, `/dashboard`, and `/status`. Each surface owns its own login endpoint, session cookie, and fallback asset directory under `cli/server/<surface>/`. Token-based local access is managed through `WEBTTY_TOKEN`, `WEBCHAT_TOKEN`, `WEBMEET_TOKEN`, and `WEBDASHBOARD_TOKEN`; the read-only `/status` surface reuses the dashboard-token namespace for invitation-style access. Asset resolution may also consult the static host root and `webLibs/`, but the documented fallback implementation for the first-party surfaces lives under `cli/server/`.
+The router must provide first-party browser surfaces at `/webtty`, `/webchat`, `/webmeet`, `/dashboard`, and `/status`. Each surface owns its own session cookie and fallback asset directory under `cli/server/<surface>/`. `/webtty`, `/webchat`, and `/webmeet` must rely on the router login flow and the authenticated router session; they no longer accept surface-specific token login. `/dashboard` and the read-only `/status` surface continue to support dashboard-token access through `WEBDASHBOARD_TOKEN`. Asset resolution may also consult the static host root and `webLibs/`, but the documented fallback implementation for the first-party surfaces lives under `cli/server/`.
 
 The router must also expose:
 

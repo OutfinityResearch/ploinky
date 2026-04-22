@@ -2,10 +2,7 @@ import crypto from 'crypto';
 import * as secretVars from '../../services/secretVars.js';
 
 const TOKEN_VARS = {
-    webtty: 'WEBTTY_TOKEN',
-    webchat: 'WEBCHAT_TOKEN',
     dashboard: 'WEBDASHBOARD_TOKEN',
-    webmeet: 'WEBMEET_TOKEN',
     status: 'WEBDASHBOARD_TOKEN'
 };
 

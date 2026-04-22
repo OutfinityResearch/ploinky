@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { resolveWebchatCommandsForAgent } from '../webchat/commandResolver.js';
-import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie, parseMultipartFormData } from './common.js';
+import { parseCookies, buildCookie, appendSetCookie, parseMultipartFormData } from './common.js';
 import * as staticSrv from '../static/index.js';
 import { createServerTtsStrategy } from './ttsStrategies/index.js';
 import {
@@ -100,7 +100,7 @@ function parseInputEnvelope(rawBody) {
 function buildTranscriptContext(req, appState, tabId) {
     const sid = getSession(req, appState) || '';
     return {
-        authMode: req.authMode || (req.user ? 'user' : 'token'),
+        authMode: req.authMode || (req.user ? 'user' : 'anonymous'),
         sessionId: sid,
         userId: req.user?.id || '',
         tabId
@@ -206,40 +206,21 @@ function getSession(req, appState) {
     return (sid && appState.sessions.has(sid)) ? sid : null;
 }
 
-function authorized(req, appState) {
-    if (req.user) return true;
-    return !!getSession(req, appState);
+function authorized(req) {
+    return Boolean(req?.user);
 }
 
-async function handleAuth(req, res, appConfig, appState) {
-    if (req.user) {
-        res.writeHead(400);
-        res.end('SSO is enabled; legacy auth disabled.');
-        return;
+function redirectToRouterLogin(req, res, parsedUrl, agentOverride = '') {
+    const returnTo = `${parsedUrl.pathname || `/${appName}/`}${parsedUrl.search || ''}`;
+    const params = new URLSearchParams({ returnTo });
+    if (agentOverride) {
+        params.set('agent', agentOverride);
     }
-    try {
-        const token = loadToken(appName);
-        const body = await readJsonBody(req);
-        if (body && body.token && String(body.token).trim() === token) {
-            const sid = crypto.randomBytes(16).toString('hex');
-            appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
-            const cookies = [
-                buildCookie(SID_COOKIE, sid, req, `/${appName}`),
-                buildCookie(`${appName}_token`, token, req, `/${appName}`, { maxAge: 7 * 24 * 60 * 60 })
-            ];
-            res.writeHead(200, {
-                'Content-Type': 'application/json',
-                'Set-Cookie': cookies
-            });
-            res.end(JSON.stringify({ ok: true }));
-        } else {
-            res.writeHead(403);
-            res.end('Forbidden');
-        }
-    } catch (_) {
-        res.writeHead(400);
-        res.end('Bad Request');
-    }
+    res.writeHead(302, {
+        Location: `/auth/login?${params.toString()}`,
+        'Cache-Control': 'no-store'
+    });
+    res.end('Authentication required');
 }
 
 function ensureAppSession(req, res, appState) {
@@ -360,8 +341,7 @@ function handleLogout(req, res, appState, agentQuery) {
     }
 
     const cookies = [
-        buildCookie(SID_COOKIE, '', req, `/${appName}`, { maxAge: 0 }),
-        buildCookie(`${appName}_token`, '', req, `/${appName}`, { maxAge: 0 })
+        buildCookie(SID_COOKIE, '', req, `/${appName}`, { maxAge: 0 })
     ];
 
     res.writeHead(200, {
@@ -597,11 +577,18 @@ async function handleWebChat(req, res, appConfig, appState) {
         agentQuery = `agent=${encodeURIComponent(overrideCommands.agentName || agentOverride)}`;
     }
 
-    if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
+    if (pathname === '/auth' && req.method === 'POST') {
+        res.writeHead(410, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify({
+            ok: false,
+            error: 'surface_token_auth_removed',
+            detail: 'Use the router login page.'
+        }));
+    }
     if (pathname === '/logout' && req.method === 'POST') return handleLogout(req, res, appState, agentQuery);
     if (pathname === '/whoami') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ ok: authorized(req, appState) }));
+        return res.end(JSON.stringify({ ok: authorized(req) }));
     }
 
     if (pathname === '/feedback' && req.method === 'POST') {
@@ -642,48 +629,12 @@ async function handleWebChat(req, res, appConfig, appState) {
         if (assetPath && staticSrv.sendFile(res, assetPath)) return;
     }
 
-    const cookies = parseCookies(req);
-
     if (req.user) {
         ensureAppSession(req, res, appState);
-    } else {
-        const savedToken = cookies.get(`${appName}_token`);
-        const currentToken = loadToken(appName);
-
-        if (savedToken && savedToken === currentToken && !authorized(req, appState)) {
-            const sid = crypto.randomBytes(16).toString('hex');
-            appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
-            appendSetCookie(res, buildCookie(SID_COOKIE, sid, req, `/${appName}`));
-            req.headers.cookie = `${req.headers.cookie || ''}; ${appName}_sid=${sid}`;
-        }
     }
 
-    if (!authorized(req, appState)) {
-        if (req.user) {
-            res.writeHead(403);
-            return res.end('Access forbidden');
-        }
-        const html = renderTemplate(['login.html', 'index.html'], {
-            '__ASSET_BASE__': `/${appName}/assets`,
-            '__AGENT_NAME__': effectiveConfig.displayName || effectiveConfig.agentName || '',
-            '__DISPLAY_NAME__': effectiveConfig.displayName || effectiveConfig.agentName || 'WebChat',
-            '__RUNTIME__': effectiveConfig.runtime || 'local',
-            '__REQUIRES_AUTH__': 'true',
-            '__BASE_PATH__': `/${appName}`,
-            '__TTS_PROVIDER__': DEFAULT_TTS_PROVIDER,
-            '__STT_PROVIDER__': DEFAULT_STT_PROVIDER,
-            '__AGENT_QUERY__': agentQuery
-        });
-        if (html) {
-            res.writeHead(200, {
-                'Content-Type': 'text/html',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            });
-            return res.end(html);
-        }
-        res.writeHead(403); return res.end('Forbidden');
+    if (!authorized(req)) {
+        return redirectToRouterLogin(req, res, parsedUrl, agentOverride);
     }
 
     if (pathname === '/tts' && req.method === 'POST') {

@@ -24,16 +24,10 @@
   // External links to Console/Chat servers (open in new tab)
   try {
     const loc = window.location;
-    const host = loc.hostname || 'localhost';
-    const proto = loc.protocol || 'http:';
-    const consolePort = document.body.dataset.ttyPort || '';
-    const chatPort = document.body.dataset.chatPort || '';
-    const consoleToken = document.body.dataset.ttyToken || '';
-    const chatToken = document.body.dataset.chatToken || '';
     const lnkConsole = document.getElementById('lnkConsole');
     const lnkChat = document.getElementById('lnkChat');
-    if (lnkConsole && consolePort) lnkConsole.href = `${proto}//${host}:${consolePort}/` + (consoleToken ? `?token=${consoleToken}` : '');
-    if (lnkChat && chatPort) lnkChat.href = `${proto}//${host}:${chatPort}/` + (chatToken ? `?token=${chatToken}` : '');
+    if (lnkConsole) lnkConsole.href = `${loc.origin}/webtty/`;
+    if (lnkChat) lnkChat.href = `${loc.origin}/webchat/`;
   } catch(_) {}
 
   // Tab navigation
@@ -133,7 +127,7 @@
       }
       button.innerHTML = `
         <div><strong>${escapeHtml(conversation.agentName || 'webchat')}</strong></div>
-        <small>${escapeHtml(conversation.runtime || 'local')} · ${escapeHtml(conversation.authMode || 'token')}</small>
+        <small>${escapeHtml(conversation.runtime || 'local')} · ${escapeHtml(conversation.authMode || 'session')}</small>
         <div class="wa-transcript-meta">${escapeHtml(formatDateTime(conversation.updatedAt))}</div>
         <div class="wa-transcript-meta">${conversation.messageCount || 0} messages</div>
       `;

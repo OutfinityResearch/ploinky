@@ -85,7 +85,7 @@ export FAST_PLOINKY_ONLY="host-env-value"
 test_check "Host-only env var not visible inside container" assert_container_env_absent "$TEST_AGENT_CONT_NAME" "FAST_PLOINKY_ONLY"
 
 stage_header "Router var change"
-test_check "Router reflects updated testVar without restart" fast_router_verify_test_var_dynamic
+test_check "Router rejects legacy WebTTY token auth" fast_router_verify_test_var_dynamic
 
 stage_header "Workspace status command"
 test_check "Status reports SSO disabled" fast_assert_status_contains "- SSO: disabled"
@@ -103,7 +103,7 @@ stage_header "Dashboard UI"
 test_check "Dashboard surfaces workspace status" assert_dashboard_status
 
 stage_header "WebMeet API"
-test_check "WebMeet whoami endpoint authenticates" assert_webmeet_whoami
+test_check "WebMeet legacy token auth endpoint is disabled" assert_webmeet_whoami
 
 stage_header "Demo agent dependency tests"
 SIMULATOR_CONTAINER=$(compute_container_name "simulator" "demo")
@@ -136,14 +136,14 @@ test_check "expose applies to ${FAST_VAR_TEST_NAME}" fast_cli_expose_and_reinsta
 test_check "Agent sees exposed ${FAST_VAR_TEST_NAME} via shell" fast_cli_verify_var_in_shell
 
 stage_header "WebChat Command"
-test_check "webchat --rotate regenerates token" fast_check_webchat_token_rotation
-test_check "WebChat agent override responds via curl" fast_check_webchat_alias_override
-test_check "WebChat logout clears session cookies and access" fast_check_webchat_logout_flow
+test_check "webchat --rotate does not recreate a legacy token" fast_check_webchat_token_rotation
+test_check "WebChat agent override redirects to router login" fast_check_webchat_alias_override
+test_check "WebChat legacy token auth endpoint is disabled" fast_check_webchat_logout_flow
 
 stage_header "WebChat SSO Parameters"
 test_action "Configure WebChat CLI for test agent" configure_webchat_cli_for_test_agent
 wait_for_router
-test_check "WebChat CLI session exports guest SSO context" test_sso_params_disabled
+test_check "Legacy WebChat token-based SSO harness is skipped" test_sso_params_disabled
 #test_check "WebChat CLI session logs SSO identity when enabled" test_sso_params_enabled
 
 stage_header "Router Static Assets"

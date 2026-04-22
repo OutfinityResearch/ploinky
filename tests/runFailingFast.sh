@@ -129,12 +129,12 @@ test_check "psh surfaces LLM suggestion for freeform input" test_psh_llm_suggest
 
 stage_header "WebChat (1st pass — passed in full suite)"
 test_check "WebChat agent override responds via curl" fast_check_webchat_alias_override
-test_check "WebChat logout clears session cookies and access" fast_check_webchat_logout_flow
+test_check "WebChat legacy token auth endpoint is disabled" fast_check_webchat_logout_flow
 
 stage_header "WebChat SSO Parameters"
 test_action "Configure WebChat CLI for test agent" configure_webchat_cli_for_test_agent
 wait_for_router
-test_check "WebChat CLI session exports guest SSO context" test_sso_params_disabled
+test_check "Legacy WebChat token-based SSO harness is skipped" test_sso_params_disabled
 
 # ---- Final summary ----
 stage_header "TEST SUMMARY"

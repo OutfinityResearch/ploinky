@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
-import { loadToken, parseCookies, buildCookie, readJsonBody, appendSetCookie } from './common.js';
+import { parseCookies, buildCookie, appendSetCookie } from './common.js';
 import * as staticSrv from '../static/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,38 +29,19 @@ function getSession(req, appState) {
     return (sid && appState.sessions.has(sid)) ? sid : null;
 }
 
-function authorized(req, appState) {
-    if (req.user) return true;
-    return !!getSession(req, appState);
+function authorized(req) {
+    return Boolean(req?.user);
 }
 
-async function handleAuth(req, res, appConfig, appState) {
-    if (req.user) {
-        res.writeHead(400);
-        res.end('SSO is enabled; legacy auth disabled.');
-        return;
-    }
-    try {
-        const token = loadToken(appName);
-        const body = await readJsonBody(req);
-        if (body && body.token && String(body.token).trim() === token) {
-            const sid = crypto.randomBytes(16).toString('hex');
-            appState.sessions.set(sid, { tabs: new Map(), createdAt: Date.now() });
-            res.writeHead(200, {
-                'Content-Type': 'application/json',
-                'Set-Cookie': buildCookie(SID_COOKIE, sid, req, `/${appName}`)
-            });
-            res.end(JSON.stringify({ ok: true }));
-        } else {
-            res.writeHead(403);
-            res.end('Forbidden');
-        }
-    } catch (_) {
-        res.writeHead(400);
-        res.end('Bad Request');
-    }
+function redirectToRouterLogin(req, res, parsedUrl) {
+    const returnTo = `${parsedUrl.pathname || `/${appName}/`}${parsedUrl.search || ''}`;
+    const location = `/auth/login?${new URLSearchParams({ returnTo }).toString()}`;
+    res.writeHead(302, {
+        Location: location,
+        'Cache-Control': 'no-store'
+    });
+    res.end('Authentication required');
 }
-
 
 function ensureAppSession(req, res, appState) {
     const cookies = parseCookies(req);
@@ -83,10 +64,17 @@ function handleWebTTY(req, res, appConfig, appState) {
     const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
 
-    if (pathname === '/auth' && req.method === 'POST') return handleAuth(req, res, appConfig, appState);
+    if (pathname === '/auth' && req.method === 'POST') {
+        res.writeHead(410, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify({
+            ok: false,
+            error: 'surface_token_auth_removed',
+            detail: 'Use the router login page.'
+        }));
+    }
     if (pathname === '/whoami') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ ok: authorized(req, appState) }));
+        return res.end(JSON.stringify({ ok: authorized(req) }));
     }
 
     if (req.user) {
@@ -99,24 +87,8 @@ function handleWebTTY(req, res, appConfig, appState) {
         if (assetPath && staticSrv.sendFile(res, assetPath)) return;
     }
 
-    if (!authorized(req, appState)) {
-        if (req.user) {
-            res.writeHead(403);
-            return res.end('Access forbidden');
-        }
-        const html = renderTemplate(['login.html', 'index.html'], {
-            '__ASSET_BASE__': `/${appName}/assets`,
-            '__AGENT_NAME__': appConfig.agentName || 'Router',
-            '__CONTAINER_NAME__': appConfig.containerName || '-',
-            '__RUNTIME__': appConfig.runtime || 'local',
-            '__REQUIRES_AUTH__': 'true',
-            '__BASE_PATH__': `/${appName}`
-        });
-        if (html) {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            return res.end(html);
-        }
-        res.writeHead(403); return res.end('Forbidden');
+    if (!authorized(req)) {
+        return redirectToRouterLogin(req, res, parsedUrl);
     }
 
     if (pathname === '/' || pathname === '/index.html') {

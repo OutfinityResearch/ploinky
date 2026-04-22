@@ -319,7 +319,7 @@ async function handleCommand(args) {
             else ensureComponentToken('webchat');
 
             if (!rotate && positional.length) {
-                console.warn('webchat: argument-based configuration has been removed; tokens are still managed by this command.');
+                console.warn('webchat: argument-based configuration has been removed; this command now only prints the access URL.');
             }
             break;
         }

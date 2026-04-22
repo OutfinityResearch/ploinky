@@ -4,10 +4,10 @@ import * as envSvc from '../../services/secretVars.js';
 import { ROUTING_FILE } from '../../services/config.js';
 
 const COMPONENTS = {
-  webtty: { varName: 'WEBTTY_TOKEN', label: 'WebTTY', path: '/webtty' },
-  webchat: { varName: 'WEBCHAT_TOKEN', label: 'WebChat', path: '/webchat' },
-  dashboard: { varName: 'WEBDASHBOARD_TOKEN', label: 'Dashboard', path: '/dashboard' },
-  webmeet: { varName: 'WEBMEET_TOKEN', label: 'WebMeet', path: '/webmeet' }
+  webtty: { label: 'WebTTY', path: '/webtty', authMode: 'login' },
+  webchat: { label: 'WebChat', path: '/webchat', authMode: 'login' },
+  dashboard: { varName: 'WEBDASHBOARD_TOKEN', label: 'Dashboard', path: '/dashboard', authMode: 'token' },
+  webmeet: { label: 'WebMeet', path: '/webmeet', authMode: 'login' }
 };
 
 function getRouterPort() {
@@ -37,9 +37,21 @@ function maskToken(token) {
   return token.slice(0, 5);
 }
 
+function printLoginSurface(spec, { quiet } = {}) {
+  if (quiet) return null;
+  const port = getRouterPort();
+  console.log(`✓ ${spec.label} uses router login.`);
+  console.log(`  Visit: http://127.0.0.1:${port}${spec.path}`);
+  console.log('  Sign in with your workspace account.');
+  return null;
+}
+
 function refreshComponentToken(component, { quiet } = {}) {
   const spec = COMPONENTS[component];
   if (!spec) throw new Error(`Unknown component '${component}'`);
+  if (spec.authMode !== 'token') {
+    return printLoginSurface(spec, { quiet });
+  }
   const token = crypto.randomBytes(32).toString('hex');
   envSvc.setEnvVar(spec.varName, token);
   if (!quiet) {
@@ -53,6 +65,9 @@ function refreshComponentToken(component, { quiet } = {}) {
 function getComponentToken(component) {
   const spec = COMPONENTS[component];
   if (!spec) throw new Error(`Unknown component '${component}'`);
+  if (spec.authMode !== 'token' || !spec.varName) {
+    return null;
+  }
   try {
     const val = envSvc.resolveVarValue(spec.varName);
     if (typeof val === 'string' && val.trim()) {
@@ -65,6 +80,9 @@ function getComponentToken(component) {
 function ensureComponentToken(component, { quiet } = {}) {
   const spec = COMPONENTS[component];
   if (!spec) throw new Error(`Unknown component '${component}'`);
+  if (spec.authMode !== 'token') {
+    return printLoginSurface(spec, { quiet });
+  }
   const existing = getComponentToken(component);
   if (existing) {
     if (!quiet) {

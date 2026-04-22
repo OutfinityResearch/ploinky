@@ -20,10 +20,10 @@ export function showHelp(args = []) {
   start [staticAgent] [port]     Start agents from .ploinky/agents.json and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
-  webconsole [shell] [--rotate]  Prepare WebTTY (alias). Prints URL; --rotate mints new token.
+  webconsole [shell] [--rotate]  Prepare WebTTY (alias). Prints URL; login happens in router.
   webtty [shell] [--rotate]      Prepare WebTTY and print access URL. Optional shell.
-  webchat [--rotate]             Show or rotate WebChat token and print access URL
-  webmeet [moderatorAgent] [--rotate]  Show WebMeet token; --rotate mints a new one
+  webchat [--rotate]             Print the WebChat access URL
+  webmeet [moderatorAgent] [--rotate]  Print the WebMeet access URL
   dashboard [--rotate]           Show or rotate Dashboard token and print access URL
   sso enable|disable|status  Bind or inspect SSO provider agents
   vars                           List all variable names (no values)
@@ -84,10 +84,10 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Set a workspace variable (stored in .ploinky/.secrets)',
             syntax: 'var <VAR> <value>',
             examples: [
-                'var WEBTTY_TOKEN deadbeef  # Override token manually (prefer using webtty command)',
+                'var WEBDASHBOARD_TOKEN deadbeef  # Override dashboard token manually',
                 'var API_KEY sk-123456'
             ],
-            notes: "Use 'vars' to list variables. Tokens are usually managed via webtty/webchat/webmeet/dashboard commands."
+            notes: "Use 'vars' to list variables. WebTTY/WebChat/WebMeet use the router login flow; only dashboard still uses a surface token."
         },
         'vars': {
             description: 'List workspace variables (from .ploinky/.secrets)',
@@ -128,31 +128,31 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         'webconsole': {
-            description: 'Alias of webtty. Optionally configure shell for console sessions; show or rotate token.',
+            description: 'Alias of webtty. Optionally configure shell for console sessions and print the access URL.',
             syntax: 'webconsole [shell] [--rotate]',
             examples: [ 'webconsole', 'webconsole zsh', 'webconsole --rotate' ],
-            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or absolute path. If a shell is provided, the router restarts (if configured). Without --rotate, prints existing URL (creates token if missing); with --rotate, mints a new token. Token stored in .ploinky/.secrets.'
+            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or absolute path. If a shell is provided, the router restarts (if configured). WebTTY now uses the normal router login flow. `--rotate` no longer changes anything for this surface.'
         },
         'webtty': {
-            description: 'Prepare WebTTY. Optionally configure shell for console sessions; show or rotate token.',
+            description: 'Prepare WebTTY. Optionally configure shell for console sessions and print the access URL.',
             syntax: 'webtty [shell] [--rotate]',
             examples: [ 'webtty', 'webtty sh', 'webtty --rotate' ],
-            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or absolute path. If a shell is provided, the router restarts (if configured). Without --rotate, prints existing URL (creates token if missing); with --rotate, mints a new token. Token stored in .ploinky/.secrets.'
+            notes: 'Allowed shells: sh, zsh, dash, ksh, csh, tcsh, fish, or absolute path. If a shell is provided, the router restarts (if configured). WebTTY now uses the normal router login flow. `--rotate` no longer changes anything for this surface.'
         },
         'webchat': {
-            description: 'Display or rotate the WebChat token served at /webchat.',
+            description: 'Print the WebChat URL served at /webchat.',
             syntax: 'webchat [--rotate]',
             examples: [
                 'webchat',
                 'webchat --rotate'
             ],
-            notes: 'Arguments for configuring agents or scripts are no longer supported. This command only manages the access token stored in .ploinky/.secrets.'
+            notes: 'WebChat now uses the normal router login flow. `--rotate` no longer changes anything for this surface.'
         },
         'webmeet': {
-            description: 'Display or rotate the WebMeet token served at /webmeet, optionally storing a moderator agent.',
+            description: 'Print the WebMeet URL served at /webmeet, optionally storing a moderator agent.',
             syntax: 'webmeet [moderatorAgent] [--rotate]',
             examples: [ 'webmeet', 'webmeet ModeratorAgent', 'webmeet --rotate' ],
-            notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBMEET_TOKEN` to print it.'
+            notes: 'WebMeet now uses the normal router login flow. `--rotate` no longer changes anything for this surface.'
         },
         'dashboard': {
             description: 'Display or rotate the Dashboard token used by /dashboard.',
