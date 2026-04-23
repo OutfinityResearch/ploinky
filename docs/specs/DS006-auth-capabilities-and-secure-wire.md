@@ -1,7 +1,7 @@
 ---
 id: DS006
 title: Auth, Capabilities, and Secure Wire
-status: implemented
+status: implemented (wire protocol superseded by DS011)
 owner: ploinky-team
 summary: Defines local auth, SSO provider binding, capability discovery, and the signed secure-wire path for delegated agent calls.
 ---

@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Specification Matrix - Project Documentation</title>
   <link rel="stylesheet" href="styles.css">
+  <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+  </script>
   <script src="partials-loader.js" defer></script>
 </head>
 <body data-page="specs">
@@ -88,10 +92,13 @@
           const { metadata, body } = this.parseFrontmatter(markdown);
           const html = this.markdownToHtml(body);
 
-          this.content.innerHTML = html;
+          this.content.textContent = '';
+          this.content.insertAdjacentHTML('afterbegin', html);
           this.renderMetadata(metadata);
           this.currentSpecSpan.textContent = this.specPath;
           this.scrollToHash();
+          var mermaidNodes = this.content.querySelectorAll('.mermaid');
+          if (mermaidNodes.length && typeof mermaid !== 'undefined') { mermaid.run({ nodes: mermaidNodes }); }
 
           const title = metadata.title || body.match(/^#\s+(.+)$/m)?.[1] || this.specPath;
           this.specTitle.textContent = title;
@@ -241,6 +248,7 @@
         let paragraph = [];
         let listItems = [];
         let inCode = false;
+        let codeLang = '';
         let codeBuffer = [];
 
         const flushParagraph = () => {
@@ -257,8 +265,13 @@
 
         const flushCode = () => {
           if (!codeBuffer.length) return;
-          htmlParts.push(`<pre><code>${this.escapeHtml(codeBuffer.join('\n'))}</code></pre>`);
+          if (codeLang === 'mermaid') {
+            htmlParts.push(`<pre class="mermaid">${codeBuffer.join('\n')}</pre>`);
+          } else {
+            htmlParts.push(`<pre><code>${this.escapeHtml(codeBuffer.join('\n'))}</code></pre>`);
+          }
           codeBuffer = [];
+          codeLang = '';
         };
 
         for (let index = 0; index < lines.length; index += 1) {
@@ -273,6 +286,7 @@
             } else {
               flushParagraph();
               flushList();
+              codeLang = trimmed.slice(3).trim();
               inCode = true;
             }
             continue;
