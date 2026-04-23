@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
     buildEnvFlags,
+    ensurePersistentSecret,
     formatEnvFlag,
     getExposedNames,
     getManifestEnvNames,
@@ -35,11 +36,7 @@ import {
     applyRuntimeResourceEnv,
     ensurePersistentStorageHostDir
 } from '../runtimeResourcePlanner.js';
-import {
-    getRouterPublicKey as getRouterPublicKeyMaterial,
-    ensureAgentKeypair
-} from '../agentKeystore.js';
-import { listRegisteredAgentPublicKeys } from '../capabilityRegistry.js';
+import { resolveAgentDescriptor } from '../capabilityRegistry.js';
 import { deriveAgentPrincipalId } from '../agentIdentity.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
@@ -377,25 +374,13 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         envStrings.push(formatEnvFlag(envKey, envValue));
     }
 
-    // Secure-wire plumbing: expose the router public key and this agent's
-    // principal id so the AgentServer can verify invocation tokens.
     try {
         const repoName = path.basename(path.dirname(agentPath));
         const principalId = deriveAgentPrincipalId(repoName, agentName);
-        const keypair = ensureAgentKeypair(principalId);
-        args.push('-v', `${keypair.privatePath}:${AGENT_PRIVATE_KEY_CONTAINER_PATH}${runtime === 'podman' ? ':ro,z' : ':ro'}`);
         envStrings.push(formatEnvFlag('PLOINKY_AGENT_PRINCIPAL', principalId));
-        envStrings.push(formatEnvFlag('PLOINKY_AGENT_PRIVATE_KEY_PATH', AGENT_PRIVATE_KEY_CONTAINER_PATH));
-        const routerKey = getRouterPublicKeyMaterial();
-        if (routerKey?.publicKeyJwk) {
-            envStrings.push(formatEnvFlag('PLOINKY_ROUTER_PUBLIC_KEY_JWK', JSON.stringify(routerKey.publicKeyJwk)));
-        }
-        const agentPublicKeys = listRegisteredAgentPublicKeys();
-        if (Object.keys(agentPublicKeys).length) {
-            envStrings.push(formatEnvFlag('PLOINKY_AGENT_PUBLIC_KEYS_JSON', JSON.stringify(agentPublicKeys)));
-        }
+        envStrings.push(formatEnvFlag('PLOINKY_WIRE_SECRET', ensurePersistentSecret('PLOINKY_WIRE_SECRET')));
     } catch (err) {
-        debugLog(`[secureWire] could not propagate router key to ${agentName}: ${err?.message || err}`);
+        debugLog(`[invocationAuth] could not set agent identity for ${agentName}: ${err?.message || err}`);
     }
 
     const profileEnv = normalizeProfileEnv(profileConfig?.env);
@@ -706,8 +691,8 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
 
     if (manifestPorts.length === 0) {
         const hostPort = preferredHostPort || (10000 + Math.floor(Math.random() * 50000));
-        additionalPorts = [`${hostPort}:7000`];
-        allPortMappings = [{ containerPort: 7000, hostPort }];
+        additionalPorts = [`127.0.0.1:${hostPort}:7000`];
+        allPortMappings = [{ containerPort: 7000, hostPort, hostIp: '127.0.0.1' }];
     }
 
     startAgentContainer(agentName, manifest, agentPath, { publish: additionalPorts, containerName, alias: aliasOverride });

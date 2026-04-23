@@ -4,15 +4,14 @@ import { createAgentClient } from '../AgentClient.js';
 import { waitForAgentReady } from '../utils/agentReadiness.js';
 import {
     buildFirstPartyInvocation,
+    buildDelegatedInvocation,
     verifyDelegatedToolCall
-} from './secureWire.js';
+} from './invocationMinter.js';
 import { getAgentDescriptorByPrincipal } from '../../services/capabilityRegistry.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
 const AGENT_PROXY_SERVER_INFO = { name: 'ploinky-router-proxy', version: '1.0.0' };
-const INVOCATION_TOKEN_HEADER = 'x-ploinky-invocation';
-const CALLER_ASSERTION_HEADER = 'x-ploinky-caller-assertion';
-const USER_CONTEXT_HEADER = 'x-ploinky-user-context';
+const CALLER_JWT_HEADER = 'x-ploinky-caller-jwt';
 
 // Session store for agent MCP connections
 const agentSessionStore = new Map();
@@ -52,54 +51,48 @@ function resolveProviderAgentRef(agentName) {
     return agentName;
 }
 
-function buildCallerAssertionInputs(req) {
-    const rawAssertion = req.headers?.[CALLER_ASSERTION_HEADER] || req.headers?.[CALLER_ASSERTION_HEADER.toLowerCase()];
-    if (typeof rawAssertion === 'string' && rawAssertion) {
-        return { callerAssertionToken: rawAssertion.trim() };
-    }
-    return null;
-}
-
-function readForwardedUserContextToken(req) {
-    const raw = req.headers?.[USER_CONTEXT_HEADER] || req.headers?.[USER_CONTEXT_HEADER.toLowerCase()];
+function readCallerJwt(req) {
+    const raw = req.headers?.[CALLER_JWT_HEADER] || req.headers?.[CALLER_JWT_HEADER.toLowerCase()];
     return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
 }
 
-function buildInvocationContextForProviderCall({ req, agentName, toolName, toolArgs }) {
+function extractDelegatedUser(req) {
+    if (!req.user || typeof req.user !== 'object') return null;
+    return {
+        id: req.user.id || '',
+        username: req.user.username || req.user.name || req.user.email || '',
+        email: req.user.email || '',
+        roles: Array.isArray(req.user.roles) ? [...req.user.roles] : []
+    };
+}
+
+export function buildInvocationContextForProviderCall({ req, agentName, toolName, toolArgs }) {
     if (!isSecureWireEnabled()) return null;
     const providerAgentRef = resolveProviderAgentRef(agentName);
     const bodyObject = { tool: toolName, arguments: toolArgs || {} };
-    const delegatedUser = req.user && typeof req.user === 'object'
-        ? {
-            id: req.user.id || '',
-            username: req.user.username || req.user.name || req.user.email || '',
-            email: req.user.email || '',
-            roles: Array.isArray(req.user.roles) ? [...req.user.roles] : []
-        }
-        : null;
 
-    const assertionInput = buildCallerAssertionInputs(req);
-    const forwardedUserContextToken = readForwardedUserContextToken(req);
-    if (assertionInput?.callerAssertionToken) {
-        if (!forwardedUserContextToken) {
-            throw new Error('Delegated agent call is missing x-ploinky-user-context.');
-        }
-        return {
-            directHeaders: {
-                [CALLER_ASSERTION_HEADER]: assertionInput.callerAssertionToken,
-                [USER_CONTEXT_HEADER]: forwardedUserContextToken
-            }
-        };
+    const callerJwt = readCallerJwt(req);
+    if (callerJwt) {
+        const verified = req.delegatedAgentVerified && typeof req.delegatedAgentVerified === 'object'
+            ? req.delegatedAgentVerified
+            : verifyDelegatedToolCall({
+                providerAgentRef,
+                callerJwt
+            });
+        return buildDelegatedInvocation({
+            providerPrincipal: verified.providerPrincipal,
+            callerPrincipal: verified.callerPrincipal,
+            tool: toolName,
+            scope: [],
+            bodyObject,
+            delegatedUser: verified.user
+        });
     }
     return buildFirstPartyInvocation({
         providerAgentRef,
         tool: toolName,
         bodyObject,
-        delegatedUser,
-        sessionId: req.sessionId,
-        // Scope/binding remain empty for direct browser/first-party calls
-        // (provider is expected to accept them based on audience + signed
-        // first-party issuer when no binding is involved).
+        delegatedUser: extractDelegatedUser(req),
         scope: []
     });
 }
@@ -169,20 +162,16 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
     }
 
     function buildRequestHeadersForToolCall(toolName, toolArgs) {
-        const headers = {};
         const ctx = buildInvocationContextForProviderCall({
             req,
             agentName,
             toolName,
             toolArgs: toolArgs || {}
         });
-        if (ctx?.directHeaders && typeof ctx.directHeaders === 'object') {
-            Object.assign(headers, ctx.directHeaders);
-        }
         if (ctx?.token) {
-            headers[INVOCATION_TOKEN_HEADER] = ctx.token;
+            return { authorization: `Bearer ${ctx.token}` };
         }
-        return Object.keys(headers).length ? headers : null;
+        return null;
     }
 
     const agentClient = createAgentClient(baseUrl);
@@ -230,8 +219,14 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                     sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, error: { code: -32602, message: 'Missing resource uri' } }, sessionIdHeader);
                     break;
                 }
-                const result = await agentClient.readResource(uri);
-                sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
+                const resourceHeaders = buildRequestHeadersForToolCall('resources/read', { uri });
+                const resourceClient = createAgentClient(baseUrl, resourceHeaders ? { requestHeaders: resourceHeaders } : undefined);
+                try {
+                    const result = await resourceClient.readResource(uri);
+                    sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
+                } finally {
+                    await resourceClient.close().catch(() => {});
+                }
                 break;
             }
             case 'ping': {
@@ -255,11 +250,7 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
  */
 async function handleAgentMcpRequest(req, res, route, agentName) {
     const method = (req.method || 'GET').toUpperCase();
-    const hasCallerAssertion = typeof req.headers?.[CALLER_ASSERTION_HEADER] === 'string'
-        || typeof req.headers?.[CALLER_ASSERTION_HEADER.toLowerCase()] === 'string';
-    const hasUserContext = typeof req.headers?.[USER_CONTEXT_HEADER] === 'string'
-        || typeof req.headers?.[USER_CONTEXT_HEADER.toLowerCase()] === 'string';
-    const isDelegatedAgentRequest = hasCallerAssertion || hasUserContext;
+    const isDelegatedAgentRequest = Boolean(readCallerJwt(req));
 
     if (method === 'GET') {
         res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'POST, DELETE' });
@@ -298,27 +289,6 @@ async function handleAgentMcpRequest(req, res, route, agentName) {
         const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
         if (isDelegatedAgentRequest) {
-            if (!(hasCallerAssertion && hasUserContext)) {
-                if (isJsonRpc) {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({
-                        jsonrpc: '2.0',
-                        id: message?.id ?? null,
-                        error: {
-                            code: -32600,
-                            message: 'Delegated agent calls must provide both x-ploinky-caller-assertion and x-ploinky-user-context.'
-                        }
-                    }));
-                    return;
-                }
-                res.writeHead(401, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({
-                    ok: false,
-                    error: 'incomplete_agent_auth',
-                    detail: 'Delegated agent calls must provide both x-ploinky-caller-assertion and x-ploinky-user-context.'
-                }));
-                return;
-            }
             if (!isJsonRpc || message?.method !== 'tools/call') {
                 const errorMessage = 'Delegated agent calls must use a direct tools/call request.';
                 if (isJsonRpc) {
@@ -334,24 +304,11 @@ async function handleAgentMcpRequest(req, res, route, agentName) {
                 res.end(JSON.stringify({ error: 'invalid_agent_request', detail: errorMessage }));
                 return;
             }
-            const params = message?.params && typeof message.params === 'object' ? message.params : {};
-            const toolName = typeof params.name === 'string'
-                ? params.name
-                : typeof params.tool === 'string'
-                    ? params.tool
-                    : '';
-            const toolArgs = params && typeof params.arguments === 'object' && params.arguments && !Array.isArray(params.arguments)
-                ? { ...params.arguments }
-                : {};
             try {
-                verifyDelegatedToolCall({
+                req.delegatedAgentVerified = verifyDelegatedToolCall({
                     providerAgentRef: agentName,
-                    tool: toolName,
-                    args: toolArgs,
-                    callerAssertionToken: req.headers?.[CALLER_ASSERTION_HEADER] || req.headers?.[CALLER_ASSERTION_HEADER.toLowerCase()],
-                    userContextToken: req.headers?.[USER_CONTEXT_HEADER] || req.headers?.[USER_CONTEXT_HEADER.toLowerCase()]
+                    callerJwt: readCallerJwt(req)
                 });
-                req.delegatedAgentVerified = true;
             } catch (error) {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({

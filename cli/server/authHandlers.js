@@ -7,11 +7,12 @@ import { resolveVarValue } from '../services/secretVars.js';
 import { resolveEnabledAgentRecord } from '../services/agents.js';
 import { ROUTING_FILE } from '../services/config.js';
 import { createAuthService } from './auth/service.js';
-import { authenticateLocalUser, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, listLocalAuthUsers, resolveLocalAuthConfig, revokeSession as revokeLocalSession, updateLocalCredentials } from './auth/localService.js';
+import { authenticateLocalUser, GUEST_SESSION_TTL_SECONDS, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, listLocalAuthUsers, mintGuestSessionJwt, mintSessionJwt, resolveLocalAuthConfig, resolveUserRev, revokeSession as revokeLocalSession, updateLocalCredentials, verifySessionJwt } from './auth/localService.js';
 import { waitForAgentReady } from './utils/agentReadiness.js';
 
 const SSO_AUTH_COOKIE_NAME = 'ploinky_sso';
-const LOCAL_AUTH_COOKIE_NAME = 'ploinky_local';
+const LOCAL_AUTH_COOKIE_NAME = 'ploinky_jwt';
+const GUEST_AUTH_COOKIE_NAME = 'ploinky_guest';
 const authService = createAuthService();
 
 export function sendJson(res, statusCode, body) {
@@ -562,7 +563,7 @@ function getLocalAuthPolicyFromSession(session = null, fallbackPolicy = null) {
 async function resolveSessionForAuthContext(authContext, sessionId) {
     if (!sessionId) return null;
     let session = authContext.mode === 'local'
-        ? getLocalSession(sessionId)
+        ? getLocalSession(sessionId, { policy: authContext.policy })
         : authService.getSession(sessionId);
     if (authContext.mode === 'sso' && (!session || (session.expiresAt && Date.now() > session.expiresAt))) {
         try {
@@ -620,7 +621,9 @@ async function readLoginBody(req) {
 }
 
 function getCookieNameForMode(mode) {
-    return mode === 'local' ? LOCAL_AUTH_COOKIE_NAME : SSO_AUTH_COOKIE_NAME;
+    if (mode === 'local') return LOCAL_AUTH_COOKIE_NAME;
+    if (mode === 'guest') return GUEST_AUTH_COOKIE_NAME;
+    return SSO_AUTH_COOKIE_NAME;
 }
 
 function respondUnauthenticated(req, res, parsedUrl, authContext = resolveAuthContext(parsedUrl)) {
@@ -671,7 +674,7 @@ export async function ensureAgentAuthenticated(req, res, parsedUrl) {
     return {
         ok: false,
         error: 'legacy_agent_bearer_auth_removed',
-        detail: 'Use x-ploinky-caller-assertion signed requests via the router secure wire.'
+        detail: 'Use X-Ploinky-Caller-JWT delegated requests via the router secure wire.'
     };
 }
 
@@ -685,6 +688,45 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
         return { ok: false, error: 'sso_not_configured' };
     }
     const cookies = parseCookies(req);
+
+    if (authContext.mode === 'guest') {
+            const existingAuth = cookies.get(LOCAL_AUTH_COOKIE_NAME);
+            if (existingAuth) {
+                const authSession = getLocalSession(existingAuth, { policy: authContext.policy });
+            if (authSession) {
+                req.user = authSession.user;
+                req.session = authSession;
+                req.sessionId = existingAuth;
+                req.authMode = 'local';
+                return { ok: true, session: authSession };
+            }
+        }
+        const guestCookie = cookies.get(GUEST_AUTH_COOKIE_NAME);
+        if (guestCookie) {
+        const guestSession = getLocalSession(guestCookie, { policy: authContext.policy });
+            if (guestSession) {
+                req.user = guestSession.user;
+                req.session = guestSession;
+                req.sessionId = guestCookie;
+                req.authMode = 'guest';
+                return { ok: true, session: guestSession };
+            }
+        }
+        const guestJwt = mintGuestSessionJwt();
+        const guestSession = getLocalSession(guestJwt, { policy: authContext.policy });
+        const cookie = buildCookie(GUEST_AUTH_COOKIE_NAME, guestJwt, req, '/', {
+            maxAge: GUEST_SESSION_TTL_SECONDS,
+            sameSite: 'Lax'
+        });
+        appendSetCookie(res, cookie);
+        req.user = guestSession?.user || { id: 'guest', username: 'visitor', roles: ['guest'] };
+        req.session = guestSession;
+        req.sessionId = guestJwt;
+        req.authMode = 'guest';
+        appendLog('auth_guest_session_created', { path: parsedUrl.pathname });
+        return { ok: true, session: guestSession };
+    }
+
     const cookieName = getCookieNameForMode(authContext.mode);
     const sessionId = cookies.get(cookieName);
     if (!sessionId) {
@@ -692,7 +734,7 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
         return respondUnauthenticated(req, res, parsedUrl, authContext);
     }
     let session = authContext.mode === 'local'
-        ? getLocalSession(sessionId)
+        ? getLocalSession(sessionId, { policy: authContext.policy })
         : authService.getSession(sessionId);
     if (authContext.mode === 'sso' && (!session || (session.expiresAt && Date.now() > session.expiresAt))) {
         try {
@@ -706,18 +748,36 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
         appendLog('auth_session_invalid', { sessionId: '[redacted]', mode: authContext.mode });
         return respondUnauthenticated(req, res, parsedUrl, authContext);
     }
+    if (authContext.mode === 'local' && session._jwtPayload) {
+        const jwtPayload = session._jwtPayload;
+        const usersVar = authContext.policy?.usersVar || '';
+        const currentRev = resolveUserRev(usersVar, jwtPayload.usr?.username || '');
+        if (currentRev !== (jwtPayload.rev || 1)) {
+            appendLog('auth_rev_mismatch', { username: jwtPayload.usr?.username });
+            return respondUnauthenticated(req, res, parsedUrl, authContext);
+        }
+    }
     req.user = session.user;
     req.session = session;
     req.sessionId = sessionId;
     req.authMode = authContext.mode;
     try {
-        const cookie = buildCookie(cookieName, sessionId, req, '/', {
-            maxAge: authContext.mode === 'local'
-                ? getLocalSessionCookieMaxAge()
-                : authService.getSessionCookieMaxAge(),
-            sameSite: 'Lax'
-        });
-        appendSetCookie(res, cookie);
+        if (authContext.mode === 'local' && session.user) {
+            const refreshedJwt = mintSessionJwt(session.user, session._jwtPayload?.rev || 1, {
+                usersVar: session.localAuth?.usersVar || authContext.policy?.usersVar || ''
+            });
+            const cookie = buildCookie(cookieName, refreshedJwt, req, '/', {
+                maxAge: getLocalSessionCookieMaxAge(),
+                sameSite: 'Lax'
+            });
+            appendSetCookie(res, cookie);
+        } else {
+            const cookie = buildCookie(cookieName, sessionId, req, '/', {
+                maxAge: authService.getSessionCookieMaxAge(),
+                sameSite: 'Lax'
+            });
+            appendSetCookie(res, cookie);
+        }
     } catch (_) { }
     return { ok: true, session };
 }
@@ -827,7 +887,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             }
             const cookies = parseCookies(req);
             const sessionId = cookies.get(LOCAL_AUTH_COOKIE_NAME) || '';
-            const session = getLocalSession(sessionId);
+            const session = getLocalSession(sessionId, { policy: authContext.policy });
             const routeKey = getLocalRouteKey(parsedUrl, session, authContext.routeKey);
             const returnToFromQuery = normalizeRelativePath(parsedUrl.searchParams.get('returnTo') || '/', '/');
 
@@ -974,7 +1034,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
             }
             const cookies = parseCookies(req);
             const sessionId = cookies.get(LOCAL_AUTH_COOKIE_NAME) || '';
-            const session = getLocalSession(sessionId);
+            const session = getLocalSession(sessionId, { policy: authContext.policy });
             if (!session) {
                 sendJson(res, 401, { ok: false, error: 'authentication_required' });
                 return true;
@@ -1084,7 +1144,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 return true;
             }
             const session = authContext.mode === 'local'
-                ? getLocalSession(sessionId)
+                ? getLocalSession(sessionId, { policy: authContext.policy })
                 : authService.getSession(sessionId);
             if (!session) {
                 const clearCookie = buildCookie(cookieName, '', req, '/', { maxAge: 0, sameSite: 'Lax' });

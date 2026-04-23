@@ -26,7 +26,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const RESERVED_AGENT_KEYS = new Set(['_config']);
 const ALIAS_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
-const AUTH_MODES = new Set(['none', 'local', 'pwd', 'sso']);
+const AUTH_MODES = new Set(['none', 'local', 'pwd', 'sso', 'guest']);
 
 function isPathUnderRoot(candidate) {
     if (!candidate) return false;
@@ -121,6 +121,9 @@ function normalizeManifestPwdUsers(manifest) {
 }
 
 function resolveManifestAuthMode(manifest) {
+    if (manifest?.guest === true) {
+        return 'guest';
+    }
     const ploinkyDirectives = parsePloinkyDirectives(manifest?.ploinky);
     if (ploinkyDirectives.includes('pwd enable')) {
         return 'local';

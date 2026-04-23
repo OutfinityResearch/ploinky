@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
     buildEnvMap,
+    ensurePersistentSecret,
     formatEnvFlag,
     getExposedNames,
     getManifestEnvNames,
@@ -31,11 +32,7 @@ import {
     applyRuntimeResourceEnv,
     ensurePersistentStorageHostDir
 } from '../runtimeResourcePlanner.js';
-import {
-    getRouterPublicKey as getRouterPublicKeyMaterial,
-    ensureAgentKeypair
-} from '../agentKeystore.js';
-import { listRegisteredAgentPublicKeys } from '../capabilityRegistry.js';
+import { resolveAgentDescriptor } from '../capabilityRegistry.js';
 import { deriveAgentPrincipalId } from '../agentIdentity.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {
@@ -325,23 +322,12 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
         }
     }
 
-    // Secure-wire plumbing: expose router public key + agent principal id.
     try {
         const principalId = deriveAgentPrincipalId(repoName, agentName);
-        const keypair = ensureAgentKeypair(principalId);
         env.PLOINKY_AGENT_PRINCIPAL = principalId;
-        env.PLOINKY_AGENT_PRIVATE_KEY_PATH = AGENT_PRIVATE_KEY_CONTAINER_PATH;
-        const routerKey = getRouterPublicKeyMaterial();
-        if (routerKey?.publicKeyJwk) {
-            env.PLOINKY_ROUTER_PUBLIC_KEY_JWK = JSON.stringify(routerKey.publicKeyJwk);
-        }
-        const agentPublicKeys = listRegisteredAgentPublicKeys();
-        if (Object.keys(agentPublicKeys).length) {
-            env.PLOINKY_AGENT_PUBLIC_KEYS_JSON = JSON.stringify(agentPublicKeys);
-        }
-        env.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH = keypair.privatePath;
+        env.PLOINKY_WIRE_SECRET = ensurePersistentSecret('PLOINKY_WIRE_SECRET');
     } catch (err) {
-        debugLog(`[secureWire/bwrap] could not propagate router key: ${err?.message || err}`);
+        debugLog(`[invocationAuth/bwrap] could not set agent identity: ${err?.message || err}`);
     }
 
     // Profile env vars

@@ -25,7 +25,6 @@ import { deriveAgentPrincipalId } from './agentIdentity.js';
  */
 
 const CAPABILITY_BINDINGS_KEY = 'capabilityBindings';
-const CAPABILITY_AGENT_KEYS_KEY = 'capabilityAgentKeys';
 
 function toNonEmptyString(value) {
     return typeof value === 'string' && value.trim() ? value.trim() : '';
@@ -481,75 +480,6 @@ export function resolveBindingsForProvider(providerAgentRef) {
         };
     }
     return resolved;
-}
-
-// ---------- Agent public-key registry (populated by agentKeystore.js) ----------
-
-function loadAgentKeyEntry(principalId) {
-    const cfg = workspaceSvc.getConfig() || {};
-    const map = cfg[CAPABILITY_AGENT_KEYS_KEY];
-    if (!map || typeof map !== 'object') return null;
-    const record = map[principalId];
-    return record && typeof record === 'object' ? record : null;
-}
-
-function saveAgentKeyEntry(principalId, record) {
-    const cfg = workspaceSvc.getConfig() || {};
-    const map = cfg[CAPABILITY_AGENT_KEYS_KEY] && typeof cfg[CAPABILITY_AGENT_KEYS_KEY] === 'object'
-        ? cfg[CAPABILITY_AGENT_KEYS_KEY]
-        : {};
-    if (record == null) {
-        delete map[principalId];
-    } else {
-        map[principalId] = { ...record };
-    }
-    cfg[CAPABILITY_AGENT_KEYS_KEY] = map;
-    workspaceSvc.setConfig(cfg);
-}
-
-export function listRegisteredAgentPublicKeys() {
-    const cfg = workspaceSvc.getConfig() || {};
-    const map = cfg[CAPABILITY_AGENT_KEYS_KEY];
-    if (!map || typeof map !== 'object') {
-        return {};
-    }
-    const out = {};
-    for (const [principalId, record] of Object.entries(map)) {
-        if (!principalId || !record || typeof record !== 'object') continue;
-        out[principalId] = { ...record };
-    }
-    return out;
-}
-
-export function getRegisteredAgentPublicKey(principalId) {
-    const clean = toNonEmptyString(principalId);
-    if (!clean) return null;
-    return loadAgentKeyEntry(clean);
-}
-
-export function registerAgentPublicKey(principalId, { publicKeyJwk, fingerprint }) {
-    const clean = toNonEmptyString(principalId);
-    if (!clean) throw new Error('registerAgentPublicKey: principalId required');
-    if (!publicKeyJwk || typeof publicKeyJwk !== 'object') {
-        throw new Error('registerAgentPublicKey: publicKeyJwk required');
-    }
-    const entry = {
-        principalId: clean,
-        publicKeyJwk,
-        fingerprint: toNonEmptyString(fingerprint),
-        updatedAt: new Date().toISOString()
-    };
-    saveAgentKeyEntry(clean, entry);
-    return entry;
-}
-
-export function unregisterAgentPublicKey(principalId) {
-    const clean = toNonEmptyString(principalId);
-    if (!clean) return false;
-    const existing = loadAgentKeyEntry(clean);
-    if (!existing) return false;
-    saveAgentKeyEntry(clean, null);
-    return true;
 }
 
 // ---------- Utility: deterministic body hash for wire signing ----------

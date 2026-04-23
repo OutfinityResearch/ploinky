@@ -7,25 +7,23 @@ import { zod } from 'mcp-sdk';
 import { TaskQueue } from './TaskQueue.mjs';
 import {
     createMemoryReplayCache
-} from '../lib/wireVerify.mjs';
+} from '../lib/jwtVerify.mjs';
 import {
     hasInvocationTokenHeader,
-    hasDirectAgentHeaders,
-    verifyInvocationFromHeaders,
-    verifyDirectAgentRequest
-} from '../lib/runtimeWire.mjs';
+    verifyInvocationFromHeaders
+} from '../lib/invocationAuth.mjs';
 const { z } = zod;
 
 const DEFAULT_MAX_CONCURRENT_TASKS = 10;
 const DEFAULT_TASK_LOG_TAIL_BYTES = 128 * 1024;
 const TASK_QUEUE_FILE = path.resolve(process.cwd(), '.tasksQueue');
 const invocationReplayCache = createMemoryReplayCache({ maxSize: 4096 });
-const directCallerReplayCache = createMemoryReplayCache({ maxSize: 4096 });
 
-function verifyInvocationForRequest({ requestHeaders, bodyObject }) {
+function verifyInvocationForRequest({ requestHeaders, bodyObject, expectedTool }) {
     return verifyInvocationFromHeaders(requestHeaders, bodyObject, {
         env: process.env,
-        replayCache: invocationReplayCache
+        replayCache: invocationReplayCache,
+        expectedTool
     });
 }
 
@@ -347,12 +345,55 @@ function sanitizeInvocationForLog(invocation = null) {
     };
 }
 
+function shouldRedactLogField(key) {
+    return /authorization|cookie|jwt|token|secret|password|credential|access[_-]?key|api[_-]?key|^value$/i.test(String(key || ''));
+}
+
+function sanitizeValueForLog(value, key = '') {
+    if (value == null) return value;
+    if (shouldRedactLogField(key)) return '[redacted]';
+    if (Array.isArray(value)) {
+        return value.map((entry) => sanitizeValueForLog(entry));
+    }
+    if (typeof value === 'object') {
+        const out = {};
+        for (const [entryKey, entryValue] of Object.entries(value)) {
+            out[entryKey] = sanitizeValueForLog(entryValue, entryKey);
+        }
+        return out;
+    }
+    return value;
+}
+
 function sanitizeContextForLog(context = {}) {
     if (!context || typeof context !== 'object') return context;
+    const sanitized = sanitizeValueForLog(context);
     return {
-        ...context,
+        ...sanitized,
+        requestInfo: sanitizeValueForLog(context.requestInfo || null),
+        invocationToken: context.invocationToken ? '[redacted]' : context.invocationToken,
         authInfo: sanitizeAuthInfoForLog(context.authInfo || null),
         invocation: sanitizeInvocationForLog(context.invocation || null)
+    };
+}
+
+function rejectInvocation(helpers, reason) {
+    const ErrorCtor = helpers?.McpError || Error;
+    const code = helpers?.ErrorCode?.InvalidRequest ?? -32600;
+    throw new ErrorCtor(code, `Invocation rejected: ${reason}`);
+}
+
+function requireVerifiedInvocation({ requestHeaders, bodyObject, expectedTool, context = {}, helpers }) {
+    const invocationResult = hasInvocationTokenHeader(requestHeaders)
+        ? verifyInvocationForRequest({ requestHeaders, bodyObject, expectedTool })
+        : { ok: false, reason: 'missing secure wire headers' };
+    if (!invocationResult.ok) {
+        rejectInvocation(helpers, invocationResult.reason);
+    }
+    return {
+        ...context,
+        invocation: invocationResult.payload,
+        invocationToken: invocationResult.rawToken
     };
 }
 
@@ -360,6 +401,7 @@ function sanitizePayloadForLog(payload = {}) {
     if (!payload || typeof payload !== 'object') return payload;
     return {
         ...payload,
+        input: sanitizeValueForLog(payload.input || {}),
         metadata: sanitizeContextForLog(payload.metadata || {})
     };
 }
@@ -418,27 +460,14 @@ async function registerFromConfig(server, config, helpers) {
                 // exposing any caller context. On success, attach the verified
                 // grant to the metadata so tools can rely on it.
                 const bodyObject = { tool: name, arguments: args || {} };
-                const hasInvocationHeader = hasInvocationTokenHeader(requestHeaders);
-                const hasDirectHeaders = hasDirectAgentHeaders(requestHeaders);
-                const invocationResult = hasInvocationHeader
-                    ? verifyInvocationForRequest({
-                        requestHeaders,
-                        bodyObject
-                    })
-                    : hasDirectHeaders
-                        ? verifyDirectAgentRequest(requestHeaders, bodyObject, {
-                            env: process.env,
-                            callerReplayCache: directCallerReplayCache
-                        })
-                        : { ok: false, reason: 'missing secure wire headers' };
-                if (invocationResult.ok) {
-                    context = { ...context, invocation: invocationResult.payload };
-                } else {
-                    const ErrorCtor = helpers?.McpError || Error;
-                    const code = helpers?.ErrorCode?.InvalidRequest ?? -32600;
-                    throw new ErrorCtor(code, `Invocation rejected: ${invocationResult.reason}`);
-                }
-                console.log(`[AgentServer/MCP] Tool '${name}' args:`, args);
+                context = requireVerifiedInvocation({
+                    requestHeaders,
+                    bodyObject,
+                    expectedTool: name,
+                    context,
+                    helpers
+                });
+                console.log(`[AgentServer/MCP] Tool '${name}' args:`, sanitizeValueForLog(args));
                 console.log(`[AgentServer/MCP] Tool '${name}' context:`, sanitizeContextForLog(context));
                 const payload = { tool: name, input: args, metadata: context };
                 console.log(`[AgentServer/MCP] Tool '${name}' payload:`, JSON.stringify(sanitizePayloadForLog(payload)));
@@ -516,7 +545,15 @@ async function registerFromConfig(server, config, helpers) {
             };
             if (resource.template && typeof resource.template === 'string') {
                 const template = new ResourceTemplate(resource.template, extractTemplateParams(resource.template));
-                server.registerResource(name, template, metadata, async (uri, params = {}) => {
+                server.registerResource(name, template, metadata, async (uri, params = {}, extra = {}) => {
+                    const bodyObject = { tool: 'resources/read', arguments: { uri: uri.href } };
+                    requireVerifiedInvocation({
+                        requestHeaders: extra?.requestInfo?.headers || null,
+                        bodyObject,
+                        expectedTool: 'resources/read',
+                        context: extra,
+                        helpers
+                    });
                     const payload = { resource: name, uri: uri.href, params };
                     const result = await executeShell(commandSpec, payload);
                     if (result.code !== 0) {
@@ -528,7 +565,15 @@ async function registerFromConfig(server, config, helpers) {
                     };
                 });
             } else if (resource.uri && typeof resource.uri === 'string') {
-                server.registerResource(name, resource.uri, metadata, async (uri) => {
+                server.registerResource(name, resource.uri, metadata, async (uri, extra = {}) => {
+                    const bodyObject = { tool: 'resources/read', arguments: { uri: uri.href } };
+                    requireVerifiedInvocation({
+                        requestHeaders: extra?.requestInfo?.headers || null,
+                        bodyObject,
+                        expectedTool: 'resources/read',
+                        context: extra,
+                        helpers
+                    });
                     const payload = { resource: name, uri: uri.href };
                     const result = await executeShell(commandSpec, payload);
                     if (result.code !== 0) {
@@ -614,6 +659,17 @@ async function main() {
                 if (!taskId) {
                     return sendJson(400, { error: 'missing taskId' });
                 }
+                const bodyObject = { tool: '__task_status__', arguments: { taskId } };
+                const invocationResult = hasInvocationTokenHeader(req.headers)
+                    ? verifyInvocationForRequest({
+                        requestHeaders: req.headers,
+                        bodyObject,
+                        expectedTool: '__task_status__'
+                    })
+                    : { ok: false, reason: 'missing secure wire headers' };
+                if (!invocationResult.ok) {
+                    return sendJson(401, { error: 'invocation_rejected', reason: invocationResult.reason });
+                }
                 const task = taskQueue.getTask(taskId);
                 if (!task) {
                     return sendJson(404, { error: 'task not found' });
@@ -664,8 +720,10 @@ async function main() {
         }
     });
 
-    serverHttp.listen(PORT, () => {
-        console.log(`[AgentServer/MCP] Streamable HTTP listening on ${PORT} (/mcp)`);
+    const isContainerRuntime = Boolean(process.env.PLOINKY_CONTAINER_ID || process.env.PLOINKY_CONTAINER_NAME);
+    const HOST = process.env.PLOINKY_AGENT_BIND_HOST || (isContainerRuntime ? '0.0.0.0' : '127.0.0.1');
+    serverHttp.listen(PORT, HOST, () => {
+        console.log(`[AgentServer/MCP] Streamable HTTP listening on ${HOST}:${PORT} (/mcp)`);
     });
 }
 

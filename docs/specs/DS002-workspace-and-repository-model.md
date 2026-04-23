@@ -27,6 +27,8 @@ The repository must store workspace runtime state under `.ploinky/`, including a
 
 Repository installation must clone into `.ploinky/repos/<name>/`. Predefined repositories are resolved through the built-in catalog in `cli/services/repos.js`, while custom repositories may provide their own URL. Skills-only repositories are not valid targets for `enable repo`; they must instead be consumed through `default-skills`.
 
+The all-repository `update` flow must update repositories under `.ploinky/repos/` and then update project repositories discovered from a project search root. When the operator provides a folder path, discovery starts from that path. When no folder path is provided, discovery starts from the current working directory. Discovery must include the search root itself when it is a git repository, recurse through ordinary child directories, and skip runtime or generated directories such as `.ploinky/`, `.git/`, `node_modules/`, and `globalDeps/`.
+
 Enabled repositories constrain discovery when `enabled_repos.json` is populated. If no repositories are explicitly enabled, installed repositories remain discoverable by default. This fallback is part of the user-facing repository model and must remain documented as such.
 
 Agent source and skill trees must be projected into `.ploinky/code/<agent>/` and `.ploinky/skills/<agent>/` through symlinks when an agent is enabled. If a real directory blocks a symlink target, the runtime may warn and skip that symlink rather than destroying the existing path.
@@ -42,6 +44,11 @@ The CLI is intended to run from arbitrary directories inside a workspace. Anchor
 
 Response:
 This preserves a workable default for freshly initialized workspaces and matches the current implementation in `getActiveRepos()`. The explicit enabled list narrows discovery only when the operator has chosen to manage that list, which keeps first-run behavior simpler without removing the ability to curate visible repositories later.
+
+### Question #3: Why does `update` default project discovery to the current working directory?
+
+Response:
+The command is intended to act on the directory where the operator runs it, matching the normal shell expectation for commands that accept an optional root path. Operators can still provide a folder path to broaden, narrow, or redirect discovery, including pointing directly at a single repository root.
 
 ## Conclusion
 

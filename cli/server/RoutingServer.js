@@ -20,7 +20,7 @@ import { loadApiRoutes, handleRouterMcp, handleHttpServiceRoute, isPublicHttpSer
 import { appendLog, logBootEvent, logMemoryUsage } from './utils/logger.js';
 
 // New modular components
-import { agentSessionStore, handleAgentMcpRequest } from './mcp-proxy/index.js';
+import { agentSessionStore, buildInvocationContextForProviderCall, handleAgentMcpRequest } from './mcp-proxy/index.js';
 import { initializeTTYFactories, createServiceConfig } from './utils/ttyFactories.js';
 import { setupProcessLifecycle } from './utils/processLifecycle.js';
 
@@ -107,7 +107,7 @@ function serveMcpBrowserClient(req, res) {
     stream.pipe(res);
 }
 
-function proxyAgentTaskStatus(req, res, route, parsedUrl, agentName) {
+async function proxyAgentTaskStatus(req, res, route, parsedUrl, agentName) {
     const method = (req.method || 'GET').toUpperCase();
     if (method !== 'GET') {
         res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'GET' });
@@ -115,12 +115,27 @@ function proxyAgentTaskStatus(req, res, route, parsedUrl, agentName) {
         return;
     }
     const pathWithQuery = `/getTaskStatus${parsedUrl.search || ''}`;
+    const taskId = parsedUrl.searchParams.get('taskId') || '';
+    const invocation = buildInvocationContextForProviderCall({
+        req,
+        agentName,
+        toolName: '__task_status__',
+        toolArgs: { taskId }
+    });
+    if (!invocation?.token) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'invocation_required' }));
+        return;
+    }
     const upstream = http.request({
         hostname: '127.0.0.1',
         port: route.hostPort,
         path: pathWithQuery,
         method: 'GET',
-        headers: { accept: 'application/json' }
+        headers: {
+            accept: 'application/json',
+            authorization: `Bearer ${invocation.token}`
+        }
     }, upstreamRes => {
         res.writeHead(upstreamRes.statusCode || 200, upstreamRes.headers);
         upstreamRes.pipe(res, { end: true });
@@ -249,7 +264,7 @@ async function processRequest(req, res) {
 
         const subPath = parts.slice(3).join('/');
         if (subPath === 'task') {
-            proxyAgentTaskStatus(req, res, route, parsedUrl, agent);
+            await proxyAgentTaskStatus(req, res, route, parsedUrl, agent);
             return;
         }
         if (subPath === 'mcp' || subPath.startsWith('mcp/')) {

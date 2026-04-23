@@ -111,11 +111,17 @@ enable repo cloud</code></pre>
                         <p>List all available repositories and their status.</p>
                         <pre><code>list repos</code></pre>
 
-                        <h3>update repo</h3>
-                        <p>Pull latest changes from remote for a repository.</p>
-                        <pre><code>update repo &lt;name&gt;</code></pre>
-                        <pre><code># Example
-update repo basic</code></pre>
+                        <h3>update</h3>
+                        <p>Update Ploinky-managed repositories and project repositories. The all-repository form first pulls repositories under <code>.ploinky/repos/</code>, then recursively discovers git repositories from the provided folder path, pulls each one, refreshes Achilles default skills in each discovered project repository, and updates each project repository's managed <code>.gitignore</code> block.</p>
+                        <pre><code>update [folderPath]
+update all [folderPath]
+update repos [folderPath]
+update repo &lt;name&gt;</code></pre>
+                        <pre><code># Examples
+update                    # Search from the current working directory
+update /work/projects     # Search from an explicit folder
+update all /work/projects # Same as update with an explicit all keyword
+update repo basic         # Update one .ploinky/repos entry</code></pre>
                     </div>
 
                     <div class="doc-section" id="agent">
@@ -321,6 +327,13 @@ settings</code></pre>
 expose DATABASE_URL $DB_URL myAgent
 expose API_KEY $PROD_KEY            # Uses static agent
 expose AUTO_SECRET demo             # Uses value from $AUTO_SECRET</code></pre>
+
+                        <h3>default-skills</h3>
+                        <p>Copy every skill directory from a skills repository into <code>.claude/skills/</code> and <code>.agents/skills/</code>. Re-running the command replaces existing copied skill folders so removed upstream files do not remain, and the command keeps a managed <code>.gitignore</code> block up to date.</p>
+                        <pre><code>default-skills &lt;repoName&gt; [--only agent[,agent...]] [--skip agent[,agent...]]</code></pre>
+                        <pre><code># Examples
+default-skills AchillesCopilotBasicSkills
+default-skills AchillesCopilotBasicSkills --only claude-code</code></pre>
                     </div>
 
                     <div class="doc-section" id="web">

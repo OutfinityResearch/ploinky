@@ -1,18 +1,20 @@
-export function authInfoFromInvocation(grant) {
+export function authInfoFromInvocation(grant, { invocationToken = '' } = {}) {
   if (!grant || typeof grant !== 'object') return null;
   const out = {};
-  if (grant.sub && /^agent:/i.test(grant.sub)) {
+  const callerPrincipal = grant.caller || grant.sub || '';
+  if (callerPrincipal && /^agent:/i.test(callerPrincipal)) {
     out.agent = {
-      principalId: grant.sub,
-      name: String(grant.sub).replace(/^agent:/i, '')
+      principalId: callerPrincipal,
+      name: String(callerPrincipal).replace(/^agent:/i, '')
     };
   }
-  if (grant.user && typeof grant.user === 'object') {
+  const userClaims = grant.usr || grant.user;
+  if (userClaims && typeof userClaims === 'object') {
     out.user = {
-      id: String(grant.user.id || grant.user.sub || ''),
-      username: String(grant.user.username || grant.user.preferred_username || ''),
-      email: String(grant.user.email || ''),
-      roles: Array.isArray(grant.user.roles) ? [...grant.user.roles] : []
+      id: String(userClaims.id || userClaims.sub || ''),
+      username: String(userClaims.username || userClaims.preferred_username || ''),
+      email: String(userClaims.email || ''),
+      roles: Array.isArray(userClaims.roles) ? [...userClaims.roles] : []
     };
   }
   out.invocation = {
@@ -20,9 +22,9 @@ export function authInfoFromInvocation(grant) {
     tool: String(grant.tool || ''),
     contract: String(grant.contract || ''),
     bindingId: String(grant.binding_id || ''),
-    workspaceId: String(grant.workspace_id || ''),
-    userContextToken: String(grant.user_context_token || '')
+    workspaceId: String(grant.workspace_id || '')
   };
+  out.invocationToken = String(invocationToken || '');
   return out;
 }
 

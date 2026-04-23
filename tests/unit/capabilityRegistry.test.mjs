@@ -32,8 +32,6 @@ const {
     resolveAliasForConsumer,
     resolveBindingsForConsumer,
     resolveBindingsForProvider,
-    registerAgentPublicKey,
-    getRegisteredAgentPublicKey,
     canonicalJsonHash
 } = registryModule;
 
@@ -155,14 +153,9 @@ test('resolveBindingsForProvider returns provider-facing binding metadata', () =
     });
 });
 
-test('registerAgentPublicKey persists in workspace config', () => {
-    registerAgentPublicKey('agent:git/gitAgent', {
-        publicKeyJwk: { kty: 'OKP', crv: 'Ed25519', x: 'abc' },
-        fingerprint: 'fp-123'
-    });
-    const entry = getRegisteredAgentPublicKey('agent:git/gitAgent');
-    assert.equal(entry.fingerprint, 'fp-123');
-    assert.equal(entry.publicKeyJwk.x, 'abc');
+test('capability registry does not expose DS006 agent public-key storage', () => {
+    assert.equal(Object.hasOwn(registryModule, 'registerAgentPublicKey'), false);
+    assert.equal(Object.hasOwn(registryModule, 'getRegisteredAgentPublicKey'), false);
 });
 
 test('canonicalJsonHash is stable across key order', () => {

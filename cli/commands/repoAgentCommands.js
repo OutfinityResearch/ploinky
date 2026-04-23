@@ -4,10 +4,12 @@ import { PLOINKY_DIR } from '../services/config.js';
 import { showHelp } from '../services/help.js';
 import * as reposSvc from '../services/repos.js';
 import * as agentsSvc from '../services/agents.js';
+import * as skillsSvc from '../services/skills.js';
 import { collectAgentsSummary } from '../services/status.js';
 import { findAgent } from '../services/utils.js';
 
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
+const SKILLS_REPO_NAME = 'AchillesCopilotBasicSkills';
 
 function getRepoNames() {
     if (!fs.existsSync(REPOS_DIR)) return [];
@@ -70,36 +72,78 @@ async function updateRepo(repoName) {
     }
 }
 
-async function updateAllRepos() {
-    const repos = getRepoNames();
-    if (!repos.length) {
-        console.log('No installed repositories to update.');
-        return { total: 0, updated: 0, failed: [] };
-    }
-
+async function updateAllRepos(folderPath) {
+    const projectsRoot = resolveUpdateProjectsRoot(folderPath);
+    const workspaceRepos = reposSvc.findWorkspaceGitRepos(projectsRoot);
+    const ploinkyRepos = getRepoNames();
     const failed = [];
     let updated = 0;
 
-    for (const repoName of repos) {
-        try {
-            reposSvc.updateRepo(repoName);
-            console.log(`✓ Repo '${repoName}' updated.`);
-            updated += 1;
-        } catch (err) {
-            const message = err?.message || String(err);
-            failed.push({ repoName, message });
-            console.error(`✗ Repo '${repoName}' update failed: ${message}`);
+    if (ploinkyRepos.length) {
+        console.log('Updating ploinky repositories...');
+        for (const repoName of ploinkyRepos) {
+            try {
+                reposSvc.updateRepo(repoName);
+                console.log(`  ✓ ${repoName}`);
+                updated += 1;
+            } catch (err) {
+                const message = err?.message || String(err);
+                failed.push({ repoName, message });
+                console.error(`  ✗ ${repoName}: ${message}`);
+            }
         }
     }
 
-    console.log(`Update summary: ${updated}/${repos.length} repositories updated.`);
+    if (workspaceRepos.length) {
+        console.log(`Updating workspace repositories in ${projectsRoot}...`);
+        for (const repo of workspaceRepos) {
+            try {
+                reposSvc.pullGitRepo(repo.path);
+                console.log(`  ✓ ${repo.name}`);
+                updated += 1;
+            } catch (err) {
+                const message = err?.message || String(err);
+                failed.push({ repoName: repo.name, message });
+                console.error(`  ✗ ${repo.name}: ${message}`);
+            }
+        }
+    }
+
+    if (workspaceRepos.length) {
+        console.log('Installing default skills into workspace repositories...');
+        for (const repo of workspaceRepos) {
+            try {
+                const result = skillsSvc.installDefaultSkills(SKILLS_REPO_NAME, {
+                    targetRoot: repo.path,
+                });
+                const skillNames = result.skills.join(', ');
+                console.log(`  ✓ ${repo.name}: ${result.skills.length} skill(s) (${skillNames})`);
+                if (result.gitignoreUpdated) {
+                    console.log(`    .gitignore updated`);
+                }
+            } catch (err) {
+                const message = err?.message || String(err);
+                failed.push({ repoName: `${repo.name} skills`, message });
+                console.error(`  ✗ ${repo.name} skills: ${message}`);
+            }
+        }
+    }
+
+    const totalRepos = ploinkyRepos.length + workspaceRepos.length;
+    console.log(`Update summary: ${updated}/${totalRepos} repositories updated.`);
 
     if (failed.length) {
         const failedNames = failed.map(entry => entry.repoName).join(', ');
         throw new Error(`Failed to update ${failed.length} repository(s): ${failedNames}`);
     }
 
-    return { total: repos.length, updated, failed };
+    return { total: totalRepos, updated, failed };
+}
+
+function resolveUpdateProjectsRoot(folderPath) {
+    const explicitRoot = typeof folderPath === 'string' ? folderPath.trim() : '';
+    if (explicitRoot) return path.resolve(explicitRoot);
+    return process.cwd();
 }
 
 function enableRepo(repoName, branch = null) {
@@ -140,6 +184,7 @@ export {
     addRepo,
     updateRepo,
     updateAllRepos,
+    resolveUpdateProjectsRoot,
     enableRepo,
     disableRepo,
     enableAgent,

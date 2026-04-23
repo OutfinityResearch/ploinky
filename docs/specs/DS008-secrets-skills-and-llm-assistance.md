@@ -18,7 +18,9 @@ Secret resolution must prefer process environment variables, then `.ploinky/.sec
 
 Workspace variable commands must preserve explicit operator control. `var` writes workspace-local values, `vars` lists known names, `echo` resolves aliases, and `expose` maps values into agent environments. Wildcard expansion is allowed, but the all-match `*` pattern must exclude variable names containing `API_KEY` or `APIKEY`. Sensitive values therefore require explicit manifest or operator intent rather than accidental blanket inclusion.
 
-`default-skills` must copy skill directories from a skills repository into `.claude/skills/` and `.agents/skills/` and must update `.gitignore` through the managed marker block. The copied skills are a workspace convenience and must not be documented as runtime product pages or runtime DS files for the host project.
+`default-skills` must copy skill directories from a skills repository into `.claude/skills/` and `.agents/skills/` and must update `.gitignore` through the managed marker block. Existing copied skill directories must be replaced before copying so deleted upstream files do not remain locally. The copied skills are a workspace convenience and must not be documented as runtime product pages or runtime DS files for the host project.
+
+When the all-repository `update` flow refreshes project repositories, it must install or refresh `AchillesCopilotBasicSkills` in every discovered project repository and update each repository's managed `.gitignore` block. A failure to clone the skills repository, copy the skills, or update `.gitignore` is a command failure, not just an informational warning.
 
 The repository-local skills under `.agents/skills/` must be listed consistently in `AGENTS.md` and in the HTML documentation, but they remain maintenance tooling. Host-project docs may summarize them, yet must keep the DS set focused on Ploinky itself rather than creating one DS file per copied skill.
 
@@ -35,6 +37,11 @@ The user-facing runtime is Ploinky, not the copied skill catalog. Summarizing th
 
 Response:
 The LLM helper in `cli/commands/llmSystemCommands.js` reads that file directly to shape command suggestions. Once a documentation file becomes executable context for a runtime feature, it is no longer optional prose; it is part of the operator-visible behavior and must stay synchronized with the CLI.
+
+### Question #3: Why does skill refresh replace existing copied directories instead of only overwriting files?
+
+Response:
+The skills repository is the source of truth for copied skill payloads. A copy operation that only overwrites same-named files can leave stale files behind after upstream deletes or renames them. Replacing each copied skill directory before copying keeps the local discovery roots aligned with the selected skills repository while preserving the managed `.gitignore` block around those generated local installations.
 
 ## Conclusion
 

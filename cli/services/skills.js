@@ -24,8 +24,9 @@ function listSkillDirectories(skillsRoot) {
         .map(entry => entry.name);
 }
 
-function copySkill(srcDir, destDir) {
+export function copySkill(srcDir, destDir) {
     fs.mkdirSync(path.dirname(destDir), { recursive: true });
+    fs.rmSync(destDir, { recursive: true, force: true });
     fs.cpSync(srcDir, destDir, { recursive: true, force: true });
 }
 

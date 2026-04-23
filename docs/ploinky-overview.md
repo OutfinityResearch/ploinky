@@ -12,6 +12,8 @@ Ploinky is a workspace-local runtime for repository-backed agents.
 ## Common CLI commands
 
 - `ploinky add repo <name> [url] [branch]`: clone a repository into `.ploinky/repos/`.
+- `ploinky update [folderPath]` and `ploinky update all [folderPath]`: update `.ploinky/repos/`, recursively update discovered git repositories, and refresh Achilles default skills in those project repositories. When no folder path is provided, discovery starts at the current working directory.
+- `ploinky update repo <name>`: update one repository under `.ploinky/repos/`.
 - `ploinky enable repo <name> [branch]`: enable a repository for discovery and listings.
 - `ploinky enable agent <name|repo/name> [global|devel [repo]] [--auth none|pwd|sso] [as <alias>]`: register an agent in `.ploinky/agents.json`.
 - `ploinky start [staticAgent] [port]`: resolve dependency waves, start enabled agents, write `routing.json`, and launch the router under the watchdog.
@@ -60,7 +62,7 @@ Ploinky is a workspace-local runtime for repository-backed agents.
 
 - `ploinky vars`, `ploinky var <NAME> <value>`, and `ploinky echo <NAME>` manage `.ploinky/.secrets`.
 - `ploinky expose <ENV_NAME> [<$VAR|value>] [agent]` maps values into agent environments.
-- `ploinky default-skills <repoName>` copies skills from a skills repository into `.claude/skills/` and `.agents/skills/`.
+- `ploinky default-skills <repoName>` copies skills from a skills repository into `.claude/skills/` and `.agents/skills/`, replacing existing copied skill folders and updating `.gitignore` through a managed marker block.
 
 ## LLM helper behavior
 

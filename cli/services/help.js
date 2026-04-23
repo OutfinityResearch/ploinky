@@ -16,7 +16,7 @@ export function showHelp(args = []) {
 
 ▶ LOCAL DEVELOPMENT
   add repo <name> [url] [branch] Add repository (basic/cloud/vibe/security/extra/demo)
-  update [all|repos|<name>]      Pull latest changes from remote (all repos by default)
+  update [folderPath]            Pull .ploinky/repos and discovered project repos, then refresh default skills
   start [staticAgent] [port]     Start agents from .ploinky/agents.json and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
@@ -30,7 +30,7 @@ export function showHelp(args = []) {
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
   expose <ENV_NAME> [<$VAR|value>] [agent]  Expose to agent environment
-  default-skills <repoName>      Copy skills/ from .ploinky/repos/<repoName> into coding-agent skill dirs (gitignored)
+  default-skills <repoName>      Copy or refresh skills/ from .ploinky/repos/<repoName> into gitignored skill dirs
   list agents | repos            List agents (manifests) or predefined repos
 
 
@@ -96,10 +96,10 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         },
         
         'update': {
-            description: 'Update repositories',
-            syntax: 'update | update all | update repos | update <name> | update repo <name>',
-            examples: [ 'update', 'update all', 'update repos', 'update basic', 'update repo basic' ],
-            notes: 'Runs git pull --rebase --autostash for target repositories. `update` without arguments updates all installed repos.'
+            description: 'Update Ploinky repositories and project repositories',
+            syntax: 'update [folderPath] | update all [folderPath] | update repos [folderPath] | update repo <name>',
+            examples: [ 'update', 'update /work/projects', 'update all /work/projects', 'update repo basic' ],
+            notes: 'Runs git pull --rebase --autostash for .ploinky/repos and for git repositories discovered recursively from folderPath. Without folderPath, discovery starts at the current working directory. Discovered project repositories also receive refreshed AchillesCopilotBasicSkills copies and managed .gitignore entries.'
         },
         
         
@@ -263,7 +263,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 'default-skills AchillesCopilotBasicSkills --only claude-code',
                 'default-skills AchillesCopilotBasicSkills --skip agents'
             ],
-            notes: 'Targets: .claude/skills, .agents/skills. Re-running the command overwrites existing skill files; the .gitignore marker block is updated idempotently.'
+            notes: 'Targets: .claude/skills, .agents/skills. Re-running the command replaces existing copied skill folders; the .gitignore marker block is updated idempotently.'
         },
         'start': {
             description: 'Start enabled agents and the local Router',

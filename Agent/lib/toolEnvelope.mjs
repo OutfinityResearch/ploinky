@@ -95,15 +95,16 @@ export function extractLegacyAuthInfo(envelope) {
  *     principalId,
  *     agent: { principalId, name } | null,
  *     delegatedUser: { id, username, email, roles } | null,
- *     userContextToken: string,
+ *     invocationToken: string,
  *     invocationVerified: bool
  *   }
  */
 export function deriveActor(envelope) {
     const grant = extractInvocationGrant(envelope);
+    const metadata = extractMetadata(envelope);
     if (grant) {
-        const callerPrincipal = String(grant.sub || grant.caller?.principalId || '').trim();
-        const delegated = grant.user && typeof grant.user === 'object' ? grant.user : null;
+        const callerPrincipal = String(grant.caller || grant.sub || '').trim();
+        const delegated = (grant.usr || grant.user) && typeof (grant.usr || grant.user) === 'object' ? (grant.usr || grant.user) : null;
         return {
             authenticated: true,
             invocationVerified: true,
@@ -119,7 +120,7 @@ export function deriveActor(envelope) {
                       roles: Array.isArray(delegated.roles) ? [...delegated.roles] : []
                   }
                 : null,
-            userContextToken: String(grant.user_context_token || ''),
+            invocationToken: String(metadata.invocationToken || ''),
             scope: Array.isArray(grant.scope) ? [...grant.scope] : [],
             tool: String(grant.tool || ''),
             bindingId: String(grant.binding_id || ''),
@@ -145,7 +146,7 @@ export function deriveActor(envelope) {
                       roles: Array.isArray(user.roles) ? [...user.roles] : []
                   }
                 : null,
-            userContextToken: '',
+            invocationToken: '',
             scope: [],
             tool: '',
             bindingId: '',
@@ -159,7 +160,7 @@ export function deriveActor(envelope) {
         principalId: '',
         agent: null,
         delegatedUser: null,
-        userContextToken: '',
+        invocationToken: '',
         scope: [],
         tool: '',
         bindingId: '',
@@ -193,10 +194,8 @@ export function toLegacyAuthInfo(envelope) {
     if (actor.workspaceId) {
         legacy.workspaceId = actor.workspaceId;
     }
-    if (actor.userContextToken) {
-        legacy.invocation = {
-            userContextToken: actor.userContextToken
-        };
+    if (actor.invocationToken) {
+        legacy.invocationToken = actor.invocationToken;
     }
     return legacy;
 }

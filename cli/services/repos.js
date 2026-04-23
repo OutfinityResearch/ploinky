@@ -178,3 +178,42 @@ export function updateRepo(name, { rebase = true, autostash = true } = {}) {
     execFileSync('git', args, { stdio: 'inherit' });
     return true;
 }
+
+export function findWorkspaceGitRepos(workspaceRoot) {
+    const root = path.resolve(workspaceRoot);
+    if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+        throw new Error(`Search root '${root}' is not a directory.`);
+    }
+
+    const repos = [];
+    const ignoredDirNames = new Set([
+        '.git',
+        '.ploinky',
+        'node_modules',
+        'globalDeps',
+    ]);
+
+    function visit(dir) {
+        if (fs.existsSync(path.join(dir, '.git'))) {
+            repos.push({ name: path.basename(dir), path: dir });
+            if (dir !== root) return;
+        }
+
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            if (entry.name.startsWith('.') || ignoredDirNames.has(entry.name)) continue;
+            visit(path.join(dir, entry.name));
+        }
+    }
+
+    visit(root);
+    return repos;
+}
+
+export function pullGitRepo(repoPath, { rebase = true, autostash = true } = {}) {
+    const args = ['-C', repoPath, 'pull'];
+    if (rebase) args.push('--rebase');
+    if (autostash) args.push('--autostash');
+    execFileSync('git', args, { stdio: 'inherit' });
+    return true;
+}
