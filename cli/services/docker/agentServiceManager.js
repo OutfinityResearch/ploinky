@@ -14,12 +14,12 @@ import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
     containerExists,
-    containerRuntime,
     computeEnvHash,
     flagsToArgs,
     getAgentContainerName,
     getConfiguredProjectPath,
     getContainerLabel,
+    getRuntime,
     isContainerRunning,
     loadAgentsMap,
     parseHostPort,
@@ -203,13 +203,13 @@ function appendEnvFlagsFromMap(envFlags, envMap) {
 }
 
 function startAgentContainer(agentName, manifest, agentPath, options = {}) {
+    const runtime = getRuntime();
     const repoName = path.basename(path.dirname(agentPath));
     const containerName = options.containerName || getAgentContainerName(agentName, repoName);
-    try { execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
-    try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+    try { execSync(`${runtime} stop ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+    try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
     clearLivenessState(containerName);
 
-    const runtime = containerRuntime;
     const image = manifest.container || manifest.image || 'node:18-alpine';
     const { raw: explicitAgentCmd } = readManifestAgentCommand(manifest);
     const startCmd = readManifestStartCommand(manifest);
@@ -455,7 +455,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
             entrySummary = startArgs.join(' ');
         }
     } else if (explicitAgentCmd) {
-        const shellPath = detectShellForImage(agentName, image);
+        const shellPath = detectShellForImage(agentName, image, runtime);
         if (shellPath === SHELL_FALLBACK_DIRECT) {
             throw new Error(`[start] ${agentName}: no supported shell found to execute agent command.`);
         }
@@ -574,9 +574,10 @@ function resolveHostPortFromRecord(record, containerPortCandidates) {
 }
 
 function resolveHostPortFromRuntime(containerName, containerPortCandidates) {
+    const runtime = getRuntime();
     for (const containerPort of containerPortCandidates) {
         try {
-            const portMap = execSync(`${containerRuntime} port ${containerName} ${containerPort}/tcp`, { stdio: 'pipe' }).toString().trim();
+            const portMap = execSync(`${runtime} port ${containerName} ${containerPort}/tcp`, { stdio: 'pipe' }).toString().trim();
             const hostPort = parseHostPort(portMap);
             if (hostPort) {
                 return hostPort;
@@ -595,16 +596,19 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         try {
             return ensureBwrapService(agentName, manifest, agentPath, options);
         } catch (err) {
-            console.warn(`[bwrap] ${agentName}: sandbox failed (${err.message}), falling back to ${containerRuntime}`);
+            const fallbackRuntime = getRuntime();
+            console.warn(`[bwrap] ${agentName}: sandbox failed (${err.message}), falling back to ${fallbackRuntime}`);
         }
     }
     if (agentRuntime === 'seatbelt') {
         try {
             return ensureSeatbeltService(agentName, manifest, agentPath, options);
         } catch (err) {
-            console.warn(`[seatbelt] ${agentName}: sandbox failed (${err.message}), falling back to ${containerRuntime}`);
+            const fallbackRuntime = getRuntime();
+            console.warn(`[seatbelt] ${agentName}: sandbox failed (${err.message}), falling back to ${fallbackRuntime}`);
         }
     }
+    const runtime = getRuntime();
 
     let preferredHostPort;
     let containerOverride;
@@ -652,7 +656,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     const withParallelAgent = Boolean(startCmd && explicitAgentCmd);
 
     if (forceRecreate && containerExists(containerName)) {
-        try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+        try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
         clearLivenessState(containerName);
     }
 
@@ -661,7 +665,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
             debugLog(`[ensureAgentService] ${agentName}: env hash changed (current=${current || '<none>'}, desired=${desired.slice(0, 12)}…), recreating container`);
-            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+            try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
             clearLivenessState(containerName);
         }
     }
@@ -670,7 +674,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         if (!isContainerRunning(containerName)) {
             ensureManifestVolumeHostPaths(manifest);
             syncAgentMcpConfig(containerName, agentPath, agentName);
-            try { execSync(`${containerRuntime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
+            try { execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
             if (withParallelAgent) {
                 try {
                     launchAgentSidecar({ containerName, agentCommand: explicitAgentCmd, agentName });
@@ -701,7 +705,6 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     const agentWorkDir = getAgentWorkDir(agentName);
     const agentCodePath = getAgentCodePath(agentName);
     const agentSkillsPath = getAgentSkillsPath(agentName);
-    const runtime = containerRuntime;
     const profileEnv = normalizeProfileEnv(profileConfig?.env);
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, runtime, profileConfig || {});
 

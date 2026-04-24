@@ -1,7 +1,7 @@
 import { spawnSync } from 'child_process';
 import { parentPort } from 'worker_threads';
 import {
-    containerRuntime,
+    getRuntime,
     waitForContainerRunning,
     sleepMs
 } from './common.js';
@@ -64,9 +64,10 @@ function normalizeProbeConfig(type, manifestProbeConfig = null) {
 }
 
 function runProbeOnce(agentName, containerName, probe) {
+    const runtime = getRuntime();
     const execCommand = ['exec', containerName, 'sh', '-lc', `cd /code && sh "./${probe.script}"`];
     const execRes = spawnSync(
-        containerRuntime,
+        runtime,
         execCommand,
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: probe.timeout * 1000 }
     );
@@ -89,9 +90,10 @@ function runProbeOnce(agentName, containerName, probe) {
 }
 
 function ensureScriptExists(agentName, containerName, probe) {
+    const runtime = getRuntime();
     const scriptPath = `/code/${probe.script}`;
     const exists = spawnSync(
-        containerRuntime,
+        runtime,
         ['exec', containerName, 'sh', '-lc', `[ -f "${scriptPath}" ]`],
         { stdio: 'ignore' }
     );
@@ -137,9 +139,10 @@ function runProbeLoop(agentName, containerName, type, probe) {
 }
 
 function restartContainer(agentName, containerName) {
+    const runtime = getRuntime();
     postProbeLog('warn', `[probe] ${agentName}: restarting container ${containerName} after liveness failure...`);
     const restartRes = spawnSync(
-        containerRuntime,
+        runtime,
         ['restart', containerName],
         { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
     );

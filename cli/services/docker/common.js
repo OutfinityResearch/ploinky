@@ -69,19 +69,28 @@ function isRuntimeInstalled(runtime) {
     }
 }
 
-function getContainerRuntime() {
-    const preferredRuntimes = ['podman', 'docker'];
-    for (const runtime of preferredRuntimes) {
-        if (isRuntimeInstalled(runtime)) {
-            debugLog(`Using ${runtime} as container runtime.`);
-            return runtime;
+let containerRuntime = null;
+
+function probeContainerRuntime() {
+    if (containerRuntime) return containerRuntime;
+    for (const candidate of ['podman', 'docker']) {
+        if (isRuntimeInstalled(candidate)) {
+            debugLog(`Using ${candidate} as container runtime.`);
+            containerRuntime = candidate;
+            return candidate;
         }
     }
-    console.error('Neither podman nor docker found in PATH. Please install one of them.');
-    process.exit(1);
+    return null;
 }
 
-const containerRuntime = getContainerRuntime();
+function requireContainerRuntime() {
+    const rt = probeContainerRuntime();
+    if (!rt) {
+        console.error('Neither podman nor docker found in PATH. Please install one of them.');
+        process.exit(1);
+    }
+    return rt;
+}
 const SLEEP_ARRAY = new Int32Array(new SharedArrayBuffer(4));
 const CONTAINER_CONFIG_DIR = '/code';
 const CONTAINER_CONFIG_PATH = `${CONTAINER_CONFIG_DIR}/mcp-config.json`;
@@ -108,7 +117,9 @@ function getAgentContainerName(agentName, repoName) {
 }
 
 function isContainerRunning(containerName) {
-    const command = `${containerRuntime} ps --format "{{.Names}}" | grep -x "${containerName}"`;
+    const runtime = probeContainerRuntime();
+    if (!runtime) return false;
+    const command = `${runtime} ps --format "{{.Names}}" | grep -x "${containerName}"`;
     debugLog(`Checking if container is running with command: ${command}`);
     try {
         const result = execSync(command, { stdio: 'pipe' }).toString();
@@ -123,7 +134,9 @@ function isContainerRunning(containerName) {
 
 function containerExists(containerName) {
     // Use inspect instead of grep - more reliable and avoids race conditions
-    const command = `${containerRuntime} inspect --format "{{.Name}}" "${containerName}"`;
+    const runtime = probeContainerRuntime();
+    if (!runtime) return false;
+    const command = `${runtime} inspect --format "{{.Name}}" "${containerName}"`;
     debugLog(`Checking if container exists with command: ${command}`);
     try {
         execSync(command, { stdio: 'pipe' });
@@ -137,7 +150,7 @@ function containerExists(containerName) {
 
 function getSecretsForAgent(manifest) {
     const vars = buildEnvFlags(manifest);
-    debugLog(`Formatted env vars for ${containerRuntime} command: ${vars.join(' ')}`);
+    debugLog(`Formatted env vars for ${probeContainerRuntime() || 'container'} command: ${vars.join(' ')}`);
     return vars;
 }
 
@@ -288,7 +301,9 @@ function computeEnvHash(manifest, profileConfig) {
 
 function getContainerLabel(containerName, key) {
     try {
-        const out = execSync(`${containerRuntime} inspect ${containerName} --format '{{ json .Config.Labels }}'`, { stdio: 'pipe' }).toString();
+        const runtime = probeContainerRuntime();
+        if (!runtime) return '';
+        const out = execSync(`${runtime} inspect ${containerName} --format '{{ json .Config.Labels }}'`, { stdio: 'pipe' }).toString();
         const labels = JSON.parse(out || '{}') || {};
         return labels[key] || '';
     } catch (_) {
@@ -297,9 +312,10 @@ function getContainerLabel(containerName, key) {
 }
 
 function waitForContainerRunning(containerName, maxAttempts = 20, delayMs = 250) {
+    const runtime = requireContainerRuntime();
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         try {
-            const status = execSync(`${containerRuntime} inspect ${containerName} --format '{{ .State.Status }}'`, { stdio: 'pipe' })
+            const status = execSync(`${runtime} inspect ${containerName} --format '{{ .State.Status }}'`, { stdio: 'pipe' })
                 .toString()
                 .trim()
                 .toLowerCase();
@@ -338,6 +354,7 @@ export {
     getSecretsForAgent,
     isContainerRunning,
     isSandboxRuntime,
+    probeContainerRuntime,
     runtimeFamilyName,
     loadAgentsMap,
     parseHostPort,
@@ -351,7 +368,17 @@ export {
 };
 
 function getRuntime() {
-    return containerRuntime;
+    return requireContainerRuntime();
+}
+
+function fallbackToContainer(tag, reason) {
+    const fallback = probeContainerRuntime();
+    if (!fallback) {
+        console.error(`[${tag}] ${reason} and no container runtime (podman/docker) available for fallback.`);
+        process.exit(1);
+    }
+    console.warn(`[${tag}] ${reason}, falling back to ${fallback}`);
+    return fallback;
 }
 
 function getRuntimeForAgent(manifest) {
@@ -362,8 +389,7 @@ function getRuntimeForAgent(manifest) {
                 execSync('command -v bwrap', { stdio: 'ignore' });
                 return 'bwrap';
             } catch {
-                console.warn(`[bwrap] bwrap not found in PATH, falling back to ${containerRuntime}`);
-                return containerRuntime;
+                return fallbackToContainer('bwrap', 'bwrap not found in PATH');
             }
         }
         if (manifest?.runtime === 'seatbelt') {
@@ -372,12 +398,10 @@ function getRuntimeForAgent(manifest) {
                     execSync('command -v sandbox-exec', { stdio: 'ignore' });
                     return 'seatbelt';
                 } catch {
-                    console.warn(`[seatbelt] sandbox-exec not found, falling back to ${containerRuntime}`);
-                    return containerRuntime;
+                    return fallbackToContainer('seatbelt', 'sandbox-exec not found');
                 }
             }
-            console.warn(`[seatbelt] seatbelt runtime requires macOS, falling back to ${containerRuntime}`);
-            return containerRuntime;
+            return fallbackToContainer('seatbelt', 'seatbelt runtime requires macOS');
         }
 
         // sandbox: true — auto-detect platform
@@ -391,9 +415,8 @@ function getRuntimeForAgent(manifest) {
             execSync('command -v bwrap', { stdio: 'ignore' });
             return 'bwrap';
         } catch {
-            console.warn(`[sandbox] No sandbox runtime found (bwrap/sandbox-exec), falling back to ${containerRuntime}`);
-            return containerRuntime;
+            return fallbackToContainer('sandbox', 'No sandbox runtime found (bwrap/sandbox-exec)');
         }
     }
-    return containerRuntime;
+    return requireContainerRuntime();
 }

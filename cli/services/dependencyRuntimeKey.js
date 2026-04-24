@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { containerRuntime, getRuntimeForAgent } from './docker/common.js';
+import { getRuntime, getRuntimeForAgent } from './docker/common.js';
 
 const SUPPORTED_FAMILIES = new Set(['bwrap', 'seatbelt', 'container']);
 
@@ -100,7 +100,7 @@ export function detectContainerRuntimeKey({
     manifest = null,
     repoName = '',
     agentName = '',
-    runtime = containerRuntime,
+    runtime = null,
     image = '',
     execProbe = defaultContainerProbe,
 } = {}) {
@@ -108,7 +108,8 @@ export function detectContainerRuntimeKey({
     if (!resolvedImage) {
         throw new Error(`Container runtime-key detection requires an image${repoName || agentName ? ` for ${repoName}/${agentName}` : ''}.`);
     }
-    const output = execProbe({ image: resolvedImage, runtime, manifest, repoName, agentName });
+    const resolvedRuntime = runtime || getRuntime();
+    const output = execProbe({ image: resolvedImage, runtime: resolvedRuntime, manifest, repoName, agentName });
     const probe = parseContainerProbeOutput(output);
     return buildRuntimeKey({
         family: 'container',

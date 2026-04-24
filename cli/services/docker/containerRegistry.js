@@ -1,7 +1,7 @@
 import { execSync } from 'child_process';
 import path from 'path';
 import { debugLog } from '../utils.js';
-import { containerRuntime, loadAgentsMap } from './common.js';
+import { probeContainerRuntime, loadAgentsMap } from './common.js';
 
 function parseAgentInfoFromMounts(mounts = []) {
     let repoName = '-';
@@ -43,7 +43,8 @@ function getAgentsRegistry() {
 }
 
 function collectLiveAgentContainers() {
-    const runtime = containerRuntime;
+    const runtime = probeContainerRuntime();
+    if (!runtime) return [];
     let names = [];
     try {
         const raw = execSync(`${runtime} ps --format "{{.Names}}"`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();

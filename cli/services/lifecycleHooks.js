@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync, spawnSync } from 'child_process';
-import { containerRuntime } from './docker/common.js';
+import { getRuntime } from './docker/common.js';
 import { RUNNING_DIR } from './config.js';
 import { debugLog } from './utils.js';
 import { getProfileConfig, getProfileEnvVars, getHookNames, getActiveProfile } from './profileService.js';
@@ -28,6 +28,18 @@ function normalizeProfileEnv(env) {
         normalized[String(key)] = value === undefined ? '' : String(value);
     }
     return normalized;
+}
+
+function sanitizeMarkerPart(value) {
+    const sanitized = String(value || 'default').replace(/[^a-zA-Z0-9_.-]/g, '_');
+    return sanitized || 'default';
+}
+
+export function getPreinstallMarkerPath(agentName, repoName, profileName) {
+    return path.join(
+        RUNNING_DIR,
+        `preinstall-${sanitizeMarkerPart(repoName || 'unknown')}-${sanitizeMarkerPart(agentName)}-${sanitizeMarkerPart(profileName || 'default')}`
+    );
 }
 
 /**
@@ -154,8 +166,9 @@ export function executeContainerHook(containerName, script, env = {}, options = 
     }
 
     try {
+        const runtime = getRuntime();
         debugLog(`[hook] Executing container hook in ${containerName}: ${script}`);
-        const result = spawnSync(containerRuntime, [
+        const result = spawnSync(runtime, [
             'exec',
             ...envFlags,
             '-w',
@@ -422,8 +435,8 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath, profile
         const profileConfig = getProfileConfig(`${repoName}/${agentName}`, profileName) || {};
         if (profileConfig.preinstall) {
             // Check if preinstall was already run for this agent in this session
-            const markerDir = RUNNING_DIR;
-            const markerFile = path.join(markerDir, `preinstall-${agentName}-${profileName || 'default'}`);
+            const markerFile = getPreinstallMarkerPath(agentName, repoName, profileName);
+            const markerDir = path.dirname(markerFile);
             
             if (fs.existsSync(markerFile)) {
                 debugLog(`[lifecycle] Skipping preinstall [HOST] for ${agentName} (already run)`);

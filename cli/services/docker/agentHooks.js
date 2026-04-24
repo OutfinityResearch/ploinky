@@ -1,7 +1,7 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import { normalizeLifecycleCommands } from './agentCommands.js';
-import { containerRuntime, waitForContainerRunning, isContainerRunning } from './common.js';
+import { getRuntime, waitForContainerRunning, isContainerRunning } from './common.js';
 import { SHARED_DIR } from '../config.js';
 
 
@@ -12,6 +12,7 @@ function ensureSharedHostDir() {
 }
 
 function runPostinstallHook(agentName, containerName, manifest, cwd) {
+    const runtime = getRuntime();
     // Read postinstall from profiles.default
     const postinstallCmd = manifest?.profiles?.default?.postinstall;
     const commands = normalizeLifecycleCommands(postinstallCmd);
@@ -29,7 +30,7 @@ function runPostinstallHook(agentName, containerName, manifest, cwd) {
             return;
         }
         console.log(`[postinstall] ${agentName}: cd '${cwd}' && ${cmd}`);
-        const res = spawnSync(containerRuntime, ['exec', containerName, 'sh', '-lc', `cd '${cwd}' && ${cmd}`], { stdio: 'inherit' });
+        const res = spawnSync(runtime, ['exec', containerName, 'sh', '-lc', `cd '${cwd}' && ${cmd}`], { stdio: 'inherit' });
         if (res.status !== 0) {
             // If exec failed because container exited, warn instead of failing
             if (!isContainerRunning(containerName)) {
@@ -44,7 +45,7 @@ function runPostinstallHook(agentName, containerName, manifest, cwd) {
     // The postinstall commands may have caused the container to become unstable
     if (!isContainerRunning(containerName)) {
         console.log(`[postinstall] ${agentName}: restarting container ${containerName}`);
-        const restartRes = spawnSync(containerRuntime, ['restart', containerName], { stdio: 'inherit' });
+        const restartRes = spawnSync(runtime, ['restart', containerName], { stdio: 'inherit' });
         if (restartRes.status !== 0) {
             // If restart fails, just warn - the container may have issues
             console.warn(`[postinstall] ${agentName}: restart failed with code ${restartRes.status}, container may need manual intervention`);

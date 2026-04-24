@@ -10,7 +10,7 @@ import {
 import { parseRuntimeKey, detectHostRuntimeKey } from './dependencyRuntimeKey.js';
 import { debugLog } from './utils.js';
 import { readGlobalDepsPackage, mergePackageJson } from './dependencyInstaller.js';
-import { containerRuntime } from './docker/common.js';
+import { getRuntime } from './docker/common.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './docker/shellDetection.js';
 
 export const STAMP_VERSION = 1;
@@ -183,7 +183,7 @@ function runNpmInstall(cwd, { log = debugLog } = {}) {
     }
 }
 
-function resolveInstallBackend(runtimeKey, { image = '', runtime = containerRuntime, log = debugLog } = {}) {
+function resolveInstallBackend(runtimeKey, { image = '', runtime = null, log = debugLog } = {}) {
     const parsed = assertRuntimeKey(runtimeKey);
     if (parsed.family === 'bwrap' || parsed.family === 'seatbelt') {
         assertHostMatchesRuntimeKey(runtimeKey);
@@ -195,31 +195,33 @@ function resolveInstallBackend(runtimeKey, { image = '', runtime = containerRunt
         };
     }
     if (parsed.family === 'container') {
+        const resolvedRuntime = runtime || getRuntime();
         const resolvedImage = String(image || '').trim();
         if (!resolvedImage) {
             throw new Error(`Container cache preparation for ${runtimeKey} requires an image.`);
         }
         return {
             install(cwd) {
-                return runNpmInstallInContainer(cwd, { image: resolvedImage, runtime, log });
+                return runNpmInstallInContainer(cwd, { image: resolvedImage, runtime: resolvedRuntime, log });
             },
-            installerRuntime: runtime,
+            installerRuntime: resolvedRuntime,
             image: resolvedImage,
         };
     }
     throw new Error(`Unsupported install backend for runtime family ${parsed.family}`);
 }
 
-function runNpmInstallInContainer(cwd, { image, runtime = containerRuntime, log = debugLog } = {}) {
+function runNpmInstallInContainer(cwd, { image, runtime = null, log = debugLog } = {}) {
     if (!image) {
         throw new Error('Container dependency install requires an image.');
     }
-    const shellPath = detectShellForImage('deps-cache', image);
+    const resolvedRuntime = runtime || getRuntime();
+    const shellPath = detectShellForImage('deps-cache', image, resolvedRuntime);
     if (!shellPath || shellPath === SHELL_FALLBACK_DIRECT) {
         throw new Error(`Could not determine a shell for image ${image}.`);
     }
-    const volumeSuffix = runtime === 'podman' ? ':z' : '';
-    const roArgs = runtime === 'podman'
+    const volumeSuffix = resolvedRuntime === 'podman' ? ':z' : '';
+    const roArgs = resolvedRuntime === 'podman'
         ? ['--network', 'slirp4netns:allow_host_loopback=true']
         : [];
     const installScript = [
@@ -241,7 +243,7 @@ function runNpmInstallInContainer(cwd, { image, runtime = containerRuntime, log 
         installScript,
     ];
     log(`[deps-cache] npm install in container ${image} at ${cwd}`);
-    const result = spawnSync(runtime, args, { stdio: 'inherit', timeout: 10 * 60 * 1000 });
+    const result = spawnSync(resolvedRuntime, args, { stdio: 'inherit', timeout: 10 * 60 * 1000 });
     if (result.error) {
         throw new Error(`container npm install failed: ${result.error.message}`);
     }
@@ -250,7 +252,7 @@ function runNpmInstallInContainer(cwd, { image, runtime = containerRuntime, log 
     }
 }
 
-export function prepareGlobalCache(runtimeKey, { force = false, log = debugLog, image = '', runtime = containerRuntime } = {}) {
+export function prepareGlobalCache(runtimeKey, { force = false, log = debugLog, image = '', runtime = null } = {}) {
     const backend = resolveInstallBackend(runtimeKey, { image, runtime, log });
 
     const globalPackageFile = getGlobalPackagePath();
@@ -307,7 +309,7 @@ export function prepareAgentCache({
     force = false,
     log = debugLog,
     image = '',
-    runtime = containerRuntime,
+    runtime = null,
 } = {}) {
     const backend = resolveInstallBackend(runtimeKey, { image, runtime, log });
     if (!repoName || !agentName) {

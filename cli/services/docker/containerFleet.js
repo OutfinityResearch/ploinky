@@ -2,12 +2,13 @@ import { execSync } from 'child_process';
 import { debugLog } from '../utils.js';
 import { loadAgents } from '../workspace.js';
 import {
-    containerRuntime,
     containerExists,
     getAgentContainerName,
+    getRuntime,
     isContainerRunning,
     isSandboxRuntime,
-    loadAgentsMap
+    loadAgentsMap,
+    probeContainerRuntime
 } from './common.js';
 import { clearLivenessState } from './healthProbes.js';
 import { stopBwrapProcess, stopAllBwrapProcesses, isBwrapProcessRunning } from '../bwrap/bwrapFleet.js';
@@ -32,8 +33,9 @@ function gracefulStopContainer(name, { prefix = '[destroy]' } = {}) {
     }
 
     try {
+        const runtime = getRuntime();
         log(`Sending SIGTERM to ${name}...`);
-        execSync(`${containerRuntime} kill --signal SIGTERM ${name}`, { stdio: 'ignore' });
+        execSync(`${runtime} kill --signal SIGTERM ${name}`, { stdio: 'ignore' });
     } catch (e) {
         debugLog(`gracefulStopContainer SIGTERM ${name}: ${e?.message || e}`);
     }
@@ -52,16 +54,17 @@ function waitForContainers(names, timeoutSec = 5) {
 
 function forceStopContainers(names, { prefix } = {}) {
     if (!Array.isArray(names) || !names.length) return;
+    const runtime = getRuntime();
     for (const chunk of chunkArray(names)) {
         try {
             console.log(`${prefix} Forcing kill for ${chunk.join(', ')}...`);
-            execSync(`${containerRuntime} kill ${chunk.join(' ')}`, { stdio: 'ignore' });
+            execSync(`${runtime} kill ${chunk.join(' ')}`, { stdio: 'ignore' });
         } catch (e) {
             debugLog(`forceStopContainers kill ${chunk.join(', ')}: ${e?.message || e}`);
             for (const name of chunk) {
                 try {
                     console.log(`${prefix} Forcing kill for ${name}...`);
-                    execSync(`${containerRuntime} kill ${name}`, { stdio: 'ignore' });
+                    execSync(`${runtime} kill ${name}`, { stdio: 'ignore' });
                 } catch (err) {
                     debugLog(`forceStopContainers (single) kill ${name}: ${err?.message || err}`);
                 }
@@ -174,11 +177,12 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
 
     const prefix = fast ? '[destroy-fast]' : '[destroy]';
     const runningList = Array.from(runningSet);
+    const runtime = getRuntime();
     if (runningList.length) {
         console.log(`${prefix} Sending SIGTERM to ${runningList.length} container(s)...`);
         for (const chunk of chunkArray(runningList)) {
             try {
-                execSync(`${containerRuntime} kill --signal SIGTERM ${chunk.join(' ')}`, { stdio: 'ignore' });
+                execSync(`${runtime} kill --signal SIGTERM ${chunk.join(' ')}`, { stdio: 'ignore' });
             } catch (e) {
                 debugLog(`batch SIGTERM failed for ${chunk.join(', ')}: ${e?.message || e}`);
                 for (const name of chunk) {
@@ -199,7 +203,7 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
     for (const chunk of chunkArray(removalList)) {
         try {
             console.log(`${prefix} Removing containers: ${chunk.join(', ')}`);
-            execSync(`${containerRuntime} rm -f ${chunk.join(' ')}`, { stdio: 'ignore' });
+            execSync(`${runtime} rm -f ${chunk.join(' ')}`, { stdio: 'ignore' });
             chunk.forEach((name) => {
                 console.log(`${prefix} ✓ removed ${name}`);
                 clearLivenessState(name);
@@ -210,7 +214,7 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
             for (const name of chunk) {
                 try {
                     console.log(`${prefix} Removing container: ${name}`);
-                    execSync(`${containerRuntime} rm -f ${name}`, { stdio: 'ignore' });
+                    execSync(`${runtime} rm -f ${name}`, { stdio: 'ignore' });
                     console.log(`${prefix} ✓ removed ${name}`);
                     clearLivenessState(name);
                     removed.push(name);
@@ -230,8 +234,10 @@ function stopAndRemove(name, fast = false) {
 }
 
 function listAllContainerNames() {
+    const runtime = probeContainerRuntime();
+    if (!runtime) return [];
     try {
-        const out = execSync(`${containerRuntime} ps -a --format "{{.Names}}"`, { stdio: 'pipe' }).toString().trim();
+        const out = execSync(`${runtime} ps -a --format "{{.Names}}"`, { stdio: 'pipe' }).toString().trim();
         return out ? out.split(/\n+/).filter(Boolean) : [];
     } catch (e) {
         debugLog(`listAllContainerNames error: ${e?.message || e}`);

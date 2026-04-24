@@ -7,10 +7,10 @@ import { debugLog } from '../utils.js';
 import { getActiveProfile, getProfileConfig } from '../profileService.js';
 import {
     CONTAINER_CONFIG_PATH,
-    containerRuntime,
     containerExists,
     getAgentContainerName,
     getConfiguredProjectPath,
+    getRuntime,
     getSecretsForAgent,
     isContainerRunning,
     loadAgentsMap,
@@ -34,6 +34,7 @@ function ensureSharedHostDir() {
 }
 
 function runCommandInContainer(agentName, repoName, manifest, command, interactive = false) {
+    const runtime = getRuntime();
     const containerName = getAgentContainerName(agentName, repoName);
     let agents = loadAgentsMap();
     const projectDir = getConfiguredProjectPath(agentName, repoName);
@@ -51,7 +52,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             formatEnvFlag('NODE_PATH', `${projectDir}/node_modules`)
         ];
         const envVars = envVarParts.join(' ');
-        const mountOptions = containerRuntime === 'podman'
+        const mountOptions = runtime === 'podman'
             ? [
                 `--mount type=bind,source="${projectDir}",destination="${projectDir}",relabel=shared`,
                 `--mount type=bind,source="${sharedDir}",destination="/shared",relabel=shared`
@@ -70,12 +71,12 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
         let containerId;
 
         try {
-            const createCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${portOptions} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
+            const createCommand = `${runtime} create -it --name ${containerName} ${mountOption} ${portOptions} ${envVars} ${containerImage} /bin/sh -lc "while :; do sleep 3600; done"`;
             debugLog(`Executing create command: ${createCommand}`);
             createOutput = execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] }).toString().trim();
             containerId = createOutput;
         } catch (error) {
-            if (containerRuntime === 'podman' && error.message.includes('short-name')) {
+            if (runtime === 'podman' && error.message.includes('short-name')) {
                 debugLog(`Short-name resolution failed, trying with docker.io prefix...`);
 
                 if (!containerImage.includes('/')) {
@@ -85,7 +86,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
                 }
 
                 console.log(`Retrying with full registry name: ${containerImage}`);
-                const retryCommand = `${containerRuntime} create -it --name ${containerName} ${mountOption} ${portOptions} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
+                const retryCommand = `${runtime} create -it --name ${containerName} ${mountOption} ${portOptions} ${envVars} ${containerImage} /bin/sh -lc \"while :; do sleep 3600; done\"`;
                 debugLog(`Executing retry command: ${retryCommand}`);
 
                 try {
@@ -126,7 +127,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
 
     if (!isContainerRunning(containerName)) {
         try {
-            const stateCommand = `${containerRuntime} ps -a --format "{{.Names}}\t{{.Status}}" | grep "^${containerName}"`;
+            const stateCommand = `${runtime} ps -a --format "{{.Names}}\t{{.Status}}" | grep "^${containerName}"`;
             const stateResult = execSync(stateCommand, { stdio: 'pipe' }).toString().trim();
             debugLog(`Container state: ${stateResult}`);
 
@@ -135,7 +136,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             } else if (stateResult && !stateResult.includes('Up')) {
                 debugLog(`Container is in unexpected state, attempting to stop first...`);
                 try {
-                    execSync(`${containerRuntime} stop ${containerName}`, { stdio: 'pipe' });
+                    execSync(`${runtime} stop ${containerName}`, { stdio: 'pipe' });
                 } catch (e) {
                     debugLog(`Could not stop container: ${e.message}`);
                 }
@@ -144,12 +145,12 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             debugLog(`Could not check container state: ${e.message}`);
         }
 
-        const startCommand = `${containerRuntime} start ${containerName}`;
+        const startCommand = `${runtime} start ${containerName}`;
         debugLog(`Executing start command: ${startCommand}`);
         try {
             execSync(startCommand, { stdio: 'inherit' });
         } catch (error) {
-            console.error(`Error starting container. Try removing it with: ${containerRuntime} rm ${containerName}`);
+            console.error(`Error starting container. Try removing it with: ${runtime} rm ${containerName}`);
             throw error;
         }
     }
@@ -160,7 +161,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             console.warn(`[install] ${agentName}: container not running after creation; skipping install.`);
         } else {
             console.log(`[install] ${agentName}: cd '${projectDir}' && ${manifest.install}`);
-            const installCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
+            const installCommand = `${runtime} exec ${interactive ? '-it' : ''} ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
             debugLog(`Executing install command: ${installCommand}`);
             execSync(installCommand, { stdio: 'inherit' });
         }
@@ -176,7 +177,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
         bashCommand = `cd '${projectDir}' && ${command}`;
     }
 
-    const execCommand = `${containerRuntime} exec ${interactive ? '-it' : ''} ${envVars} ${containerName} sh -lc "${bashCommand}"`;
+    const execCommand = `${runtime} exec ${interactive ? '-it' : ''} ${envVars} ${containerName} sh -lc "${bashCommand}"`;
     debugLog(`Executing run command: ${execCommand}`);
 
     if (interactive) {
@@ -190,7 +191,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
 
         debugLog(`Running interactive session with args: ${args.join(' ')}`);
 
-        const result = spawnSync(containerRuntime, args, {
+        const result = spawnSync(runtime, args, {
             stdio: 'inherit',
             shell: false
         });
@@ -204,7 +205,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
             execSync(execCommand, { stdio: 'inherit' });
         } catch (error) {
             code = (error && typeof error.status === 'number') ? error.status : 1;
-            debugLog(`Caught error during ${containerRuntime} exec. Exit code: ${code}`);
+            debugLog(`Caught error during ${runtime} exec. Exit code: ${code}`);
         } finally {
             const dt = Date.now() - t0;
             console.log(`[Ploinky] Command finished in ${dt} ms with exit code ${code}.`);
@@ -213,6 +214,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
 }
 
 function ensureAgentContainer(agentName, repoName, manifest) {
+    const runtime = getRuntime();
     const containerName = getAgentContainerName(agentName, repoName);
     const projectDir = getConfiguredProjectPath(agentName, repoName);
     const agentLibPath = path.resolve(__dirname, '../../../Agent');
@@ -232,7 +234,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         const desired = computeEnvHash(manifest, profileConfig);
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
-            try { execSync(`${containerRuntime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
+            try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
         }
     }
     let createdNew = false;
@@ -244,14 +246,14 @@ function ensureAgentContainer(agentName, repoName, manifest) {
             formatEnvFlag('NODE_PATH', `${projectDir}/node_modules`)
         ];
         const envVars = envVarParts.join(' ');
-        const volZ = (containerRuntime === 'podman') ? ':z' : '';
-        const roOpt = (containerRuntime === 'podman') ? ':ro,z' : ':ro';
+        const volZ = (runtime === 'podman') ? ':z' : '';
+        const roOpt = (runtime === 'podman') ? ':ro,z' : ':ro';
         let containerImage = manifest.container;
         const envHash = computeEnvHash(manifest, profileConfig);
         const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
         const portOptions = manifestPorts.map(p => `-p ${p}`).join(' ');
         try {
-            const createCommand = `${containerRuntime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
+            const createCommand = `${runtime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
               -v "${projectDir}:${projectDir}${volZ}" \
               -v "${agentLibPath}:/Agent${roOpt}" \
               -v "${absAgentPath}:/code${roOpt}" \
@@ -261,11 +263,11 @@ function ensureAgentContainer(agentName, repoName, manifest) {
             execSync(createCommand, { stdio: ['pipe', 'pipe', 'inherit'] });
             createdNew = true;
         } catch (error) {
-            if (containerRuntime === 'podman' && String(error.message || '').includes('short-name')) {
+            if (runtime === 'podman' && String(error.message || '').includes('short-name')) {
                 if (!containerImage.includes('/')) containerImage = `docker.io/library/${containerImage}`;
                 else if (!containerImage.startsWith('docker.io/') && !containerImage.includes('.')) containerImage = `docker.io/${containerImage}`;
                 console.log(`Retrying with full registry name: ${containerImage}`);
-                const retryCommand = `${containerRuntime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
+                const retryCommand = `${runtime} create -it --name ${containerName} --label ploinky.envhash=${envHash} \
                   -v "${projectDir}:${projectDir}${volZ}" \
                   -v "${agentLibPath}:/Agent${roOpt}" \
                   -v "${absAgentPath}:/code${roOpt}" \
@@ -302,7 +304,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         saveAgentsMap(agents);
     }
     if (!isContainerRunning(containerName)) {
-        const startCommand = `${containerRuntime} start ${containerName}`;
+        const startCommand = `${runtime} start ${containerName}`;
         debugLog(`Executing start command: ${startCommand}`);
         try { execSync(startCommand, { stdio: 'inherit' }); }
         catch (e) { console.error('[docker.ensureAgentContainer] start failed:', e.message || e); throw e; }
@@ -315,7 +317,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
                 console.warn(`[install] ${agentName}: container not running after creation; skipping install.`);
             } else {
                 console.log(`[install] ${agentName}: cd '${projectDir}' && ${manifest.install}`);
-                const installCommand = `${containerRuntime} exec ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
+                const installCommand = `${runtime} exec ${containerName} sh -lc "cd '${projectDir}' && ${manifest.install}"`;
                 debugLog(`Executing install command: ${installCommand}`);
                 execSync(installCommand, { stdio: 'inherit' });
             }
@@ -342,10 +344,11 @@ function buildExecArgs(containerName, workdir, entryCommand, interactive = true,
 }
 
 function attachInteractive(containerName, workdir, entryCommand) {
+    const runtime = getRuntime();
     // PLOINKY_NO_TTY=1 disables TTY allocation (used by webchat to ensure stdin EOF propagates)
     const allocateTty = process.env.PLOINKY_NO_TTY !== '1';
     const execArgs = buildExecArgs(containerName, workdir, entryCommand, true, allocateTty);
-    const result = spawnSync(containerRuntime, execArgs, { stdio: 'inherit' });
+    const result = spawnSync(runtime, execArgs, { stdio: 'inherit' });
     return result.status ?? 0;
 }
 

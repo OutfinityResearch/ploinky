@@ -1,7 +1,7 @@
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { containerRuntime } from './common.js';
+import { getRuntime } from './common.js';
 
 const SHELL_PROBE_PATHS = ['/bin/bash', '/bin/sh', '/bin/ash', '/bin/dash', '/bin/zsh', '/bin/fish', '/bin/ksh'];
 const SHELL_FALLBACK_DIRECT = Symbol('no-shell');
@@ -32,11 +32,11 @@ function findShellInMount(mountPath) {
     return '';
 }
 
-function detectShellViaImageMount(image) {
-    if (containerRuntime !== 'podman') return '';
+function detectShellViaImageMount(image, runtime) {
+    if (runtime !== 'podman') return '';
     let mountPoint = '';
     try {
-        const mountRes = spawnSync(containerRuntime, ['image', 'mount', image], { stdio: ['ignore', 'pipe', 'pipe'] });
+        const mountRes = spawnSync(runtime, ['image', 'mount', image], { stdio: ['ignore', 'pipe', 'pipe'] });
         if (mountRes.status !== 0) return '';
         mountPoint = normalizeMountPath(mountRes.stdout || mountRes.stderr);
         if (!mountPoint) return '';
@@ -44,16 +44,16 @@ function detectShellViaImageMount(image) {
         return shellPath;
     } finally {
         if (mountPoint) {
-            try { spawnSync(containerRuntime, ['image', 'unmount', mountPoint], { stdio: 'ignore' }); } catch (_) {}
+            try { spawnSync(runtime, ['image', 'unmount', mountPoint], { stdio: 'ignore' }); } catch (_) {}
         }
     }
 }
 
-function detectShellViaContainerRun(image) {
+function detectShellViaContainerRun(image, runtime) {
     for (const shellPath of SHELL_PROBE_PATHS) {
         // Use --entrypoint to bypass any custom ENTRYPOINT (e.g. Keycloak's
         // kc.sh) that would intercept the probe command.
-        const res = spawnSync(containerRuntime, ['run', '--rm', '--entrypoint', 'test', image, '-x', shellPath], { stdio: 'ignore' });
+        const res = spawnSync(runtime, ['run', '--rm', '--entrypoint', 'test', image, '-x', shellPath], { stdio: 'ignore' });
         if (res.status === 0) {
             return shellPath;
         }
@@ -61,17 +61,19 @@ function detectShellViaContainerRun(image) {
     return '';
 }
 
-function detectShellForImage(agentName, image) {
+function detectShellForImage(agentName, image, runtime = null) {
     if (!agentName || !image) {
         throw new Error('[start] Missing agent or image for shell detection.');
     }
-    if (shellDetectionCache.has(image)) {
-        return shellDetectionCache.get(image);
+    const resolvedRuntime = runtime || getRuntime();
+    const cacheKey = `${resolvedRuntime}:${image}`;
+    if (shellDetectionCache.has(cacheKey)) {
+        return shellDetectionCache.get(cacheKey);
     }
-    const fromMount = detectShellViaImageMount(image);
-    const shellPath = fromMount || detectShellViaContainerRun(image);
+    const fromMount = detectShellViaImageMount(image, resolvedRuntime);
+    const shellPath = fromMount || detectShellViaContainerRun(image, resolvedRuntime);
     const finalShell = shellPath || SHELL_FALLBACK_DIRECT;
-    shellDetectionCache.set(image, finalShell);
+    shellDetectionCache.set(cacheKey, finalShell);
     return finalShell;
 }
 

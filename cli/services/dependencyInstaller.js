@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { execSync, spawnSync } from 'child_process';
-import { containerRuntime } from './docker/common.js';
+import { getRuntime } from './docker/common.js';
 import { GLOBAL_DEPS_PATH } from './config.js';
 import { getAgentWorkDir, getAgentCodePath, getRepoAgentCodePath } from './workspaceStructure.js';
 import { debugLog } from './utils.js';
@@ -14,7 +14,8 @@ import { debugLog } from './utils.js';
  * @returns {string} Command output
  */
 function dockerExec(containerName, command, options = {}) {
-    const cmd = `${containerRuntime} exec ${containerName} sh -c "${command.replace(/"/g, '\\"')}"`;
+    const runtime = getRuntime();
+    const cmd = `${runtime} exec ${containerName} sh -c "${command.replace(/"/g, '\\"')}"`;
     debugLog(`dockerExec: ${cmd}`);
     return execSync(cmd, { stdio: options.stdio || 'pipe', ...options }).toString().trim();
 }
@@ -26,7 +27,8 @@ function dockerExec(containerName, command, options = {}) {
  * @param {string} content - Content to write
  */
 function writeFileInContainer(containerName, filePath, content) {
-    const cmd = `${containerRuntime} exec -i ${containerName} sh -c "cat > ${filePath}"`;
+    const runtime = getRuntime();
+    const cmd = `${runtime} exec -i ${containerName} sh -c "cat > ${filePath}"`;
     debugLog(`dockerExec: ${cmd}`);
     execSync(cmd, { input: content });
 }
@@ -325,8 +327,9 @@ function needsHostInstall(agentName, options = {}) {
  */
 function runNpmInstallInContainer(containerName, workDir, log = debugLog) {
     try {
+        const runtime = getRuntime();
         log(`[deps] Running npm install in ${workDir}...`);
-        execSync(`${containerRuntime} exec -w "${workDir}" ${containerName} npm install --no-package-lock`, {
+        execSync(`${runtime} exec -w "${workDir}" ${containerName} npm install --no-package-lock`, {
             stdio: 'inherit',
             timeout: 600000 // 10 minute timeout
         });

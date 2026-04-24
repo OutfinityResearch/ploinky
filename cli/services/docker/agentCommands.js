@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process';
-import { containerRuntime, flagsToArgs, waitForContainerRunning } from './common.js';
+import { flagsToArgs, getRuntime, waitForContainerRunning } from './common.js';
 
 const DEFAULT_AGENT_ENTRY = 'sh /Agent/server/AgentServer.sh';
 
@@ -34,8 +34,9 @@ function launchAgentSidecar({ containerName, agentCommand, agentName }) {
     if (!waitForContainerRunning(containerName, 40, 250)) {
         throw new Error(`[start] ${agentName || containerName}: container not running; cannot launch agent command.`);
     }
+    const runtime = getRuntime();
     const execArgs = ['exec', '-d', containerName, ...startArgs];
-    const execRes = spawnSync(containerRuntime, execArgs, { stdio: 'inherit' });
+    const execRes = spawnSync(runtime, execArgs, { stdio: 'inherit' });
     if (execRes.status !== 0) {
         throw new Error(`[start] ${agentName || containerName}: failed to launch start command (exit ${execRes.status}).`);
     }
