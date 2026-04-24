@@ -168,10 +168,24 @@ function assertHostMatchesRuntimeKey(runtimeKey) {
     return parsed;
 }
 
+function withGithubHttpsGitConfig(env = process.env) {
+    const rawCount = Number.parseInt(env.GIT_CONFIG_COUNT || '0', 10);
+    const baseCount = Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : 0;
+    return {
+        ...env,
+        GIT_CONFIG_COUNT: String(baseCount + 2),
+        [`GIT_CONFIG_KEY_${baseCount}`]: 'url.https://github.com/.insteadOf',
+        [`GIT_CONFIG_VALUE_${baseCount}`]: 'ssh://git@github.com/',
+        [`GIT_CONFIG_KEY_${baseCount + 1}`]: 'url.https://github.com/.insteadOf',
+        [`GIT_CONFIG_VALUE_${baseCount + 1}`]: 'git@github.com:',
+    };
+}
+
 function runNpmInstall(cwd, { log = debugLog } = {}) {
     log(`[deps-cache] npm install in ${cwd}`);
     const result = spawnSync('npm', ['install', '--no-package-lock'], {
         cwd,
+        env: withGithubHttpsGitConfig(),
         stdio: 'inherit',
         timeout: 10 * 60 * 1000,
     });
@@ -230,6 +244,8 @@ function runNpmInstallInContainer(cwd, { image, runtime = null, log = debugLog }
         '  (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
         '  (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
         ') 2>/dev/null',
+        '&& git config --global url.https://github.com/.insteadOf ssh://git@github.com/',
+        '&& git config --global --add url.https://github.com/.insteadOf git@github.com:',
         '&& npm install --no-package-lock',
     ].join(' ');
     const args = [
