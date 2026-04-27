@@ -1,0 +1,155 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import {
+    INTERACTIVE_PLOINKY_UPDATE_MESSAGE,
+    findAchillesDependencyPackages,
+    refreshAchillesDependenciesInRepos,
+    updatePloinkySelf,
+} from '../../cli/services/updateService.js';
+
+function tempDir(prefix = 'ploinky-update-') {
+    return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function writeJson(filePath, value) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(value, null, 4));
+}
+
+test('interactive Ploinky self-update is deferred when upstream has a new version', () => {
+    const root = tempDir();
+    const warnings = [];
+
+    try {
+        fs.mkdirSync(path.join(root, '.git'), { recursive: true });
+
+        const result = updatePloinkySelf({
+            repoPath: root,
+            interactiveSession: true,
+            logger: { warn(message) { warnings.push(message); } },
+            checkUpdate() {
+                return {
+                    available: true,
+                    head: 'old-head',
+                    upstream: 'new-head',
+                };
+            },
+            pull() {
+                throw new Error('interactive update must not pull');
+            },
+        });
+
+        assert.equal(result.deferred, true);
+        assert.equal(result.updateAvailable, true);
+        assert.equal(warnings.length, 1);
+        assert.equal(warnings[0], INTERACTIVE_PLOINKY_UPDATE_MESSAGE);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('non-interactive Ploinky self-update pulls and reports changed HEAD', () => {
+    const root = tempDir();
+    let pulled = false;
+
+    try {
+        fs.mkdirSync(path.join(root, '.git'), { recursive: true });
+
+        const result = updatePloinkySelf({
+            repoPath: root,
+            getRef() {
+                return pulled ? 'new-head' : 'old-head';
+            },
+            pull(repoPath) {
+                assert.equal(repoPath, root);
+                pulled = true;
+            },
+        });
+
+        assert.equal(pulled, true);
+        assert.equal(result.updated, true);
+        assert.equal(result.before, 'old-head');
+        assert.equal(result.after, 'new-head');
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('findAchillesDependencyPackages finds packages in repos and ignores node_modules', () => {
+    const root = tempDir();
+
+    try {
+        writeJson(path.join(root, 'repoA', 'agentA', 'package.json'), {
+            dependencies: {
+                achillesAgentLib: 'git+https://example.invalid/achillesAgentLib.git',
+            },
+        });
+        writeJson(path.join(root, 'repoA', 'agentA', 'node_modules', 'nested', 'package.json'), {
+            dependencies: {
+                achillesAgentLib: 'should-be-ignored',
+            },
+        });
+        writeJson(path.join(root, 'repoB', 'agentB', 'package.json'), {
+            dependencies: {
+                leftpad: '1.0.0',
+            },
+        });
+        writeJson(path.join(root, 'repoC', 'package.json'), {
+            devDependencies: {
+                achillesAgentLib: 'git+https://example.invalid/achillesAgentLib.git',
+            },
+        });
+
+        const found = findAchillesDependencyPackages(root)
+            .map(entry => path.relative(root, entry.packageDir))
+            .sort();
+
+        assert.deepEqual(found, ['repoA/agentA', 'repoC']);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('refreshAchillesDependenciesInRepos updates installed git dependency or falls back to npm update', () => {
+    const root = tempDir();
+    const calls = [];
+
+    try {
+        const gitBacked = path.join(root, 'repoA', 'agentA');
+        const npmBacked = path.join(root, 'repoB', 'agentB');
+        writeJson(path.join(gitBacked, 'package.json'), {
+            dependencies: { achillesAgentLib: 'git+https://example.invalid/achillesAgentLib.git' },
+        });
+        writeJson(path.join(npmBacked, 'package.json'), {
+            dependencies: { achillesAgentLib: 'git+https://example.invalid/achillesAgentLib.git' },
+        });
+        fs.mkdirSync(path.join(gitBacked, 'node_modules', 'achillesAgentLib', '.git'), { recursive: true });
+
+        const result = refreshAchillesDependenciesInRepos({
+            reposRoot: root,
+            logger: { log() {}, error() {} },
+            stdio: 'ignore',
+            spawn(command, args, options) {
+                calls.push({ command, args, cwd: options.cwd });
+                return { status: 0 };
+            },
+        });
+
+        assert.equal(result.total, 2);
+        assert.equal(result.refreshed.length, 2);
+        assert.equal(result.failed.length, 0);
+        assert.deepEqual(calls.map(call => call.command).sort(), ['git', 'npm']);
+        assert.ok(calls.some(call => call.command === 'git'
+            && call.args.includes('pull')
+            && call.cwd.endsWith(path.join('node_modules', 'achillesAgentLib'))));
+        assert.ok(calls.some(call => call.command === 'npm'
+            && call.args.join(' ') === 'update achillesAgentLib --no-package-lock'
+            && call.cwd === npmBacked));
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});

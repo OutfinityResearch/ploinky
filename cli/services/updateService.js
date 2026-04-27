@@ -1,0 +1,269 @@
+import fs from 'fs';
+import path from 'path';
+import { execFileSync, spawnSync } from 'child_process';
+import { fileURLToPath } from 'url';
+import { PLOINKY_DIR } from './config.js';
+
+const ACHILLES_PACKAGE_NAME = 'achillesAgentLib';
+const DEPENDENCY_SECTIONS = [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+];
+
+export const INTERACTIVE_PLOINKY_UPDATE_MESSAGE = [
+    'A newer Ploinky version is available, but this interactive session is already running loaded code.',
+    'Close this session, run `ploinky update` from your shell, then start Ploinky again so the new changes are visible.',
+].join('\n');
+
+function defaultLogger() {
+    return console;
+}
+
+export function resolvePloinkyRoot() {
+    const envRoot = String(process.env.PLOINKY_ROOT || '').trim();
+    if (envRoot) return path.resolve(envRoot);
+    return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+}
+
+function isDirectory(dir) {
+    try {
+        return fs.statSync(dir).isDirectory();
+    } catch (_) {
+        return false;
+    }
+}
+
+export function isGitRepo(repoPath) {
+    return isDirectory(path.join(repoPath, '.git'))
+        || fs.existsSync(path.join(repoPath, '.git'));
+}
+
+function gitOutput(repoPath, args, { execFile = execFileSync } = {}) {
+    return String(execFile('git', ['-C', repoPath, ...args], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+    }) || '').trim();
+}
+
+export function getGitRef(repoPath, ref = 'HEAD', options = {}) {
+    return gitOutput(repoPath, ['rev-parse', ref], options);
+}
+
+function runGit(repoPath, args, { spawn = spawnSync, stdio = 'inherit' } = {}) {
+    const result = spawn('git', ['-C', repoPath, ...args], { stdio });
+    if (result.error) {
+        throw new Error(`git ${args.join(' ')} failed: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+        throw new Error(`git ${args.join(' ')} exited with code ${result.status}`);
+    }
+    return result;
+}
+
+export function pullGitRepo(repoPath, {
+    rebase = true,
+    autostash = true,
+    spawn = spawnSync,
+    stdio = 'inherit',
+} = {}) {
+    const args = ['pull'];
+    if (rebase) args.push('--rebase');
+    if (autostash) args.push('--autostash');
+    runGit(repoPath, args, { spawn, stdio });
+    return true;
+}
+
+export function checkGitUpstreamUpdate(repoPath, {
+    execFile = execFileSync,
+    spawn = spawnSync,
+} = {}) {
+    if (!isGitRepo(repoPath)) {
+        return { available: false, skipped: true, reason: 'not a git repository' };
+    }
+
+    let upstreamRef;
+    try {
+        upstreamRef = gitOutput(repoPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { execFile });
+    } catch (_) {
+        return { available: false, skipped: true, reason: 'no upstream branch' };
+    }
+
+    runGit(repoPath, ['fetch', '--quiet'], { spawn, stdio: 'ignore' });
+
+    const head = getGitRef(repoPath, 'HEAD', { execFile });
+    const upstream = getGitRef(repoPath, '@{u}', { execFile });
+    if (!head || !upstream || head === upstream) {
+        return { available: false, head, upstream, upstreamRef };
+    }
+
+    const contains = spawn('git', ['-C', repoPath, 'merge-base', '--is-ancestor', upstream, 'HEAD'], {
+        stdio: 'ignore',
+    });
+    if (contains.error) {
+        throw new Error(`git merge-base failed: ${contains.error.message}`);
+    }
+
+    return {
+        available: contains.status !== 0,
+        head,
+        upstream,
+        upstreamRef,
+    };
+}
+
+export function updatePloinkySelf({
+    repoPath = resolvePloinkyRoot(),
+    interactiveSession = false,
+    logger = defaultLogger(),
+    checkUpdate = checkGitUpstreamUpdate,
+    pull = pullGitRepo,
+    getRef = getGitRef,
+} = {}) {
+    if (!isGitRepo(repoPath)) {
+        logger.warn?.(`Skipping Ploinky self-update: ${repoPath} is not a git repository.`);
+        return { skipped: true, reason: 'not a git repository', repoPath };
+    }
+
+    if (interactiveSession) {
+        const check = checkUpdate(repoPath);
+        if (check.available) {
+            logger.warn?.(INTERACTIVE_PLOINKY_UPDATE_MESSAGE);
+            return {
+                deferred: true,
+                updateAvailable: true,
+                repoPath,
+                before: check.head,
+                after: check.upstream,
+            };
+        }
+        return {
+            updated: false,
+            updateAvailable: false,
+            skipped: check.skipped === true,
+            reason: check.reason,
+            repoPath,
+            before: check.head,
+            after: check.upstream || check.head,
+        };
+    }
+
+    const before = getRef(repoPath, 'HEAD');
+    pull(repoPath);
+    const after = getRef(repoPath, 'HEAD');
+    return {
+        updated: Boolean(before && after && before !== after),
+        repoPath,
+        before,
+        after,
+    };
+}
+
+function hasAchillesDependency(pkg) {
+    for (const section of DEPENDENCY_SECTIONS) {
+        const deps = pkg?.[section];
+        if (deps && Object.prototype.hasOwnProperty.call(deps, ACHILLES_PACKAGE_NAME)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export function findAchillesDependencyPackages(rootDir) {
+    const root = path.resolve(rootDir);
+    if (!isDirectory(root)) return [];
+
+    const packages = [];
+    const ignored = new Set(['.git', 'node_modules']);
+
+    function visit(dir) {
+        const packagePath = path.join(dir, 'package.json');
+        if (fs.existsSync(packagePath)) {
+            try {
+                const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+                if (hasAchillesDependency(pkg)) {
+                    packages.push({ packageDir: dir, packagePath });
+                }
+            } catch (_) {
+                // Ignore malformed package files during discovery; npm will report
+                // actionable errors if an explicitly updated package is invalid.
+            }
+        }
+
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            if (entry.name.startsWith('.') || ignored.has(entry.name)) continue;
+            visit(path.join(dir, entry.name));
+        }
+    }
+
+    visit(root);
+    return packages;
+}
+
+function runCommand(command, args, {
+    cwd,
+    spawn = spawnSync,
+    stdio = 'inherit',
+} = {}) {
+    const result = spawn(command, args, { cwd, stdio });
+    if (result.error) {
+        throw new Error(`${command} ${args.join(' ')} failed: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+        throw new Error(`${command} ${args.join(' ')} exited with code ${result.status}`);
+    }
+    return result;
+}
+
+export function refreshAchillesDependencyPackage(packageDir, {
+    spawn = spawnSync,
+    stdio = 'inherit',
+} = {}) {
+    const installedPath = path.join(packageDir, 'node_modules', ACHILLES_PACKAGE_NAME);
+    if (isGitRepo(installedPath)) {
+        runCommand('git', ['pull', '--rebase', '--autostash'], {
+            cwd: installedPath,
+            spawn,
+            stdio,
+        });
+        return { packageDir, method: 'git-pull' };
+    }
+
+    runCommand('npm', ['update', ACHILLES_PACKAGE_NAME, '--no-package-lock'], {
+        cwd: packageDir,
+        spawn,
+        stdio,
+    });
+    return { packageDir, method: 'npm-update' };
+}
+
+export function refreshAchillesDependenciesInRepos({
+    reposRoot = path.join(PLOINKY_DIR, 'repos'),
+    logger = defaultLogger(),
+    spawn = spawnSync,
+    stdio = 'inherit',
+} = {}) {
+    const packages = findAchillesDependencyPackages(reposRoot);
+    const refreshed = [];
+    const failed = [];
+
+    if (!packages.length) {
+        return { total: 0, refreshed, failed };
+    }
+
+    logger.log?.(`Refreshing ${ACHILLES_PACKAGE_NAME} in .ploinky repositories...`);
+    for (const pkg of packages) {
+        try {
+            const result = refreshAchillesDependencyPackage(pkg.packageDir, { spawn, stdio });
+            refreshed.push(result);
+            logger.log?.(`  ✓ ${path.relative(reposRoot, pkg.packageDir) || '.'} (${result.method})`);
+        } catch (err) {
+            const message = err?.message || String(err);
+            failed.push({ packageDir: pkg.packageDir, message });
+            logger.error?.(`  ✗ ${path.relative(reposRoot, pkg.packageDir) || '.'}: ${message}`);
+        }
+    }
+
+    return { total: packages.length, refreshed, failed };
+}

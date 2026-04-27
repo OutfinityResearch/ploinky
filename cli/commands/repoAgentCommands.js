@@ -5,6 +5,11 @@ import { showHelp } from '../services/help.js';
 import * as reposSvc from '../services/repos.js';
 import * as agentsSvc from '../services/agents.js';
 import * as skillsSvc from '../services/skills.js';
+import {
+    refreshAchillesDependenciesInRepos,
+    resolvePloinkyRoot,
+    updatePloinkySelf,
+} from '../services/updateService.js';
 import { collectAgentsSummary } from '../services/status.js';
 import { findAgent } from '../services/utils.js';
 
@@ -67,17 +72,55 @@ async function updateRepo(repoName) {
     try {
         reposSvc.updateRepo(repoName);
         console.log(`✓ Repo '${repoName}' updated.`);
+        const repoPath = path.join(REPOS_DIR, repoName);
+        const achilles = refreshAchillesDependenciesInRepos({ reposRoot: repoPath });
+        if (achilles.failed.length) {
+            const failedPackages = achilles.failed.map(entry => path.relative(repoPath, entry.packageDir) || '.').join(', ');
+            throw new Error(`Failed to refresh achillesAgentLib in ${failedPackages}`);
+        }
     } catch (err) {
         throw new Error(`update repo failed: ${err?.message || err}`);
     }
 }
 
-async function updateAllRepos(folderPath) {
+async function updateAllRepos(folderPath, options = {}) {
     const projectsRoot = resolveUpdateProjectsRoot(folderPath);
-    const workspaceRepos = reposSvc.findWorkspaceGitRepos(projectsRoot);
+    const ploinkyRoot = resolvePloinkyRoot();
+    const workspaceRepos = reposSvc.findWorkspaceGitRepos(projectsRoot)
+        .filter(repo => !pathsReferToSameLocation(repo.path, ploinkyRoot));
     const ploinkyRepos = getRepoNames();
     const failed = [];
     let updated = 0;
+
+    console.log('Updating Ploinky...');
+    let selfUpdate = null;
+    try {
+        selfUpdate = updatePloinkySelf({
+            interactiveSession: options.interactiveSession === true,
+        });
+        if (selfUpdate.deferred) {
+            return {
+                total: 0,
+                updated: 0,
+                failed: [],
+                selfUpdate,
+                deferred: true,
+            };
+        }
+        if (selfUpdate.skipped) {
+            console.log(`  - skipped (${selfUpdate.reason || 'not available'})`);
+        } else if (selfUpdate.updated) {
+            console.log('  ✓ Ploinky updated.');
+            updated += 1;
+        } else {
+            console.log('  ✓ Ploinky already up to date.');
+            updated += 1;
+        }
+    } catch (err) {
+        const message = err?.message || String(err);
+        failed.push({ repoName: 'ploinky', message });
+        console.error(`  ✗ Ploinky: ${message}`);
+    }
 
     if (ploinkyRepos.length) {
         console.log('Updating ploinky repositories...');
@@ -109,6 +152,16 @@ async function updateAllRepos(folderPath) {
         }
     }
 
+    const achilles = refreshAchillesDependenciesInRepos();
+    if (achilles.failed.length) {
+        for (const entry of achilles.failed) {
+            failed.push({
+                repoName: `achillesAgentLib ${path.relative(REPOS_DIR, entry.packageDir) || '.'}`,
+                message: entry.message,
+            });
+        }
+    }
+
     if (workspaceRepos.length) {
         console.log('Installing default skills into workspace repositories...');
         for (const repo of workspaceRepos) {
@@ -129,15 +182,26 @@ async function updateAllRepos(folderPath) {
         }
     }
 
-    const totalRepos = ploinkyRepos.length + workspaceRepos.length;
+    const totalRepos = 1 + ploinkyRepos.length + workspaceRepos.length;
     console.log(`Update summary: ${updated}/${totalRepos} repositories updated.`);
+    if (achilles.total) {
+        console.log(`Achilles dependency summary: ${achilles.refreshed.length}/${achilles.total} package(s) refreshed.`);
+    }
 
     if (failed.length) {
         const failedNames = failed.map(entry => entry.repoName).join(', ');
         throw new Error(`Failed to update ${failed.length} repository(s): ${failedNames}`);
     }
 
-    return { total: totalRepos, updated, failed };
+    return { total: totalRepos, updated, failed, selfUpdate, achilles };
+}
+
+function pathsReferToSameLocation(first, second) {
+    try {
+        return fs.realpathSync(first) === fs.realpathSync(second);
+    } catch (_) {
+        return path.resolve(first) === path.resolve(second);
+    }
 }
 
 function resolveUpdateProjectsRoot(folderPath) {

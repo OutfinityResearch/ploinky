@@ -186,13 +186,13 @@ async function handleCommand(args) {
                 const firstLower = first.toLowerCase();
                 if (!first || firstLower === 'all' || firstLower === 'repos' || firstLower === 'repositories') {
                     const folderArg = first ? String(options[1] || '').trim() || undefined : undefined;
-                    await updateAllRepos(folderArg);
+                    await updateAllRepos(folderArg, { interactiveSession: Boolean(inputState.getInterface?.()) });
                 } else if (firstLower === 'repo' || firstLower === 'repository') {
                     await updateRepo(options[1]);
                 } else {
                     const resolved = path.resolve(first);
                     if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-                        await updateAllRepos(first);
+                        await updateAllRepos(first, { interactiveSession: Boolean(inputState.getInterface?.()) });
                     } else {
                         await updateRepo(first);
                     }

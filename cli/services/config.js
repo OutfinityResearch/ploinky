@@ -1,21 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-function findWorkspaceRoot(startDir = process.cwd()) {
-    let current = path.resolve(startDir);
-    while (true) {
-        if (fs.existsSync(path.join(current, '.ploinky'))) {
-            return current;
-        }
-        const parent = path.dirname(current);
-        if (parent === current) {
-            return path.resolve(startDir);
-        }
-        current = parent;
-    }
-}
-
-export const WORKSPACE_ROOT = findWorkspaceRoot();
+export const WORKSPACE_ROOT = path.resolve(process.cwd());
 export const PLOINKY_DIR = path.join(WORKSPACE_ROOT, '.ploinky');
 export const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 export const AGENTS_FILE = path.join(PLOINKY_DIR, 'agents.json');

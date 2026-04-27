@@ -16,7 +16,7 @@ export function showHelp(args = []) {
 
 ▶ LOCAL DEVELOPMENT
   add repo <name> [url] [branch] Add repository (basic/cloud/vibe/security/extra/demo)
-  update [folderPath]            Pull .ploinky/repos and discovered project repos, then refresh default skills
+  update [folderPath]            Update Ploinky, .ploinky/repos, Achilles deps, projects, and default skills
   start [staticAgent] [port]     Start agents from .ploinky/agents.json and launch Router
   shell <agentName>              Open interactive sh in container (attached TTY)
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
@@ -96,10 +96,10 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         },
         
         'update': {
-            description: 'Update Ploinky repositories and project repositories',
+            description: 'Update Ploinky itself, workspace repositories, Achilles dependencies, and project repositories',
             syntax: 'update [folderPath] | update all [folderPath] | update repos [folderPath] | update repo <name>',
             examples: [ 'update', 'update /work/projects', 'update all /work/projects', 'update repo basic' ],
-            notes: 'Runs git pull --rebase --autostash for .ploinky/repos and for git repositories discovered recursively from folderPath. Without folderPath, discovery starts at the current working directory. Discovered project repositories also receive refreshed AchillesCopilotBasicSkills copies and managed .gitignore entries.'
+            notes: 'Runs git pull --rebase --autostash for the Ploinky checkout, .ploinky/repos, and git repositories discovered recursively from folderPath. Without folderPath, discovery starts at the current working directory. Packages under .ploinky/repos that declare achillesAgentLib refresh that dependency. Discovered project repositories also receive refreshed AchillesCopilotBasicSkills copies and managed .gitignore entries. In an interactive Ploinky session, a detected Ploinky self-update is deferred: close the session, run `ploinky update`, then restart Ploinky so the new code is loaded.'
         },
         
         
