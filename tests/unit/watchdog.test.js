@@ -12,7 +12,8 @@ const {
     state,
     CONFIG,
     getTestLogs,
-    clearTestLogs
+    clearTestLogs,
+    getRouterNodeExecutable
 } = await import('../../cli/server/Watchdog.js');
 
 const extractEvents = () => getTestLogs().map(entry => entry.event);
@@ -134,4 +135,8 @@ test('pendingHealthCheckRestart flag is cleared after restart decision', () => {
     const shouldRestart = determineShouldRestart(0, null);
     assert.equal(shouldRestart, false);
     assert.ok(extractEvents().includes('clean_exit'));
+});
+
+test('watchdog reuses the current node executable for router launches', () => {
+    assert.equal(getRouterNodeExecutable(), process.execPath);
 });

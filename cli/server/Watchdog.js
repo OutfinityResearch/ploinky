@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 const CONFIG = {
     SERVER_SCRIPT: path.join(__dirname, 'RoutingServer.js'),
     LOG_DIR: LOGS_DIR,
+    ROUTER_LOG: path.join(LOGS_DIR, 'router.log'),
     PROCESS_LOG: path.join(LOGS_DIR, 'watchdog.log'),
     
     // Restart configuration
@@ -76,6 +77,25 @@ function ensureLogDirectory() {
         fs.mkdirSync(CONFIG.LOG_DIR, { recursive: true });
     } catch (err) {
         safeConsole('error', '[ProcessManager] Failed to create log directory:', err.message);
+    }
+}
+
+function getRouterNodeExecutable() {
+    return process.execPath || 'node';
+}
+
+function appendRouterProcessOutput(streamName, chunk) {
+    if (IS_TEST_MODE || !chunk) {
+        return;
+    }
+    try {
+        ensureLogDirectory();
+        fs.appendFileSync(CONFIG.ROUTER_LOG, chunk);
+    } catch (err) {
+        log('error', 'router_output_log_failed', {
+            stream: streamName,
+            error: err?.message || String(err)
+        });
     }
 }
 
@@ -340,8 +360,9 @@ function spawnServer() {
         MANAGED_BY_PROCESS_MANAGER: 'true',
     };
     
-    const child = spawn('node', [CONFIG.SERVER_SCRIPT], {
-        stdio: ['inherit', 'inherit', 'inherit'],
+    const nodeExecutable = getRouterNodeExecutable();
+    const child = spawn(nodeExecutable, [CONFIG.SERVER_SCRIPT], {
+        stdio: ['ignore', 'pipe', 'pipe'],
         env,
         detached: false
     });
@@ -350,8 +371,12 @@ function spawnServer() {
     
     log('info', 'server_spawned', {
         pid: child.pid,
+        nodeExecutable,
         totalRestarts: state.totalRestarts
     });
+
+    child.stdout?.on('data', chunk => appendRouterProcessOutput('stdout', chunk));
+    child.stderr?.on('data', chunk => appendRouterProcessOutput('stderr', chunk));
     
     // Handle process exit
     child.on('exit', (code, signal) => {
@@ -649,5 +674,6 @@ export {
     checkCircuitBreaker,
     getTestLogs,
     clearTestLogs,
+    getRouterNodeExecutable,
     IS_TEST_MODE as __IS_TEST_MODE
 };

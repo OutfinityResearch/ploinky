@@ -22,6 +22,47 @@ import { waitForAgentReady } from '../server/utils/agentReadiness.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function createAppendLogStdio(logFile) {
+  const opened = [];
+  try {
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    const stdoutFd = fs.openSync(logFile, 'a');
+    const stderrFd = fs.openSync(logFile, 'a');
+    opened.push(stdoutFd, stderrFd);
+    return {
+      stdio: ['ignore', stdoutFd, stderrFd],
+      closeParentFds() {
+        for (const fd of opened) {
+          try { fs.closeSync(fd); } catch (_) {}
+        }
+      }
+    };
+  } catch (_) {
+    for (const fd of opened) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+    return {
+      stdio: 'ignore',
+      closeParentFds() {}
+    };
+  }
+}
+
+function spawnWatchdog(routerPath, port, routerPidFile) {
+  const logStdio = createAppendLogStdio(path.join(LOGS_DIR, 'watchdog.log'));
+  const child = spawn(process.execPath, [routerPath], {
+    detached: true,
+    stdio: logStdio.stdio,
+    env: {
+      ...process.env,
+      PORT: String(port),
+      PLOINKY_ROUTER_PID_FILE: routerPidFile
+    }
+  });
+  logStdio.closeParentFds();
+  return child;
+}
+
 function getCliCmd(manifest) {
   const explicitCli =
     (manifest.cli && String(manifest.cli)) ||
@@ -594,15 +635,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     }
 
     const routerPidFile = path.join(runningDir, 'router.pid');
-    const child = spawn(process.execPath, [routerPath], {
-      detached: true,
-      stdio: 'ignore',
-      env: {
-        ...process.env,
-        PORT: String(staticPort),
-        PLOINKY_ROUTER_PID_FILE: routerPidFile
-      }
-    });
+    const child = spawnWatchdog(routerPath, staticPort, routerPidFile);
     try { fs.writeFileSync(routerPidFile, String(child.pid)); } catch (_) {}
     // Detach so the CLI can exit while the router keeps running.
     child.unref();
@@ -845,11 +878,7 @@ async function reinstallAgent(agentName) {
                 fs.mkdirSync(runningDir, { recursive: true });
                 const routerPath = path.resolve(__dirname, '../server/Watchdog.js');
                 const routerPidFile = path.join(runningDir, 'router.pid');
-                const child = spawn(process.execPath, [routerPath], {
-                    detached: true,
-                    stdio: 'ignore',
-                    env: { ...process.env, PORT: String(cfg.port), PLOINKY_ROUTER_PID_FILE: routerPidFile }
-                });
+                const child = spawnWatchdog(routerPath, cfg.port, routerPidFile);
                 try { fs.writeFileSync(routerPidFile, String(child.pid)); } catch(_) {}
                 child.unref();
                 console.log(`[reinstall] Watchdog launched (pid ${child.pid}) on port ${cfg.port}.`);
