@@ -26,6 +26,7 @@ export function showHelp(args = []) {
   webmeet [moderatorAgent] [--rotate]  Print the WebMeet access URL
   dashboard [--rotate]           Show or rotate Dashboard token and print access URL
   sso enable|disable|status  Bind or inspect SSO provider agents
+  sandbox status|disable|enable  Force lite-sandbox agents to use containers, or restore bwrap/seatbelt
   vars                           List all variable names (no values)
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
@@ -184,6 +185,18 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 }
             }
         },
+        'sandbox': {
+            description: 'Control host sandbox runtime selection for this workspace.',
+            syntax: 'sandbox status | sandbox disable | sandbox enable',
+            examples: [
+                'sandbox status',
+                'sandbox disable',
+                'disable sandbox',
+                'sandbox enable',
+                'enable sandbox'
+            ],
+            notes: 'When disabled, agents whose manifests request `lite-sandbox: true` use podman/docker instead. This is useful for testing container behavior. Restart running agents to apply the change. Environment override: PLOINKY_DISABLE_HOST_SANDBOX=1.'
+        },
         
         
         'shutdown': {
@@ -202,6 +215,12 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'enable': {
             description: 'Enable features for agents and repos',
             subcommands: {
+                'sandbox': {
+                    syntax: 'enable sandbox',
+                    description: 'Restore manifest-driven bwrap/seatbelt selection for this workspace.',
+                    examples: [ 'enable sandbox' ],
+                    notes: 'Equivalent to `sandbox enable`. Restart running agents to apply the change.'
+                },
                 'repo': {
                     syntax: 'enable repo <name> [branch] | enable repo <name> --branch <branch>',
                     description: 'Enable a repository for agent listings (see list repos). If not already installed, clones the repository.',
@@ -312,6 +331,12 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         'disable': {
             description: 'Disable features',
             subcommands: {
+                'sandbox': {
+                    syntax: 'disable sandbox',
+                    description: 'Disable bwrap/seatbelt selection for all agents in this workspace; lite-sandbox agents will use podman/docker.',
+                    examples: [ 'disable sandbox' ],
+                    notes: 'Equivalent to `sandbox disable`. Restart running agents to apply the change.'
+                },
                 'repo': {
                     syntax: 'disable repo <name>',
                     description: 'Disable a repository from agent listings',

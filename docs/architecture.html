@@ -202,13 +202,14 @@ handleCommand(args) {
 }</code></pre>
 
                         <h3>Runtime Detection</h3>
-                        <p>Automatically detects and uses available container runtime:</p>
+                        <p>Automatically detects the runtime from the manifest and host:</p>
                         <pre><code>// Runtime preference: podman > docker
-// Checks 'podman' first, falls back to 'docker'
-// For sandbox runtimes:
-//   manifest "lite-sandbox": true → auto-detect (macOS: seatbelt > bwrap, Linux: bwrap)
-//   manifest "runtime": "bwrap"  → bubblewrap only
-//   manifest "runtime": "seatbelt" → macOS sandbox-exec only</code></pre>
+// Default: podman/docker
+// Host sandbox:
+//   manifest "lite-sandbox": true → macOS: seatbelt, Linux: bwrap
+// Container override:
+//   ploinky sandbox disable → podman/docker even for lite-sandbox agents
+// Legacy string selectors such as "runtime": "bwrap" are rejected.</code></pre>
                     </div>
 
                     <div class="doc-section" id="routing">

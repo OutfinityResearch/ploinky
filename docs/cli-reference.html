@@ -597,7 +597,7 @@ help cli       # Help for cli command</code></pre>
                         <pre><code>{
   "container": "node:20-bullseye",
   "lite-sandbox": true,
-  "runtime": "bwrap",
+  "runtime": { "resources": {} },
   "start": "/code/start_script.sh",
   "agent": "node server.js",
   "cli": "node repl.js",

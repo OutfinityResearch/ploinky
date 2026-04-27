@@ -86,7 +86,9 @@
 
   // Sandbox and runtime
   "lite-sandbox": true,               // Enable sandbox runtime auto-detection
-  "runtime": "bwrap",                 // Explicit runtime: "bwrap" or "seatbelt"
+  "runtime": {                        // Optional runtime resources, not backend selection
+    "resources": {}
+  },
 
   // Readiness checks
   "readiness": {                      // Startup readiness protocol
@@ -229,7 +231,7 @@
                             <tr>
                                 <td><code>runtime</code></td>
                                 <td>No</td>
-                                <td>Explicit sandbox runtime override: <code>"bwrap"</code> (Linux) or <code>"seatbelt"</code> (macOS).</td>
+                                <td>Object for runtime resources such as declarative env and storage. String backend selectors such as <code>"bwrap"</code> or <code>"seatbelt"</code> are no longer supported; use <code>lite-sandbox</code> plus <code>ploinky sandbox disable</code> when container testing is needed.</td>
                             </tr>
                             <tr>
                                 <td><code>readiness</code></td>
@@ -294,7 +296,7 @@ new agent myrepo MyAgent node:20
                         <ol style="margin-left: 2rem; margin-top: 1rem;">
                             <li><code>preinstall</code> &mdash; runs on the <strong>host</strong> before the agent is added to the workspace.</li>
                             <li><code>hosthook_aftercreation</code> &mdash; runs on the <strong>host</strong> after the container is created.</li>
-                            <li><code>install</code> &mdash; runs inside a disposable <strong>container</strong> with the agent mounts to prepare dependencies.</li>
+                            <li><code>install</code> &mdash; runs before runtime launch to prepare dependencies. Container agents use a disposable install container; host-sandbox agents use the host dependency cache.</li>
                             <li><code>postinstall</code> &mdash; runs inside the running <strong>container</strong> and triggers a restart when it finishes.</li>
                             <li><code>hosthook_postinstall</code> &mdash; runs on the <strong>host</strong> after postinstall completes.</li>
                         </ol>

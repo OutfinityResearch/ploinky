@@ -207,7 +207,7 @@
                     <p>For other operating systems or more detailed instructions, please refer to the <a href="https://podman.io/getting-started/installation" target="_blank" rel="noopener noreferrer">official Podman documentation</a>.</p>
 
                     <h4>Lightweight Sandboxes (Optional)</h4>
-                    <p>On Linux, Ploinky can use <strong>bubblewrap</strong> (<code>bwrap</code>) for lightweight process sandboxing without full containers. On macOS, <strong>seatbelt</strong> (<code>sandbox-exec</code>) provides similar isolation. Set <code>"lite-sandbox": true</code> in an agent's <code>manifest.json</code> to auto-detect the best available sandbox, or set <code>"runtime": "bwrap"</code> or <code>"runtime": "seatbelt"</code> explicitly.</p>
+                    <p>On Linux, Ploinky can use <strong>bubblewrap</strong> (<code>bwrap</code>) for lightweight process sandboxing without full containers. On macOS, <strong>seatbelt</strong> (<code>sandbox-exec</code>) provides similar isolation. Set <code>"lite-sandbox": true</code> in an agent's <code>manifest.json</code> to auto-detect the host sandbox. To force podman/docker for testing, run <code>ploinky sandbox disable</code>.</p>
 
                     <h3>Installation</h3>
                     <pre><code>$ git clone https://github.com/ploinkyRepos/ploinky.git

@@ -20,6 +20,7 @@ import {
     getGlobalCachePath,
     getAgentCachePath,
     ensureCacheDir,
+    ensureAgentCacheForFamily,
     nodeModulesDir,
 } from '../../cli/services/dependencyCache.js';
 
@@ -184,4 +185,31 @@ test('cache paths follow .ploinky/deps layout', () => {
     assert.ok(globalPath.includes(path.join('.ploinky', 'deps', 'global', rk)));
     const agentPath = getAgentCachePath('repoX', 'agentY', rk);
     assert.ok(agentPath.includes(path.join('.ploinky', 'deps', 'agents', 'repoX', 'agentY', rk)));
+});
+
+test('ensureAgentCacheForFamily prepares cache and returns node_modules path', () => {
+    const cachePath = tempDir();
+    const agentCodePath = tempDir();
+    try {
+        let call;
+        const nm = ensureAgentCacheForFamily({
+            family: 'seatbelt',
+            repoName: 'repoX',
+            agentName: 'agentY',
+            agentCodePath,
+            prepare(args) {
+                call = args;
+                return { cachePath };
+            },
+        });
+
+        assert.equal(nm, nodeModulesDir(cachePath));
+        assert.equal(call.repoName, 'repoX');
+        assert.equal(call.agentName, 'agentY');
+        assert.match(call.runtimeKey, /^seatbelt-/);
+        assert.equal(call.agentPackagePath, path.join(agentCodePath, 'package.json'));
+    } finally {
+        fs.rmSync(cachePath, { recursive: true, force: true });
+        fs.rmSync(agentCodePath, { recursive: true, force: true });
+    }
 });

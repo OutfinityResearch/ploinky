@@ -8,6 +8,7 @@ import { getAgentWorkDir } from '../workspaceStructure.js';
 import { buildEnvFlags, buildEnvMap } from '../secretVars.js';
 import { loadAgents, saveAgents } from '../workspace.js';
 import { debugLog } from '../utils.js';
+import { isHostSandboxDisabled } from '../sandboxRuntime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -352,6 +353,8 @@ export {
     getContainerLabel,
     getRuntime,
     getSecretsForAgent,
+    getHostSandboxDisableHint,
+    getHostSandboxInstallHint,
     isContainerRunning,
     isSandboxRuntime,
     probeContainerRuntime,
@@ -364,6 +367,8 @@ export {
     waitForContainerRunning,
     flagsToArgs,
     sleepMs,
+    createHostSandboxError,
+    createHostSandboxStartupError,
     getRuntimeForAgent
 };
 
@@ -371,52 +376,82 @@ function getRuntime() {
     return requireContainerRuntime();
 }
 
-function fallbackToContainer(tag, reason) {
-    const fallback = probeContainerRuntime();
-    if (!fallback) {
-        console.error(`[${tag}] ${reason} and no container runtime (podman/docker) available for fallback.`);
-        process.exit(1);
+function getHostSandboxInstallHint() {
+    if (process.platform === 'darwin') {
+        return 'macOS lite sandbox requires Seatbelt via sandbox-exec. Check `command -v sandbox-exec`.';
     }
-    console.warn(`[${tag}] ${reason}, falling back to ${fallback}`);
-    return fallback;
+    if (process.platform === 'linux') {
+        return 'Linux lite sandbox requires bubblewrap. Install the `bwrap`/`bubblewrap` package and check `command -v bwrap`.';
+    }
+    return `Host lite sandbox only supports macOS Seatbelt and Linux bubblewrap; current platform is ${process.platform}.`;
+}
+
+function getHostSandboxDisableHint() {
+    return 'To test the same agent with podman/docker instead, run `ploinky sandbox disable`, then restart or reinstall the running agents.';
+}
+
+function createHostSandboxError(reason) {
+    const message = [
+        `lite-sandbox: true requested, but ${reason}.`,
+        getHostSandboxInstallHint(),
+        getHostSandboxDisableHint(),
+    ].join('\n');
+    const error = new Error(message);
+    error.code = 'PLOINKY_HOST_SANDBOX_UNAVAILABLE';
+    return error;
+}
+
+function createHostSandboxStartupError(agentName, runtime, cause) {
+    const detail = cause?.message || String(cause || 'unknown error');
+    const message = [
+        `[${runtime}] ${agentName}: lite-sandbox startup failed: ${detail}`,
+        getHostSandboxInstallHint(),
+        getHostSandboxDisableHint(),
+    ].join('\n');
+    const error = new Error(message);
+    error.code = 'PLOINKY_HOST_SANDBOX_START_FAILED';
+    error.cause = cause;
+    return error;
+}
+
+function createLegacyRuntimeStringError(runtimeValue) {
+    const message = [
+        `manifest.runtime: ${JSON.stringify(runtimeValue)} is no longer supported as an execution backend selector.`,
+        'Use `lite-sandbox: true` to request the host sandbox for macOS/Linux.',
+        getHostSandboxDisableHint(),
+    ].join('\n');
+    const error = new Error(message);
+    error.code = 'PLOINKY_LEGACY_RUNTIME_SELECTOR';
+    return error;
 }
 
 function getRuntimeForAgent(manifest) {
-    if (manifest?.['lite-sandbox'] === true || manifest?.runtime === 'bwrap' || manifest?.runtime === 'seatbelt') {
-        // Explicit runtime override
-        if (manifest?.runtime === 'bwrap') {
-            try {
-                execSync('command -v bwrap', { stdio: 'ignore' });
-                return 'bwrap';
-            } catch {
-                return fallbackToContainer('bwrap', 'bwrap not found in PATH');
-            }
-        }
-        if (manifest?.runtime === 'seatbelt') {
-            if (process.platform === 'darwin') {
-                try {
-                    execSync('command -v sandbox-exec', { stdio: 'ignore' });
-                    return 'seatbelt';
-                } catch {
-                    return fallbackToContainer('seatbelt', 'sandbox-exec not found');
-                }
-            }
-            return fallbackToContainer('seatbelt', 'seatbelt runtime requires macOS');
+    if (typeof manifest?.runtime === 'string') {
+        throw createLegacyRuntimeStringError(manifest.runtime);
+    }
+    if (manifest?.['lite-sandbox'] === true) {
+        if (isHostSandboxDisabled()) {
+            return requireContainerRuntime();
         }
 
-        // sandbox: true — auto-detect platform
+        // lite-sandbox: true — auto-detect platform.
         if (process.platform === 'darwin') {
             try {
                 execSync('command -v sandbox-exec', { stdio: 'ignore' });
                 return 'seatbelt';
-            } catch { /* try bwrap next */ }
+            } catch {
+                throw createHostSandboxError('sandbox-exec was not found or is not executable');
+            }
         }
-        try {
-            execSync('command -v bwrap', { stdio: 'ignore' });
-            return 'bwrap';
-        } catch {
-            return fallbackToContainer('sandbox', 'No sandbox runtime found (bwrap/sandbox-exec)');
+        if (process.platform === 'linux') {
+            try {
+                execSync('command -v bwrap', { stdio: 'ignore' });
+                return 'bwrap';
+            } catch {
+                throw createHostSandboxError('bwrap was not found or is not executable');
+            }
         }
+        throw createHostSandboxError(`platform ${process.platform} is not supported`);
     }
     return requireContainerRuntime();
 }

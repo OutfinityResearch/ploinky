@@ -18,7 +18,7 @@ import {
     readManifestAgentCommand,
     readManifestStartCommand
 } from '../docker/agentCommands.js';
-import { LOGS_DIR } from '../config.js';
+import { LOGS_DIR, PLOINKY_DIR } from '../config.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {
     runPreContainerLifecycle,
@@ -42,7 +42,7 @@ import {
     getAgentSkillsPath,
     createAgentWorkDir
 } from '../workspaceStructure.js';
-import { verifyAgentCacheForFamily } from '../dependencyCache.js';
+import { ensureAgentCacheForFamily } from '../dependencyCache.js';
 import {
     getExposedNames,
     getManifestEnvNames
@@ -63,6 +63,7 @@ import { buildSeatbeltProfile, writeSeatbeltProfile } from './seatbeltProfile.js
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
+const DEFAULT_SEATBELT_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
 function resolveSymlinkPath(symlinkPath) {
     try {
@@ -76,6 +77,129 @@ function resolveSymlinkPath(symlinkPath) {
         debugLog(`Warning: could not resolve symlink ${symlinkPath}: ${err.message}`);
     }
     return symlinkPath;
+}
+
+function dedupePathSegments(segments) {
+    const seen = new Set();
+    const result = [];
+    for (const segment of segments) {
+        if (!segment || typeof segment !== 'string') continue;
+        const trimmed = segment.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        seen.add(trimmed);
+        result.push(trimmed);
+    }
+    return result;
+}
+
+function buildSeatbeltPathEnv() {
+    const nodeDir = path.dirname(process.execPath);
+    return dedupePathSegments([
+        nodeDir,
+        '/opt/homebrew/bin',
+        '/opt/homebrew/sbin',
+        ...(process.env.PATH || '').split(':'),
+        ...DEFAULT_SEATBELT_PATH.split(':')
+    ]).join(':');
+}
+
+function addHostToolPrefix(readPaths, candidatePath) {
+    if (!candidatePath) return;
+    const resolved = path.resolve(candidatePath);
+    const binDir = path.dirname(resolved);
+    const runtimeRoot = path.dirname(binDir);
+    if (resolved.startsWith('/opt/homebrew/')) {
+        readPaths.add('/opt/homebrew');
+        return;
+    }
+    if (resolved.startsWith('/opt/local/')) {
+        readPaths.add('/opt/local');
+        return;
+    }
+    if (resolved.startsWith('/nix/')) {
+        readPaths.add('/nix');
+        return;
+    }
+    if (path.basename(binDir) === 'bin' && path.basename(resolved) === 'node') {
+        readPaths.add(runtimeRoot);
+        return;
+    }
+    readPaths.add(binDir);
+}
+
+function getSeatbeltExtraReadPaths() {
+    const readPaths = new Set();
+    addHostToolPrefix(readPaths, process.execPath);
+    try {
+        addHostToolPrefix(readPaths, fs.realpathSync(process.execPath));
+    } catch {
+        // Ignore realpath failures; process.execPath is still included.
+    }
+    for (const segment of (process.env.PATH || '').split(':')) {
+        if (segment.startsWith('/opt/homebrew/')) readPaths.add('/opt/homebrew');
+        if (segment.startsWith('/opt/local/')) readPaths.add('/opt/local');
+        if (segment.startsWith('/nix/')) readPaths.add('/nix');
+    }
+    return Array.from(readPaths);
+}
+
+function seatbeltRuntimeSegment(agentName) {
+    return String(agentName || 'agent').replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function ensureSeatbeltAgentLibDir(agentName, nodeModulesDir) {
+    const runtimeRoot = path.join(PLOINKY_DIR, 'seatbelt-runtime', seatbeltRuntimeSegment(agentName));
+    const stagedAgentLibPath = path.join(runtimeRoot, `Agent-${process.pid}-${Date.now()}`);
+    const sourceNodeModules = path.join(AGENT_LIB_PATH, 'node_modules');
+
+    fs.mkdirSync(runtimeRoot, { recursive: true });
+    fs.cpSync(AGENT_LIB_PATH, stagedAgentLibPath, {
+        recursive: true,
+        filter(sourcePath) {
+            const resolvedSource = path.resolve(sourcePath);
+            return resolvedSource !== sourceNodeModules
+                && !resolvedSource.startsWith(`${sourceNodeModules}${path.sep}`);
+        }
+    });
+    fs.symlinkSync(nodeModulesDir, path.join(stagedAgentLibPath, 'node_modules'), 'dir');
+    return stagedAgentLibPath;
+}
+
+function ensureSeatbeltCodeNodeModules(agentName, agentCodePath, nodeModulesDir) {
+    const linkPath = path.join(agentCodePath, 'node_modules');
+    const expectedTarget = fs.realpathSync(nodeModulesDir);
+    try {
+        const stat = fs.lstatSync(linkPath);
+        if (stat.isSymbolicLink()) {
+            let currentTarget;
+            try {
+                currentTarget = fs.realpathSync(linkPath);
+            } catch (err) {
+                if (!err || err.code !== 'ENOENT') {
+                    throw err;
+                }
+                fs.unlinkSync(linkPath);
+                currentTarget = null;
+            }
+            if (currentTarget === expectedTarget) {
+                return linkPath;
+            }
+            if (currentTarget) {
+                fs.unlinkSync(linkPath);
+            }
+        } else {
+            throw new Error(
+                `[seatbelt] ${agentName}: ${linkPath} exists and is not the Ploinky-managed `
+                + 'dependency-cache symlink. Remove or move that node_modules directory, then restart.'
+            );
+        }
+    } catch (err) {
+        if (!err || err.code !== 'ENOENT') {
+            throw new Error(`[seatbelt] ${agentName}: failed to inspect ${linkPath}: ${err.message}`);
+        }
+    }
+    fs.symlinkSync(nodeModulesDir, linkPath, 'dir');
+    return linkPath;
 }
 
 function normalizeMountMode(mode, fallback) {
@@ -99,7 +223,7 @@ function getProfileMountModes(profile, profileConfig = {}) {
  * and replace /code/ references with the real code path.
  * Returns the path to the rewritten copy, or null if no mcp-config exists.
  */
-function rewriteMcpConfig(agentName, agentCodePath, agentWorkDir) {
+function rewriteMcpConfig(agentName, agentCodePath, agentWorkDir, agentLibPath = AGENT_LIB_PATH) {
     const sourcePath = path.join(agentWorkDir, 'mcp-config.json');
     if (!fs.existsSync(sourcePath)) return null;
 
@@ -108,6 +232,8 @@ function rewriteMcpConfig(agentName, agentCodePath, agentWorkDir) {
         // Replace /code/ references with the real agent code path
         content = content.replace(/\/code\//g, agentCodePath + '/');
         content = content.replace(/\/code"/g, agentCodePath + '"');
+        content = content.replace(/\/Agent\//g, agentLibPath + '/');
+        content = content.replace(/\/Agent"/g, agentLibPath + '"');
         const rewrittenPath = path.join(agentWorkDir, 'mcp-config.seatbelt.json');
         fs.writeFileSync(rewrittenPath, content, 'utf8');
         return rewrittenPath;
@@ -127,8 +253,8 @@ function buildSeatbeltEntryCommand(agentName, manifest, profileConfig, realPaths
     const startCmd = readManifestStartCommand(manifest);
     const useStartEntry = Boolean(startCmd);
 
-    // Dependencies are prepared on the host via `ploinky deps prepare` and
-    // exposed read-only via the seatbelt profile — no runtime npm install.
+    // Dependencies are prepared before sandbox launch and exposed read-only via
+    // the seatbelt profile. The sandboxed process never runs npm install.
     const manifestInstallCmd = String(profileConfig?.install || manifest?.install || '').trim();
 
     const rewritePath = (cmd) => {
@@ -143,7 +269,13 @@ function buildSeatbeltEntryCommand(agentName, manifest, profileConfig, realPaths
     const rewrittenInstall = manifestInstallCmd ? rewritePath(manifestInstallCmd) : '';
 
     let entryCmd;
-    if (useStartEntry) {
+    if (useStartEntry && explicitAgentCmd) {
+        const rewrittenStart = rewritePath(startCmd);
+        const rewrittenAgent = rewritePath(explicitAgentCmd);
+        entryCmd = rewrittenInstall
+            ? `cd ${agentCodePath} && ${rewrittenInstall} && (${rewrittenStart} &) && exec ${rewrittenAgent}`
+            : `cd ${agentCodePath} && (${rewrittenStart} &) && exec ${rewrittenAgent}`;
+    } else if (useStartEntry) {
         const rewrittenStart = rewritePath(startCmd);
         entryCmd = rewrittenInstall
             ? `cd ${agentCodePath} && ${rewrittenInstall} && ${rewrittenStart}`
@@ -176,7 +308,7 @@ function resolveSeatbeltAgentNodeModules({
         }
         return fallback;
     }
-    return verifyAgentCacheForFamily({
+    return ensureAgentCacheForFamily({
         family: 'seatbelt',
         repoName,
         agentName,
@@ -222,7 +354,7 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     createAgentWorkDir(agentName);
     syncAgentMcpConfig(`seatbelt_${agentName}`, path.resolve(agentPath), agentName);
 
-    // Verify prepared dependency cache (see dependencyCache.js).
+    // Prepare or reuse the host dependency cache (see dependencyCache.js).
     const agentHasPackageJson = fs.existsSync(path.join(agentCodePath, 'package.json'));
     const startCmd = readManifestStartCommand(manifest);
     const needsCoreDeps = !startCmd || agentHasPackageJson;
@@ -233,6 +365,8 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
         agentWorkDir,
         needsCoreDeps,
     });
+    ensureSeatbeltCodeNodeModules(agentName, agentCodePath, nodeModulesDir);
+    const seatbeltAgentLibPath = ensureSeatbeltAgentLibDir(agentName, nodeModulesDir);
 
     // Port resolution — with shared host network, hostPort === containerPort
     const { portMappings } = parseManifestPorts(manifest, profileConfig);
@@ -255,16 +389,17 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     }
 
     // Seatbelt-specific env vars: real paths for AgentServer.sh/mjs
-    envMap.PLOINKY_AGENT_LIB_DIR = AGENT_LIB_PATH;
+    envMap.PLOINKY_AGENT_LIB_DIR = seatbeltAgentLibPath;
+    envMap.PLOINKY_INVOCATION_AUTH_MODULE = path.join(seatbeltAgentLibPath, 'lib/invocation-auth.mjs');
     envMap.PLOINKY_CODE_DIR = agentCodePath;
 
     // NODE_PATH for module resolution
     envMap.NODE_PATH = nodeModulesDir;
     envMap.HOME = '/tmp';
-    envMap.PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+    envMap.PATH = buildSeatbeltPathEnv();
 
     // Rewrite mcp-config.json for real paths
-    const rewrittenMcpConfig = rewriteMcpConfig(agentName, agentCodePath, agentWorkDir);
+    const rewrittenMcpConfig = rewriteMcpConfig(agentName, agentCodePath, agentWorkDir, seatbeltAgentLibPath);
     if (rewrittenMcpConfig) {
         envMap.PLOINKY_MCP_CONFIG_PATH = rewrittenMcpConfig;
     }
@@ -272,21 +407,24 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     // Generate seatbelt profile
     const profileContent = buildSeatbeltProfile({
         agentCodePath,
-        agentLibPath: AGENT_LIB_PATH,
+        agentLibPath: seatbeltAgentLibPath,
         nodeModulesDir,
+        agentWorkDir,
         sharedDir,
         cwd,
         skillsPath: agentSkillsPath,
         codeReadOnly,
         skillsReadOnly,
-        volumes: manifest.volumes
+        volumes: manifest.volumes,
+        extraReadPaths: getSeatbeltExtraReadPaths(),
+        extraWritePaths: [LOGS_DIR]
     });
     const profilePath = writeSeatbeltProfile(agentName, profileContent);
 
     // Build entry command with real paths
     const entryCmd = buildSeatbeltEntryCommand(agentName, manifest, profileConfig, {
         agentCodePath,
-        agentLibPath: AGENT_LIB_PATH,
+        agentLibPath: seatbeltAgentLibPath,
         agentWorkDir
     });
 
@@ -307,7 +445,8 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     const child = spawn('sandbox-exec', ['-f', profilePath, 'sh', '-c', entryCmd], {
         detached: true,
         stdio: ['ignore', logFd, logFd],
-        env: envMap
+        env: envMap,
+        cwd
     });
     child.unref();
     fs.closeSync(logFd);
@@ -486,9 +625,9 @@ function ensureSeatbeltService(agentName, manifest, agentPath, options = {}) {
 /**
  * Spawn an interactive seatbelt session (for `ploinky cli` / `ploinky shell`).
  */
-function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entryCommand) {
+function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entryCommand, options = {}) {
     const repoName = path.basename(path.dirname(agentPath));
-    const containerName = getAgentContainerName(agentName, repoName);
+    const containerName = options.containerName || getAgentContainerName(agentName, repoName);
     const agents = loadAgentsMap();
     const record = agents[containerName];
 
@@ -518,20 +657,23 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
         agentWorkDir,
         needsCoreDeps,
     });
+    ensureSeatbeltCodeNodeModules(agentName, agentCodePath, nodeModulesDir);
+    const seatbeltAgentLibPath = ensureSeatbeltAgentLibDir(agentName, nodeModulesDir);
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
     // Build environment (same as running agent)
     const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'seatbelt');
     const hostPort = record.config?.ports?.[0]?.hostPort;
     if (hostPort) envMap.PORT = String(hostPort);
-    envMap.PLOINKY_AGENT_LIB_DIR = AGENT_LIB_PATH;
+    envMap.PLOINKY_AGENT_LIB_DIR = seatbeltAgentLibPath;
+    envMap.PLOINKY_INVOCATION_AUTH_MODULE = path.join(seatbeltAgentLibPath, 'lib/invocation-auth.mjs');
     envMap.PLOINKY_CODE_DIR = agentCodePath;
     envMap.NODE_PATH = nodeModulesDir;
     envMap.HOME = '/tmp';
-    envMap.PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+    envMap.PATH = buildSeatbeltPathEnv();
 
     // Rewrite mcp-config
-    const rewrittenMcpConfig = rewriteMcpConfig(agentName, agentCodePath, agentWorkDir);
+    const rewrittenMcpConfig = rewriteMcpConfig(agentName, agentCodePath, agentWorkDir, seatbeltAgentLibPath);
     if (rewrittenMcpConfig) {
         envMap.PLOINKY_MCP_CONFIG_PATH = rewrittenMcpConfig;
     }
@@ -539,14 +681,17 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
     // Generate seatbelt profile
     const profileContent = buildSeatbeltProfile({
         agentCodePath,
-        agentLibPath: AGENT_LIB_PATH,
+        agentLibPath: seatbeltAgentLibPath,
         nodeModulesDir,
+        agentWorkDir,
         sharedDir,
         cwd: record.projectPath || agentWorkDir,
         skillsPath: agentSkillsPath,
         codeReadOnly,
         skillsReadOnly,
-        volumes: manifest.volumes
+        volumes: manifest.volumes,
+        extraReadPaths: getSeatbeltExtraReadPaths(),
+        extraWritePaths: [LOGS_DIR]
     });
     const profilePath = writeSeatbeltProfile(agentName, profileContent);
 
@@ -560,14 +705,15 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
     const rewrittenCmd = cmd
         .replace(/\/code\//g, agentCodePath + '/')
         .replace(/\/code(?=["'\s;|&$]|$)/g, agentCodePath)
-        .replace(/\/Agent\//g, AGENT_LIB_PATH + '/')
-        .replace(/\/Agent(?=["'\s;|&$]|$)/g, AGENT_LIB_PATH);
+        .replace(/\/Agent\//g, seatbeltAgentLibPath + '/')
+        .replace(/\/Agent(?=["'\s;|&$]|$)/g, seatbeltAgentLibPath);
 
     debugLog(`[seatbelt] ${agentName}: interactive session: sh -lc "cd '${wd}' && ${rewrittenCmd}"`);
 
     const result = spawnSync('sandbox-exec', ['-f', profilePath, 'sh', '-lc', `cd '${wd}' && ${rewrittenCmd}`], {
         stdio: 'inherit',
-        env: envMap
+        env: envMap,
+        cwd: record.projectPath || agentWorkDir
     });
     return result.status ?? 0;
 }
@@ -577,5 +723,9 @@ export {
     startSeatbeltProcess,
     attachSeatbeltInteractive,
     rewriteMcpConfig,
-    buildSeatbeltEntryCommand
+    buildSeatbeltEntryCommand,
+    buildSeatbeltPathEnv,
+    getSeatbeltExtraReadPaths,
+    ensureSeatbeltAgentLibDir,
+    ensureSeatbeltCodeNodeModules
 };

@@ -160,11 +160,17 @@ function completer(line) {
             } else if (command === 'disable') {
                 if (subcommand === 'repo') {
                     completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
+                } else if (subcommand === 'sandbox') {
+                    completions = [];
                 } else {
-                    completions = getAgentNames();
+                    completions = [...new Set(['sandbox', ...getAgentNames()])];
                 }
+            } else if (command === 'enable' && subcommand === 'sandbox') {
+                completions = [];
             } else if (command === 'enable' && subcommand === 'repo') {
                 completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];
+            } else if (command === 'sandbox') {
+                completions = COMMANDS.sandbox;
             } else if (command === 'add' && subcommand === 'repo') {
                 // For add repo, show predefined repo names
                 completions = ['basic', 'cloud', 'vibe', 'security', 'extra', 'demo'];

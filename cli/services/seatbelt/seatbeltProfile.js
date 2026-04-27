@@ -1,6 +1,15 @@
 import fs from 'fs';
 import path from 'path';
-import { PLOINKY_DIR } from '../config.js';
+import {
+    AGENTS_DEPS_CACHE_DIR,
+    CODE_DIR,
+    DEPS_DIR,
+    PLOINKY_DIR,
+    PROFILE_FILE,
+    ROUTING_FILE,
+    SECRETS_FILE,
+    SERVERS_CONFIG_FILE,
+} from '../config.js';
 
 const SEATBELT_PROFILES_DIR = path.join(PLOINKY_DIR, 'seatbelt-profiles');
 
@@ -16,40 +25,84 @@ function buildSeatbeltProfile(options) {
         agentCodePath,
         agentLibPath,
         nodeModulesDir,
+        agentWorkDir,
         sharedDir,
         cwd,
         skillsPath,
         codeReadOnly,
         skillsReadOnly,
-        volumes
+        volumes,
+        extraReadPaths = [],
+        extraWritePaths = []
     } = options;
 
+    const normalizedExtraWritePaths = normalizePathList(extraWritePaths);
+    const normalizedVolumes = normalizeVolumeHostPaths(volumes, cwd);
+    const protectedWritePaths = collectProtectedWritePaths({
+        agentCodePath,
+        agentLibPath,
+        nodeModulesDir,
+        agentWorkDir,
+        skillsPath,
+        codeReadOnly,
+        skillsReadOnly,
+    });
     const lines = [];
     lines.push('(version 1)');
     lines.push('(deny default)');
     lines.push('');
 
-    // System read access (macOS paths)
+    const systemReadPaths = [
+        '/usr',
+        '/System',
+        '/Library',
+        '/Applications',
+        '/private',
+        '/dev',
+        '/var',
+        '/etc',
+        '/tmp',
+        '/bin',
+        '/sbin'
+    ];
+    const scopedReadPaths = [
+        ...systemReadPaths,
+        agentLibPath,
+        agentCodePath,
+        nodeModulesDir,
+        agentWorkDir,
+        sharedDir,
+        cwd,
+        ...(skillsPath && fs.existsSync(skillsPath) ? [skillsPath] : []),
+        ...normalizedVolumes,
+        ...normalizePathList(extraReadPaths),
+        ...normalizedExtraWritePaths
+    ];
+
     lines.push('; System read access');
     lines.push('(allow file-read*');
-    lines.push('    (subpath "/usr")');
-    lines.push('    (subpath "/System")');
-    lines.push('    (subpath "/Library")');
-    lines.push('    (subpath "/Applications")');
-    lines.push('    (subpath "/private")');
-    lines.push('    (subpath "/dev")');
-    lines.push('    (subpath "/var")');
-    lines.push('    (subpath "/etc")');
-    lines.push('    (subpath "/tmp")');
-    lines.push('    (subpath "/bin")');
-    lines.push('    (subpath "/sbin")');
+    for (const literalPath of collectLiteralPathAccess(scopedReadPaths)) {
+        lines.push(`    (literal ${sbplQuote(literalPath)})`);
+    }
+    for (const readPath of scopedReadPaths) {
+        lines.push(`    (subpath ${sbplQuote(readPath)})`);
+    }
     lines.push(')');
     lines.push('');
 
     // Temp write access (HOME=/tmp for agents)
     lines.push('; Temp write access');
     lines.push('(allow file-write* (subpath "/tmp") (subpath "/private/tmp"))');
+    lines.push('(allow file-write* (literal "/dev/null"))');
     lines.push('');
+
+    if (normalizedExtraWritePaths.length) {
+        lines.push('; Additional write paths');
+        for (const writePath of normalizedExtraWritePaths) {
+            lines.push(`(allow file-write* (subpath ${sbplQuote(writePath)}))`);
+        }
+        lines.push('');
+    }
 
     // Full network (agents use host network)
     lines.push('; Network access');
@@ -67,12 +120,11 @@ function buildSeatbeltProfile(options) {
 
     // Agent library (always read-only)
     lines.push('; Agent library (read-only)');
-    lines.push(`(allow file-read* (subpath ${sbplQuote(agentLibPath)}))`);
+    lines.push(`; covered by read access block: ${agentLibPath}`);
     lines.push('');
 
     // Agent code directory
     lines.push('; Agent code');
-    lines.push(`(allow file-read* (subpath ${sbplQuote(agentCodePath)}))`);
     if (!codeReadOnly) {
         lines.push(`(allow file-write* (subpath ${sbplQuote(agentCodePath)}))`);
     }
@@ -80,23 +132,30 @@ function buildSeatbeltProfile(options) {
 
     // node_modules — read-only prepared cache (see dependencyCache.js)
     lines.push('; node_modules (read-only prepared cache)');
-    lines.push(`(allow file-read* (subpath ${sbplQuote(nodeModulesDir)}))`);
+    lines.push(`; covered by read access block: ${nodeModulesDir}`);
     lines.push('');
 
     // Shared directory
     lines.push('; Shared directory');
-    lines.push(`(allow file-read* file-write* (subpath ${sbplQuote(sharedDir)}))`);
+    lines.push(`(allow file-write* (subpath ${sbplQuote(sharedDir)}))`);
     lines.push('');
 
-    // CWD passthrough (workspace agent dir)
-    lines.push('; Agent work directory');
-    lines.push(`(allow file-read* file-write* (subpath ${sbplQuote(cwd)}))`);
+    // Agent work directory
+    if (agentWorkDir) {
+        lines.push('; Agent work directory');
+        lines.push(`(allow file-write* (subpath ${sbplQuote(agentWorkDir)}))`);
+        lines.push('');
+    }
+
+    // CWD passthrough (user workspace root). Protected Ploinky internals are
+    // denied below so this does not bypass read-only code/dependency mounts.
+    lines.push('; Workspace directory');
+    lines.push(`(allow file-write* (subpath ${sbplQuote(cwd)}))`);
     lines.push('');
 
     // Skills directory
     if (skillsPath && fs.existsSync(skillsPath)) {
         lines.push('; Skills directory');
-        lines.push(`(allow file-read* (subpath ${sbplQuote(skillsPath)}))`);
         if (!skillsReadOnly) {
             lines.push(`(allow file-write* (subpath ${sbplQuote(skillsPath)}))`);
         }
@@ -108,17 +167,111 @@ function buildSeatbeltProfile(options) {
         const volumeEntries = Object.entries(volumes);
         if (volumeEntries.length) {
             lines.push('; Custom volumes');
-            for (const [hostPath] of volumeEntries) {
-                const resolvedHostPath = path.isAbsolute(hostPath)
-                    ? hostPath
-                    : path.resolve(cwd, hostPath);
-                lines.push(`(allow file-read* file-write* (subpath ${sbplQuote(resolvedHostPath)}))`);
+            for (const resolvedHostPath of normalizedVolumes) {
+                lines.push(`(allow file-write* (subpath ${sbplQuote(resolvedHostPath)}))`);
             }
             lines.push('');
         }
     }
 
+    if (protectedWritePaths.length) {
+        lines.push('; Protected runtime paths');
+        lines.push('(deny file-write*');
+        for (const protectedPath of protectedWritePaths) {
+            lines.push(`    (${protectedPath.kind} ${sbplQuote(protectedPath.path)})`);
+        }
+        lines.push(')');
+        lines.push('');
+    }
+
     return lines.join('\n') + '\n';
+}
+
+function normalizePathList(paths) {
+    if (!Array.isArray(paths)) return [];
+    return Array.from(new Set(paths
+        .filter((value) => typeof value === 'string' && value.trim())
+        .map((value) => path.resolve(value))));
+}
+
+function normalizeVolumeHostPaths(volumes, cwd) {
+    if (!volumes || typeof volumes !== 'object') return [];
+    return Array.from(new Set(Object.keys(volumes).map((hostPath) => (
+        path.isAbsolute(hostPath) ? hostPath : path.resolve(cwd, hostPath)
+    ))));
+}
+
+function collectProtectedWritePaths({
+    agentCodePath,
+    agentLibPath,
+    nodeModulesDir,
+    agentWorkDir,
+    skillsPath,
+    codeReadOnly,
+    skillsReadOnly,
+}) {
+    const entries = [];
+    const addSubpath = (value) => {
+        if (!value || typeof value !== 'string') return;
+        entries.push({ kind: 'subpath', path: path.resolve(value) });
+    };
+    const addLiteral = (value) => {
+        if (!value || typeof value !== 'string') return;
+        entries.push({ kind: 'literal', path: path.resolve(value) });
+    };
+
+    const nodeModulesParent = nodeModulesDir ? path.dirname(nodeModulesDir) : '';
+    if (nodeModulesParent && path.resolve(nodeModulesParent) !== path.resolve(agentWorkDir || '')) {
+        addSubpath(nodeModulesParent);
+    }
+    addSubpath(DEPS_DIR);
+    addSubpath(AGENTS_DEPS_CACHE_DIR);
+    addSubpath(path.join(agentCodePath || '', 'node_modules'));
+    addSubpath(agentLibPath);
+    addSubpath(path.join(PLOINKY_DIR, 'seatbelt-runtime'));
+    addSubpath(CODE_DIR);
+
+    if (codeReadOnly) {
+        addSubpath(agentCodePath);
+    }
+    if (skillsReadOnly && skillsPath && fs.existsSync(skillsPath)) {
+        addSubpath(skillsPath);
+    }
+
+    addLiteral(SECRETS_FILE);
+    addLiteral(PROFILE_FILE);
+    addLiteral(ROUTING_FILE);
+    addLiteral(SERVERS_CONFIG_FILE);
+
+    return dedupePathRules(entries.filter(({ path: value }) => value && value !== path.dirname(value)));
+}
+
+function dedupePathRules(entries) {
+    const seen = new Set();
+    const result = [];
+    for (const entry of entries) {
+        const key = `${entry.kind}:${entry.path}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(entry);
+    }
+    return result;
+}
+
+function collectLiteralPathAccess(paths) {
+    const literals = new Set(['/']);
+    for (const readPath of normalizePathList(paths)) {
+        let current = path.resolve(readPath);
+        const chain = [];
+        while (current && current !== '/') {
+            chain.push(current);
+            current = path.dirname(current);
+        }
+        for (let index = chain.length - 1; index >= 0; index -= 1) {
+            literals.add(chain[index]);
+        }
+    }
+    return Array.from(literals);
 }
 
 /**
@@ -145,5 +298,6 @@ function writeSeatbeltProfile(agentName, content) {
 export {
     SEATBELT_PROFILES_DIR,
     buildSeatbeltProfile,
-    writeSeatbeltProfile
+    writeSeatbeltProfile,
+    collectLiteralPathAccess
 };

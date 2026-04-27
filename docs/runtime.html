@@ -92,7 +92,7 @@
 
         <section class="chapter-section">
           <h2>Runtime Backends and Mount Policy</h2>
-          <p>The container path is the default backend and auto-detects <code>podman</code> before <code>docker</code>. Agents may also run through sandbox backends such as <code>bwrap</code> or <code>seatbelt</code>. The actual runtime is recorded in the registry, because sandbox attempts may fall back to a container runtime during service startup.</p>
+          <p>The container path is the default backend and auto-detects <code>podman</code> before <code>docker</code>. Agents with <code>lite-sandbox: true</code> run through the host sandbox backend when available: <code>bwrap</code> on Linux and <code>seatbelt</code> on macOS. Ploinky does not silently fall back from a requested host sandbox to containers; use <code>ploinky sandbox disable</code> when podman/docker testing is desired.</p>
           <p>Profile handling is merged from manifest <code>profiles.default</code> plus the active profile from <code>.ploinky/profile</code>. In <code>dev</code>, code and skills mounts default to read-write. In <code>qa</code> and <code>prod</code>, they default to read-only unless the profile explicitly overrides them.</p>
           <div class="callout callout--warm">
             <p>Manifest volumes are resolved relative to the workspace root unless the manifest provides an absolute host path. Runtime resource planning can also create persistent storage directories under <code>.ploinky/data/</code> and template environment values from workspace roots, storage paths, secrets, and variables.</p>

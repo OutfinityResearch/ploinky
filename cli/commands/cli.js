@@ -53,6 +53,7 @@ import {
 } from './sessionControl.js';
 import { handleSsoCommand } from './ssoCommands.js';
 import { handleDepsCommand } from './depsCommands.js';
+import { disableHostSandbox, enableHostSandbox, handleSandboxCommand } from './sandboxCommands.js';
 import ClientCommands from './client.js';
 
 let llmAgentsLoadPromise = null;
@@ -223,6 +224,9 @@ async function handleCommand(args) {
                 const parsed = parseEnableAgentArgs(options.slice(1));
                 await enableAgent(parsed.agentName, parsed.mode, parsed.repoName, parsed.alias, parsed.authMode, parsed.username, parsed.password);
             }
+            else if (['sandbox', 'host-sandbox', 'lite-sandbox'].includes(String(options[0] || '').toLowerCase())) {
+                enableHostSandbox();
+            }
             else showHelp();
             break;
         case 'expose':
@@ -239,6 +243,11 @@ async function handleCommand(args) {
 
             if (options[0] === 'repo') {
                 disableRepo(options[1]);
+                break;
+            }
+
+            if (['sandbox', 'host-sandbox', 'lite-sandbox'].includes(String(options[0] || '').toLowerCase())) {
+                disableHostSandbox();
                 break;
             }
 
@@ -331,6 +340,9 @@ async function handleCommand(args) {
         }
         case 'sso':
             await handleSsoCommand(options);
+            break;
+        case 'sandbox':
+            handleSandboxCommand(options);
             break;
         case 'deps':
             await handleDepsCommand(options);

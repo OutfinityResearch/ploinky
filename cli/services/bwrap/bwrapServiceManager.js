@@ -26,7 +26,17 @@ import {
     readManifestAgentCommand,
     readManifestStartCommand
 } from '../docker/agentCommands.js';
-import { LOGS_DIR, ROUTING_FILE, WORKSPACE_ROOT } from '../config.js';
+import {
+    CODE_DIR,
+    DEPS_DIR,
+    LOGS_DIR,
+    PLOINKY_DIR,
+    PROFILE_FILE,
+    ROUTING_FILE,
+    SECRETS_FILE,
+    SERVERS_CONFIG_FILE,
+    WORKSPACE_ROOT
+} from '../config.js';
 import {
     planRuntimeResources,
     applyRuntimeResourceEnv,
@@ -57,7 +67,7 @@ import {
     getAgentSkillsPath,
     createAgentWorkDir
 } from '../workspaceStructure.js';
-import { verifyAgentCacheForFamily } from '../dependencyCache.js';
+import { ensureAgentCacheForFamily } from '../dependencyCache.js';
 import {
     isBwrapProcessRunning,
     stopBwrapProcess,
@@ -115,7 +125,7 @@ function resolveBwrapAgentNodeModules({
         }
         return fallback;
     }
-    return verifyAgentCacheForFamily({
+    return ensureAgentCacheForFamily({
         family: 'bwrap',
         repoName,
         agentName,
@@ -151,6 +161,47 @@ function getProfileMountModes(profile, profileConfig = {}) {
         codeReadOnly: codeMode === 'ro',
         skillsReadOnly: skillsMode === 'ro'
     };
+}
+
+function isSameOrInside(candidate, parent) {
+    if (!candidate || !parent) return false;
+    const resolvedCandidate = path.resolve(candidate);
+    const resolvedParent = path.resolve(parent);
+    const relative = path.relative(resolvedParent, resolvedCandidate);
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function addReadOnlyOverlay(args, hostPath, cwd, seen) {
+    if (!hostPath || !isSameOrInside(hostPath, cwd) || !fs.existsSync(hostPath)) return;
+    const resolved = path.resolve(hostPath);
+    if (seen.has(resolved)) return;
+    seen.add(resolved);
+    args.push('--ro-bind', resolved, resolved);
+}
+
+function addProtectedWorkspaceOverlays(args, options) {
+    const {
+        agentCodePath,
+        nodeModulesDir,
+        cwd,
+        codeReadOnly,
+    } = options;
+    const seen = new Set();
+    const nodeModulesParent = nodeModulesDir ? path.dirname(nodeModulesDir) : '';
+
+    addReadOnlyOverlay(args, DEPS_DIR, cwd, seen);
+    addReadOnlyOverlay(args, nodeModulesParent, cwd, seen);
+    addReadOnlyOverlay(args, path.join(agentCodePath || '', 'node_modules'), cwd, seen);
+    addReadOnlyOverlay(args, CODE_DIR, cwd, seen);
+    addReadOnlyOverlay(args, path.join(PLOINKY_DIR, 'seatbelt-runtime'), cwd, seen);
+    addReadOnlyOverlay(args, SECRETS_FILE, cwd, seen);
+    addReadOnlyOverlay(args, PROFILE_FILE, cwd, seen);
+    addReadOnlyOverlay(args, ROUTING_FILE, cwd, seen);
+    addReadOnlyOverlay(args, SERVERS_CONFIG_FILE, cwd, seen);
+
+    if (codeReadOnly) {
+        addReadOnlyOverlay(args, agentCodePath, cwd, seen);
+    }
 }
 
 /**
@@ -274,6 +325,13 @@ function buildBwrapArgs(options) {
         ensurePersistentStorageHostDir(options.runtimeResourcePlan);
         args.push('--bind', ps.hostPath, ps.containerPath);
     }
+
+    addProtectedWorkspaceOverlays(args, {
+        agentCodePath,
+        nodeModulesDir,
+        cwd,
+        codeReadOnly,
+    });
 
     // Process isolation — do NOT unshare network (agents need host network)
     // NOTE: --die-with-parent is intentionally omitted. Agent processes must survive
@@ -730,9 +788,9 @@ function ensureBwrapService(agentName, manifest, agentPath, options = {}) {
  * but runs the given command instead of the agent server.
  * Uses --die-with-parent so the session is cleaned up when the parent exits.
  */
-function attachBwrapInteractive(agentName, manifest, agentPath, workdir, entryCommand) {
+function attachBwrapInteractive(agentName, manifest, agentPath, workdir, entryCommand, options = {}) {
     const repoName = path.basename(path.dirname(agentPath));
-    const containerName = getAgentContainerName(agentName, repoName);
+    const containerName = options.containerName || getAgentContainerName(agentName, repoName);
     const agents = loadAgentsMap();
     const record = agents[containerName];
 

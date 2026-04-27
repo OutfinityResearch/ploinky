@@ -36,7 +36,7 @@ fast_check_explorer_dependencies() {
   for (( i=0; i<attempts; i++ )); do
     if is_bwrap_agent "$container"; then
       local output
-      output=$( { echo 'test -d "/code/node_modules/mcp-sdk" && echo EXISTS'; echo exit; } | ploinky shell "explorer" 2>&1 ) || true
+      output=$( { echo 'test -d "${PLOINKY_CODE_DIR:-/code}/node_modules/mcp-sdk" && echo EXISTS'; echo exit; } | ploinky shell "explorer" 2>&1 ) || true
       if echo "$output" | grep -q "EXISTS"; then
         return 0
       fi

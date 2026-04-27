@@ -15,12 +15,15 @@ import {
     CONTAINER_CONFIG_PATH,
     containerExists,
     computeEnvHash,
+    createHostSandboxStartupError,
     flagsToArgs,
     getAgentContainerName,
     getConfiguredProjectPath,
     getContainerLabel,
     getRuntime,
+    getRuntimeForAgent,
     isContainerRunning,
+    isSandboxRuntime,
     loadAgentsMap,
     parseHostPort,
     parseManifestPorts,
@@ -39,7 +42,6 @@ import {
 import { resolveAgentDescriptor } from '../capabilityRegistry.js';
 import { deriveAgentPrincipalId } from '../agentIdentity.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
-import { getRuntimeForAgent, isSandboxRuntime } from './common.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
 import { ensureSeatbeltService } from '../seatbelt/seatbeltServiceManager.js';
 import { detectShellForImage, SHELL_FALLBACK_DIRECT } from './shellDetection.js';
@@ -596,16 +598,14 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         try {
             return ensureBwrapService(agentName, manifest, agentPath, options);
         } catch (err) {
-            const fallbackRuntime = getRuntime();
-            console.warn(`[bwrap] ${agentName}: sandbox failed (${err.message}), falling back to ${fallbackRuntime}`);
+            throw createHostSandboxStartupError(agentName, 'bwrap', err);
         }
     }
     if (agentRuntime === 'seatbelt') {
         try {
             return ensureSeatbeltService(agentName, manifest, agentPath, options);
         } catch (err) {
-            const fallbackRuntime = getRuntime();
-            console.warn(`[seatbelt] ${agentName}: sandbox failed (${err.message}), falling back to ${fallbackRuntime}`);
+            throw createHostSandboxStartupError(agentName, 'seatbelt', err);
         }
     }
     const runtime = getRuntime();

@@ -6,6 +6,7 @@ import {
     GLOBAL_DEPS_CACHE_DIR,
     AGENTS_DEPS_CACHE_DIR,
     GLOBAL_DEPS_PATH,
+    WORKSPACE_ROOT,
 } from './config.js';
 import { parseRuntimeKey, detectHostRuntimeKey } from './dependencyRuntimeKey.js';
 import { debugLog } from './utils.js';
@@ -168,11 +169,25 @@ function assertHostMatchesRuntimeKey(runtimeKey) {
     return parsed;
 }
 
-function withGithubHttpsGitConfig(env = process.env) {
+function mergePathList(existing, additions) {
+    const values = String(existing || '')
+        .split(path.delimiter)
+        .filter(Boolean);
+    for (const value of additions) {
+        if (value && !values.includes(value)) values.push(value);
+    }
+    return values.join(path.delimiter);
+}
+
+function withGithubHttpsGitConfig(env = process.env, { cwd = '' } = {}) {
     const rawCount = Number.parseInt(env.GIT_CONFIG_COUNT || '0', 10);
     const baseCount = Number.isFinite(rawCount) && rawCount >= 0 ? rawCount : 0;
     return {
         ...env,
+        GIT_CEILING_DIRECTORIES: mergePathList(env.GIT_CEILING_DIRECTORIES, [
+            WORKSPACE_ROOT,
+            cwd && path.resolve(cwd),
+        ]),
         GIT_CONFIG_COUNT: String(baseCount + 2),
         [`GIT_CONFIG_KEY_${baseCount}`]: 'url.https://github.com/.insteadOf',
         [`GIT_CONFIG_VALUE_${baseCount}`]: 'ssh://git@github.com/',
@@ -185,7 +200,7 @@ function runNpmInstall(cwd, { log = debugLog } = {}) {
     log(`[deps-cache] npm install in ${cwd}`);
     const result = spawnSync('npm', ['install', '--no-package-lock'], {
         cwd,
-        env: withGithubHttpsGitConfig(),
+        env: withGithubHttpsGitConfig(process.env, { cwd }),
         stdio: 'inherit',
         timeout: 10 * 60 * 1000,
     });
@@ -246,7 +261,7 @@ function runNpmInstallInContainer(cwd, { image, runtime = null, log = debugLog }
         ') 2>/dev/null',
         '&& git config --global url.https://github.com/.insteadOf ssh://git@github.com/',
         '&& git config --global --add url.https://github.com/.insteadOf git@github.com:',
-        '&& npm install --no-package-lock',
+        '&& GIT_CEILING_DIRECTORIES=/install npm install --no-package-lock',
     ].join(' ');
     const args = [
         'run', '--rm',
@@ -426,11 +441,9 @@ export function verifyAgentCache({
 }
 
 /**
- * Startup-time helper: verify that a prepared agent cache is valid for the
- * given host runtime family and return its node_modules path.
- *
- * Must never install. Plan §3.3: normal startup verifies and mounts only —
- * dependency preparation is an explicit `ploinky deps prepare` step.
+ * Strict helper for diagnostics and explicit checks: verify that a prepared
+ * agent cache is valid for the given host runtime family and return its
+ * node_modules path.
  */
 export function verifyAgentCacheForFamily({
     family,
@@ -447,6 +460,34 @@ export function verifyAgentCacheForFamily({
             agentName,
             agentPackagePath,
         });
+    } catch (err) {
+        throw new Error(`[${family}] ${agentName}: ${err.message}`);
+    }
+}
+
+/**
+ * Startup-time helper: prepare or reuse a valid agent dependency cache for the
+ * given host runtime family and return its node_modules path.
+ */
+export function ensureAgentCacheForFamily({
+    family,
+    repoName,
+    agentName,
+    agentCodePath,
+    log = debugLog,
+    prepare = prepareAgentCache,
+}) {
+    const runtimeKey = detectHostRuntimeKey(family);
+    const agentPackagePath = path.join(agentCodePath, 'package.json');
+    try {
+        const prepared = prepare({
+            repoName,
+            agentName,
+            runtimeKey,
+            agentPackagePath,
+            log,
+        });
+        return nodeModulesDir(prepared.cachePath);
     } catch (err) {
         throw new Error(`[${family}] ${agentName}: ${err.message}`);
     }

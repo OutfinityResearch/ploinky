@@ -70,12 +70,12 @@ You can use Ploinky in two ways:
 
 ## Dependency caches
 
-Node-based agents consume a prepared, runtime-keyed dependency cache instead of running `npm install` during normal startup.
+Node-based agents consume a prepared, runtime-keyed dependency cache. `ploinky start` prepares or reuses the cache before launching the runtime; `ploinky deps prepare` lets operators warm or refresh the same cache explicitly.
 
 - Global deps come from `ploinky/globalDeps/package.json` and land in `.ploinky/deps/global/<runtime-key>/node_modules/`.
 - Per-agent deps merge global + `<agent>/package.json` and land in `.ploinky/deps/agents/<repo>/<agent>/<runtime-key>/node_modules/`.
 - The runtime key is `<family>-<platform>-<arch>-node<major>` for host runtimes and may include a Linux container libc variant when needed, for example `container-linux-x64-musl-node20` or `container-linux-x64-glibc-node20`.
-- Agents mount the cache read-only. Startup verifies the cache stamp (runtime key + merged-package hash) and refuses to boot if stale — run `ploinky deps prepare <repo>/<agent>` to refresh.
+- Agents mount the cache read-only. Startup checks the cache stamp (runtime key + merged-package hash) and prepares the cache when it is missing or stale, which may require npm, git, network access, and native build tools.
 - `bwrap`, `seatbelt`, and container runtimes all consume prepared caches now. Container caches are prepared in a short-lived install container that matches the target runtime image, then mounted read-only into the runtime container.
 
 ## Notes
