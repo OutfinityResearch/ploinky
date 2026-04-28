@@ -97,8 +97,17 @@ function resolveSymlinkPath(symlinkPath) {
 
 function ensureManifestVolumeHostPath(resolvedHostPath, _containerPath, options = {}) {
     if (!resolvedHostPath) return;
+    const containerPath = typeof _containerPath === 'string' ? _containerPath.trim() : '';
+    const hostLooksLikeFile = path.extname(resolvedHostPath) !== '';
+    const containerLooksLikeFile = path.extname(containerPath) !== '';
+    const shouldCreateFile = hostLooksLikeFile || containerLooksLikeFile;
     if (!fs.existsSync(resolvedHostPath)) {
-        fs.mkdirSync(resolvedHostPath, { recursive: true });
+        if (shouldCreateFile) {
+            fs.mkdirSync(path.dirname(resolvedHostPath), { recursive: true });
+            fs.writeFileSync(resolvedHostPath, '');
+        } else {
+            fs.mkdirSync(resolvedHostPath, { recursive: true });
+        }
     }
     if (options && typeof options.chmod === 'number') {
         try { fs.chmodSync(resolvedHostPath, options.chmod); } catch (_) {}
@@ -177,6 +186,15 @@ function normalizeMountMode(mode, fallback) {
     return fallback;
 }
 
+function ensureNamedRuntimeNetwork(runtime, networkName) {
+    if (!networkName) return;
+    try {
+        execSync(`${runtime} network inspect ${networkName}`, { stdio: 'ignore' });
+    } catch (_) {
+        execSync(`${runtime} network create ${networkName}`, { stdio: 'inherit' });
+    }
+}
+
 function normalizeProfileEnv(env) {
     if (!env || typeof env !== 'object' || Array.isArray(env)) {
         return {};
@@ -221,7 +239,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const sharedDir = ensureSharedHostDir();
 
     // Get active profile and configuration
-    const activeProfile = getActiveProfile();
+    const activeProfile = String(options.profileName || getActiveProfile()).trim() || getActiveProfile();
     const hasProfileConfig = Boolean(manifest?.profiles && Object.keys(manifest.profiles).length > 0);
     const profileConfig = hasProfileConfig
         ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
@@ -299,7 +317,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     // Build volume mount arguments using new workspace structure
     // Prepared node_modules are mounted read-only; runtime containers never mutate deps.
     const nodeModulesMount = runtime === 'podman' ? ':ro,z' : ':ro';
-    const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', '/code',
+    const containerWorkdir = String(manifest?.workdir || '/code').trim() || '/code';
+    const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', containerWorkdir,
         // Agent library (always ro)
         '-v', `${AGENT_LIB_PATH}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
         // Code directory - profile dependent (rw in dev, ro in qa/prod)
@@ -329,7 +348,22 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     if (fs.existsSync(agentSkillsPath)) {
         args.push('-v', `${agentSkillsPath}:/code/skills${skillsMountMode}`);
     }
-    if (runtime === 'podman') {
+    const manifestNetwork = manifest?.network && typeof manifest.network === 'object' ? manifest.network : null;
+    const manifestNetworkName = String(manifestNetwork?.name || '').trim();
+    const manifestNetworkAliases = Array.isArray(manifestNetwork?.aliases)
+        ? manifestNetwork.aliases.map((entry) => String(entry || '').trim()).filter(Boolean)
+        : [];
+
+    if (manifestNetworkName) {
+        ensureNamedRuntimeNetwork(runtime, manifestNetworkName);
+        args.splice(1, 0, '--network', manifestNetworkName);
+        for (const alias of manifestNetworkAliases) {
+            args.splice(1, 0, '--network-alias', alias);
+        }
+        if (runtime === 'podman') {
+            args.splice(1, 0, '--replace');
+        }
+    } else if (runtime === 'podman') {
         args.splice(1, 0, '--network', 'slirp4netns:allow_host_loopback=true');
         args.splice(1, 0, '--replace');
     } else if (runtime === 'docker') {
@@ -614,6 +648,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     let containerOverride;
     let aliasOverride;
     let forceRecreate = false;
+    let profileNameOverride;
     if (typeof options === 'number') {
         preferredHostPort = options;
     } else if (options && typeof options === 'object') {
@@ -621,6 +656,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         containerOverride = options.containerName;
         aliasOverride = options.alias;
         forceRecreate = options.forceRecreate === true;
+        profileNameOverride = options.profileName;
     }
 
     const repoName = path.basename(path.dirname(agentPath));
@@ -633,7 +669,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     const image = manifest.container || manifest.image || 'node:18-alpine';
 
     // Resolve profile config early - needed for port resolution
-    const activeProfile = getActiveProfile();
+    const activeProfile = String(profileNameOverride || existingRecord.profile || getActiveProfile()).trim() || getActiveProfile();
     const hasProfileConfig = Boolean(manifest?.profiles && Object.keys(manifest.profiles).length > 0);
     const profileConfig = hasProfileConfig
         ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
@@ -699,7 +735,12 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         allPortMappings = [{ containerPort: 7000, hostPort, hostIp: '127.0.0.1' }];
     }
 
-    startAgentContainer(agentName, manifest, agentPath, { publish: additionalPorts, containerName, alias: aliasOverride });
+    startAgentContainer(agentName, manifest, agentPath, {
+        publish: additionalPorts,
+        containerName,
+        alias: aliasOverride,
+        profileName: activeProfile
+    });
 
     // Get paths for the new workspace structure
     const agentWorkDir = getAgentWorkDir(agentName);

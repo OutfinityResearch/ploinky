@@ -308,11 +308,12 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
         for (const entry of env) {
             if (entry === undefined || entry === null) continue;
             if (typeof entry === 'object' && !Array.isArray(entry)) {
-                const { name, value, varName, required } = entry;
+                const { name, value, default: defaultValue, varName, required } = entry;
                 const insideName = typeof name === 'string' ? name.trim() : '';
                 if (!insideName) continue;
                 const sourceName = typeof varName === 'string' && varName.trim() ? varName.trim() : insideName;
-                addSpec(insideName, sourceName, toBool(required, false), value);
+                const resolvedDefault = value !== undefined ? value : defaultValue;
+                addSpec(insideName, sourceName, toBool(required, false), resolvedDefault);
                 continue;
             }
             const text = String(entry).trim();

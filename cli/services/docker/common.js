@@ -253,26 +253,83 @@ function parseManifestPorts(manifest, profileConfig = null) {
 
         const parts = portSpec.split(':');
         let hostIp = '127.0.0.1';  // Default to localhost for security
-        let hostPort;
-        let containerPort;
+        let hostPortSpec;
+        let containerPortSpec;
         if (parts.length === 1) {
-            hostPort = containerPort = parseInt(parts[0], 10);
+            hostPortSpec = containerPortSpec = parts[0];
         } else if (parts.length === 2) {
-            hostPort = parseInt(parts[0], 10);
-            containerPort = parseInt(parts[1], 10);
+            hostPortSpec = parts[0];
+            containerPortSpec = parts[1];
         } else if (parts.length === 3) {
             hostIp = parts[0];  // Respect the specified IP address
-            hostPort = parseInt(parts[1], 10);
-            containerPort = parseInt(parts[2], 10);
+            hostPortSpec = parts[1];
+            containerPortSpec = parts[2];
         }
-        if (hostPort && containerPort) {
-            const normalized = `${hostIp}:${hostPort}:${containerPort}`;
+        const parsed = parsePortPublishSpec(hostPortSpec, containerPortSpec);
+        if (parsed) {
+            const normalized = `${hostIp}:${parsed.hostPortSpec}:${parsed.containerPortSpec}${parsed.protocolSuffix}`;
             publishArgs.push(normalized);
-            portMappings.push({ hostPort, containerPort, hostIp });
+            for (const mapping of parsed.portMappings) {
+                portMappings.push({ ...mapping, hostIp, protocol: parsed.protocol });
+            }
         }
     }
 
     return { publishArgs, portMappings };
+}
+
+function parsePortPublishSpec(hostPortSpec, containerPortSpec) {
+    if (!hostPortSpec || !containerPortSpec) return null;
+    const container = splitPortProtocol(containerPortSpec);
+    const host = splitPortProtocol(hostPortSpec);
+    const protocol = container.protocol || host.protocol || 'tcp';
+    if ((container.protocol && host.protocol && container.protocol !== host.protocol) || !['tcp', 'udp'].includes(protocol)) {
+        return null;
+    }
+    const hostRange = parsePortRange(host.portSpec);
+    const containerRange = parsePortRange(container.portSpec);
+    if (!hostRange || !containerRange || hostRange.length !== containerRange.length) {
+        return null;
+    }
+    const portMappings = [];
+    for (let offset = 0; offset < hostRange.length; offset += 1) {
+        portMappings.push({
+            hostPort: hostRange.start + offset,
+            containerPort: containerRange.start + offset
+        });
+    }
+    return {
+        hostPortSpec: formatPortRange(hostRange),
+        containerPortSpec: formatPortRange(containerRange),
+        protocol,
+        protocolSuffix: protocol === 'tcp' ? '' : `/${protocol}`,
+        portMappings
+    };
+}
+
+function splitPortProtocol(portSpec) {
+    const raw = String(portSpec || '').trim();
+    const match = raw.match(/^(.+?)(?:\/([a-zA-Z]+))?$/);
+    return {
+        portSpec: String(match?.[1] || '').trim(),
+        protocol: String(match?.[2] || '').trim().toLowerCase()
+    };
+}
+
+function parsePortRange(portSpec) {
+    const match = String(portSpec || '').trim().match(/^(\d+)(?:-(\d+))?$/);
+    if (!match) return null;
+    const start = parseInt(match[1], 10);
+    const end = match[2] ? parseInt(match[2], 10) : start;
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start <= 0 || end <= 0 || end < start) {
+        return null;
+    }
+    return { start, end, length: end - start + 1 };
+}
+
+function formatPortRange(range) {
+    if (!range) return '';
+    return range.start === range.end ? String(range.start) : `${range.start}-${range.end}`;
 }
 
 function parseHostPort(output) {
