@@ -31,6 +31,26 @@ test('findWorkspaceGitRepos includes root and nested repositories', () => {
     }
 });
 
+test('findWorkspaceGitRepos skips unreadable runtime data directories', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-repos-'));
+    const pgdata = path.join(root, 'postgres', 'data', 'pgdata');
+
+    try {
+        mkdir(path.join(root, 'project', '.git'));
+        mkdir(pgdata);
+        fs.chmodSync(pgdata, 0o000);
+
+        const discovered = findWorkspaceGitRepos(root)
+            .map(repo => path.relative(root, repo.path) || '.')
+            .sort();
+
+        assert.deepEqual(discovered, ['project']);
+    } finally {
+        try { fs.chmodSync(pgdata, 0o700); } catch (_) {}
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('findWorkspaceGitRepos rejects missing search roots', () => {
     const missing = path.join(os.tmpdir(), `ploinky-missing-${Date.now()}`);
     assert.throws(() => findWorkspaceGitRepos(missing), /is not a directory/);

@@ -98,9 +98,9 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
         
         'update': {
             description: 'Update Ploinky itself, workspace repositories, Achilles dependencies, and project repositories',
-            syntax: 'update [folderPath] | update all [folderPath] | update repos [folderPath] | update repo <name>',
+            syntax: 'update [folderPath] | update all [folderPath] | update repos | update repo <name>',
             examples: [ 'update', 'update /work/projects', 'update all /work/projects', 'update repo basic' ],
-            notes: 'Runs git pull --rebase --autostash for the Ploinky checkout, .ploinky/repos, and git repositories discovered recursively from folderPath. Without folderPath, discovery starts at the current working directory. Packages under .ploinky/repos that declare achillesAgentLib refresh that dependency. Discovered project repositories also receive refreshed AchillesCopilotBasicSkills copies and managed .gitignore entries. In an interactive Ploinky session, a detected Ploinky self-update is deferred: close the session, run `ploinky update`, then restart Ploinky so the new code is loaded.'
+            notes: '`update` is the same full workflow as `update all`: it runs git pull --rebase --autostash for the Ploinky checkout, .ploinky/repos, and git repositories discovered recursively from folderPath. Without folderPath, discovery starts at the current working directory. `update repos` updates only installed .ploinky/repos and their achillesAgentLib packages. Discovered project repositories also receive refreshed AchillesCopilotBasicSkills copies and managed .gitignore entries. In an interactive Ploinky session, a detected Ploinky self-update is deferred: close the session, run `ploinky update`, then restart Ploinky so the new code is loaded.'
         },
         
         

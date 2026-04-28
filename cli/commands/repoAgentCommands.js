@@ -83,6 +83,51 @@ async function updateRepo(repoName) {
     }
 }
 
+async function updatePloinkyRepos() {
+    const ploinkyRepos = getRepoNames();
+    const failed = [];
+    let updated = 0;
+
+    if (ploinkyRepos.length) {
+        console.log('Updating ploinky repositories...');
+        for (const repoName of ploinkyRepos) {
+            try {
+                reposSvc.updateRepo(repoName);
+                console.log(`  ✓ ${repoName}`);
+                updated += 1;
+            } catch (err) {
+                const message = err?.message || String(err);
+                failed.push({ repoName, message });
+                console.error(`  ✗ ${repoName}: ${message}`);
+            }
+        }
+    } else {
+        console.log('No ploinky repositories installed.');
+    }
+
+    const achilles = refreshAchillesDependenciesInRepos();
+    if (achilles.failed.length) {
+        for (const entry of achilles.failed) {
+            failed.push({
+                repoName: `achillesAgentLib ${path.relative(REPOS_DIR, entry.packageDir) || '.'}`,
+                message: entry.message,
+            });
+        }
+    }
+
+    console.log(`Ploinky repository update summary: ${updated}/${ploinkyRepos.length} repositories updated.`);
+    if (achilles.total) {
+        console.log(`Achilles dependency summary: ${achilles.refreshed.length}/${achilles.total} package(s) refreshed.`);
+    }
+
+    if (failed.length) {
+        const failedNames = failed.map(entry => entry.repoName).join(', ');
+        throw new Error(`Failed to update ${failed.length} repository(s): ${failedNames}`);
+    }
+
+    return { total: ploinkyRepos.length, updated, failed, achilles };
+}
+
 async function updateAllRepos(folderPath, options = {}) {
     const projectsRoot = resolveUpdateProjectsRoot(folderPath);
     const ploinkyRoot = resolvePloinkyRoot();
@@ -247,6 +292,7 @@ export {
     getAgentNames,
     addRepo,
     updateRepo,
+    updatePloinkyRepos,
     updateAllRepos,
     resolveUpdateProjectsRoot,
     enableRepo,

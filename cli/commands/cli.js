@@ -28,6 +28,7 @@ import {
     getAgentNames,
     addRepo,
     updateRepo,
+    updatePloinkyRepos,
     updateAllRepos,
     enableRepo,
     disableRepo,
@@ -185,9 +186,11 @@ async function handleCommand(args) {
             {
                 const first = String(options[0] || '').trim();
                 const firstLower = first.toLowerCase();
-                if (!first || firstLower === 'all' || firstLower === 'repos' || firstLower === 'repositories') {
+                if (!first || firstLower === 'all') {
                     const folderArg = first ? String(options[1] || '').trim() || undefined : undefined;
                     await updateAllRepos(folderArg, { interactiveSession: Boolean(inputState.getInterface?.()) });
+                } else if (firstLower === 'repos' || firstLower === 'repositories') {
+                    await updatePloinkyRepos();
                 } else if (firstLower === 'repo' || firstLower === 'repository') {
                     await updateRepo(options[1]);
                 } else {

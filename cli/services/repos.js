@@ -199,7 +199,15 @@ export function findWorkspaceGitRepos(workspaceRoot) {
             if (dir !== root) return;
         }
 
-        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        let entries;
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch (err) {
+            if (err?.code === 'EACCES' || err?.code === 'EPERM') return;
+            throw err;
+        }
+
+        for (const entry of entries) {
             if (!entry.isDirectory()) continue;
             if (entry.name.startsWith('.') || ignoredDirNames.has(entry.name)) continue;
             visit(path.join(dir, entry.name));
