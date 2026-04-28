@@ -1,7 +1,24 @@
 import fs from 'fs';
 import path from 'path';
 
-export const WORKSPACE_ROOT = path.resolve(process.cwd());
+function resolveWorkspaceRoot() {
+    try {
+        return path.resolve(process.cwd());
+    } catch (err) {
+        if (err?.code === 'ENOENT') {
+            console.error([
+                'Ploinky could not determine the current directory because it no longer exists.',
+                'Change into an existing directory and run the command again, for example:',
+                '  cd ..',
+                '  cd -P <workspace>',
+            ].join('\n'));
+            process.exit(1);
+        }
+        throw err;
+    }
+}
+
+export const WORKSPACE_ROOT = resolveWorkspaceRoot();
 export const PLOINKY_DIR = path.join(WORKSPACE_ROOT, '.ploinky');
 export const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 export const AGENTS_FILE = path.join(PLOINKY_DIR, 'agents.json');

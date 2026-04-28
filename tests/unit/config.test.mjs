@@ -47,3 +47,28 @@ test('config uses cwd as workspace root even when a parent has .ploinky', () => 
         fs.rmSync(root, { recursive: true, force: true });
     }
 });
+
+test('config reports deleted current directory clearly', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-config-missing-cwd-'));
+    const child = path.join(root, 'child');
+
+    try {
+        fs.mkdirSync(child, { recursive: true });
+        const script = `
+            import fs from 'node:fs';
+            process.chdir(${JSON.stringify(child)});
+            fs.rmSync(${JSON.stringify(child)}, { recursive: true, force: true });
+            await import(${JSON.stringify(`${configUrl}?missing-cwd=${Date.now()}`)});
+        `;
+        const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+            cwd: root,
+            encoding: 'utf8',
+        });
+
+        assert.equal(result.status, 1);
+        assert.match(result.stderr, /current directory because it no longer exists/);
+        assert.match(result.stderr, /cd -P <workspace>/);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
