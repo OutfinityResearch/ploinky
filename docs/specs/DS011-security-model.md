@@ -1,0 +1,167 @@
+---
+id: DS011
+title: Security Model
+status: implemented
+owner: ploinky-team
+supersedes: DS006 (partial - auth wire protocol)
+summary: Defines Ploinky's trust boundaries, master-keyed storage, authentication modes, secure-wire invocation flow, runtime isolation, file controls, and residual security limits.
+---
+
+# DS011 Security Model
+
+## Introduction
+
+Ploinky is a workspace-local runtime. Its security model is designed for a single operator or a trusted team running agents on a controlled host, not for hostile multi-tenant execution or arbitrary third-party agent hosting. The router, workspace state, runtime backends, and enabled agents form one local trust domain.
+
+This document is the system-level security contract. DS006 defines the older authentication and capability framing, including the secure-wire design that this specification supersedes where current behavior differs. This document combines the current branch behavior across storage, authentication, routing, agent invocation, sandboxing, static file serving, uploads, transcripts, and operational gaps. Earlier security material described `PLOINKY_WIRE_SECRET` as a separate persisted workspace secret; this document is the current authority: the implementation uses `PLOINKY_MASTER_KEY` as the workspace root key and injects the same bytes into agents under the `PLOINKY_WIRE_SECRET` environment variable for compatibility with the invocation verifier.
+
+## Core Content
+
+### Security Scope and Trust Assumptions
+
+Ploinky must treat the operator account, the local host, `PLOINKY_MASTER_KEY`, and the `.ploinky/` workspace directory as high-trust assets. Anyone who can read `PLOINKY_MASTER_KEY` can decrypt encrypted workspace stores, mint local session JWTs, and mint agent invocation JWTs. Anyone who can write critical `.ploinky/` files can alter enabled agents, routing, profiles, stored secrets, or user records.
+
+The router is the trust broker for browser users and agent-to-agent calls. Browser surfaces and MCP calls should pass through the router so that route auth, session handling, delegated invocation minting, and audit hooks apply. Agent ports must be considered implementation details even when they listen on localhost. Direct access to an agent port may expose tool and resource metadata, because MCP initialization and listing do not require an invocation token, while executable tool calls, resource reads, and task-status reads do require a valid router-minted invocation JWT.
+
+Agents are isolated from the host by containers, bubblewrap, or macOS Seatbelt, but enabled agent code is not mutually distrusted once the workspace master key is injected into its runtime. Any code running inside an agent process that can read its environment can read `PLOINKY_WIRE_SECRET` and therefore can forge workspace invocation JWTs if it escapes the intended router-mediated path. This is acceptable only under the current single-workspace, operator-controlled trust model. Ploinky must not claim tenant isolation or non-repudiation between agents without replacing the shared-HMAC model with per-agent or asymmetric credentials.
+
+The router port is sensitive. The current server starts with `server.listen(port)` and logs a `127.0.0.1` URL, but the implementation does not explicitly pass a bind host. Operators who expose the port outside the local machine must provide network controls, TLS termination, and proxy policy appropriate for the deployment. Public-internet exposure is outside the implemented security assumptions unless additional controls are added.
+
+### Workspace Key and Encrypted Storage
+
+`PLOINKY_MASTER_KEY` is the root cryptographic secret for current workspace security. It must be exactly 64 hexadecimal characters, representing 256 bits of key material. `cli/services/masterKey.js` resolves it from `process.env.PLOINKY_MASTER_KEY` first and then from the nearest `.env` discovered by walking upward from the current directory. Encrypted stores fail closed when the key is missing, malformed, or unable to decrypt the existing file.
+
+`.ploinky/.secrets` must be stored as an AES-256-GCM JSON envelope through `cli/services/encryptedSecretsFile.js`. Legacy plaintext key-value files are migrated into the encrypted envelope on first read. The envelope encrypts both variable names and values inside the ciphertext payload. Writes use a temporary file and rename, and the implementation attempts to set mode `0600`.
+
+Local authentication users must be stored in `.ploinky/passwords.enc` through `cli/services/encryptedPasswordStore.js`, not in `.ploinky/.secrets`. The password store is an AES-256-GCM envelope keyed by `PLOINKY_MASTER_KEY`; it groups user payloads by the route-specific users variable name, such as `PLOINKY_AUTH_EXPLORER_USERS`. User password material inside that store must be password hashes, not plaintext.
+
+The implementation uses more than one secret resolution path, and future changes must preserve the purpose-specific precedence deliberately. The workspace root key is resolved only from process environment and `.env`, because `.secrets` cannot be decrypted before the key exists. `secretInjector.getSecret()` prefers process environment, then encrypted `.secrets`, then `.env`. Manifest environment resolution in `cli/services/secretVars.js` currently resolves encrypted `.secrets` before process environment and then `.env`. Security-sensitive code must not assume a universal precedence order without checking the call site.
+
+`ensurePersistentSecret()` remains available for generated workspace values such as transcript keys and other runtime resource templates. It may read process environment, `.env`, and encrypted `.secrets`, then generate and persist a new random hexadecimal value when no value exists.
+
+### Passwords, Local Sessions, and User Administration
+
+Local authentication is enabled per route when the enabled-agent record has `auth.mode: "local"`, which may come from the manifest directive `pwd enable` or from explicit enable-time auth selection. Local auth user records must contain a stable local id, username, display name, optional email, roles, password hash, and revision counter.
+
+Password hashing must use the supported hash verifier in `cli/services/localAuthPasswords.js`. New hashes use scrypt with a random 16-byte salt and a 64-byte derived key. Legacy `sha256:` hashes can still be verified but must not be treated as the preferred storage format.
+
+Successful local login mints a compact HS256 session JWT in the `ploinky_jwt` cookie. The cookie must be `HttpOnly`, `SameSite=Lax`, path `/`, and `Secure` when the request is HTTPS or forwarded as HTTPS. The session JWT has `typ: "session"`, issuer `ploinky-router`, user claims in `usr`, a route users-variable binding in `uvar`, a revision number in `rev`, a random `jti`, and a four-hour expiry. Authenticated local requests refresh the cookie as a sliding window.
+
+Local session revocation is revision-based rather than session-store-based. When a password or admin-managed user record changes, the target user's `rev` increases. On the next request, `getSession()` and `ensureAuthenticated()` compare the JWT `rev` and `uvar` against the current encrypted user store. A mismatch rejects the session. This route binding is required so a JWT issued for one local-auth route cannot administer or authenticate another route that has a different users variable.
+
+The local account page permits a user to change their own username and password only after presenting the current password. The web handler enforces new-password confirmation and a minimum length for self-service password changes. Admin user-management APIs are exposed under `/api/agents/<agent>/users` and must require a valid local session for the target agent plus a local admin role or the built-in local admin identity. Admin mutations must preserve at least one admin user.
+
+### SSO and Guest Sessions
+
+SSO is workspace-bound through the capability registry. The workspace binding `workspace:sso` must point to an installed provider that implements `auth-provider/v1`. Core auth code delegates provider-specific login URL creation, callback handling, refresh, logout, and user normalization to that provider. Core owns the random pending browser state, expiry, session cookie, and in-memory session store.
+
+SSO pending state must be short lived. The generic bridge currently keeps pending entries for five minutes and deletes them after callback consumption. SSO sessions are server-side records containing normalized user information and opaque provider session or token material. Refresh remains provider-driven.
+
+Guest auth is enabled by `guest: true` in an agent manifest. Guest routes first honor an existing authenticated local session when one is present. Otherwise, the router mints a one-hour session JWT in `ploinky_guest` with a `guest` role and a random guest id. Guest identity is therefore pseudonymous and short lived, and agents must enforce guest limitations from the `usr.roles` claim in invocation JWTs.
+
+### Router Route Protection
+
+The router must attach authenticated identity to `req.user`, `req.session`, `req.sessionId`, and `req.authMode` before protected browser surfaces and first-party MCP requests execute. The route auth context is resolved from the request path, explicit `agent` query parameter, route table, and static-agent configuration.
+
+`/health` and `/MCPBrowserClient.js` are intentionally reachable before route authentication. `/health` exposes operational metadata needed by the watchdog. `/MCPBrowserClient.js` serves first-party client code and must not contain secrets.
+
+`/auth/*` handles login, logout, account, token, and callback flows. `/api/agents/<agent>/users` performs its own local-admin authorization because it must authenticate against the target agent's local-auth policy. `/mcp` is protected by normal route authentication before router-level MCP aggregation. `/mcps/<agent>/mcp` and `/mcp/<agent>/mcp` defer browser authentication or delegated-caller verification until the JSON-RPC body is available, because secure-wire tokens are body-bound.
+
+Dashboard access has two modes. If router auth has established `req.user`, the Dashboard creates its own surface session and treats the router-authenticated user as authorized. If no router user exists, the Dashboard can still use the legacy `WEBDASHBOARD_TOKEN` flow. The Dashboard `/run` endpoint can execute `ploinky` commands with user-supplied arguments and must remain behind Dashboard authorization. Production-oriented deployments should remove or tightly constrain that endpoint before exposing Dashboard beyond a trusted operator network.
+
+The Status surface is protected by the router auth context when a route policy requires auth. Its handler does not implement an additional token challenge. If the active route context resolves to auth mode `none`, Status data is effectively public on the router port.
+
+Public service routes under `/public-services/...` intentionally bypass router auth. Protected service routes under `/services/...` may pass a plain `x-ploinky-auth-info` header derived from `req.user` to a downstream HTTP service. That header is not a signed secure-wire grant; downstream services must trust it only when the request came through a protected router path and must not accept caller-supplied equivalents as authoritative.
+
+### Secure-Wire Invocation Model
+
+Executable agent calls must use router-minted HS256 invocation JWTs. The router is the issuer. Agents verify only. The signing key is the workspace master key bytes; the runtime injects the same bytes into agents as `PLOINKY_WIRE_SECRET`. Agent verification also accepts `PLOINKY_MASTER_KEY` for compatibility in tests and host runtimes.
+
+An invocation JWT must have `typ: "invocation"`, issuer `ploinky-router`, target audience `aud`, caller principal, tool name, normalized scope list, body hash `bh`, delegated user claims `usr`, issued and expiry timestamps, and a random `jti`. The router computes `bh` from canonical JSON over the exact `{ tool, arguments }` body forwarded to the agent. Default invocation TTL is 60 seconds and the verifier rejects tokens with an excessive TTL.
+
+The agent verifier in `Agent/lib/invocationAuth.mjs` must reject missing bearer tokens, missing wire secret, missing expected audience, audience mismatch, tool mismatch, body hash mismatch, expiry failure, and replayed `jti` values. `Agent/server/AgentServer.mjs` uses an in-memory replay cache with a bounded size and requires verified invocation for tool calls, resource reads, and task-status reads.
+
+Delegated agent calls must go back through the router. A caller presents its original invocation JWT in `X-Ploinky-Caller-JWT`. The router verifies that JWT's signature, type, issuer, and expiry, extracts the caller identity from `aud`, extracts the delegated user from `usr`, and mints a fresh invocation JWT for the target. The router intentionally does not enforce the caller JWT's original body hash or replay id for the delegated request, because those fields were bound to the original tool call. Integrity and replay protection are enforced on the new target invocation token.
+
+The shared-HMAC model does not provide non-repudiation between agents. The security invariant is that the router is the intended issuer and that normal agents receive invocation tokens only through router-mediated calls. It is not safe to use this model for mutually hostile agents that can read their own environment.
+
+### Capabilities and Domain Authorization
+
+The capability registry is an authorization input, not a complete authorization system. Agent manifests may declare `provides` contracts and `requires` aliases. Workspace bindings pin a consumer alias to a provider and approved scopes. These bindings are used for SSO provider selection and capability discovery.
+
+Invocation scopes are broad by default for first-party and delegated calls when no explicit scopes are supplied. Domain agents that protect sensitive resources must enforce their own authorization using `authInfo` or the derived actor. For example, a secrets provider must check operation-specific scopes, user or agent identity, per-resource ACLs, and provider-specific policy files before granting access. Ploinky core must not claim that a router session alone authorizes every provider operation.
+
+Legacy agent client-credential auth is removed. `/auth/agent-token` returns gone, and `ensureAgentAuthenticated()` rejects legacy bearer-style agent auth. Agent-to-agent authorization must use delegated invocation JWTs through the router.
+
+### Runtime Isolation and Mount Policy
+
+The default runtime backend is a container runtime, preferring Podman when available and falling back to Docker. Host sandboxes are selected only when the manifest requests `lite-sandbox: true`: Linux uses bubblewrap, macOS uses Seatbelt, and unsupported or unavailable host sandboxes fail with operator guidance rather than silently falling back.
+
+Container agents must mount `/Agent` read-only, prepared dependency caches read-only, code and skills according to the active profile, and workspace or shared paths as required by the run mode. The `dev` profile defaults code and skills to read-write. `qa` and `prod` default them to read-only unless a profile explicitly relaxes them. Prepared `node_modules` caches must remain read-only in runtime containers. Manifest volumes and runtime resources are explicit operator-granted write surfaces and must be treated as trusted manifest power.
+
+Container-published ports default to localhost when no explicit profile port mapping is declared. Profile port mappings may include an explicit host IP; if a manifest or profile binds to a non-local address, that exposure is intentional operator configuration and must be reviewed as a network security decision.
+
+Bubblewrap agents clear the environment and then set only the constructed environment map. They bind system paths needed for execution as read-only, bind `/Agent` read-only, bind dependency caches read-only, bind code and skills according to profile policy, bind shared and workspace paths as writable where required, and apply read-only overlays to protected Ploinky state such as dependency caches, `.secrets`, profile, routing, server configuration, and staged runtime paths. Bubblewrap currently unshares PID but does not unshare network, because agents need network access and router reachability.
+
+Seatbelt agents run with a generated deny-default SBPL profile. The profile allows system reads, network access, process execution, temporary writes, shared/workspace writes, profile-controlled code and skills writes, declared volumes, and logs. It denies writes to protected runtime paths, dependency caches, staged Agent libraries, `.secrets`, profile, routing, and server configuration. Because Seatbelt exposes real host paths rather than a mount namespace, its generated profile is the authoritative access-control layer.
+
+Lifecycle hooks are trusted host or runtime code. `preinstall` runs on the host before container or sandbox creation and can seed workspace variables or files. Host lifecycle hooks are outside runtime sandbox protection. A manifest that defines hooks must therefore be trusted at the same level as a local script run by the operator.
+
+### Files, Static Content, Uploads, and Blobs
+
+Workspace file reads and uploads must remain confined to the workspace root. `cli/server/utils/workspacePaths.js` rejects null bytes, resolves leading slashes as workspace-relative when requested, canonicalizes paths through realpath-aware logic, and denies symlink escapes outside the workspace.
+
+Static file serving sanitizes relative paths and denies `..` traversal. Static and agent-specific serving may allow symlink targets under the static or agent root's parent directory, because the allowed-root checks include both the root and its parent. Operators must not place secrets in directories reachable by static roots or symlinks from static roots.
+
+Blob upload and download paths use random hexadecimal ids and reject ids containing characters outside the allowed id set. Original filenames and MIME types are stored as metadata and must not control filesystem paths. Blob and upload handlers currently do not enforce a repository-wide content-size limit or quota. Any deployment that exposes uploads beyond a trusted local user must add request-size limits and storage quotas at the router or proxy layer.
+
+`/upload` writes to an operator-specified workspace path after canonical path validation. `/blobs` stores shared blobs under `.ploinky/shared` or agent blobs under the enabled agent project path. Responses use `X-Content-Type-Options: nosniff` for blob data.
+
+### Transcripts, Logs, and Audit Data
+
+WebChat transcripts must be encrypted at rest independently from the main workspace secret envelope. `PLOINKY_TRANSCRIPTS_MASTER_KEY` is resolved from encrypted workspace secrets or environment and may be generated on first use. Each conversation receives a random data-encryption key, and that key is wrapped with the transcript master key. Message text, attachments, and metadata are encrypted with AES-256-GCM.
+
+Transcript records must store hashed session, user, and tab identifiers rather than raw identity values. Dashboard transcript and feedback APIs require transcript viewer access. SSO users must hold an allowed role from `PLOINKY_TRANSCRIPT_VIEWER_ROLES` unless the role list is `*`. Local or legacy Dashboard sessions may read transcripts only when `PLOINKY_TRANSCRIPT_VIEWER_ALLOW_LOCAL` explicitly allows it.
+
+Router logs and agent logs are diagnostic surfaces and must not intentionally record secrets, passwords, cookies, bearer tokens, JWTs, or API keys. Some agent execution paths sanitize known sensitive fields before logging payloads, but `appendLog()` itself trusts the caller. New logging code must redact sensitive fields before writing to `.ploinky/logs/`.
+
+### Browser Media and Third-Party API Keys
+
+WebChat server-side speech-to-text uses `OPENAI_API_KEY` from the router process environment when the OpenAI STT provider is selected. The Realtime token endpoint currently returns that API key to an authenticated browser as `client_secret.value` for direct browser use. This is acceptable only for trusted local users and must not be documented as a production-safe ephemeral-token implementation. A production deployment must replace this behavior with short-lived provider-issued client credentials or disable the endpoint.
+
+The SSO `/auth/token` endpoint can return provider access-token information for an authenticated SSO session. That endpoint is a browser-facing token surface and must remain protected by the active session cookie and route auth context.
+
+### Residual Security Requirements
+
+Ploinky's implemented controls are sufficient for local, operator-controlled workspaces when the router port is not exposed to untrusted networks. Before treating Ploinky as an internet-facing or multi-tenant service, the implementation must add explicit bind-host configuration, TLS guidance or enforcement behind a proxy, CSRF or origin checks for cookie-authenticated state-changing routes, login rate limiting, upload quotas, hardened Dashboard command policy, and a replacement for shared-HMAC agent credentials.
+
+## Decisions & Questions
+
+### Question #1: Why is `PLOINKY_MASTER_KEY` the root security secret?
+
+Response:
+The current branch uses `PLOINKY_MASTER_KEY` to decrypt `.ploinky/.secrets`, decrypt `.ploinky/passwords.enc`, mint local session JWTs, and mint invocation JWTs. Keeping one explicit workspace root key makes encrypted local storage and router-agent wire authentication operationally simple, but it also means key exposure is a full workspace compromise. This document therefore treats the key as a high-trust asset and supersedes older wording that described a separately persisted `PLOINKY_WIRE_SECRET`.
+
+### Question #2: Why is the shared-HMAC invocation model acceptable only for the current local workspace model?
+
+Response:
+The shared-HMAC model assumes that enabled agents are operator-controlled participants inside one workspace. It reduces key lifecycle complexity and keeps agent verification simple. It does not prevent an agent that reads the shared secret from minting tokens for another principal. Multi-tenant or hostile-agent deployments require per-agent derived secrets, asymmetric signatures, or another issuer model that restores non-repudiation and limits blast radius.
+
+### Question #3: Why are runtime sandboxes not described as complete containment?
+
+Response:
+Containers, bubblewrap, and Seatbelt reduce host filesystem and process exposure, but Ploinky still grants agents network access, selected writable mounts, manifest-declared volumes, runtime-resource storage, and sensitive environment variables. Host lifecycle hooks run outside the sandbox. The correct contract is therefore defense in depth for operator-enabled code, not a guarantee that arbitrary hostile code can be run safely without further controls.
+
+### Question #4: Why does the security model call out router network exposure as a deployment risk?
+
+Response:
+The router prints a localhost URL, but the current `RoutingServer.js` call does not pass an explicit hostname to `server.listen()`. The security posture therefore depends on host networking, firewall rules, container or process placement, and any reverse proxy. Documentation must be explicit that exposing the router port changes the threat model.
+
+### Question #5: What unresolved hardening work is required before internet-facing production use?
+
+Response:
+The current branch lacks explicit CSRF or origin checks, login rate limiting, upload quotas, a hardened replacement for Dashboard command execution, an ephemeral-token implementation for WebChat Realtime browser credentials, and per-agent credential isolation. These are not defects for the documented local workspace model, but they are blockers for a broader hosted security claim.
+
+## Conclusion
+
+Ploinky's security model is a local workspace model built around a trusted operator, a router trust broker, encrypted workspace stores, JWT-HMAC invocation tokens, and runtime isolation backends. The implementation must continue to document its real boundaries clearly: strong local controls where they exist, explicit trust in the workspace master key and enabled agents, and no claim of multi-tenant or public-internet safety without additional hardening.
