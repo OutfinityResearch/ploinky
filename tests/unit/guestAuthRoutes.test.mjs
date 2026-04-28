@@ -1,0 +1,169 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { Readable } from 'node:stream';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const REPO_ROOT = path.resolve(__dirname, '../..');
+const MASTER_KEY = '4'.repeat(64);
+
+class MockResponse {
+    constructor() {
+        this.statusCode = 200;
+        this.headers = new Map();
+        this.body = '';
+    }
+
+    setHeader(name, value) {
+        this.headers.set(String(name).toLowerCase(), value);
+    }
+
+    getHeader(name) {
+        return this.headers.get(String(name).toLowerCase());
+    }
+
+    writeHead(statusCode, headers = {}) {
+        this.statusCode = statusCode;
+        for (const [name, value] of Object.entries(headers || {})) {
+            this.setHeader(name, value);
+        }
+    }
+
+    end(chunk = '') {
+        this.body += chunk ? String(chunk) : '';
+    }
+}
+
+function makeRequest({ method = 'GET', url, body, cookie = '' }) {
+    const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body), 'utf8')];
+    const req = Readable.from(chunks);
+    req.method = method;
+    req.url = url;
+    req.headers = {
+        accept: 'application/json',
+        host: 'localhost',
+        ...(cookie ? { cookie } : {}),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    };
+    req.socket = { encrypted: false };
+    return req;
+}
+
+function writeWorkspaceConfig(ploinkyDir) {
+    writeFileSync(path.join(ploinkyDir, '.secrets'), '# test secrets\n');
+    writeFileSync(path.join(ploinkyDir, 'agents.json'), JSON.stringify({
+        explorer: {
+            type: 'agent',
+            agentName: 'explorer',
+            repoName: 'AchillesIDE',
+            auth: { mode: 'local', usersVar: 'PLOINKY_AUTH_EXPLORER_USERS' },
+        },
+        webAssist: {
+            type: 'agent',
+            agentName: 'webAssist',
+            repoName: 'webassist',
+            auth: { mode: 'guest' },
+        },
+        webAdmin: {
+            type: 'agent',
+            agentName: 'webAdmin',
+            repoName: 'webassist',
+            auth: { mode: 'none' },
+        },
+    }, null, 2));
+    writeFileSync(path.join(ploinkyDir, 'routing.json'), JSON.stringify({
+        routes: {
+            explorer: { agent: 'explorer', repo: 'AchillesIDE', hostPort: 55289 },
+            webAssist: { agent: 'webAssist', repo: 'webassist', hostPort: 53659 },
+            webAdmin: { agent: 'webAdmin', repo: 'webassist', hostPort: 41155 },
+        },
+        static: {
+            agent: 'explorer',
+            hostPath: '/tmp/explorer',
+        },
+    }, null, 2));
+}
+
+async function withAuthModules(t) {
+    const workspace = mkdtempSync(path.join(os.tmpdir(), 'ploinky-guest-auth-'));
+    const ploinkyDir = path.join(workspace, '.ploinky');
+    mkdirSync(ploinkyDir, { recursive: true });
+    writeWorkspaceConfig(ploinkyDir);
+
+    const previousCwd = process.cwd();
+    const previousMasterKey = process.env.PLOINKY_MASTER_KEY;
+    process.chdir(workspace);
+    process.env.PLOINKY_MASTER_KEY = MASTER_KEY;
+    t.after(() => {
+        process.chdir(previousCwd);
+        if (previousMasterKey === undefined) {
+            delete process.env.PLOINKY_MASTER_KEY;
+        } else {
+            process.env.PLOINKY_MASTER_KEY = previousMasterKey;
+        }
+        rmSync(workspace, { recursive: true, force: true });
+    });
+
+    const nonce = `${Date.now()}-${Math.random()}`;
+    const authHandlers = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/server/authHandlers.js')).href}?test=${nonce}`);
+    return { authHandlers };
+}
+
+test('guest routes use the guest agent policy instead of the static Explorer policy', async (t) => {
+    const { authHandlers } = await withAuthModules(t);
+    const mcpReq = makeRequest({
+        method: 'POST',
+        url: '/mcps/webAssist/mcp',
+    });
+    const mcpRes = new MockResponse();
+    const mcpParsedUrl = new URL(mcpReq.url, 'http://localhost');
+
+    const mcpResult = await authHandlers.ensureAuthenticated(mcpReq, mcpRes, mcpParsedUrl);
+
+    assert.equal(mcpResult.ok, true);
+    assert.equal(mcpReq.authMode, 'guest');
+    assert.equal(mcpReq.user?.username, 'visitor');
+    assert.deepEqual(mcpReq.user?.roles, ['guest']);
+    assert.match(String(mcpRes.getHeader('set-cookie') || ''), /^ploinky_guest=/);
+    assert.doesNotMatch(String(mcpRes.getHeader('set-cookie') || ''), /^ploinky_jwt=/);
+
+    const guestJwt = String(mcpReq.sessionId || '');
+    const tokenReq = makeRequest({
+        method: 'GET',
+        url: '/auth/token?agent=webAssist',
+        cookie: `ploinky_guest=${guestJwt}`,
+    });
+    const tokenRes = new MockResponse();
+    const tokenParsedUrl = new URL(tokenReq.url, 'http://localhost');
+
+    const handled = await authHandlers.handleAuthRoutes(tokenReq, tokenRes, tokenParsedUrl);
+    const body = JSON.parse(tokenRes.body || '{}');
+
+    assert.equal(handled, true);
+    assert.equal(tokenRes.statusCode, 200);
+    assert.equal(body.ok, true);
+    assert.equal(body.token.accessToken, null);
+    assert.equal(body.user.username, 'visitor');
+    assert.deepEqual(body.user.roles, ['guest']);
+    assert.match(String(tokenRes.getHeader('set-cookie') || ''), /^ploinky_guest=/);
+    assert.match(String(tokenRes.getHeader('set-cookie') || ''), /Max-Age=3600/);
+
+    const noAuthMcpReq = makeRequest({
+        method: 'POST',
+        url: '/mcps/webAdmin/mcp',
+    });
+    const noAuthMcpRes = new MockResponse();
+    const noAuthMcpParsedUrl = new URL(noAuthMcpReq.url, 'http://localhost');
+
+    const noAuthMcpResult = await authHandlers.ensureAuthenticated(noAuthMcpReq, noAuthMcpRes, noAuthMcpParsedUrl);
+    const noAuthMcpBody = JSON.parse(noAuthMcpRes.body || '{}');
+
+    assert.equal(noAuthMcpResult.ok, false);
+    assert.equal(noAuthMcpRes.statusCode, 401);
+    assert.equal(noAuthMcpBody.error, 'not_authenticated');
+    assert.match(noAuthMcpBody.login, /agent=explorer/);
+});

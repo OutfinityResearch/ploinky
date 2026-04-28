@@ -514,10 +514,18 @@ function resolveAuthRouteKey(parsedUrl) {
     const staticAgent = String(routing.static?.agent || '').trim();
     if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/')) {
         if (explicit) return explicit;
-        if (staticAgent) return staticAgent;
         if (parts.length >= 2) {
-            return parts[1];
+            const pathAgent = parts[1];
+            try {
+                const resolved = resolveEnabledAgentRecord(pathAgent);
+                const pathAuthMode = String(resolved?.record?.auth?.mode || 'none').trim().toLowerCase() || 'none';
+                if (pathAuthMode !== 'none') {
+                    return pathAgent;
+                }
+            } catch (_) { }
+            if (!staticAgent) return pathAgent;
         }
+        if (staticAgent) return staticAgent;
     }
     if (parts.length >= 1 && routes[parts[0]]) {
         return parts[0];
@@ -1143,7 +1151,7 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                 sendJson(res, 401, { ok: false, error: 'not_authenticated' });
                 return true;
             }
-            const session = authContext.mode === 'local'
+            const session = (authContext.mode === 'local' || authContext.mode === 'guest')
                 ? getLocalSession(sessionId, { policy: authContext.policy })
                 : authService.getSession(sessionId);
             if (!session) {
@@ -1173,10 +1181,13 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
                     tokenType: session.tokens?.tokenType || null
                 };
             }
+            const cookieMaxAge = authContext.mode === 'local'
+                ? getLocalSessionCookieMaxAge()
+                : authContext.mode === 'guest'
+                    ? GUEST_SESSION_TTL_SECONDS
+                    : authService.getSessionCookieMaxAge();
             const cookie = buildCookie(cookieName, sessionId, req, '/', {
-                maxAge: authContext.mode === 'local'
-                    ? getLocalSessionCookieMaxAge()
-                    : authService.getSessionCookieMaxAge(),
+                maxAge: cookieMaxAge,
                 sameSite: 'Lax'
             });
             res.writeHead(200, {
