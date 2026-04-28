@@ -13,7 +13,7 @@ import { handleBlobs, handleWorkspaceUpload } from './handlers/blobs.js';
 import * as staticSrv from './static/index.js';
 
 // Authentication and routing
-import { ensureAuthenticated, handleAuthRoutes } from './authHandlers.js';
+import { ensureAuthenticated, handleAuthRoutes, handleUserAdminRoutes } from './authHandlers.js';
 import { loadApiRoutes, handleRouterMcp, handleHttpServiceRoute, isPublicHttpServiceRoute } from './routerHandlers.js';
 
 // Logging
@@ -204,6 +204,11 @@ async function processRequest(req, res) {
     // Authentication routes
     if (pathname.startsWith('/auth/')) {
         const handled = await handleAuthRoutes(req, res, parsedUrl);
+        if (handled) return;
+    }
+
+    if (pathname.startsWith('/api/agents/')) {
+        const handled = await handleUserAdminRoutes(req, res, parsedUrl);
         if (handled) return;
     }
 

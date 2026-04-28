@@ -78,10 +78,6 @@ export function initEnvironment() {
         fs.writeFileSync(AGENTS_FILE, JSON.stringify({}, null, 2));
     }
 
-    if (!fs.existsSync(SECRETS_FILE)) {
-        fs.writeFileSync(SECRETS_FILE, '# This file stores secrets for Ploinky agents.\n');
-    }
-
     if (!fs.existsSync(HISTORY_FILE)) {
         fs.writeFileSync(HISTORY_FILE, '');
     }

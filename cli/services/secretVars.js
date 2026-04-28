@@ -1,73 +1,20 @@
 import fs from 'fs';
 import { randomBytes } from 'crypto';
-import path from 'path';
-import { SECRETS_FILE } from './config.js';
 import { getConfig } from './workspace.js';
 import { findAgent } from './utils.js';
 import { loadSecretsFile, loadEnvFile } from './secretInjector.js';
-
-function ensureSecretsFile() {
-    try {
-        const dir = path.dirname(SECRETS_FILE);
-        if (dir && dir !== '.') {
-            try {
-                fs.mkdirSync(dir, { recursive: true });
-            } catch (_) {}
-        }
-        if (!fs.existsSync(SECRETS_FILE)) {
-            fs.writeFileSync(SECRETS_FILE, '# Ploinky secrets\n');
-        }
-    } catch (_) {}
-}
+import { deleteSecretValue, readSecretsFile, setSecretValue } from './encryptedSecretsFile.js';
 
 export function parseSecrets() {
-    ensureSecretsFile();
-    const map = {};
-    try {
-        const raw = fs.readFileSync(SECRETS_FILE, 'utf8');
-        for (const line of (raw.split('\n') || [])) {
-            if (!line || line.trim().startsWith('#')) continue;
-            const idx = line.indexOf('=');
-            if (idx > 0) {
-                const k = line.slice(0, idx).trim();
-                const v = line.slice(idx + 1);
-                if (k) map[k] = v;
-            }
-        }
-    } catch (_) {}
-    return map;
+    return readSecretsFile();
 }
 
 export function setEnvVar(name, value) {
-    if (!name) throw new Error('Missing variable name.');
-    ensureSecretsFile();
-    let lines = [];
-    try {
-        lines = fs.readFileSync(SECRETS_FILE, 'utf8').split('\n');
-    } catch (_) {
-        lines = [];
-    }
-    const envLine = `${name}=${value ?? ''}`;
-    const idx = lines.findIndex(l => String(l).startsWith(name + '='));
-    if (idx >= 0) lines[idx] = envLine;
-    else lines.push(envLine);
-    fs.writeFileSync(SECRETS_FILE, lines.filter(x => x !== undefined).join('\n'));
+    setSecretValue(name, value);
 }
 
 export function deleteVar(name) {
-    if (!name) return;
-    ensureSecretsFile();
-    let lines = [];
-    try {
-        lines = fs.readFileSync(SECRETS_FILE, 'utf8').split('\n');
-    } catch (_) {
-        lines = [];
-    }
-    const idx = lines.findIndex(l => String(l).startsWith(name + '='));
-    if (idx >= 0) {
-        lines.splice(idx, 1);
-        fs.writeFileSync(SECRETS_FILE, lines.join('\n'));
-    }
+    deleteSecretValue(name);
 }
 
 export function declareVar(name) {

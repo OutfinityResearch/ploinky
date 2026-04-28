@@ -3,7 +3,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { loadAgents, saveAgents } from './workspace.js';
-import { setEnvVar } from './secretVars.js';
+import { resolveMasterKey, setUsersPayload } from './encryptedPasswordStore.js';
 import { hashPassword } from './localAuthPasswords.js';
 import {
     getAgentContainerName,
@@ -114,7 +114,8 @@ function normalizeManifestPwdUsers(manifest) {
                 name: name || username,
                 email: email || null,
                 passwordHash: hashPassword(password),
-                roles: roles.length ? Array.from(new Set(['local', ...roles])) : ['local']
+                roles: roles.length ? Array.from(new Set(['local', ...roles])) : ['local'],
+                rev: 1
             };
         })
         .filter(Boolean);
@@ -301,12 +302,13 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam, authMode
         }
     };
     if (authMode === 'local') {
+        resolveMasterKey();
         record.auth = {
             mode: authMode,
             ...buildDefaultLocalAuthVars(routeKey)
         };
         if (username && password) {
-            setEnvVar(record.auth.usersVar, JSON.stringify({
+            setUsersPayload(record.auth.usersVar, {
                 version: 1,
                 users: [{
                     id: `local:${username}`,
@@ -314,14 +316,15 @@ export function enableAgent(agentName, mode, repoNameParam, aliasParam, authMode
                     name: username,
                     email: null,
                     passwordHash: hashPassword(password),
-                    roles: ['local']
+                    roles: ['local', 'admin'],
+                    rev: 1
                 }]
-            }));
+            });
         } else if (manifestPwdUsers.length) {
-            setEnvVar(record.auth.usersVar, JSON.stringify({
+            setUsersPayload(record.auth.usersVar, {
                 version: 1,
                 users: manifestPwdUsers
-            }));
+            });
         }
     } else {
         record.auth = { mode: authMode };

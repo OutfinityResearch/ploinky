@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-import { resolveVarValue, setEnvVar, ensurePersistentSecret } from '../../services/secretVars.js';
+import { getUsersPayload, resolveMasterKey, setUsersPayload } from '../../services/encryptedPasswordStore.js';
 import { hashPassword, verifyPasswordHash } from '../../services/localAuthPasswords.js';
 import { signHmacJwt } from '../../../Agent/lib/jwtSign.mjs';
 import { verifyJws } from '../../../Agent/lib/jwtVerify.mjs';
@@ -11,7 +11,7 @@ const sessionStore = createSessionStore();
 const SESSION_TTL_SECONDS = 4 * 60 * 60;
 
 function getWireSecretBuffer() {
-    return Buffer.from(ensurePersistentSecret('PLOINKY_WIRE_SECRET'), 'hex');
+    return resolveMasterKey();
 }
 
 function mintSessionJwt(user, rev = 1, options = {}) {
@@ -87,31 +87,16 @@ function resolveUserRev(usersVar, username) {
     }
     const cacheKey = `${usersVar}:${username}`;
     if (revCache.has(cacheKey)) return revCache.get(cacheKey);
-    const raw = readConfigValue(usersVar);
-    if (!raw) return 1;
-    try {
-        const parsed = JSON.parse(raw);
-        const users = Array.isArray(parsed?.users) ? parsed.users : [];
-        const matched = users.find((u) => String(u.username || '').trim() === username);
-        if (!matched) {
-            revCache.set(cacheKey, 0);
-            return 0;
-        }
-        const rev = Number(matched?.rev) || 1;
-        revCache.set(cacheKey, rev);
-        return rev;
-    } catch {
-        return 1;
+    const parsed = getUsersPayload(usersVar);
+    const users = Array.isArray(parsed?.users) ? parsed.users : [];
+    const matched = users.find((u) => String(u.username || '').trim() === username);
+    if (!matched) {
+        revCache.set(cacheKey, 0);
+        return 0;
     }
-}
-
-function readConfigValue(name) {
-    if (!name) return '';
-    const secret = resolveVarValue(name);
-    if (secret && String(secret).trim()) return String(secret).trim();
-    const env = process.env[name];
-    if (env && String(env).trim()) return String(env).trim();
-    return '';
+    const rev = Number(matched?.rev) || 1;
+    revCache.set(cacheKey, rev);
+    return rev;
 }
 
 function safeEqual(left, right) {
@@ -136,6 +121,17 @@ function normalizeRoles(input) {
     return values;
 }
 
+function isLocalAdminUser(user = null) {
+    if (!user || typeof user !== 'object') return false;
+    const roles = Array.isArray(user.roles) ? user.roles : [];
+    if (roles.some((role) => String(role || '').trim().toLowerCase() === 'admin')) {
+        return true;
+    }
+    const username = String(user.username || '').trim().toLowerCase();
+    const id = String(user.id || '').trim().toLowerCase();
+    return username === 'admin' || id === 'local:admin';
+}
+
 function normalizeLocalUserRecord(entry = {}) {
     const username = String(entry.username || entry.login || '').trim();
     const passwordHash = String(entry.passwordHash || '').trim();
@@ -155,24 +151,15 @@ function normalizeLocalUserRecord(entry = {}) {
     };
 }
 
-function parseUsersPayload(rawValue) {
-    const raw = String(rawValue || '').trim();
-    if (!raw) {
-        return [];
-    }
-    try {
-        const parsed = JSON.parse(raw);
-        const users = Array.isArray(parsed?.users) ? parsed.users : [];
-        return users
-            .map((entry) => normalizeLocalUserRecord(entry))
-            .filter(Boolean);
-    } catch {
-        return [];
-    }
+function parseUsersPayload(payload) {
+    const users = Array.isArray(payload?.users) ? payload.users : [];
+    return users
+        .map((entry) => normalizeLocalUserRecord(entry))
+        .filter(Boolean);
 }
 
 function serializeUsersPayload(users = []) {
-    return JSON.stringify({
+    return {
         version: 1,
         users: users.map((entry) => ({
             id: entry.id,
@@ -183,15 +170,21 @@ function serializeUsersPayload(users = []) {
             roles: normalizeRoles(entry.roles),
             rev: Number(entry.rev) || 1
         }))
-    });
+    };
 }
 
 function resolveLocalAuthConfig(policy = {}) {
     const usersVar = String(policy.usersVar || '').trim();
     return {
         usersVar,
-        users: parseUsersPayload(readConfigValue(usersVar))
+        users: parseUsersPayload(getUsersPayload(usersVar))
     };
+}
+
+function writeLocalAuthUsers(usersVar, users = []) {
+    setUsersPayload(usersVar, serializeUsersPayload(users));
+    revCache = null;
+    revCacheTime = 0;
 }
 
 function serializeUserSummary(entry = {}) {
@@ -199,7 +192,8 @@ function serializeUserSummary(entry = {}) {
         id: String(entry.id || '').trim(),
         username: String(entry.username || '').trim(),
         name: String(entry.name || '').trim(),
-        email: String(entry.email || '').trim() || null
+        email: String(entry.email || '').trim() || null,
+        roles: normalizeRoles(entry.roles)
     };
 }
 
@@ -255,32 +249,37 @@ function createExternalSession({ user, routeKey = '', provider = 'external' } = 
 
 function getSession(sessionId, options = {}) {
     if (!sessionId) return null;
+    let payload;
     try {
-        const payload = verifySessionJwt(sessionId);
-        const usersVar = String(options?.usersVar || options?.policy?.usersVar || payload.uvar || '').trim();
-        if (usersVar && payload.usr?.username) {
-            const currentRev = resolveUserRev(usersVar, payload.usr.username);
-            if (currentRev !== (payload.rev || 1)) {
-                return null;
-            }
-        }
-        return {
-            id: sessionId,
-            user: payload.usr ? {
-                id: payload.usr.id || payload.sub,
-                username: payload.usr.username,
-                name: payload.usr.name || payload.usr.username,
-                email: payload.usr.email || null,
-                roles: Array.isArray(payload.usr.roles) ? payload.usr.roles : ['local']
-            } : null,
-            localAuth: { usersVar, username: payload.usr?.username || '' },
-            createdAt: payload.iat * 1000,
-            expiresAt: payload.exp * 1000,
-            _jwtPayload: payload
-        };
+        payload = verifySessionJwt(sessionId);
     } catch {
         return null;
     }
+    const usersVar = String(options?.usersVar || options?.policy?.usersVar || payload.uvar || '').trim();
+    const payloadUsersVar = String(payload.uvar || '').trim();
+    if (usersVar && payloadUsersVar !== usersVar) {
+        return null;
+    }
+    if (usersVar && payload.usr?.username) {
+        const currentRev = resolveUserRev(usersVar, payload.usr.username);
+        if (currentRev !== (payload.rev || 1)) {
+            return null;
+        }
+    }
+    return {
+        id: sessionId,
+        user: payload.usr ? {
+            id: payload.usr.id || payload.sub,
+            username: payload.usr.username,
+            name: payload.usr.name || payload.usr.username,
+            email: payload.usr.email || null,
+            roles: Array.isArray(payload.usr.roles) ? payload.usr.roles : ['local']
+        } : null,
+        localAuth: { usersVar, username: payload.usr?.username || '' },
+        createdAt: payload.iat * 1000,
+        expiresAt: payload.exp * 1000,
+        _jwtPayload: payload
+    };
 }
 
 function revokeSession(sessionId) {
@@ -361,9 +360,7 @@ function updateLocalCredentials({
         return nextRecord;
     });
 
-    setEnvVar(config.usersVar, serializeUsersPayload(nextUsers));
-    revCache = null;
-    revCacheTime = 0;
+    writeLocalAuthUsers(config.usersVar, nextUsers);
 
     revokeSessionsForLocalPolicy(policy);
 
@@ -386,12 +383,178 @@ function listLocalAuthUsers(policy = {}) {
     return config.users.map((entry) => serializeUserSummary(entry));
 }
 
+function countAdmins(users = []) {
+    return users.filter((entry) => isLocalAdminUser(entry)).length;
+}
+
+function assertAdminWillRemain(users = []) {
+    if (countAdmins(users) < 1) {
+        throw new Error('last_admin_required');
+    }
+}
+
+function createLocalAuthUser({
+    policy,
+    username,
+    password,
+    name = '',
+    email = '',
+    roles
+} = {}) {
+    const config = resolveLocalAuthConfig(policy);
+    if (!config.usersVar) {
+        throw new Error('local_auth_not_configured');
+    }
+    const normalizedUsername = String(username || '').trim();
+    const normalizedPassword = String(password || '');
+    if (!normalizedUsername) {
+        throw new Error('username_required');
+    }
+    if (!normalizedPassword) {
+        throw new Error('password_required');
+    }
+    if (roles !== undefined && !Array.isArray(roles)) {
+        throw new Error('roles_must_be_array');
+    }
+    if (config.users.some((entry) => safeEqual(entry.username, normalizedUsername))) {
+        throw new Error('username_taken');
+    }
+    const nextUser = normalizeLocalUserRecord({
+        id: `local:${normalizedUsername}`,
+        username: normalizedUsername,
+        name: String(name || normalizedUsername).trim() || normalizedUsername,
+        email: String(email || '').trim() || null,
+        passwordHash: hashPassword(normalizedPassword),
+        roles: normalizeRoles(Array.isArray(roles) ? roles : []),
+        rev: 1
+    });
+    const nextUsers = [...config.users, nextUser];
+    writeLocalAuthUsers(config.usersVar, nextUsers);
+    return serializeUserSummary(nextUser);
+}
+
+function updateLocalAuthUser({
+    policy,
+    id,
+    username,
+    password,
+    name,
+    email,
+    roles
+} = {}) {
+    const config = resolveLocalAuthConfig(policy);
+    if (!config.usersVar || !config.users.length) {
+        throw new Error('local_auth_not_configured');
+    }
+    const targetId = String(id || '').trim();
+    if (!targetId) {
+        throw new Error('user_id_required');
+    }
+    const index = config.users.findIndex((entry) => safeEqual(entry.id, targetId));
+    if (index < 0) {
+        throw new Error('user_not_found');
+    }
+    const currentUser = config.users[index];
+    const nextRecord = { ...currentUser };
+    let changed = false;
+
+    if (username !== undefined) {
+        const nextUsername = String(username || '').trim();
+        if (!nextUsername) {
+            throw new Error('username_required');
+        }
+        if (!safeEqual(nextUsername, currentUser.username)
+            && config.users.some((entry) => !safeEqual(entry.id, targetId) && safeEqual(entry.username, nextUsername))) {
+            throw new Error('username_taken');
+        }
+        if (!safeEqual(nextUsername, nextRecord.username)) {
+            if (safeEqual(nextRecord.id, `local:${nextRecord.username}`)) {
+                nextRecord.id = `local:${nextUsername}`;
+            }
+            nextRecord.username = nextUsername;
+            if (safeEqual(String(nextRecord.name || '').trim(), currentUser.username)) {
+                nextRecord.name = nextUsername;
+            }
+            changed = true;
+        }
+    }
+
+    if (name !== undefined) {
+        const nextName = String(name || '').trim() || nextRecord.username;
+        if (!safeEqual(nextName, nextRecord.name)) {
+            nextRecord.name = nextName;
+            changed = true;
+        }
+    }
+
+    if (email !== undefined) {
+        const nextEmail = String(email || '').trim() || null;
+        if (!safeEqual(nextEmail || '', nextRecord.email || '')) {
+            nextRecord.email = nextEmail;
+            changed = true;
+        }
+    }
+
+    if (roles !== undefined) {
+        if (!Array.isArray(roles)) {
+            throw new Error('roles_must_be_array');
+        }
+        const nextRoles = normalizeRoles(roles);
+        const currentRoles = normalizeRoles(nextRecord.roles);
+        if (JSON.stringify(nextRoles) !== JSON.stringify(currentRoles)) {
+            nextRecord.roles = nextRoles;
+            changed = true;
+        }
+    }
+
+    if (password !== undefined) {
+        const nextPassword = String(password || '');
+        if (!nextPassword) {
+            throw new Error('password_required');
+        }
+        nextRecord.passwordHash = hashPassword(nextPassword);
+        changed = true;
+    }
+
+    if (!changed) {
+        throw new Error('no_changes_requested');
+    }
+
+    nextRecord.rev = (Number(currentUser.rev) || 1) + 1;
+    const nextUsers = config.users.map((entry, entryIndex) => entryIndex === index ? nextRecord : entry);
+    assertAdminWillRemain(nextUsers);
+    writeLocalAuthUsers(config.usersVar, nextUsers);
+    return serializeUserSummary(nextRecord);
+}
+
+function deleteLocalAuthUser({ policy, id } = {}) {
+    const config = resolveLocalAuthConfig(policy);
+    if (!config.usersVar || !config.users.length) {
+        throw new Error('local_auth_not_configured');
+    }
+    const targetId = String(id || '').trim();
+    if (!targetId) {
+        throw new Error('user_id_required');
+    }
+    const target = config.users.find((entry) => safeEqual(entry.id, targetId));
+    if (!target) {
+        throw new Error('user_not_found');
+    }
+    const nextUsers = config.users.filter((entry) => !safeEqual(entry.id, targetId));
+    assertAdminWillRemain(nextUsers);
+    writeLocalAuthUsers(config.usersVar, nextUsers);
+    return serializeUserSummary(target);
+}
+
 export {
     authenticateLocalUser,
+    createLocalAuthUser,
     createExternalSession,
+    deleteLocalAuthUser,
     GUEST_SESSION_TTL_SECONDS,
     getSession,
     getSessionCookieMaxAge,
+    isLocalAdminUser,
     listLocalAuthUsers,
     mintGuestSessionJwt,
     mintSessionJwt,
@@ -399,6 +562,7 @@ export {
     resolveUserRev,
     revokeSession,
     revokeSessionsForLocalPolicy,
+    updateLocalAuthUser,
     updateLocalCredentials,
     verifySessionJwt
 };

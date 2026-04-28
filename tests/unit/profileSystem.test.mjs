@@ -5,8 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 
 const originalCwd = process.cwd();
+const originalMasterKey = process.env.PLOINKY_MASTER_KEY;
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-profile-'));
 process.chdir(tempDir);
+process.env.PLOINKY_MASTER_KEY = '5'.repeat(64);
 
 const moduleSuffix = `?test=${Date.now()}`;
 const profileServiceUrl = new URL('../../cli/services/profileService.js', import.meta.url);
@@ -55,6 +57,11 @@ function writeManifest(repoName, agentName, manifest) {
 
 test.after(() => {
     process.chdir(originalCwd);
+    if (originalMasterKey === undefined) {
+        delete process.env.PLOINKY_MASTER_KEY;
+    } else {
+        process.env.PLOINKY_MASTER_KEY = originalMasterKey;
+    }
     fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
@@ -271,7 +278,7 @@ test('buildSecretEnvFlags escapes special values', () => {
 test('formatMissingSecretsError includes guidance and file path', () => {
     const message = formatMissingSecretsError(['ONE', 'TWO'], 'qa');
     assert.ok(message.includes("Missing required secrets for profile 'qa'"));
-    assert.ok(message.includes(path.join(tempDir, '.ploinky', '.secrets')));
+    assert.ok(message.includes('ploinky var ONE your_value_here'));
     assert.ok(message.includes(path.join(tempDir, '.env')));
 });
 

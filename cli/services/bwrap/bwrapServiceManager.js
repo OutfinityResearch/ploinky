@@ -4,12 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
     buildEnvMap,
-    ensurePersistentSecret,
     formatEnvFlag,
     getExposedNames,
     getManifestEnvNames,
     resolveVarValue
 } from '../secretVars.js';
+import { resolveMasterKey } from '../encryptedPasswordStore.js';
 import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
@@ -383,7 +383,7 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
     try {
         const principalId = deriveAgentPrincipalId(repoName, agentName);
         env.PLOINKY_AGENT_PRINCIPAL = principalId;
-        env.PLOINKY_WIRE_SECRET = ensurePersistentSecret('PLOINKY_WIRE_SECRET');
+        env.PLOINKY_WIRE_SECRET = resolveMasterKey().toString('hex');
     } catch (err) {
         debugLog(`[invocationAuth/bwrap] could not set agent identity: ${err?.message || err}`);
     }

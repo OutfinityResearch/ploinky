@@ -35,7 +35,7 @@ function mintInvocationJwt(overrides = {}) {
 function makeEnv() {
     return {
         PLOINKY_AGENT_PRINCIPAL: PROVIDER_PRINCIPAL,
-        PLOINKY_WIRE_SECRET: SECRET_HEX
+        PLOINKY_MASTER_KEY: SECRET_HEX
     };
 }
 
@@ -79,7 +79,7 @@ test('verifyInvocationFromHeaders rejects missing agent audience configuration',
     const result = verifyInvocationFromHeaders(
         { authorization: `Bearer ${token}` },
         EXAMPLE_BODY,
-        { env: { PLOINKY_WIRE_SECRET: SECRET_HEX }, replayCache: createMemoryReplayCache() }
+        { env: { PLOINKY_MASTER_KEY: SECRET_HEX }, replayCache: createMemoryReplayCache() }
     );
     assert.equal(result.ok, false);
     assert.match(result.reason, /PLOINKY_AGENT_PRINCIPAL or AGENT_NAME not configured/);

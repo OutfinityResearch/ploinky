@@ -82,7 +82,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             }
         },
         'var': {
-            description: 'Set a workspace variable (stored in .ploinky/.secrets)',
+            description: 'Set a workspace variable (stored encrypted in .ploinky/.secrets)',
             syntax: 'var <VAR> <value>',
             examples: [
                 'var WEBDASHBOARD_TOKEN deadbeef  # Override dashboard token manually',
@@ -91,7 +91,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: "Use 'vars' to list variables. WebTTY/WebChat/WebMeet use the router login flow; only dashboard still uses a surface token."
         },
         'vars': {
-            description: 'List workspace variables (from .ploinky/.secrets)',
+            description: 'List workspace variables (from encrypted .ploinky/.secrets)',
             syntax: 'vars',
             examples: [ 'vars' ]
         },
@@ -159,7 +159,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             description: 'Display or rotate the Dashboard token used by /dashboard.',
             syntax: 'dashboard [--rotate]',
             examples: [ 'dashboard', 'dashboard --rotate' ],
-            notes: 'Writes the token to .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
+            notes: 'Writes the token to encrypted .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
         },
         'sso': {
             description: 'Manage SSO provider bindings.',

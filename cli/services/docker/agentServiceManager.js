@@ -4,12 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import {
     buildEnvFlags,
-    ensurePersistentSecret,
     formatEnvFlag,
     getExposedNames,
     getManifestEnvNames,
     resolveVarValue
 } from '../secretVars.js';
+import { resolveMasterKey } from '../encryptedPasswordStore.js';
 import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
@@ -413,8 +413,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     try {
         const repoName = path.basename(path.dirname(agentPath));
         const principalId = deriveAgentPrincipalId(repoName, agentName);
+        const wireSecret = resolveMasterKey().toString('hex');
         envStrings.push(formatEnvFlag('PLOINKY_AGENT_PRINCIPAL', principalId));
-        envStrings.push(formatEnvFlag('PLOINKY_WIRE_SECRET', ensurePersistentSecret('PLOINKY_WIRE_SECRET')));
+        envStrings.push(formatEnvFlag('PLOINKY_WIRE_SECRET', wireSecret));
     } catch (err) {
         debugLog(`[invocationAuth] could not set agent identity for ${agentName}: ${err?.message || err}`);
     }

@@ -28,8 +28,10 @@ function mintCallerInvocationJwt(overrides = {}) {
 }
 
 test('verifyDelegatedToolCall allows one caller invocation JWT to mint multiple delegated calls', async () => {
-    const oldSecret = process.env.PLOINKY_WIRE_SECRET;
-    process.env.PLOINKY_WIRE_SECRET = SECRET.toString('hex');
+    const oldMasterKey = process.env.PLOINKY_MASTER_KEY;
+    const oldWireSecret = process.env.PLOINKY_WIRE_SECRET;
+    process.env.PLOINKY_MASTER_KEY = SECRET.toString('hex');
+    delete process.env.PLOINKY_WIRE_SECRET;
     try {
         const { verifyDelegatedToolCall } = await import(`../../cli/server/mcp-proxy/invocationMinter.js?test=${Date.now()}`);
         const callerJwt = mintCallerInvocationJwt();
@@ -47,10 +49,15 @@ test('verifyDelegatedToolCall allows one caller invocation JWT to mint multiple 
         assert.equal(second.callerPrincipal, first.callerPrincipal);
         assert.deepEqual(second.user, first.user);
     } finally {
-        if (oldSecret === undefined) {
+        if (oldMasterKey === undefined) {
+            delete process.env.PLOINKY_MASTER_KEY;
+        } else {
+            process.env.PLOINKY_MASTER_KEY = oldMasterKey;
+        }
+        if (oldWireSecret === undefined) {
             delete process.env.PLOINKY_WIRE_SECRET;
         } else {
-            process.env.PLOINKY_WIRE_SECRET = oldSecret;
+            process.env.PLOINKY_WIRE_SECRET = oldWireSecret;
         }
     }
 });

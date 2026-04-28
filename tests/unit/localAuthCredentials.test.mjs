@@ -8,29 +8,38 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '../..');
+const MASTER_KEY = 'a'.repeat(64);
 
-test('local auth credentials can update username and password and revoke the old session', async (t) => {
+test('local auth credentials update through the encrypted password store', async (t) => {
     const workspace = mkdtempSync(path.join(os.tmpdir(), 'ploinky-local-auth-'));
     const ploinkyDir = path.join(workspace, '.ploinky');
     mkdirSync(ploinkyDir, { recursive: true });
-    writeFileSync(path.join(ploinkyDir, '.secrets'), '');
+    writeFileSync(path.join(ploinkyDir, '.secrets'), '# test secrets\n');
 
     const previousCwd = process.cwd();
+    const previousMasterKey = process.env.PLOINKY_MASTER_KEY;
     process.chdir(workspace);
+    process.env.PLOINKY_MASTER_KEY = MASTER_KEY;
     t.after(() => {
         process.chdir(previousCwd);
+        if (previousMasterKey === undefined) {
+            delete process.env.PLOINKY_MASTER_KEY;
+        } else {
+            process.env.PLOINKY_MASTER_KEY = previousMasterKey;
+        }
         rmSync(workspace, { recursive: true, force: true });
     });
 
-    const localService = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/server/auth/localService.js')).href}?test=${Date.now()}`);
-    const secretVars = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/services/secretVars.js')).href}?test=${Date.now() + 1}`);
-    const passwords = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/services/localAuthPasswords.js')).href}?test=${Date.now() + 2}`);
+    const nonce = Date.now();
+    const localService = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/server/auth/localService.js')).href}?test=${nonce}`);
+    const passwordStore = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/services/encryptedPasswordStore.js')).href}?test=${nonce}`);
+    const passwords = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/services/localAuthPasswords.js')).href}?test=${nonce}`);
 
     const policy = {
-        usersVar: 'PLOINKY_AUTH_TEST_USERS'
+        usersVar: 'PLOINKY_AUTH_TEST_USERS',
     };
 
-    secretVars.setEnvVar(policy.usersVar, JSON.stringify({
+    passwordStore.setUsersPayload(policy.usersVar, {
         version: 1,
         users: [
             {
@@ -39,7 +48,8 @@ test('local auth credentials can update username and password and revoke the old
                 name: 'admin',
                 email: null,
                 passwordHash: passwords.hashPassword('adminpass'),
-                roles: ['local']
+                roles: ['local', 'admin'],
+                rev: 1,
             },
             {
                 id: 'local:reviewer',
@@ -47,37 +57,42 @@ test('local auth credentials can update username and password and revoke the old
                 name: 'reviewer',
                 email: null,
                 passwordHash: passwords.hashPassword('reviewpass'),
-                roles: ['local']
-            }
-        ]
-    }));
+                roles: ['local'],
+                rev: 1,
+            },
+        ],
+    });
 
     const login = localService.authenticateLocalUser({
         username: 'admin',
         password: 'adminpass',
         policy,
-        routeKey: 'explorer'
+        routeKey: 'explorer',
     });
 
     assert.ok(login.sessionId, 'expected a local auth session id');
-    assert.equal(localService.getSession(login.sessionId)?.user?.username, 'admin');
+    assert.equal(localService.getSession(login.sessionId, { policy })?.user?.username, 'admin');
 
     const update = localService.updateLocalCredentials({
         currentPassword: 'adminpass',
         nextUsername: 'maintainer',
         nextPassword: 'newpass123',
         policy,
-        sessionUser: login.user
+        sessionUser: login.user,
     });
 
     assert.equal(update.username, 'maintainer');
     assert.equal(update.usernameChanged, true);
     assert.equal(update.passwordChanged, true);
-    assert.equal(localService.getSession(login.sessionId), null, 'old session should be revoked');
+    assert.equal(localService.getSession(login.sessionId, { policy }), null, 'old session should be revoked by rev change');
 
     const secretsText = readFileSync(path.join(ploinkyDir, '.secrets'), 'utf8');
-    assert.match(secretsText, /PLOINKY_AUTH_TEST_USERS=/);
-    const storedUsers = JSON.parse(secretVars.resolveVarValue(policy.usersVar));
+    assert.doesNotMatch(secretsText, /PLOINKY_AUTH_TEST_USERS/);
+    assert.doesNotMatch(secretsText, /PLOINKY_WIRE_SECRET/);
+    const encryptedText = readFileSync(passwordStore.PASSWORD_STORE_FILE, 'utf8');
+    assert.doesNotMatch(encryptedText, /maintainer|reviewer|adminpass|reviewpass|newpass123/);
+
+    const storedUsers = passwordStore.getUsersPayload(policy.usersVar);
     const maintainer = storedUsers.users.find((entry) => entry.username === 'maintainer');
     const reviewer = storedUsers.users.find((entry) => entry.username === 'reviewer');
     assert.ok(maintainer);
@@ -90,7 +105,7 @@ test('local auth credentials can update username and password and revoke the old
         username: 'maintainer',
         password: 'newpass123',
         policy,
-        routeKey: 'explorer'
+        routeKey: 'explorer',
     });
     assert.ok(relogin.sessionId, 'expected login with updated credentials to succeed');
 });

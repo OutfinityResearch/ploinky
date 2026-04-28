@@ -1,62 +1,8 @@
-import fs from 'fs';
 import path from 'path';
-import { SECRETS_FILE, PLOINKY_DIR } from './config.js';
+import { SECRETS_FILE } from './config.js';
+import { readSecretsFile } from './encryptedSecretsFile.js';
+import { findEnvFile, loadEnvFile } from './masterKey.js';
 import { debugLog } from './utils.js';
-
-function parseKeyValueFile(filePath) {
-    const secrets = {};
-
-    if (!fs.existsSync(filePath)) {
-        return secrets;
-    }
-
-    try {
-        const content = fs.readFileSync(filePath, 'utf8');
-        const lines = content.split('\n');
-
-        for (const line of lines) {
-            let trimmed = line.trim();
-
-            // Skip empty lines and comments
-            if (!trimmed || trimmed.startsWith('#')) {
-                continue;
-            }
-
-            if (trimmed.startsWith('export ')) {
-                trimmed = trimmed.slice('export '.length).trim();
-            }
-
-            // Parse KEY=VALUE or KEY<space>VALUE
-            let key, value;
-            const eqIndex = trimmed.indexOf('=');
-            if (eqIndex !== -1) {
-                key = trimmed.slice(0, eqIndex).trim();
-                value = trimmed.slice(eqIndex + 1).trim();
-            } else {
-                const spaceMatch = trimmed.match(/^([A-Za-z_][A-Za-z0-9_]*)\s+(.*)$/);
-                if (!spaceMatch) {
-                    continue;
-                }
-                key = spaceMatch[1];
-                value = spaceMatch[2].trim();
-            }
-
-            // Remove surrounding quotes if present
-            if ((value.startsWith('"') && value.endsWith('"')) ||
-                (value.startsWith("'") && value.endsWith("'"))) {
-                value = value.slice(1, -1);
-            }
-
-            if (key) {
-                secrets[key] = value;
-            }
-        }
-    } catch (err) {
-        debugLog(`Failed to parse secrets file: ${err.message}`);
-    }
-
-    return secrets;
-}
 
 /**
  * Load secrets from the .ploinky/.secrets file.
@@ -64,42 +10,12 @@ function parseKeyValueFile(filePath) {
  * @returns {object} Map of secret names to values
  */
 export function loadSecretsFile() {
-    return parseKeyValueFile(SECRETS_FILE);
-}
-
-/**
- * Walk up from `startDir` towards the filesystem root looking for a `.env` file.
- * Returns the first match or `null` when none is found.
- * @param {string} [startDir=process.cwd()]
- * @returns {string|null} Absolute path to the `.env` file, or null
- */
-function findEnvFile(startDir = process.cwd()) {
-    let current = path.resolve(startDir);
-    const { root } = path.parse(current);
-
-    while (true) {
-        const candidate = path.join(current, '.env');
-        if (fs.existsSync(candidate)) {
-            return candidate;
-        }
-        if (current === root) {
-            return null;
-        }
-        current = path.dirname(current);
+    try {
+        return readSecretsFile();
+    } catch (err) {
+        debugLog(`Failed to read encrypted secrets file: ${err.message}`);
+        throw err;
     }
-}
-
-/**
- * Load secrets from the nearest `.env` file found by walking up from cwd.
- * File format is KEY=VALUE, one per line, with # comments.
- * @returns {object} Map of secret names to values
- */
-export function loadEnvFile() {
-    const envPath = findEnvFile();
-    if (!envPath) {
-        return {};
-    }
-    return parseKeyValueFile(envPath);
 }
 
 /**
@@ -272,13 +188,13 @@ export function formatMissingSecretsError(missingSecrets, profileName) {
     lines.push('');
     lines.push('To provide secrets, either:');
     lines.push('  1. Set environment variables before running ploinky');
-    lines.push(`  2. Add them to ${SECRETS_FILE}`);
+    lines.push('  2. Store them with `ploinky var <NAME> <value>`');
     const envFilePath = findEnvFile() || path.join(process.cwd(), '.env');
     lines.push(`  3. Add them to ${envFilePath}`);
     lines.push('');
-    lines.push('Example (.ploinky/.secrets):');
+    lines.push('Example:');
     for (const secret of missingSecrets.slice(0, 2)) {
-        lines.push(`  ${secret}=your_value_here`);
+        lines.push(`  ploinky var ${secret} your_value_here`);
     }
 
     return lines.join('\n');
@@ -308,3 +224,8 @@ export function createEnvWithSecrets(baseEnv, secrets) {
         ...secrets
     };
 }
+
+export {
+    findEnvFile,
+    loadEnvFile,
+};

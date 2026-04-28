@@ -7,7 +7,7 @@ import { resolveVarValue } from '../services/secretVars.js';
 import { resolveEnabledAgentRecord } from '../services/agents.js';
 import { ROUTING_FILE } from '../services/config.js';
 import { createAuthService } from './auth/service.js';
-import { authenticateLocalUser, GUEST_SESSION_TTL_SECONDS, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, listLocalAuthUsers, mintGuestSessionJwt, mintSessionJwt, resolveLocalAuthConfig, resolveUserRev, revokeSession as revokeLocalSession, updateLocalCredentials, verifySessionJwt } from './auth/localService.js';
+import { authenticateLocalUser, createLocalAuthUser, deleteLocalAuthUser, GUEST_SESSION_TTL_SECONDS, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, isLocalAdminUser, listLocalAuthUsers, mintGuestSessionJwt, mintSessionJwt, resolveLocalAuthConfig, resolveUserRev, revokeSession as revokeLocalSession, updateLocalAuthUser, updateLocalCredentials, verifySessionJwt } from './auth/localService.js';
 import { waitForAgentReady } from './utils/agentReadiness.js';
 
 const SSO_AUTH_COOKIE_NAME = 'ploinky_sso';
@@ -546,6 +546,18 @@ function resolveAuthContext(parsedUrl) {
     return { routeKey, mode, policy, record };
 }
 
+function resolveAuthContextForRouteKey(routeKey) {
+    const normalizedRouteKey = String(routeKey || '').trim();
+    if (!normalizedRouteKey) {
+        return { routeKey: null, mode: 'none', policy: { mode: 'none' }, record: null };
+    }
+    const resolved = resolveEnabledAgentRecord(normalizedRouteKey);
+    const record = resolved?.record || null;
+    const policy = record?.auth || { mode: 'none' };
+    const mode = String(policy.mode || 'none').trim().toLowerCase() || 'none';
+    return { routeKey: normalizedRouteKey, mode, policy, record };
+}
+
 function getLocalRouteKey(parsedUrl, session = null, fallback = '') {
     const fromSession = String(session?.localAuth?.routeKey || session?.externalAuth?.routeKey || '').trim();
     if (fromSession) return fromSession;
@@ -606,6 +618,59 @@ function getLocalAccountErrorMessage(code = '') {
             return 'Your session is out of date. Sign in again and retry.';
         default:
             return code ? 'Unable to update credentials.' : '';
+    }
+}
+
+function getUserAdminErrorStatus(code = '') {
+    switch (String(code || '').trim()) {
+        case 'authentication_required':
+        case 'invalid_session':
+            return 401;
+        case 'admin_required':
+            return 403;
+        case 'local_auth_disabled':
+        case 'user_not_found':
+            return 404;
+        case 'username_taken':
+        case 'last_admin_required':
+        case 'roles_must_be_array':
+        case 'username_required':
+        case 'password_required':
+        case 'user_id_required':
+        case 'no_changes_requested':
+            return 400;
+        default:
+            return 500;
+    }
+}
+
+function getUserAdminErrorMessage(code = '') {
+    switch (String(code || '').trim()) {
+        case 'authentication_required':
+        case 'invalid_session':
+            return 'Authentication required.';
+        case 'admin_required':
+            return 'Admin access is required.';
+        case 'local_auth_disabled':
+            return 'Local auth is not enabled for this agent.';
+        case 'user_not_found':
+            return 'User not found.';
+        case 'username_taken':
+            return 'Username is already in use.';
+        case 'last_admin_required':
+            return 'At least one admin user is required.';
+        case 'roles_must_be_array':
+            return 'Roles must be an array.';
+        case 'username_required':
+            return 'Username is required.';
+        case 'password_required':
+            return 'Password is required.';
+        case 'user_id_required':
+            return 'User id is required.';
+        case 'no_changes_requested':
+            return 'No changes were submitted.';
+        default:
+            return code ? 'User management request failed.' : '';
     }
 }
 
@@ -788,6 +853,147 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
         }
     } catch (_) { }
     return { ok: true, session };
+}
+
+function parseUserAdminPath(pathname = '') {
+    const parts = String(pathname || '').split('/').filter(Boolean);
+    if (parts.length < 4 || parts[0] !== 'api' || parts[1] !== 'agents' || parts[3] !== 'users') {
+        return null;
+    }
+    if (parts.length > 5) {
+        return null;
+    }
+    return {
+        agent: decodeURIComponent(parts[2] || ''),
+        userId: parts[4] ? decodeURIComponent(parts[4]) : ''
+    };
+}
+
+function sendUserAdminError(res, code, detail = '') {
+    const status = getUserAdminErrorStatus(code);
+    sendJson(res, status, {
+        ok: false,
+        error: code,
+        message: getUserAdminErrorMessage(code),
+        ...(detail ? { detail } : {})
+    });
+}
+
+async function readUserAdminBody(req) {
+    try {
+        return await readJsonBody(req);
+    } catch (error) {
+        const err = new Error('invalid_json');
+        err.cause = error;
+        throw err;
+    }
+}
+
+export async function handleUserAdminRoutes(req, res, parsedUrl) {
+    const pathname = parsedUrl.pathname || '/';
+    const route = parseUserAdminPath(pathname);
+    if (!route) return false;
+
+    const method = (req.method || 'GET').toUpperCase();
+    const authContext = resolveAuthContextForRouteKey(route.agent);
+    if (authContext.mode !== 'local' || !authContext.policy?.usersVar) {
+        sendUserAdminError(res, 'local_auth_disabled');
+        return true;
+    }
+
+    const cookies = parseCookies(req);
+    const sessionId = cookies.get(LOCAL_AUTH_COOKIE_NAME) || '';
+    const session = getLocalSession(sessionId, { policy: authContext.policy });
+    if (!session) {
+        sendUserAdminError(res, 'authentication_required');
+        return true;
+    }
+    if (!isLocalAdminUser(session.user)) {
+        sendUserAdminError(res, 'admin_required');
+        return true;
+    }
+
+    try {
+        const cookie = buildCookie(LOCAL_AUTH_COOKIE_NAME, sessionId, req, '/', {
+            maxAge: getLocalSessionCookieMaxAge(),
+            sameSite: 'Lax'
+        });
+        res.setHeader('Set-Cookie', cookie);
+
+        if (method === 'GET' && !route.userId) {
+            const users = listLocalAuthUsers(authContext.policy)
+                .sort((left, right) => String(left.username || '').localeCompare(String(right.username || '')));
+            sendJson(res, 200, {
+                ok: true,
+                agent: authContext.routeKey,
+                users
+            });
+            return true;
+        }
+
+        if (method === 'POST' && !route.userId) {
+            const body = await readUserAdminBody(req);
+            const user = createLocalAuthUser({
+                policy: authContext.policy,
+                username: body?.username,
+                password: body?.password,
+                name: body?.name,
+                email: body?.email,
+                roles: Object.prototype.hasOwnProperty.call(body || {}, 'roles') ? body.roles : undefined
+            });
+            sendJson(res, 201, {
+                ok: true,
+                agent: authContext.routeKey,
+                user
+            });
+            return true;
+        }
+
+        if (method === 'PATCH' && route.userId) {
+            const body = await readUserAdminBody(req);
+            const user = updateLocalAuthUser({
+                policy: authContext.policy,
+                id: route.userId,
+                username: Object.prototype.hasOwnProperty.call(body || {}, 'username') ? body.username : undefined,
+                password: Object.prototype.hasOwnProperty.call(body || {}, 'password') ? body.password : undefined,
+                name: Object.prototype.hasOwnProperty.call(body || {}, 'name') ? body.name : undefined,
+                email: Object.prototype.hasOwnProperty.call(body || {}, 'email') ? body.email : undefined,
+                roles: Object.prototype.hasOwnProperty.call(body || {}, 'roles') ? body.roles : undefined
+            });
+            sendJson(res, 200, {
+                ok: true,
+                agent: authContext.routeKey,
+                user
+            });
+            return true;
+        }
+
+        if (method === 'DELETE' && route.userId) {
+            const user = deleteLocalAuthUser({
+                policy: authContext.policy,
+                id: route.userId
+            });
+            sendJson(res, 200, {
+                ok: true,
+                agent: authContext.routeKey,
+                deleted: true,
+                user
+            });
+            return true;
+        }
+
+        res.writeHead(405, { 'Content-Type': 'application/json', Allow: route.userId ? 'PATCH, DELETE' : 'GET, POST' });
+        res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
+        return true;
+    } catch (error) {
+        const code = error?.message === 'invalid_json' ? 'invalid_json' : (error?.message || 'user_admin_failed');
+        if (code === 'invalid_json') {
+            sendJson(res, 400, { ok: false, error: code, message: 'Request body must be valid JSON.' });
+            return true;
+        }
+        sendUserAdminError(res, code, error?.message || String(error));
+        return true;
+    }
 }
 
 export async function handleAuthRoutes(req, res, parsedUrl) {
@@ -1033,37 +1239,10 @@ export async function handleAuthRoutes(req, res, parsedUrl) {
         }
 
         if (pathname === '/auth/local-users') {
-            if (method !== 'GET') {
-                res.writeHead(405); res.end(); return true;
-            }
-            if (authContext.mode !== 'local') {
-                sendJson(res, 404, { ok: false, error: 'local_auth_disabled' });
-                return true;
-            }
-            const cookies = parseCookies(req);
-            const sessionId = cookies.get(LOCAL_AUTH_COOKIE_NAME) || '';
-            const session = getLocalSession(sessionId, { policy: authContext.policy });
-            if (!session) {
-                sendJson(res, 401, { ok: false, error: 'authentication_required' });
-                return true;
-            }
-            const policy = authContext.policy;
-            const users = listLocalAuthUsers(policy)
-                .map((entry) => ({
-                    id: entry.id,
-                    username: entry.username,
-                    name: entry.name,
-                    email: entry.email
-                }))
-                .sort((left, right) => {
-                    const leftName = String(left.name || left.username || '').toLowerCase();
-                    const rightName = String(right.name || right.username || '').toLowerCase();
-                    return leftName.localeCompare(rightName);
-                });
-            sendJson(res, 200, {
-                ok: true,
-                agent: authContext.routeKey || '',
-                users
+            sendJson(res, 410, {
+                ok: false,
+                error: 'local_users_endpoint_removed',
+                detail: 'Use /api/agents/<agent>/users.'
             });
             return true;
         }

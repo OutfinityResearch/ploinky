@@ -22,7 +22,7 @@ export function expectedAudienceForSelf(env = process.env) {
 }
 
 export function readWireSecret(env = process.env) {
-    const hex = String(env?.PLOINKY_WIRE_SECRET || '').trim();
+    const hex = String(env?.PLOINKY_WIRE_SECRET || env?.PLOINKY_MASTER_KEY || '').trim();
     return hex ? Buffer.from(hex, 'hex') : null;
 }
 
@@ -41,7 +41,7 @@ export function verifyInvocationFromHeaders(headers = {}, bodyObject, {
     }
     const secret = readWireSecret(env);
     if (!secret) {
-        return { ok: false, reason: 'PLOINKY_WIRE_SECRET not configured' };
+        return { ok: false, reason: 'PLOINKY_MASTER_KEY not configured' };
     }
     const audience = expectedAudienceForSelf(env);
     if (!audience) {
