@@ -190,13 +190,20 @@ function collectInstalledAgents() {
                 continue;
             }
             const manifest = readManifest(manifestPath);
+            let descriptor;
+            try {
+                descriptor = buildAgentDescriptor(repo, entry, manifest);
+            } catch (err) {
+                console.warn(`[capabilityRegistry] Skipping ${repo}/${entry}: ${err?.message || err}`);
+                continue;
+            }
             out.push({
                 repo,
                 agent: entry,
                 agentPath: agentDir,
                 manifestPath,
                 manifest,
-                descriptor: buildAgentDescriptor(repo, entry, manifest)
+                descriptor
             });
         }
     }

@@ -163,3 +163,17 @@ test('canonicalJsonHash is stable across key order', () => {
     const b = canonicalJsonHash({ input: { ttl: 60, key: 'A' }, tool: 'secret_get' });
     assert.equal(a, b);
 });
+
+test('buildCapabilityIndex skips entries whose names fail agentIdentity validation', () => {
+    writeManifest('gitTest', 'folder J', { about: 'stray manifest in a non-agent folder' });
+    writeManifest('gitTest', 'good agent', { about: 'agent name with whitespace' });
+
+    let index;
+    assert.doesNotThrow(() => { index = buildCapabilityIndex(); });
+
+    assert.equal(index.agents.has('gitTest/folder J'), false);
+    assert.equal(index.agents.has('gitTest/good agent'), false);
+    // valid agents from earlier setup must still be present
+    assert.ok(index.agents.has('dpu/dpuAgent'));
+    assert.ok(index.agents.has('git/gitAgent'));
+});

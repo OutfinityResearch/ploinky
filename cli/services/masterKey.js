@@ -68,9 +68,11 @@ function loadEnvFile(startDir = process.cwd()) {
 }
 
 function resolveMasterKey({ purpose = 'Ploinky encrypted storage' } = {}) {
-    const raw = String(process.env[MASTER_KEY_VAR] || loadEnvFile()[MASTER_KEY_VAR] || '').trim();
+    const raw = String(process.env[MASTER_KEY_VAR] || '').trim();
     if (!raw) {
-        throw new Error(`${MASTER_KEY_VAR} is required for ${purpose}.`);
+        const message = `${MASTER_KEY_VAR} is required for ${purpose}. Set it in the process environment before starting ploinky; it is intentionally not loaded from on-disk files.`;
+        console.error(`[ploinky] ${message}`);
+        throw new Error(message);
     }
     if (!/^[a-fA-F0-9]{64}$/.test(raw)) {
         throw new Error(`${MASTER_KEY_VAR} must be exactly 64 hex characters.`);
