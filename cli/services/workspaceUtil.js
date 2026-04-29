@@ -9,7 +9,7 @@ import * as dockerSvc from './docker/index.js';
 import { getRuntimeForAgent, isSandboxRuntime, loadAgentsMap } from './docker/common.js';
 import { isBwrapProcessRunning, stopBwrapProcess } from './bwrap/bwrapFleet.js';
 import { applyManifestDirectives } from './bootstrapManifest.js';
-import { executeHostHook, getPreinstallMarkerPath, isInlineCommand } from './lifecycleHooks.js';
+import { executeHostHook, markPreinstallRunInProcess, resetPreinstallRunInProcess, isInlineCommand } from './lifecycleHooks.js';
 import { getActiveProfile, getProfileConfig, getProfileEnvVars } from './profileService.js';
 import { getSecrets, createEnvWithSecrets } from './secretInjector.js';
 import { resolveAgentReadinessProtocol } from './startupReadiness.js';
@@ -344,6 +344,10 @@ async function waitForReadinessEntries(readinessEntries) {
 }
 
 async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, ensureComponentToken, enableAgent, killRouterIfRunning } = {}) {
+  // Clear the in-process preinstall dedup set so each workspace start (e.g.
+  // a `restart` re-entering this function in the same CLI process) re-runs
+  // hooks that may need to regenerate runtime files.
+  resetPreinstallRunInProcess();
   try {
     if (staticAgentArg) {
       let aliasResolved = null;
@@ -463,13 +467,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
             if (!result.success) {
               console.error(`[start] Preinstall failed: ${result.message}`);
             } else {
-              // Write dedup marker matching lifecycleHooks.js:426 so
-              // runPreContainerLifecycle skips a second invocation.
-              try {
-                fs.mkdirSync(RUNNING_DIR, { recursive: true });
-                const markerFile = getPreinstallMarkerPath(resolved.shortAgentName, resolved.repo, activeProfile);
-                fs.writeFileSync(markerFile, new Date().toISOString());
-              } catch (_) {}
+              markPreinstallRunInProcess(resolved.shortAgentName, resolved.repo, activeProfile);
             }
           }
         }

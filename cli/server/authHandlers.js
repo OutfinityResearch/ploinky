@@ -6,6 +6,7 @@ import { parseCookies, buildCookie, readJsonBody, appendSetCookie } from './hand
 import { resolveVarValue } from '../services/secretVars.js';
 import { resolveEnabledAgentRecord } from '../services/agents.js';
 import { ROUTING_FILE } from '../services/config.js';
+import { findAgent } from '../services/utils.js';
 import { createAuthService } from './auth/service.js';
 import { authenticateLocalUser, createLocalAuthUser, deleteLocalAuthUser, GUEST_SESSION_TTL_SECONDS, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, isLocalAdminUser, listLocalAuthUsers, mintGuestSessionJwt, mintSessionJwt, resolveLocalAuthConfig, resolveUserRev, revokeSession as revokeLocalSession, updateLocalAuthUser, updateLocalCredentials, verifySessionJwt } from './auth/localService.js';
 import { waitForAgentReady } from './utils/agentReadiness.js';
@@ -505,6 +506,61 @@ async function waitForAgentRedirectReady(agentName) {
     });
 }
 
+function readJsonFileIfExists(filePath) {
+    try {
+        if (!filePath || !fs.existsSync(filePath)) return null;
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (_) {
+        return null;
+    }
+}
+
+function readEnabledAgentManifest(routeKey, routes = {}) {
+    const normalizedRouteKey = String(routeKey || '').trim();
+    if (!normalizedRouteKey) return null;
+
+    const routeHostPath = String(routes?.[normalizedRouteKey]?.hostPath || '').trim();
+    const routeManifest = readJsonFileIfExists(routeHostPath ? path.join(routeHostPath, 'manifest.json') : '');
+    if (routeManifest) return routeManifest;
+
+    let resolved = null;
+    try {
+        resolved = resolveEnabledAgentRecord(normalizedRouteKey);
+    } catch (_) {
+        resolved = null;
+    }
+    const record = resolved?.record || null;
+    if (!record?.repoName || !record?.agentName) return null;
+
+    try {
+        const found = findAgent(`${record.repoName}/${record.agentName}`);
+        return readJsonFileIfExists(found?.manifestPath || '');
+    } catch (_) {
+        return null;
+    }
+}
+
+function resolveSurfaceAuthRouteKey(surfaceName, targetRouteKey, routing = {}) {
+    const normalizedSurface = String(surfaceName || '').trim();
+    const normalizedTarget = String(targetRouteKey || '').trim();
+    if (!normalizedSurface || !normalizedTarget) return '';
+
+    const manifest = readEnabledAgentManifest(normalizedTarget, routing.routes || {});
+    const surfaceConfig = manifest?.[normalizedSurface];
+    const authPolicy = typeof surfaceConfig === 'string'
+        ? surfaceConfig
+        : String(surfaceConfig?.auth || '').trim();
+    const normalizedAuthPolicy = String(authPolicy || '').trim().toLowerCase();
+
+    if (normalizedAuthPolicy === 'static') {
+        return String(routing.static?.agent || '').trim();
+    }
+    if (normalizedAuthPolicy === 'self') {
+        return normalizedTarget;
+    }
+    return '';
+}
+
 function resolveAuthRouteKey(parsedUrl) {
     const pathname = parsedUrl.pathname || '/';
     const parts = pathname.split('/').filter(Boolean);
@@ -512,6 +568,12 @@ function resolveAuthRouteKey(parsedUrl) {
     const routes = routing.routes || {};
     const explicit = String(parsedUrl.searchParams.get('agent') || '').trim();
     const staticAgent = String(routing.static?.agent || '').trim();
+    if (parts[0] === 'webchat' && explicit) {
+        const surfaceAuthRoute = resolveSurfaceAuthRouteKey('webchat', explicit, routing);
+        if (surfaceAuthRoute) {
+            return surfaceAuthRoute;
+        }
+    }
     if (pathname.startsWith('/mcps/') || pathname.startsWith('/mcp/')) {
         if (explicit) return explicit;
         if (parts.length >= 2) {
@@ -701,7 +763,7 @@ function getCookieNameForMode(mode) {
 
 function respondUnauthenticated(req, res, parsedUrl, authContext = resolveAuthContext(parsedUrl)) {
     const pathname = parsedUrl.pathname || '/';
-    const returnTo = parsedUrl.path || pathname || '/';
+    const returnTo = `${pathname || '/'}${parsedUrl.search || ''}`;
     const query = new URLSearchParams({ returnTo });
     if (authContext?.routeKey) query.set('agent', authContext.routeKey);
     const loginUrl = `/auth/login?${query.toString()}`;

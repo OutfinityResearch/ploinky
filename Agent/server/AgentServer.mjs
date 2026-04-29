@@ -12,6 +12,7 @@ import {
     hasInvocationTokenHeader,
     verifyInvocationFromHeaders
 } from '../lib/invocationAuth.mjs';
+import { describeShellFailure } from '../lib/toolError.mjs';
 const { z } = zod;
 
 const DEFAULT_MAX_CONCURRENT_TASKS = 10;
@@ -490,7 +491,7 @@ async function registerFromConfig(server, config, helpers) {
                 }
                 const result = await executeShell(commandSpec, payload);
                 if (result.code !== 0) {
-                    const message = result.stderr?.trim() || `command exited with code ${result.code}`;
+                    const message = describeShellFailure(result);
                     if (helpers && helpers.McpError && helpers.ErrorCode) {
                         throw new helpers.McpError(helpers.ErrorCode.InternalError, message);
                     }
@@ -555,8 +556,7 @@ async function registerFromConfig(server, config, helpers) {
                     const payload = { resource: name, uri: uri.href, params };
                     const result = await executeShell(commandSpec, payload);
                     if (result.code !== 0) {
-                        const message = result.stderr?.trim() || `command exited with code ${result.code}`;
-                        throw new McpError(ErrorCode.InternalError, message);
+                        throw new McpError(ErrorCode.InternalError, describeShellFailure(result));
                     }
                     return {
                         contents: [{ uri: uri.href, text: result.stdout, mimeType: metadata.mimeType }]
@@ -575,8 +575,7 @@ async function registerFromConfig(server, config, helpers) {
                     const payload = { resource: name, uri: uri.href };
                     const result = await executeShell(commandSpec, payload);
                     if (result.code !== 0) {
-                        const message = result.stderr?.trim() || `command exited with code ${result.code}`;
-                        throw new McpError(ErrorCode.InternalError, message);
+                        throw new McpError(ErrorCode.InternalError, describeShellFailure(result));
                     }
                     return {
                         contents: [{ uri: uri.href, text: result.stdout, mimeType: metadata.mimeType }]

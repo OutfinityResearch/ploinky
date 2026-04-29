@@ -38,13 +38,13 @@ class MockResponse {
     }
 }
 
-function makeRequest({ method = 'GET', url, body, cookie = '' }) {
+function makeRequest({ method = 'GET', url, body, cookie = '', accept = 'application/json' }) {
     const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body), 'utf8')];
     const req = Readable.from(chunks);
     req.method = method;
     req.url = url;
     req.headers = {
-        accept: 'application/json',
+        accept,
         host: 'localhost',
         ...(cookie ? { cookie } : {}),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
@@ -55,6 +55,11 @@ function makeRequest({ method = 'GET', url, body, cookie = '' }) {
 
 function writeWorkspaceConfig(ploinkyDir) {
     writeFileSync(path.join(ploinkyDir, '.secrets'), '# test secrets\n');
+    const webAdminManifestDir = path.join(ploinkyDir, 'repos', 'webassist', 'webAdmin');
+    mkdirSync(webAdminManifestDir, { recursive: true });
+    writeFileSync(path.join(webAdminManifestDir, 'manifest.json'), JSON.stringify({
+        webchat: { auth: 'static' },
+    }, null, 2));
     writeFileSync(path.join(ploinkyDir, 'agents.json'), JSON.stringify({
         explorer: {
             type: 'agent',
@@ -166,4 +171,36 @@ test('guest routes use the guest agent policy instead of the static Explorer pol
     assert.equal(noAuthMcpRes.statusCode, 401);
     assert.equal(noAuthMcpBody.error, 'not_authenticated');
     assert.match(noAuthMcpBody.login, /agent=explorer/);
+
+    const webAdminChatReq = makeRequest({
+        url: '/webchat?agent=webAdmin',
+        accept: 'text/html',
+    });
+    const webAdminChatRes = new MockResponse();
+    const webAdminChatParsedUrl = new URL(webAdminChatReq.url, 'http://localhost');
+
+    const webAdminChatResult = await authHandlers.ensureAuthenticated(webAdminChatReq, webAdminChatRes, webAdminChatParsedUrl);
+
+    assert.equal(webAdminChatResult.ok, false);
+    assert.equal(webAdminChatRes.statusCode, 302);
+
+    const location = new URL(String(webAdminChatRes.getHeader('location') || ''), 'http://localhost');
+    assert.equal(location.pathname, '/auth/login');
+    assert.equal(location.searchParams.get('agent'), 'explorer');
+    assert.equal(location.searchParams.get('returnTo'), '/webchat?agent=webAdmin');
+    assert.doesNotMatch(String(webAdminChatRes.getHeader('set-cookie') || ''), /^ploinky_guest=/);
+
+    const webAssistChatReq = makeRequest({
+        url: '/webchat?agent=webAssist',
+        accept: 'text/html',
+    });
+    const webAssistChatRes = new MockResponse();
+    const webAssistChatParsedUrl = new URL(webAssistChatReq.url, 'http://localhost');
+
+    const webAssistChatResult = await authHandlers.ensureAuthenticated(webAssistChatReq, webAssistChatRes, webAssistChatParsedUrl);
+
+    assert.equal(webAssistChatResult.ok, true);
+    assert.equal(webAssistChatReq.authMode, 'guest');
+    assert.equal(webAssistChatReq.user?.username, 'visitor');
+    assert.match(String(webAssistChatRes.getHeader('set-cookie') || ''), /^ploinky_guest=/);
 });

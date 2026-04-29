@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
+import { describeShellFailure } from '../lib/toolError.mjs';
 
 const DEFAULT_MAX_LOG_TAIL_BYTES = 128 * 1024;
 
@@ -322,7 +323,7 @@ export class TaskQueue {
             } else {
                 const message = timedOut
                     ? `Task timed out after ${task.timeoutMs}ms`
-                    : (result.stderr?.trim() || `command exited with code ${result.code}`);
+                    : describeShellFailure(result);
                 task.status = 'failed';
                 task.error = message;
                 task.result = null;

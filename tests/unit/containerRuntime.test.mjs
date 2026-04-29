@@ -6,7 +6,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { getPreinstallMarkerPath } from '../../cli/services/lifecycleHooks.js';
+import {
+    hasPreinstallRunInProcess,
+    markPreinstallRunInProcess,
+    resetPreinstallRunInProcess,
+} from '../../cli/services/lifecycleHooks.js';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
@@ -82,11 +86,24 @@ process.stdout.write(JSON.stringify(collectLiveAgentContainers()));`,
     }
 });
 
-test('preinstall markers include repo name to avoid same-agent collisions', () => {
-    const first = getPreinstallMarkerPath('shared-agent', 'repo-one', 'dev');
-    const second = getPreinstallMarkerPath('shared-agent', 'repo-two', 'dev');
+test('preinstall deduplication is process-local and repo scoped', () => {
+    const agentName = `shared-agent-${Date.now()}`;
+    assert.equal(hasPreinstallRunInProcess(agentName, 'repo-one', 'dev'), false);
 
-    assert.notEqual(first, second);
-    assert.match(path.basename(first), /^preinstall-repo-one-shared-agent-dev$/);
-    assert.match(path.basename(second), /^preinstall-repo-two-shared-agent-dev$/);
+    markPreinstallRunInProcess(agentName, 'repo-one', 'dev');
+
+    assert.equal(hasPreinstallRunInProcess(agentName, 'repo-one', 'dev'), true);
+    assert.equal(hasPreinstallRunInProcess(agentName, 'repo-two', 'dev'), false);
+});
+
+test('resetPreinstallRunInProcess clears the in-process dedup set', () => {
+    const agentName = `reset-agent-${Date.now()}`;
+    markPreinstallRunInProcess(agentName, 'repo-one', 'dev');
+    markPreinstallRunInProcess(agentName, 'repo-two', 'dev');
+    assert.equal(hasPreinstallRunInProcess(agentName, 'repo-one', 'dev'), true);
+
+    resetPreinstallRunInProcess();
+
+    assert.equal(hasPreinstallRunInProcess(agentName, 'repo-one', 'dev'), false);
+    assert.equal(hasPreinstallRunInProcess(agentName, 'repo-two', 'dev'), false);
 });

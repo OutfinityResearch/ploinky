@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import { execSync, spawnSync } from 'child_process';
 import { getRuntime } from './docker/common.js';
-import { RUNNING_DIR } from './config.js';
 import { debugLog } from './utils.js';
 import { getProfileConfig, getProfileEnvVars, getHookNames, getActiveProfile } from './profileService.js';
 import { validateSecrets, getSecrets, createEnvWithSecrets, formatMissingSecretsError } from './secretInjector.js';
@@ -35,11 +34,26 @@ function sanitizeMarkerPart(value) {
     return sanitized || 'default';
 }
 
-export function getPreinstallMarkerPath(agentName, repoName, profileName) {
-    return path.join(
-        RUNNING_DIR,
-        `preinstall-${sanitizeMarkerPart(repoName || 'unknown')}-${sanitizeMarkerPart(agentName)}-${sanitizeMarkerPart(profileName || 'default')}`
-    );
+const preinstallRunKeys = new Set();
+
+function getPreinstallRunKey(agentName, repoName, profileName) {
+    return [
+        sanitizeMarkerPart(repoName || 'unknown'),
+        sanitizeMarkerPart(agentName),
+        sanitizeMarkerPart(profileName || 'default')
+    ].join(':');
+}
+
+export function hasPreinstallRunInProcess(agentName, repoName, profileName) {
+    return preinstallRunKeys.has(getPreinstallRunKey(agentName, repoName, profileName));
+}
+
+export function markPreinstallRunInProcess(agentName, repoName, profileName) {
+    preinstallRunKeys.add(getPreinstallRunKey(agentName, repoName, profileName));
+}
+
+export function resetPreinstallRunInProcess() {
+    preinstallRunKeys.clear();
 }
 
 /**
@@ -428,17 +442,14 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath, profile
         errors.push(`Symlink creation failed: ${err.message}`);
     }
 
-    // Run preinstall [HOST] hook - this runs BEFORE container creation
-    // This allows the hook to set ploinky vars via `ploinky var` commands
-    // Skip if already run in this session (e.g., for static agent in workspaceUtil.js)
+    // Run preinstall [HOST] hook - this runs BEFORE container creation.
+    // Keep de-duplication in-process only. Persistent markers go stale across
+    // destroy/start and can suppress hooks that regenerate required runtime
+    // files, such as WebMeet's LiveKit configs.
     try {
         const profileConfig = getProfileConfig(`${repoName}/${agentName}`, profileName) || {};
         if (profileConfig.preinstall) {
-            // Check if preinstall was already run for this agent in this session
-            const markerFile = getPreinstallMarkerPath(agentName, repoName, profileName);
-            const markerDir = path.dirname(markerFile);
-            
-            if (fs.existsSync(markerFile)) {
+            if (hasPreinstallRunInProcess(agentName, repoName, profileName)) {
                 debugLog(`[lifecycle] Skipping preinstall [HOST] for ${agentName} (already run)`);
             } else {
                 // For inline commands, pass as-is; for script paths, join with agentPath
@@ -458,11 +469,7 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath, profile
                 if (!result.success) {
                     errors.push(`preinstall hook failed: ${result.message}`);
                 } else {
-                    // Mark preinstall as done for this session
-                    try {
-                        fs.mkdirSync(markerDir, { recursive: true });
-                        fs.writeFileSync(markerFile, new Date().toISOString());
-                    } catch (_) {}
+                    markPreinstallRunInProcess(agentName, repoName, profileName);
                 }
             }
         }

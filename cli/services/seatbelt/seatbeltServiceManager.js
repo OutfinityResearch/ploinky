@@ -51,6 +51,10 @@ import {
     ensurePersistentStorageHostDir,
     planRuntimeResources
 } from '../runtimeResourcePlanner.js';
+import {
+    pruneStaleRuntimeEntries,
+    runtimeSegment,
+} from '../runtimeStaging.js';
 // Reuse bwrap PID management (platform-agnostic)
 import {
     isBwrapProcessRunning,
@@ -68,6 +72,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
 const DEFAULT_SEATBELT_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+const SEATBELT_RUNTIME_ROOT = path.join(PLOINKY_DIR, 'seatbelt-runtime');
 
 function resolveSymlinkPath(symlinkPath) {
     try {
@@ -147,12 +152,8 @@ function getSeatbeltExtraReadPaths() {
     return Array.from(readPaths);
 }
 
-function seatbeltRuntimeSegment(agentName) {
-    return String(agentName || 'agent').replace(/[^a-zA-Z0-9._-]/g, '_');
-}
-
 function ensureSeatbeltAgentLibDir(agentName, nodeModulesDir) {
-    const runtimeRoot = path.join(PLOINKY_DIR, 'seatbelt-runtime', seatbeltRuntimeSegment(agentName));
+    const runtimeRoot = path.join(SEATBELT_RUNTIME_ROOT, runtimeSegment(agentName));
     const stagedAgentLibPath = path.join(runtimeRoot, `Agent-${process.pid}-${Date.now()}`);
     const sourceNodeModules = path.join(AGENT_LIB_PATH, 'node_modules');
 
@@ -512,6 +513,9 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
         envHash,
         createdAt: existingRecord.createdAt || new Date().toISOString(),
         projectPath: cwd,
+        runtimeStaging: {
+            agentLibPath: seatbeltAgentLibPath
+        },
         runMode: existingRecord.runMode,
         develRepo: existingRecord.develRepo,
         profile: activeProfile,
@@ -624,7 +628,14 @@ function ensureSeatbeltService(agentName, manifest, agentPath, options = {}) {
         }
     }
 
-    // Start the process
+    // Start the process. Sweep stale Agent-<pid>-<ts> directories rather than
+    // wiping the per-agent root: a concurrent `ploinky cli`/`ploinky shell`
+    // attached via attachSeatbeltInteractive may still hold a sibling staged
+    // dir that we must not delete.
+    fs.mkdirSync(SEATBELT_RUNTIME_ROOT, { recursive: true });
+    const seatbeltAgentRoot = path.join(SEATBELT_RUNTIME_ROOT, runtimeSegment(agentName));
+    fs.mkdirSync(seatbeltAgentRoot, { recursive: true });
+    pruneStaleRuntimeEntries(seatbeltAgentRoot);
     return startSeatbeltProcess(agentName, manifest, agentPath, {
         preferredHostPort: allPortMappings[0]?.hostPort,
         containerName,
@@ -668,6 +679,18 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
         needsCoreDeps,
     });
     ensureSeatbeltCodeNodeModules(agentName, agentCodePath, nodeModulesDir);
+    // Sweep stale interactive sessions whose owning processes have exited
+    // before staging a new Agent dir for this attach. Keep the live service's
+    // staged Agent dir: it was created by the launcher process, not by the
+    // long-running sandbox PID, so PID-based pruning alone would remove it.
+    const serviceAgentLibPath = record.runtimeStaging?.agentLibPath;
+    if (serviceAgentLibPath) {
+        try {
+            pruneStaleRuntimeEntries(path.join(SEATBELT_RUNTIME_ROOT, runtimeSegment(agentName)), {
+                keepPaths: [serviceAgentLibPath]
+            });
+        } catch (_) {}
+    }
     const seatbeltAgentLibPath = ensureSeatbeltAgentLibDir(agentName, nodeModulesDir);
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 

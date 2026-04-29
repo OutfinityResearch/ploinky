@@ -72,7 +72,7 @@ Guest auth is enabled by `guest: true` in an agent manifest. Guest routes first 
 
 ### Router Route Protection
 
-The router must attach authenticated identity to `req.user`, `req.session`, `req.sessionId`, and `req.authMode` before protected browser surfaces and first-party MCP requests execute. The route auth context is resolved from the request path, explicit `agent` query parameter, route table, and static-agent configuration.
+The router must attach authenticated identity to `req.user`, `req.session`, `req.sessionId`, and `req.authMode` before protected browser surfaces and first-party MCP requests execute. The route auth context is resolved from the request path, explicit `agent` query parameter, route table, and static-agent configuration. For `/webchat?agent=<target>`, the target agent manifest may declare `"webchat": { "auth": "static" }` to authenticate the webchat surface with the static agent's route policy while still running the target chat agent.
 
 `/health` and `/MCPBrowserClient.js` are intentionally reachable before route authentication. `/health` exposes operational metadata needed by the watchdog. `/MCPBrowserClient.js` serves first-party client code and must not contain secrets.
 
@@ -108,7 +108,7 @@ Legacy agent client-credential auth is removed. `/auth/agent-token` returns gone
 
 The default runtime backend is a container runtime, preferring Podman when available and falling back to Docker. Host sandboxes are selected only when the manifest requests `lite-sandbox: true`: Linux uses bubblewrap, macOS uses Seatbelt, and unsupported or unavailable host sandboxes fail with operator guidance rather than silently falling back.
 
-Container agents must mount `/Agent` read-only, prepared dependency caches read-only, code and skills according to the active profile, and workspace or shared paths as required by the run mode. The `dev` profile defaults code and skills to read-write. `qa` and `prod` default them to read-only unless a profile explicitly relaxes them. Prepared `node_modules` caches must remain read-only in runtime containers. Manifest volumes and runtime resources are explicit operator-granted write surfaces and must be treated as trusted manifest power.
+Container agents must mount `/Agent` read-only, prepared dependency caches read-only, code and skills according to the active profile, and workspace or shared paths as required by the run mode. The `dev` profile defaults code and skills to read-write. `qa` and `prod` default them to read-only unless a profile explicitly relaxes them. Prepared `node_modules` caches must remain read-only in runtime containers. Podman-staged symlink trees must mount each symlink target at its real path with the same read/write policy instead of relying on a broad writable workspace mount. Manifest volumes and runtime resources are explicit operator-granted write surfaces and must be treated as trusted manifest power.
 
 Container-published ports default to localhost when no explicit profile port mapping is declared. Profile port mappings may include an explicit host IP; if a manifest or profile binds to a non-local address, that exposure is intentional operator configuration and must be reviewed as a network security decision.
 
