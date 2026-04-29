@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 import { signHmacJwt, bodyHashForRequest } from '../../../Agent/lib/jwtSign.mjs';
 import { verifyInvocationToken } from '../../../Agent/lib/jwtVerify.mjs';
-import { resolveMasterKey } from '../../services/encryptedPasswordStore.js';
+import { deriveSubkey } from '../../services/masterKey.js';
 import { resolveAgentDescriptor } from '../../services/capabilityRegistry.js';
 
 /**
@@ -22,7 +22,7 @@ import { resolveAgentDescriptor } from '../../services/capabilityRegistry.js';
 const DEFAULT_INVOCATION_TTL_SECONDS = 60;
 
 function getWireSecretBuffer() {
-    return resolveMasterKey();
+    return deriveSubkey('invocation');
 }
 
 function nowSec() { return Math.floor(Date.now() / 1000); }

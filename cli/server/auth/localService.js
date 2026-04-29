@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
-import { getUsersPayload, resolveMasterKey, setUsersPayload } from '../../services/encryptedPasswordStore.js';
+import { getUsersPayload, setUsersPayload } from '../../services/encryptedPasswordStore.js';
+import { deriveSubkey } from '../../services/masterKey.js';
 import { hashPassword, verifyPasswordHash } from '../../services/localAuthPasswords.js';
 import { signHmacJwt } from '../../../Agent/lib/jwtSign.mjs';
 import { verifyJws } from '../../../Agent/lib/jwtVerify.mjs';
@@ -10,8 +11,8 @@ const sessionStore = createSessionStore();
 
 const SESSION_TTL_SECONDS = 4 * 60 * 60;
 
-function getWireSecretBuffer() {
-    return resolveMasterKey();
+function getSessionSigningKey() {
+    return deriveSubkey('session');
 }
 
 function mintSessionJwt(user, rev = 1, options = {}) {
@@ -34,12 +35,12 @@ function mintSessionJwt(user, rev = 1, options = {}) {
         exp: iat + SESSION_TTL_SECONDS,
         jti: crypto.randomBytes(16).toString('base64url')
     };
-    return signHmacJwt({ payload, secret: getWireSecretBuffer() });
+    return signHmacJwt({ payload, secret: getSessionSigningKey() });
 }
 
 function verifySessionJwt(token) {
     const { payload } = verifyJws(token, {
-        secret: getWireSecretBuffer(),
+        secret: getSessionSigningKey(),
         maxTtlSeconds: SESSION_TTL_SECONDS + 1
     });
     if (payload.typ !== 'session') {
@@ -72,7 +73,7 @@ function mintGuestSessionJwt() {
         exp: iat + GUEST_SESSION_TTL_SECONDS,
         jti: crypto.randomBytes(16).toString('base64url')
     };
-    return signHmacJwt({ payload, secret: getWireSecretBuffer() });
+    return signHmacJwt({ payload, secret: getSessionSigningKey() });
 }
 
 let revCache = null;

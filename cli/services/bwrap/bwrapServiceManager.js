@@ -9,7 +9,7 @@ import {
     getManifestEnvNames,
     resolveVarValue
 } from '../secretVars.js';
-import { resolveMasterKey } from '../encryptedPasswordStore.js';
+import { deriveSubkey } from '../masterKey.js';
 import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
@@ -383,7 +383,7 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
     try {
         const principalId = deriveAgentPrincipalId(repoName, agentName);
         env.PLOINKY_AGENT_PRINCIPAL = principalId;
-        env.PLOINKY_WIRE_SECRET = resolveMasterKey().toString('hex');
+        env.PLOINKY_WIRE_SECRET = deriveSubkey('invocation').toString('hex');
     } catch (err) {
         debugLog(`[invocationAuth/bwrap] could not set agent identity: ${err?.message || err}`);
     }

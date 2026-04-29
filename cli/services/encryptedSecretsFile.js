@@ -3,12 +3,17 @@ import fs from 'fs';
 import path from 'path';
 
 import { SECRETS_FILE } from './config.js';
-import { parseKeyValueText, resolveMasterKey } from './masterKey.js';
+import { deriveSubkey, parseKeyValueText, resolveMasterKey } from './masterKey.js';
 
 const ENVELOPE_VERSION = 1;
 const PAYLOAD_VERSION = 1;
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
+const SUBKEY_PURPOSE = 'storage/secrets';
+
+function getStorageKey() {
+    return deriveSubkey(SUBKEY_PURPOSE);
+}
 
 function normalizeSecretsMap(input = {}) {
     const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
@@ -42,6 +47,18 @@ function parseEnvelope(raw = '') {
     }
 }
 
+function decryptWithKey(envelope, key) {
+    const iv = Buffer.from(String(envelope.iv || ''), 'base64');
+    const tag = Buffer.from(String(envelope.tag || ''), 'base64');
+    const ciphertext = Buffer.from(String(envelope.ciphertext || ''), 'base64');
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([
+        decipher.update(ciphertext),
+        decipher.final(),
+    ]).toString('utf8');
+}
+
 function decryptEnvelope(envelope) {
     if (!isEncryptedSecretsEnvelope(envelope)) {
         throw new Error('Encrypted .secrets envelope is malformed.');
@@ -52,27 +69,26 @@ function decryptEnvelope(envelope) {
     if (iv.length !== IV_BYTES || tag.length !== 16 || !ciphertext.length) {
         throw new Error('Encrypted .secrets envelope is incomplete.');
     }
-    const decipher = crypto.createDecipheriv(
-        ALGORITHM,
-        resolveMasterKey({ purpose: 'encrypted .secrets' }),
-        iv,
-    );
-    decipher.setAuthTag(tag);
-    const plaintext = Buffer.concat([
-        decipher.update(ciphertext),
-        decipher.final(),
-    ]).toString('utf8');
+    // Try the derived storage subkey first; fall back once to the raw master
+    // key for files written by older versions. The next write re-encrypts with
+    // the derived key, completing the per-workspace migration in place.
+    let plaintext;
+    try {
+        plaintext = decryptWithKey(envelope, getStorageKey());
+    } catch (derivedErr) {
+        try {
+            plaintext = decryptWithKey(envelope, resolveMasterKey({ purpose: 'encrypted .secrets' }));
+        } catch {
+            throw derivedErr;
+        }
+    }
     const payload = JSON.parse(plaintext);
     return normalizeSecretsMap(payload?.secrets);
 }
 
 function encryptSecretsMap(secrets = {}) {
     const iv = crypto.randomBytes(IV_BYTES);
-    const cipher = crypto.createCipheriv(
-        ALGORITHM,
-        resolveMasterKey({ purpose: 'encrypted .secrets' }),
-        iv,
-    );
+    const cipher = crypto.createCipheriv(ALGORITHM, getStorageKey(), iv);
     const plaintext = Buffer.from(JSON.stringify({
         version: PAYLOAD_VERSION,
         secrets: normalizeSecretsMap(secrets),

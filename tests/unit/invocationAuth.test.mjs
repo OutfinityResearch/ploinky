@@ -6,8 +6,11 @@ import { signHmacJwt, bodyHashForRequest } from '../../Agent/lib/jwtSign.mjs';
 import { createMemoryReplayCache } from '../../Agent/lib/jwtVerify.mjs';
 import { verifyInvocationFromHeaders } from '../../Agent/lib/invocationAuth.mjs';
 
-const SECRET = crypto.randomBytes(32);
-const SECRET_HEX = SECRET.toString('hex');
+// Agents only ever see the router-derived wire secret. Tests treat that
+// derived secret as opaque random bytes — the JWT signing test is unrelated to
+// the derivation scheme.
+const WIRE_SECRET = crypto.randomBytes(32);
+const WIRE_SECRET_HEX = WIRE_SECRET.toString('hex');
 
 const PROVIDER_PRINCIPAL = 'agent:AssistOSExplorer/dpuAgent';
 const EXAMPLE_BODY = { tool: 'secret_put', arguments: { key: 'GIT_GITHUB_TOKEN', value: 'x' } };
@@ -29,13 +32,13 @@ function mintInvocationJwt(overrides = {}) {
         exp: now + 60,
         ...overrides
     };
-    return signHmacJwt({ payload, secret: SECRET });
+    return signHmacJwt({ payload, secret: WIRE_SECRET });
 }
 
 function makeEnv() {
     return {
         PLOINKY_AGENT_PRINCIPAL: PROVIDER_PRINCIPAL,
-        PLOINKY_MASTER_KEY: SECRET_HEX
+        PLOINKY_WIRE_SECRET: WIRE_SECRET_HEX
     };
 }
 
@@ -79,7 +82,7 @@ test('verifyInvocationFromHeaders rejects missing agent audience configuration',
     const result = verifyInvocationFromHeaders(
         { authorization: `Bearer ${token}` },
         EXAMPLE_BODY,
-        { env: { PLOINKY_MASTER_KEY: SECRET_HEX }, replayCache: createMemoryReplayCache() }
+        { env: { PLOINKY_WIRE_SECRET: WIRE_SECRET_HEX }, replayCache: createMemoryReplayCache() }
     );
     assert.equal(result.ok, false);
     assert.match(result.reason, /PLOINKY_AGENT_PRINCIPAL or AGENT_NAME not configured/);

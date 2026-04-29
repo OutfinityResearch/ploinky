@@ -22,7 +22,11 @@ export function expectedAudienceForSelf(env = process.env) {
 }
 
 export function readWireSecret(env = process.env) {
-    const hex = String(env?.PLOINKY_WIRE_SECRET || env?.PLOINKY_MASTER_KEY || '').trim();
+    // Agents must only see the router-derived wire secret. Falling back to
+    // PLOINKY_MASTER_KEY would let an agent process verify (and, via the same
+    // bytes, mint) JWTs with the workspace root key — violating the invariant
+    // that every secret is derived per-purpose from the master.
+    const hex = String(env?.PLOINKY_WIRE_SECRET || '').trim();
     return hex ? Buffer.from(hex, 'hex') : null;
 }
 
@@ -41,7 +45,7 @@ export function verifyInvocationFromHeaders(headers = {}, bodyObject, {
     }
     const secret = readWireSecret(env);
     if (!secret) {
-        return { ok: false, reason: 'PLOINKY_MASTER_KEY not configured' };
+        return { ok: false, reason: 'PLOINKY_WIRE_SECRET not configured' };
     }
     const audience = expectedAudienceForSelf(env);
     if (!audience) {

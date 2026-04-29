@@ -53,6 +53,9 @@ test('encrypted password store round-trips and enforces the master key', async (
     assert.match(encryptedText, /"alg": "aes-256-gcm"/);
     assert.doesNotMatch(encryptedText, /alice|alice@example\.com|scrypt\$secret-hash|PLOINKY_AUTH_ALPHA_USERS/);
 
+    // process.env wins over .env: the file was encrypted with ENV_KEY (set in
+    // process.env above), so removing process.env should leave only FILE_KEY
+    // available from the on-disk .env, which can no longer decrypt.
     delete process.env.PLOINKY_MASTER_KEY;
     assert.throws(
         () => store.getUsersPayload('PLOINKY_AUTH_ALPHA_USERS'),
@@ -60,6 +63,8 @@ test('encrypted password store round-trips and enforces the master key', async (
         '.env uses a different key, so process env must have taken precedence while writing',
     );
 
+    // Now overwrite the .env to ENV_KEY and confirm the on-disk fallback path
+    // actually drives decryption when process.env is unset.
     writeFileSync(path.join(workspace, '.env'), `PLOINKY_MASTER_KEY=${ENV_KEY}\n`);
     assert.equal(store.getUsersPayload('PLOINKY_AUTH_ALPHA_USERS').users[0].username, 'alice');
 
@@ -69,9 +74,11 @@ test('encrypted password store round-trips and enforces the master key', async (
         /PLOINKY_MASTER_KEY is required/,
     );
 
+    // Arbitrary strings are now accepted as seeds, so the wrong seed produces
+    // a decryption failure rather than a validation failure.
     process.env.PLOINKY_MASTER_KEY = 'abc';
     assert.throws(
         () => store.getUsersPayload('PLOINKY_AUTH_ALPHA_USERS'),
-        /PLOINKY_MASTER_KEY must be exactly 64 hex characters/,
+        /Unable to decrypt encrypted password store/,
     );
 });

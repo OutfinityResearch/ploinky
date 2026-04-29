@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 
 import { signHmacJwt, bodyHashForRequest } from '../../Agent/lib/jwtSign.mjs';
+import { deriveSubkey } from '../../cli/services/masterKey.js';
 
-const SECRET = crypto.randomBytes(32);
+const MASTER = crypto.randomBytes(32);
 const ORIGINAL_BODY = { tool: 'git_auth_status', arguments: {} };
 
 function mintCallerInvocationJwt(overrides = {}) {
@@ -24,13 +25,15 @@ function mintCallerInvocationJwt(overrides = {}) {
         exp: now + 60,
         ...overrides
     };
-    return signHmacJwt({ payload, secret: SECRET });
+    // The router signs with deriveSubkey('invocation') from the master, so the
+    // caller JWT this test feeds in must use the same derived subkey.
+    return signHmacJwt({ payload, secret: deriveSubkey('invocation') });
 }
 
 test('verifyDelegatedToolCall allows one caller invocation JWT to mint multiple delegated calls', async () => {
     const oldMasterKey = process.env.PLOINKY_MASTER_KEY;
     const oldWireSecret = process.env.PLOINKY_WIRE_SECRET;
-    process.env.PLOINKY_MASTER_KEY = SECRET.toString('hex');
+    process.env.PLOINKY_MASTER_KEY = MASTER.toString('hex');
     delete process.env.PLOINKY_WIRE_SECRET;
     try {
         const { verifyDelegatedToolCall } = await import(`../../cli/server/mcp-proxy/invocationMinter.js?test=${Date.now()}`);

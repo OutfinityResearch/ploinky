@@ -3,13 +3,18 @@ import fs from 'fs';
 import path from 'path';
 
 import { PLOINKY_DIR } from './config.js';
-import { MASTER_KEY_VAR, resolveMasterKey as resolveConfiguredMasterKey } from './masterKey.js';
+import {
+    MASTER_KEY_VAR,
+    deriveSubkey,
+    resolveMasterKey as resolveConfiguredMasterKey,
+} from './masterKey.js';
 
 const PASSWORD_STORE_FILE = path.join(PLOINKY_DIR, 'passwords.enc');
 const STORE_VERSION = 1;
 const ENVELOPE_VERSION = 1;
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
+const SUBKEY_PURPOSE = 'storage/passwords';
 
 function defaultStore() {
     return {
@@ -20,6 +25,10 @@ function defaultStore() {
 
 function resolveMasterKey() {
     return resolveConfiguredMasterKey({ purpose: 'local password storage' });
+}
+
+function getStorageKey() {
+    return deriveSubkey(SUBKEY_PURPOSE);
 }
 
 function normalizeStore(input) {
@@ -40,6 +49,18 @@ function normalizeStore(input) {
     return normalized;
 }
 
+function decryptWithKey(envelope, key) {
+    const iv = Buffer.from(String(envelope.iv || ''), 'base64');
+    const tag = Buffer.from(String(envelope.tag || ''), 'base64');
+    const ciphertext = Buffer.from(String(envelope.ciphertext || ''), 'base64');
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([
+        decipher.update(ciphertext),
+        decipher.final(),
+    ]);
+}
+
 function decryptEnvelope(envelope) {
     if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
         throw new Error('Encrypted password store is malformed.');
@@ -53,18 +74,26 @@ function decryptEnvelope(envelope) {
     if (iv.length !== IV_BYTES || tag.length !== 16 || !ciphertext.length) {
         throw new Error('Encrypted password store envelope is incomplete.');
     }
-    const decipher = crypto.createDecipheriv(ALGORITHM, resolveMasterKey(), iv);
-    decipher.setAuthTag(tag);
-    const plaintext = Buffer.concat([
-        decipher.update(ciphertext),
-        decipher.final(),
-    ]);
+    // Try the derived storage subkey first. Files written by older versions
+    // were encrypted with the raw master key bytes, so fall back once on
+    // auth-tag failure. The next write naturally re-encrypts with the derived
+    // key, completing the per-workspace migration in place.
+    let plaintext;
+    try {
+        plaintext = decryptWithKey(envelope, getStorageKey());
+    } catch (derivedErr) {
+        try {
+            plaintext = decryptWithKey(envelope, resolveMasterKey());
+        } catch {
+            throw derivedErr;
+        }
+    }
     return JSON.parse(plaintext.toString('utf8'));
 }
 
 function encryptStore(store) {
     const iv = crypto.randomBytes(IV_BYTES);
-    const cipher = crypto.createCipheriv(ALGORITHM, resolveMasterKey(), iv);
+    const cipher = crypto.createCipheriv(ALGORITHM, getStorageKey(), iv);
     const plaintext = Buffer.from(JSON.stringify(normalizeStore(store)), 'utf8');
     const ciphertext = Buffer.concat([
         cipher.update(plaintext),
