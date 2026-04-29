@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { signHmacJwt, bodyHashForRequest } from '../../../Agent/lib/jwtSign.mjs';
 import { verifyInvocationToken } from '../../../Agent/lib/jwtVerify.mjs';
 import { deriveSubkey } from '../../services/masterKey.js';
-import { resolveAgentDescriptor } from '../../services/capabilityRegistry.js';
+import { resolveAgentDescriptor } from '../../services/agentRegistry.js';
 
 /**
  * invocationMinter.js (router side)

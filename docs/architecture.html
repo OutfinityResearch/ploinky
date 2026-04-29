@@ -160,8 +160,8 @@ handleCommand(args) {
                                 <td>Seatbelt sandbox lifecycle management (macOS)</td>
                             </tr>
                             <tr>
-                                <td><code>capabilityRegistry.js</code></td>
-                                <td>Contract-driven capability discovery (provides/requires)</td>
+                                <td><code>agentRegistry.js</code></td>
+                                <td>Installed-agent lookup, principal resolution, runtime resources, and SSO-provider discovery</td>
                             </tr>
                             <tr>
                                 <td><code>dependencyCache.js</code></td>
@@ -370,7 +370,7 @@ DATABASE_URL=postgres://localhost/db</code></pre>
                         <ul style="margin-left: 2rem;">
                             <li><strong>none:</strong> No authentication (default).</li>
                             <li><strong>pwd (local):</strong> Username/password auth with HMAC-signed JWT sessions. Cookie: <code>ploinky_jwt</code>. Session TTL: 4 hours.</li>
-                            <li><strong>sso (OIDC):</strong> Delegates to an agent that provides the <code>auth-provider/v1</code> contract via the capability registry. Supports PKCE flow. Cookie: <code>ploinky_sso</code>.</li>
+                            <li><strong>sso (OIDC):</strong> Delegates to the configured SSO provider agent marked with <code>"ssoProvider": true</code>. Supports PKCE flow. Cookie: <code>ploinky_sso</code>.</li>
                         </ul>
 
                         <h3>Secure Wire Protocol</h3>

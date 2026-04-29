@@ -12,12 +12,7 @@ fs.mkdirSync(path.join(providerDir, 'runtime'), { recursive: true });
 fs.writeFileSync(
     path.join(providerDir, 'manifest.json'),
     JSON.stringify({
-        provides: {
-            'auth-provider/v1': {
-                operations: ['sso_begin_login'],
-                supportedScopes: ['auth:login']
-            }
-        }
+        ssoProvider: true,
     }, null, 2)
 );
 fs.writeFileSync(path.join(providerDir, 'runtime', 'index.mjs'), 'export function createProvider() { return {}; }');
@@ -29,7 +24,6 @@ const ssoModule = await import(`../../cli/services/sso.js${moduleSuffix}`);
 const {
     bindSsoProvider,
     unbindSsoProvider,
-    getSsoBinding,
     getSsoConfig,
     listAuthProviders,
     gatherSsoStatus
@@ -40,18 +34,15 @@ test.after(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
-test('sso service binds and unbinds auth-provider agents generically', () => {
+test('sso service enables and disables ssoProvider agents', () => {
     const providers = listAuthProviders();
     assert.equal(providers.length, 1);
     assert.equal(providers[0].agentRef, 'fake/fakeProvider');
 
-    const binding = bindSsoProvider('fake/fakeProvider', {
+    const selected = bindSsoProvider('fake/fakeProvider', {
         providerConfig: { issuerBaseUrl: 'https://fake.test' }
     });
-    assert.equal(binding.provider, 'fake/fakeProvider');
-
-    const savedBinding = getSsoBinding();
-    assert.equal(savedBinding?.provider, 'fake/fakeProvider');
+    assert.equal(selected.provider, 'fake/fakeProvider');
 
     const config = getSsoConfig();
     assert.equal(config.enabled, true);
@@ -63,6 +54,5 @@ test('sso service binds and unbinds auth-provider agents generically', () => {
     assert.equal(status.config.providerAgent, 'fake/fakeProvider');
 
     unbindSsoProvider();
-    assert.equal(getSsoBinding(), null);
     assert.equal(getSsoConfig().enabled, false);
 });

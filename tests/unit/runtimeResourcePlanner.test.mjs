@@ -50,6 +50,21 @@ test('planRuntimeResources resolves persistentStorage and templated env', () => 
     assert.equal(plan.env.DPU_MASTER_KEY, 'test-master-key-123');
 });
 
+test('planRuntimeResources can expand storage container path to host path for host sandboxes', () => {
+    const plan = planRuntimeResources({
+        runtime: {
+            resources: {
+                persistentStorage: { key: 'dpu-data', containerPath: '/dpu-data' },
+                env: {
+                    DPU_DATA_ROOT: '{{STORAGE_CONTAINER_PATH}}',
+                },
+            },
+        },
+    }, { useHostStoragePath: true });
+    assert.equal(plan.env.DPU_DATA_ROOT, plan.persistentStorage.hostPath);
+    assert.match(plan.env.DPU_DATA_ROOT, /dpu-data$/);
+});
+
 test('ensurePersistentStorageHostDir is idempotent', () => {
     const plan = planRuntimeResources({
         runtime: {

@@ -2,8 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { parseEnableDirective } from './bootstrapManifest.js';
 import { findAgent } from './utils.js';
-
-const AUTH_PROVIDER_CONTRACT = 'auth-provider/v1';
+import { isSsoProviderManifest } from './agentRegistry.js';
 
 function normalizeAuthMode(value) {
     const normalized = String(value || '').trim().toLowerCase();
@@ -41,15 +40,6 @@ function resolveManifestAuthMode(manifest, registryRecord = null) {
     return 'none';
 }
 
-function isAuthProviderManifest(manifest) {
-    if (!manifest || typeof manifest !== 'object') return false;
-    const provides = manifest.provides && typeof manifest.provides === 'object' ? manifest.provides : {};
-    for (const key of Object.keys(provides)) {
-        if (String(key).toLowerCase() === AUTH_PROVIDER_CONTRACT) return true;
-    }
-    return false;
-}
-
 function manifestForAgentRef(agentRef) {
     try {
         const resolved = findAgent(agentRef);
@@ -64,7 +54,7 @@ function shouldEnableManifestDependency(agentRef, authMode) {
     const normalizedRef = String(agentRef || '').trim();
     if (!normalizedRef) return false;
     const manifest = manifestForAgentRef(normalizedRef);
-    if (manifest && isAuthProviderManifest(manifest)) {
+    if (manifest && isSsoProviderManifest(manifest)) {
         return authMode === 'sso';
     }
     return true;

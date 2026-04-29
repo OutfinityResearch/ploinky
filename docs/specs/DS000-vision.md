@@ -12,7 +12,7 @@ summary: Defines Ploinky as a workspace-local runtime for repository-backed agen
 
 Ploinky must operate as a workspace-local runtime for agents that are discovered from repository checkouts, started through a reproducible runtime layer, and exposed through a supervised local router. The repository does not document an abstract platform concept detached from the code; it documents the implementation that exists on the current branch.
 
-The repository also carries local maintenance skills under `.agents/skills/`, but those skills are not the primary product surface. The host project is the runtime itself: the CLI, the workspace model, the runtime backends, the router, the browser surfaces, the authentication layer, the capability registry, the dependency cache system, and the test harness.
+The repository also carries local maintenance skills under `.agents/skills/`, but those skills are not the primary product surface. The host project is the runtime itself: the CLI, the workspace model, the runtime backends, the router, the browser surfaces, the authentication layer, the agent registry, the dependency cache system, and the test harness.
 
 ## Core Content
 

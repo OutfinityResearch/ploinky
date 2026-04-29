@@ -33,13 +33,12 @@ import {
 import { clearLivenessState } from './healthProbes.js';
 import { stopAndRemove } from './containerFleet.js';
 import { DEFAULT_AGENT_ENTRY, launchAgentSidecar, readManifestAgentCommand, readManifestStartCommand, splitCommandArgs } from './agentCommands.js';
-import { ROUTING_FILE, WORKSPACE_ROOT } from '../config.js';
+import { PLOINKY_DIR, ROUTING_FILE, WORKSPACE_ROOT } from '../config.js';
 import {
     planRuntimeResources,
     applyRuntimeResourceEnv,
     ensurePersistentStorageHostDir
 } from '../runtimeResourcePlanner.js';
-import { resolveAgentDescriptor } from '../capabilityRegistry.js';
 import { deriveAgentPrincipalId } from '../agentIdentity.js';
 import { ensureSharedHostDir, runPostinstallHook } from './agentHooks.js';
 import { ensureBwrapService } from '../bwrap/bwrapServiceManager.js';
@@ -74,6 +73,115 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
 const AGENT_PRIVATE_KEY_CONTAINER_PATH = '/run/ploinky-agent.key';
+
+function containerRuntimeSegment(agentName) {
+    return String(agentName || 'agent').replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function pathTypeForSymlink(sourcePath) {
+    try {
+        return fs.statSync(sourcePath).isDirectory() ? 'dir' : 'file';
+    } catch (_) {
+        return 'file';
+    }
+}
+
+function normalizeStagedRelPath(relPath) {
+    return String(relPath || '')
+        .replace(/\\/g, '/')
+        .replace(/^\/+/, '')
+        .replace(/\/+$/, '');
+}
+
+function hasStagedOverrideDescendant(relPath, overrideRelPaths) {
+    const prefix = relPath ? `${relPath}/` : '';
+    for (const overridePath of overrideRelPaths) {
+        if (overridePath.startsWith(prefix) && overridePath !== relPath) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function stageSourceTreeWithOverrides(sourceDir, stagedDir, overrideRelPaths, baseRel = '') {
+    if (!fs.existsSync(sourceDir)) return;
+    fs.mkdirSync(stagedDir, { recursive: true });
+    for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+        const relPath = normalizeStagedRelPath(baseRel ? `${baseRel}/${entry.name}` : entry.name);
+        if (!relPath || overrideRelPaths.has(relPath)) continue;
+
+        const sourcePath = path.join(sourceDir, entry.name);
+        const stagedPath = path.join(stagedDir, entry.name);
+        if (entry.isDirectory() && hasStagedOverrideDescendant(relPath, overrideRelPaths)) {
+            stageSourceTreeWithOverrides(sourcePath, stagedPath, overrideRelPaths, relPath);
+            continue;
+        }
+        fs.symlinkSync(sourcePath, stagedPath, pathTypeForSymlink(sourcePath));
+    }
+}
+
+function writeStagedSymlink(stagedCodePath, relPath, hostPath) {
+    const normalizedRelPath = normalizeStagedRelPath(relPath);
+    if (!normalizedRelPath) return;
+    const linkPath = path.join(stagedCodePath, ...normalizedRelPath.split('/'));
+    fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+    try {
+        fs.rmSync(linkPath, { recursive: true, force: true });
+    } catch (_) {}
+    fs.symlinkSync(hostPath, linkPath, pathTypeForSymlink(hostPath));
+}
+
+function ensurePodmanStagedAgentLibDir(agentName, nodeModulesDir, options = {}) {
+    const runtimeRoot = options.runtimeRoot
+        || path.join(PLOINKY_DIR, 'container-runtime', containerRuntimeSegment(agentName));
+    const stagedAgentLibPath = path.join(runtimeRoot, `Agent-${process.pid}-${Date.now()}`);
+    const sourceNodeModules = path.join(AGENT_LIB_PATH, 'node_modules');
+
+    fs.mkdirSync(runtimeRoot, { recursive: true });
+    fs.cpSync(AGENT_LIB_PATH, stagedAgentLibPath, {
+        recursive: true,
+        filter(sourcePath) {
+            const resolvedSource = path.resolve(sourcePath);
+            return resolvedSource !== sourceNodeModules
+                && !resolvedSource.startsWith(`${sourceNodeModules}${path.sep}`);
+        }
+    });
+    fs.symlinkSync(nodeModulesDir, path.join(stagedAgentLibPath, 'node_modules'), 'dir');
+    return stagedAgentLibPath;
+}
+
+function ensurePodmanStagedCodeDir(agentName, agentCodePath, nodeModulesDir, codeLinks = new Map(), options = {}) {
+    const runtimeRoot = options.runtimeRoot
+        || path.join(PLOINKY_DIR, 'container-runtime', containerRuntimeSegment(agentName));
+    const stagedCodePath = path.join(runtimeRoot, `code-${process.pid}-${Date.now()}`);
+    const normalizedLinks = new Map();
+    for (const [relPath, hostPath] of codeLinks.entries()) {
+        const normalizedRelPath = normalizeStagedRelPath(relPath);
+        if (normalizedRelPath) {
+            normalizedLinks.set(normalizedRelPath, hostPath);
+        }
+    }
+    normalizedLinks.set('node_modules', nodeModulesDir);
+
+    fs.mkdirSync(stagedCodePath, { recursive: true });
+    stageSourceTreeWithOverrides(agentCodePath, stagedCodePath, new Set(normalizedLinks.keys()));
+    for (const [relPath, hostPath] of normalizedLinks.entries()) {
+        writeStagedSymlink(stagedCodePath, relPath, hostPath);
+    }
+    return stagedCodePath;
+}
+
+function codeRelativeMountPath(containerPath) {
+    const normalized = String(containerPath || '').replace(/\\/g, '/').replace(/\/+/g, '/');
+    if (!normalized.startsWith('/code/')) return null;
+    return normalizeStagedRelPath(normalized.slice('/code/'.length));
+}
+
+function isPathWithin(childPath, parentPath) {
+    const relativePath = path.relative(parentPath, childPath);
+    return relativePath === ''
+        || (relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
 
 /**
  * Resolve a symlink path to its actual target.
@@ -311,6 +419,42 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const manifestInstallCmd = String(profileConfig?.install || manifest?.install || '').trim();
     const combinedInstallCmd = manifestInstallCmd;
 
+    const podmanCodeLinks = new Map();
+    const manifestVolumeMounts = [];
+    if (manifest.volumes && typeof manifest.volumes === 'object') {
+        const workspaceRoot = WORKSPACE_ROOT;
+        const volumeOptions = readManifestVolumeOptions(manifest);
+        for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
+            const resolvedHostPath = path.isAbsolute(hostPath)
+                ? hostPath
+                : path.resolve(workspaceRoot, hostPath);
+            const options = volumeOptions[containerPath]
+                || volumeOptions[String(containerPath || '').replace(/\/+$/, '')]
+                || {};
+            ensureManifestVolumeHostPath(resolvedHostPath, containerPath, options);
+            const codeRelPath = runtime === 'podman' ? codeRelativeMountPath(containerPath) : null;
+            if (codeRelPath) {
+                podmanCodeLinks.set(codeRelPath, resolvedHostPath);
+            } else {
+                manifestVolumeMounts.push({ resolvedHostPath, containerPath });
+            }
+        }
+    }
+
+    const skillsPathExists = fs.existsSync(agentSkillsPath);
+    const skillsPathInsideCode = skillsPathExists && isPathWithin(agentSkillsPath, agentCodePath);
+    if (runtime === 'podman' && skillsPathExists && !skillsPathInsideCode) {
+        podmanCodeLinks.set('skills', agentSkillsPath);
+    }
+
+    let agentLibMountPath = AGENT_LIB_PATH;
+    let codeMountPath = agentCodePath;
+    const useNestedDependencyMounts = runtime !== 'podman';
+    if (runtime === 'podman') {
+        agentLibMountPath = ensurePodmanStagedAgentLibDir(agentName, preparedNodeModulesDir);
+        codeMountPath = ensurePodmanStagedCodeDir(agentName, agentCodePath, preparedNodeModulesDir, podmanCodeLinks);
+    }
+
     // Ensure the agent work directory exists on host
     createAgentWorkDir(agentName);
 
@@ -320,17 +464,19 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const containerWorkdir = String(manifest?.workdir || '/code').trim() || '/code';
     const args = ['run', '-d', '--name', containerName, '--label', `ploinky.envhash=${envHash}`, '-w', containerWorkdir,
         // Agent library (always ro)
-        '-v', `${AGENT_LIB_PATH}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
+        '-v', `${agentLibMountPath}:/Agent${runtime === 'podman' ? ':ro,z' : ':ro'}`,
         // Code directory - profile dependent (rw in dev, ro in qa/prod)
-        '-v', `${agentCodePath}:/code${codeMountMode}`,
-        // node_modules mounts - ESM resolution walks up from script location
-        // Mount at both /code/node_modules (for agent code) and /Agent/node_modules (for AgentServer.mjs)
-        '-v', `${preparedNodeModulesDir}:/code/node_modules${nodeModulesMount}`,
-        '-v', `${preparedNodeModulesDir}:/Agent/node_modules${nodeModulesMount}`,
+        '-v', `${codeMountPath}:/code${codeMountMode}`,
+        ...(useNestedDependencyMounts ? [
+            // node_modules mounts - ESM resolution walks up from script location
+            // Mount at both /code/node_modules (for agent code) and /Agent/node_modules (for AgentServer.mjs)
+            '-v', `${preparedNodeModulesDir}:/code/node_modules${nodeModulesMount}`,
+            '-v', `${preparedNodeModulesDir}:/Agent/node_modules${nodeModulesMount}`,
+        ] : []),
         // Shared directory
         '-v', `${sharedDir}:/shared${runtime === 'podman' ? ':z' : ''}`,
         // CWD passthrough - provides access to agents/<name>/ for runtime data
-        '-v', `${cwd}:${cwd}${runtime === 'podman' ? ':z' : ''}`
+        '-v', `${runtime === 'podman' ? WORKSPACE_ROOT : cwd}:${runtime === 'podman' ? WORKSPACE_ROOT : cwd}${runtime === 'podman' ? ':z' : ''}`
     ];
 
     // Some modes (for example devel) run with cwd outside the isolated
@@ -345,7 +491,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     }
 
     // Mount skills directory if it exists
-    if (fs.existsSync(agentSkillsPath)) {
+    if (skillsPathExists && !skillsPathInsideCode && runtime !== 'podman') {
         args.push('-v', `${agentSkillsPath}:/code/skills${skillsMountMode}`);
     }
     const manifestNetwork = manifest?.network && typeof manifest.network === 'object' ? manifest.network : null;
@@ -370,19 +516,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         args.splice(1, 0, '--add-host', 'host.docker.internal:host-gateway');
     }
 
-    if (manifest.volumes && typeof manifest.volumes === 'object') {
-        const workspaceRoot = WORKSPACE_ROOT;
-        const volumeOptions = readManifestVolumeOptions(manifest);
-        for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
-            const resolvedHostPath = path.isAbsolute(hostPath)
-                ? hostPath
-                : path.resolve(workspaceRoot, hostPath);
-            const options = volumeOptions[containerPath]
-                || volumeOptions[String(containerPath || '').replace(/\/+$/, '')]
-                || {};
-            ensureManifestVolumeHostPath(resolvedHostPath, containerPath, options);
-            args.push('-v', `${resolvedHostPath}:${containerPath}${runtime === 'podman' ? ':z' : ''}`);
-        }
+    for (const { resolvedHostPath, containerPath } of manifestVolumeMounts) {
+        args.push('-v', `${resolvedHostPath}:${containerPath}${runtime === 'podman' ? ':z' : ''}`);
     }
 
     const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest, profileConfig);
@@ -538,13 +673,15 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         type: 'agent',
         config: {
             binds: [
-                { source: AGENT_LIB_PATH, target: '/Agent', ro: true },
-                { source: agentCodePath, target: '/code', ro: codeReadOnly },
-                { source: preparedNodeModulesDir, target: '/code/node_modules', ro: true },
-                { source: preparedNodeModulesDir, target: '/Agent/node_modules', ro: true },
+                { source: agentLibMountPath, target: '/Agent', ro: true },
+                { source: codeMountPath, target: '/code', ro: codeReadOnly },
+                ...(useNestedDependencyMounts ? [
+                    { source: preparedNodeModulesDir, target: '/code/node_modules', ro: true },
+                    { source: preparedNodeModulesDir, target: '/Agent/node_modules', ro: true },
+                ] : []),
                 { source: sharedDir, target: '/shared' },
-                ...(fs.existsSync(agentSkillsPath) ? [{ source: agentSkillsPath, target: '/skills', ro: skillsReadOnly }] : []),
-                { source: cwd, target: cwd }
+                ...(skillsPathExists && !skillsPathInsideCode && runtime !== 'podman' ? [{ source: agentSkillsPath, target: '/code/skills', ro: skillsReadOnly }] : []),
+                { source: runtime === 'podman' ? WORKSPACE_ROOT : cwd, target: runtime === 'podman' ? WORKSPACE_ROOT : cwd }
             ],
             env: Array.from(new Set(declaredEnvNames2)).map((name) => ({ name })),
             ports: portMappings
@@ -708,11 +845,19 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     }
     if (containerExists(containerName)) {
         console.log(`[ensureAgentService] ${agentName}: container exists, checking if running...`);
+        let canReuseExisting = true;
         if (!isContainerRunning(containerName)) {
             ensureManifestVolumeHostPaths(manifest);
             syncAgentMcpConfig(containerName, agentPath, agentName);
-            try { execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' }); } catch (e) { debugLog(`start ${containerName} error: ${e.message}`); }
-            if (withParallelAgent) {
+            try {
+                execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' });
+            } catch (e) {
+                canReuseExisting = false;
+                console.warn(`[ensureAgentService] ${agentName}: existing container failed to start; recreating (${e.message})`);
+                try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) { }
+                clearLivenessState(containerName);
+            }
+            if (canReuseExisting && withParallelAgent) {
                 try {
                     launchAgentSidecar({ containerName, agentCommand: explicitAgentCmd, agentName });
                 } catch (error) {
@@ -721,10 +866,12 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
                 }
             }
         }
-        console.log(`[ensureAgentService] ${agentName}: returning early (container exists)`);
-        const hostPort = resolveHostPort(containerName, existingRecord, containerPortCandidates);
-        syncAgentMcpConfig(containerName, agentPath, agentName);
-        return { containerName, hostPort };
+        if (canReuseExisting) {
+            console.log(`[ensureAgentService] ${agentName}: returning early (container exists)`);
+            const hostPort = resolveHostPort(containerName, existingRecord, containerPortCandidates);
+            syncAgentMcpConfig(containerName, agentPath, agentName);
+            return { containerName, hostPort };
+        }
     }
 
     let additionalPorts = [];
@@ -795,7 +942,9 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
 }
 
 export {
+    codeRelativeMountPath,
     ensureAgentService,
+    ensurePodmanStagedCodeDir,
     resolveHostPort,
     resolveHostPortFromRecord,
     resolveHostPortFromRuntime,

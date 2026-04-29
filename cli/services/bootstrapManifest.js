@@ -3,8 +3,7 @@ import path from 'path';
 import * as repos from './repos.js';
 import { enableAgent } from './agents.js';
 import { findAgent } from './utils.js';
-
-const AUTH_PROVIDER_CONTRACT = 'auth-provider/v1';
+import { isSsoProviderManifest } from './agentRegistry.js';
 
 export function parseEnableDirective(entry) {
     if (entry === null || entry === undefined) return null;
@@ -55,15 +54,6 @@ function resolveManifestAuthMode(manifest) {
     return 'none';
 }
 
-function isAuthProviderManifest(manifest) {
-    if (!manifest || typeof manifest !== 'object') return false;
-    const provides = manifest.provides && typeof manifest.provides === 'object' ? manifest.provides : {};
-    for (const key of Object.keys(provides)) {
-        if (String(key).toLowerCase() === AUTH_PROVIDER_CONTRACT) return true;
-    }
-    return false;
-}
-
 function manifestForDirective(parsedDirective) {
     const spec = String(parsedDirective?.spec || '').trim();
     if (!spec) return null;
@@ -82,7 +72,7 @@ function shouldEnableDirectiveForManifest(parsedDirective, manifest) {
     const spec = String(parsedDirective?.spec || '').trim();
     if (!spec) return false;
     const depManifest = manifestForDirective(parsedDirective);
-    if (depManifest && isAuthProviderManifest(depManifest)) {
+    if (depManifest && isSsoProviderManifest(depManifest)) {
         return resolveManifestAuthMode(manifest) === 'sso';
     }
     return true;

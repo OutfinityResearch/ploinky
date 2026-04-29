@@ -3,17 +3,17 @@ import {
     bindSsoProvider,
     unbindSsoProvider,
     gatherSsoStatus,
-    getSsoBinding,
+    getSsoConfig,
     listAuthProviders
 } from '../services/sso.js';
 
 function printProviderChoices(providers = []) {
     if (!providers.length) {
-        console.log('No auth-provider/v1 agents are installed.');
+        console.log('No SSO provider agents are installed.');
         console.log('Install a provider agent, then run `ploinky sso enable <providerAgent>`.');
         return;
     }
-    console.log('Installed auth-provider/v1 agents:');
+    console.log('Installed SSO provider agents:');
     for (const provider of providers) {
         console.log(`  - ${provider.agentRef}`);
     }
@@ -22,18 +22,18 @@ function printProviderChoices(providers = []) {
 function chooseProvider(explicitProvider) {
     if (explicitProvider) return explicitProvider;
 
-    const binding = getSsoBinding();
-    if (binding?.provider) return binding.provider;
+    const config = getSsoConfig();
+    if (config.providerAgent) return config.providerAgent;
 
     const providers = listAuthProviders();
     if (!providers.length) {
-        throw new Error('No auth-provider/v1 agents are installed.');
+        throw new Error('No SSO provider agents are installed.');
     }
 
     if (providers.length === 1) return providers[0].agentRef;
 
     const names = providers.map((provider) => provider.agentRef).join(', ');
-    throw new Error(`Multiple auth-provider/v1 agents are installed. Choose one explicitly: ${names}`);
+    throw new Error(`Multiple SSO provider agents are installed. Choose one explicitly: ${names}`);
 }
 
 function printSsoDetails(status) {
@@ -45,7 +45,6 @@ function printSsoDetails(status) {
     }
     console.log('SSO is enabled:');
     console.log(`  Provider: ${config.providerAgent}`);
-    console.log(`  Contract: auth-provider/v1`);
     console.log(`  Router port: ${routerPort}`);
     if (providerHostPort) {
         console.log(`  Provider port: ${providerHostPort}`);

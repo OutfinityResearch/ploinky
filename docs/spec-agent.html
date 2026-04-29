@@ -95,13 +95,8 @@
     "protocol": "tcp"                 // "tcp" or "mcp"
   },
 
-  // Capability contracts
-  "provides": {                       // Capabilities this agent provides
-    "auth-provider/v1": true
-  },
-  "requires": {                       // Capabilities this agent requires
-    "llm/v1": true
-  },
+  // SSO provider marker
+  "ssoProvider": true,                // Marks this agent as an SSO provider
 
   // Environment configuration
   "env": {
@@ -239,14 +234,9 @@
                                 <td>Object that configures startup readiness checks. Supports <code>{ "protocol": "tcp" }</code> or <code>{ "protocol": "mcp" }</code>.</td>
                             </tr>
                             <tr>
-                                <td><code>provides</code></td>
+                                <td><code>ssoProvider</code></td>
                                 <td>No</td>
-                                <td>Object declaring capability contracts the agent provides (e.g., <code>"auth-provider/v1"</code>). Used by the capability registry for inter-agent wiring.</td>
-                            </tr>
-                            <tr>
-                                <td><code>requires</code></td>
-                                <td>No</td>
-                                <td>Object declaring capability contracts the agent requires (e.g., <code>"llm/v1"</code>). Ploinky validates that a provider exists before starting.</td>
+                                <td>Boolean marker for agents that implement the workspace SSO provider runtime interface.</td>
                             </tr>
                             <tr>
                                 <td><code>profiles</code></td>

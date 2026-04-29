@@ -48,13 +48,13 @@ function resolveDataRootForKey(key) {
     return path.join(DEFAULT_DATA_ROOT, String(key || 'default'));
 }
 
-function expandTemplate(raw, { hostPath, containerPath }) {
+function expandTemplate(raw, { hostPath, containerPath, useHostStoragePath = false }) {
     if (typeof raw !== 'string') return raw == null ? '' : String(raw);
     return raw.replace(/\{\{([^}]+)\}\}/g, (match, exprRaw) => {
         const expr = String(exprRaw).trim();
         if (!expr) return '';
         if (expr === 'WORKSPACE_ROOT') return WORKSPACE_ROOT || '';
-        if (expr === 'STORAGE_CONTAINER_PATH') return containerPath || '';
+        if (expr === 'STORAGE_CONTAINER_PATH') return useHostStoragePath ? hostPath || '' : containerPath || '';
         if (expr === 'STORAGE_HOST_PATH') return hostPath || '';
         if (expr.startsWith('secret:')) {
             const name = expr.slice('secret:'.length).trim();
@@ -74,7 +74,7 @@ function expandTemplate(raw, { hostPath, containerPath }) {
     });
 }
 
-export function planRuntimeResources(manifest) {
+export function planRuntimeResources(manifest, options = {}) {
     const runtime = manifest && typeof manifest === 'object' ? manifest.runtime : null;
     const resources = runtime && typeof runtime === 'object' ? runtime.resources : null;
     if (!resources || typeof resources !== 'object') {
@@ -100,7 +100,8 @@ export function planRuntimeResources(manifest) {
     const rawEnv = resources.env && typeof resources.env === 'object' ? resources.env : {};
     const ctx = {
         hostPath: plan.persistentStorage?.hostPath || '',
-        containerPath: plan.persistentStorage?.containerPath || ''
+        containerPath: plan.persistentStorage?.containerPath || '',
+        useHostStoragePath: options.useHostStoragePath === true
     };
     for (const [name, rawValue] of Object.entries(rawEnv)) {
         if (!name) continue;

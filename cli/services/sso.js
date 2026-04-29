@@ -3,12 +3,9 @@ import fs from 'fs';
 import * as workspaceSvc from './workspace.js';
 import { ROUTING_FILE } from './config.js';
 import {
-    listProvidersForContract,
     resolveAgentDescriptor,
-    setCapabilityBinding,
-    removeCapabilityBinding,
-    getCapabilityBinding
-} from './capabilityRegistry.js';
+    listSsoProviders,
+} from './agentRegistry.js';
 
 function readRouting() {
     try {
@@ -93,8 +90,7 @@ function writeWorkspaceSsoConfig(nextSso) {
 
 function getSsoConfig() {
     const sso = readWorkspaceSsoConfig();
-    const binding = getCapabilityBinding({ consumer: 'workspace', alias: 'sso' }) || null;
-    const providerAgent = binding?.provider || sso.providerAgent || null;
+    const providerAgent = sso.providerAgent || null;
     const providerAgentShort = extractShortAgentName(providerAgent);
     const providerConfig = sso.providerConfig && typeof sso.providerConfig === 'object'
         ? { ...sso.providerConfig }
@@ -156,17 +152,9 @@ function bindSsoProvider(providerAgentRef, options = {}) {
     if (!descriptor) {
         throw new Error(`bindSsoProvider: agent '${providerAgentRef}' is not installed.`);
     }
-    const provides = descriptor.provides || {};
-    if (!provides['auth-provider/v1']) {
-        throw new Error(`bindSsoProvider: agent '${providerAgentRef}' does not implement auth-provider/v1.`);
+    if (!descriptor.ssoProvider) {
+        throw new Error(`bindSsoProvider: agent '${providerAgentRef}' is not marked with ssoProvider: true.`);
     }
-    const binding = setCapabilityBinding({
-        consumer: 'workspace',
-        alias: 'sso',
-        provider: descriptor.agentRef,
-        contract: 'auth-provider/v1',
-        approvedScopes: provides['auth-provider/v1'].supportedScopes || []
-    });
     const current = readWorkspaceSsoConfig();
     writeWorkspaceSsoConfig({
         ...current,
@@ -177,11 +165,16 @@ function bindSsoProvider(providerAgentRef, options = {}) {
             ? { ...(current.providerConfig || {}), ...options.providerConfig }
             : (current.providerConfig || {})
     });
-    return binding;
+    return {
+        provider: descriptor.agentRef,
+        agentRef: descriptor.agentRef,
+        repo: descriptor.repo,
+        agent: descriptor.agent,
+        principalId: descriptor.principalId,
+    };
 }
 
 function unbindSsoProvider() {
-    removeCapabilityBinding({ consumer: 'workspace', alias: 'sso' });
     const current = readWorkspaceSsoConfig();
     writeWorkspaceSsoConfig({
         ...current,
@@ -189,12 +182,8 @@ function unbindSsoProvider() {
     });
 }
 
-function getSsoBinding() {
-    return getCapabilityBinding({ consumer: 'workspace', alias: 'sso' }) || null;
-}
-
 function listAuthProviders() {
-    return listProvidersForContract('auth-provider/v1').map((descriptor) => ({
+    return listSsoProviders().map((descriptor) => ({
         agentRef: descriptor.agentRef,
         repo: descriptor.repo,
         agent: descriptor.agent,
@@ -215,6 +204,5 @@ export {
     extractShortAgentName,
     bindSsoProvider,
     unbindSsoProvider,
-    getSsoBinding,
     listAuthProviders
 };

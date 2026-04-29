@@ -8,15 +8,13 @@ const originalCwd = process.cwd();
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-bridge-'));
 fs.mkdirSync(path.join(tempDir, '.ploinky'), { recursive: true });
 
-// Install a fake auth-provider/v1 agent under .ploinky/repos/fake/fakeProvider/
+// Install a fake SSO provider agent under .ploinky/repos/fake/fakeProvider/
 const providerDir = path.join(tempDir, '.ploinky', 'repos', 'fake', 'fakeProvider');
 fs.mkdirSync(path.join(providerDir, 'runtime'), { recursive: true });
 fs.writeFileSync(
     path.join(providerDir, 'manifest.json'),
     JSON.stringify({
-        provides: {
-            'auth-provider/v1': { operations: ['sso_begin_login'], supportedScopes: ['auth:login'] }
-        }
+        ssoProvider: true,
     }, null, 2)
 );
 fs.writeFileSync(
@@ -40,7 +38,6 @@ export function resolveProviderConfig({ providerConfig = {} } = {}) {
 }
 export function createProvider({ getConfig }) {
     return {
-        contract: 'auth-provider/v1',
         name: 'fake/fakeProvider',
         async sso_begin_login({ redirectUri, prompt }) {
             const cfg = await getConfig();
@@ -107,7 +104,6 @@ function writeWorkspaceSsoConfig(nextSso) {
 }
 
 const moduleSuffix = `?test=${Date.now()}`;
-const { setCapabilityBinding, removeCapabilityBinding } = await import(`../../cli/services/capabilityRegistry.js${moduleSuffix}`);
 const bridgeModule = await import(`../../cli/server/auth/genericAuthBridge.js${moduleSuffix}`);
 const { createGenericAuthBridge } = bridgeModule;
 
@@ -116,7 +112,7 @@ test.after(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
-test('generic bridge requires a workspace:sso binding', async () => {
+test('generic bridge requires configured SSO provider', async () => {
     const bridge = createGenericAuthBridge();
     await assert.rejects(
         bridge.beginLogin({ baseUrl: 'http://127.0.0.1:8080' }),
@@ -125,16 +121,9 @@ test('generic bridge requires a workspace:sso binding', async () => {
 });
 
 test('generic bridge orchestrates begin/callback/refresh/logout through provider', async () => {
-    // Bind `workspace:sso` to our fake provider.
-    setCapabilityBinding({
-        consumer: 'workspace',
-        alias: 'sso',
-        provider: 'fake/fakeProvider',
-        contract: 'auth-provider/v1',
-        approvedScopes: ['auth:login']
-    });
     writeWorkspaceSsoConfig({
         enabled: true,
+        providerAgent: 'fake/fakeProvider',
         providerConfig: {
             issuerBaseUrl: 'https://fake.test',
             clientId: 'fake-client'
@@ -170,20 +159,12 @@ test('generic bridge orchestrates begin/callback/refresh/logout through provider
     assert.ok(ops.includes('sso_handle_callback'));
     assert.ok(ops.includes('sso_refresh_session'));
     assert.ok(ops.includes('sso_logout'));
-
-    removeCapabilityBinding({ consumer: 'workspace', alias: 'sso' });
 });
 
 test('bridge rejects unknown state on callback', async () => {
-    setCapabilityBinding({
-        consumer: 'workspace',
-        alias: 'sso',
-        provider: 'fake/fakeProvider',
-        contract: 'auth-provider/v1',
-        approvedScopes: ['auth:login']
-    });
     writeWorkspaceSsoConfig({
         enabled: true,
+        providerAgent: 'fake/fakeProvider',
         providerConfig: {
             issuerBaseUrl: 'https://fake.test',
             clientId: 'fake-client'
@@ -194,5 +175,4 @@ test('bridge rejects unknown state on callback', async () => {
         bridge.handleCallback({ code: 'x', state: 'bogus', baseUrl: 'http://127.0.0.1:8080' }),
         /Invalid or expired/
     );
-    removeCapabilityBinding({ consumer: 'workspace', alias: 'sso' });
 });

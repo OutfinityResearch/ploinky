@@ -6,7 +6,7 @@ import { createSessionStore } from './sessionStore.js';
 import { randomId } from './utils.js';
 import { resolveVarValue } from '../../services/secretVars.js';
 import { getConfig as getWorkspaceConfig } from '../../services/workspace.js';
-import { getCapabilityBinding, resolveAgentDescriptor } from '../../services/capabilityRegistry.js';
+import { resolveAgentDescriptor } from '../../services/agentRegistry.js';
 import { findAgent } from '../../services/utils.js';
 
 /**
@@ -16,8 +16,7 @@ import { findAgent } from '../../services/utils.js';
  *   - keeps cookie issuance, workspace session store, dev-only web-token
  *     auth, local auth fallback, and browser pending-auth state;
  *   - delegates OIDC-specific work (auth URL, callback exchange, JWT verify,
- *     refresh, logout, claim extraction) to the `auth-provider/v1`
- *     implementation that the workspace binding points to.
+ *     refresh, logout, claim extraction) to the configured SSO provider agent.
  *
  * The bridge never parses provider-specific claim or URL shapes. The provider
  * returns a `providerSession` blob and a normalized `user` — core treats both
@@ -73,18 +72,26 @@ async function loadProviderModule(providerAgentRef) {
     return mod;
 }
 
-function resolveBoundSsoProvider() {
-    const binding = getCapabilityBinding({ consumer: 'workspace', alias: 'sso' });
-    if (!binding) return null;
-    if (binding.contract !== 'auth-provider/v1') return null;
-    return binding;
+function readSsoConfig() {
+    let workspaceConfig;
+    try { workspaceConfig = getWorkspaceConfig(); } catch (_) { workspaceConfig = {}; }
+    return workspaceConfig?.sso && typeof workspaceConfig.sso === 'object' ? workspaceConfig.sso : {};
+}
+
+function resolveConfiguredSsoProvider() {
+    const sso = readSsoConfig();
+    if (sso.enabled !== true) return '';
+    return typeof sso.providerAgent === 'string' && sso.providerAgent.trim()
+        ? sso.providerAgent.trim()
+        : '';
 }
 
 async function resolveProviderConfig(mod) {
-    let workspaceConfig;
-    try { workspaceConfig = getWorkspaceConfig(); } catch (_) { workspaceConfig = {}; }
+    const workspaceConfig = (() => {
+        try { return getWorkspaceConfig(); } catch (_) { return {}; }
+    })();
     const sso = workspaceConfig?.sso && typeof workspaceConfig.sso === 'object' ? workspaceConfig.sso : {};
-    if (sso.enabled === false) return null;
+    if (sso.enabled !== true) return null;
 
     const providerConfig = sso.providerConfig && typeof sso.providerConfig === 'object'
         ? { ...sso.providerConfig }
@@ -116,31 +123,30 @@ export function createGenericAuthBridge(options = {}) {
     let providerFingerprint = null;
     let configFingerprint = null;
 
-    function fingerprintFor(config, binding) {
+    function fingerprintFor(config, providerAgent) {
         return JSON.stringify({
-            provider: binding?.provider || null,
-            bId: binding?.id || null,
-            config: config || null
+            provider: providerAgent || null,
+            config: config || null,
         });
     }
 
     async function ensureProvider() {
-        const binding = resolveBoundSsoProvider();
-        if (!binding) throw new Error('SSO is not configured (no workspace:sso binding)');
-        const mod = await loadProviderModule(binding.provider);
+        const providerAgent = resolveConfiguredSsoProvider();
+        if (!providerAgent) throw new Error('SSO is not configured (no provider agent configured)');
+        const mod = await loadProviderModule(providerAgent);
         const config = await resolveProviderConfig(mod);
         if (!config) throw new Error('SSO is not configured (incomplete config values)');
-        const nextFingerprint = fingerprintFor(config, binding);
-        if (providerInstance && providerFingerprint === binding.provider && configFingerprint === nextFingerprint) {
-            return { provider: providerInstance, binding, config };
+        const nextFingerprint = fingerprintFor(config, providerAgent);
+        if (providerInstance && providerFingerprint === providerAgent && configFingerprint === nextFingerprint) {
+            return { provider: providerInstance, providerAgent, config };
         }
         const provider = mod.createProvider({
             getConfig: async () => resolveProviderConfig(mod)
         });
         providerInstance = provider;
-        providerFingerprint = binding.provider;
+        providerFingerprint = providerAgent;
         configFingerprint = nextFingerprint;
-        return { provider, binding, config };
+        return { provider, providerAgent, config };
     }
 
     function cleanupPending() {
@@ -174,12 +180,12 @@ export function createGenericAuthBridge(options = {}) {
 
     async function beginLogin({ baseUrl, returnTo = '/', prompt } = {}) {
         cleanupPending();
-        const { provider, config, binding } = await ensureProvider();
+        const { provider, config, providerAgent } = await ensureProvider();
         const redirectUri = resolveRedirectUri(baseUrl, config);
         const { authorizationUrl, providerState, expiresAt } = await provider.sso_begin_login({ redirectUri, prompt });
         const coreState = randomId(16);
         pendingAuth.set(coreState, {
-            providerAgent: binding.provider,
+            providerAgent,
             providerState,
             redirectUri,
             returnTo: returnTo || '/',
@@ -294,13 +300,7 @@ export function createGenericAuthBridge(options = {}) {
     }
 
     function isConfigured() {
-        const binding = resolveBoundSsoProvider();
-        if (!binding) return false;
-        let workspaceConfig;
-        try { workspaceConfig = getWorkspaceConfig(); } catch (_) { workspaceConfig = {}; }
-        const sso = workspaceConfig?.sso && typeof workspaceConfig.sso === 'object' ? workspaceConfig.sso : {};
-        if (sso.enabled === false) return false;
-        return true;
+        return Boolean(resolveConfiguredSsoProvider());
     }
 
     function getSessionCookieMaxAge() {

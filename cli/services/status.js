@@ -5,7 +5,7 @@ import { PLOINKY_DIR, ROUTING_FILE } from './config.js';
 import * as reposSvc from './repos.js';
 import { collectLiveAgentContainers, getAgentsRegistry } from './docker/index.js';
 import { findAgent } from './utils.js';
-import { gatherSsoStatus, getSsoBinding, listAuthProviders } from './sso.js';
+import { gatherSsoStatus, listAuthProviders } from './sso.js';
 
 const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
 const PREDEFINED_REPOS = reposSvc.getPredefinedRepos();
@@ -340,10 +340,7 @@ function listReposForStatus() {
 }
 
 function printSsoStatusSummary(ssoStatus) {
-    const binding = (() => {
-        try { return getSsoBinding(); } catch (_) { return null; }
-    })();
-    const enabled = Boolean(ssoStatus.config.enabled) && Boolean(binding);
+    const enabled = Boolean(ssoStatus.config.enabled) && Boolean(ssoStatus.config.providerAgent);
     if (!enabled) {
         console.log(`- ${styles.label('SSO')}: ${styles.danger('disabled')}`);
         const installedProviders = (() => {
@@ -351,23 +348,19 @@ function printSsoStatusSummary(ssoStatus) {
         })();
         if (installedProviders.length) {
             const names = installedProviders.map((p) => p.agentRef).join(', ');
-            console.log(`  ${bulletSymbol} ${styles.muted(`Installed auth-provider/v1 providers: ${names}`)}`);
+            console.log(`  ${bulletSymbol} ${styles.muted(`Installed SSO providers: ${names}`)}`);
         } else {
-            console.log(`  ${bulletSymbol} ${styles.muted('No auth-provider/v1 agents installed. Install one, then run: sso enable <providerAgent>')}`);
+            console.log(`  ${bulletSymbol} ${styles.muted('No SSO provider agents installed. Install one, then run: sso enable <providerAgent>')}`);
         }
         return;
     }
 
     console.log(`- ${styles.label('SSO')}: ${styles.success('enabled')}`);
-    const providerAgent = binding?.provider || ssoStatus.config.providerAgent || '-';
+    const providerAgent = ssoStatus.config.providerAgent || '-';
     const providerHost = ssoStatus.providerHostPort
         ? ` ${styles.muted(`(host port ${ssoStatus.providerHostPort})`)}`
         : '';
     console.log(`  ${bulletSymbol} ${styles.label('Provider agent')}: ${styles.accent(providerAgent)}${providerHost}`);
-    console.log(`  ${bulletSymbol} ${styles.label('Contract')}: ${styles.muted('auth-provider/v1')}`);
-    if (Array.isArray(binding?.approvedScopes) && binding.approvedScopes.length) {
-        console.log(`  ${bulletSymbol} ${styles.label('Approved scopes')}: ${binding.approvedScopes.join(', ')}`);
-    }
     const providerConfig = ssoStatus.config.providerConfig || {};
     const baseUrl = providerConfig.baseUrl || '(unset)';
     const redirectUri = providerConfig.redirectUri || `http://127.0.0.1:${ssoStatus.routerPort}/auth/callback`;

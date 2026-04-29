@@ -20,16 +20,16 @@ When an operator enables an agent, Ploinky must persist a registry record in `.p
 
 Alias handling is part of the stable contract. Aliases must be unique inside the workspace, must follow the repository’s allowed character set, and must be treated as route keys and container-name differentiators. Commands that target a specific running alias must be able to use that alias instead of the canonical short agent name.
 
-The manifest surface may define startup commands, CLI commands, readiness hints, capabilities, dependencies, profiles, runtime resources, local password defaults, repository bootstrap directives, and enable directives. Manifest `enable` entries may pull in additional agents and may attach aliases. Manifest `repos` entries may clone and enable repositories before dependent agents are resolved.
+The manifest surface may define startup commands, CLI commands, readiness hints, dependencies, profiles, runtime resources, local password defaults, SSO-provider markers, repository bootstrap directives, and enable directives. Manifest `enable` entries may pull in additional agents and may attach aliases. Manifest `repos` entries may clone and enable repositories before dependent agents are resolved.
 
-Manifest enablement is conditional for auth providers. If a dependency manifest advertises the `auth-provider/v1` contract, it should only be auto-enabled for a dependent manifest when that dependent resolved to SSO mode. This keeps password-only or no-auth workspaces from booting unused auth-provider dependencies.
+Manifest enablement is conditional for SSO providers. If a dependency manifest sets `ssoProvider: true`, it should only be auto-enabled for a dependent manifest when that dependent resolved to SSO mode. This keeps password-only or no-auth workspaces from booting unused SSO-provider dependencies.
 
 ## Decisions & Questions
 
-### Question #1: Why are auth-provider dependencies conditionally enabled?
+### Question #1: Why are SSO-provider dependencies conditionally enabled?
 
 Response:
-The implementation checks whether a dependent manifest resolves to SSO mode before auto-enabling a provider that advertises `auth-provider/v1`. This avoids starting unnecessary auth-provider agents in workspaces that use token-based or local-password access and keeps manifest dependency behavior aligned with the chosen auth path.
+The implementation checks whether a dependent manifest resolves to SSO mode before auto-enabling a provider marked with `ssoProvider: true`. This avoids starting unnecessary SSO-provider agents in workspaces that use token-based or local-password access and keeps manifest dependency behavior aligned with the chosen auth path.
 
 ### Question #2: Why do aliases participate in both routing and execution identity?
 
@@ -38,4 +38,4 @@ The router needs a stable per-instance route key, and the runtime needs a stable
 
 ## Conclusion
 
-The manifest and registry layers define what an agent is, how it is named, and how workspace state persists operator choices. Ploinky must continue to interpret manifest directives and registry entries consistently so that startup, routing, auth, and capability flows remain reproducible.
+The manifest and registry layers define what an agent is, how it is named, and how workspace state persists operator choices. Ploinky must continue to interpret manifest directives and registry entries consistently so that startup, routing, and auth flows remain reproducible.

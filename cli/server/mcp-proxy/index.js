@@ -7,7 +7,7 @@ import {
     buildDelegatedInvocation,
     verifyDelegatedToolCall
 } from './invocationMinter.js';
-import { getAgentDescriptorByPrincipal } from '../../services/capabilityRegistry.js';
+import { getAgentDescriptorByPrincipal } from '../../services/agentRegistry.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
 const AGENT_PROXY_SERVER_INFO = { name: 'ploinky-router-proxy', version: '1.0.0' };
@@ -43,7 +43,7 @@ function isSecureWireEnabled() {
 
 function resolveProviderAgentRef(agentName) {
     // agentName is typically the short route name. Find the full repo/agent
-    // reference so the capability registry can resolve principal/contract.
+    // reference so the agent registry can resolve the provider principal.
     try {
         const descriptor = getAgentDescriptorByPrincipal(`agent:${agentName}`);
         if (descriptor) return descriptor.agentRef;

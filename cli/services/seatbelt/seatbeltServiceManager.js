@@ -47,6 +47,10 @@ import {
     getExposedNames,
     getManifestEnvNames
 } from '../secretVars.js';
+import {
+    ensurePersistentStorageHostDir,
+    planRuntimeResources
+} from '../runtimeResourcePlanner.js';
 // Reuse bwrap PID management (platform-agnostic)
 import {
     isBwrapProcessRunning,
@@ -380,8 +384,11 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     }
     const hostPort = allPortMappings[0]?.hostPort;
 
+    const runtimeResourcePlan = planRuntimeResources(manifest, { useHostStoragePath: true });
+    ensurePersistentStorageHostDir(runtimeResourcePlan);
+
     // Build environment map (reuse bwrap's builder with 'seatbelt' runtimeName)
-    const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'seatbelt');
+    const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'seatbelt', runtimeResourcePlan);
 
     // Set PORT env var
     if (hostPort) {
@@ -417,7 +424,10 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
         skillsReadOnly,
         volumes: manifest.volumes,
         extraReadPaths: getSeatbeltExtraReadPaths(),
-        extraWritePaths: [LOGS_DIR]
+        extraWritePaths: [
+            LOGS_DIR,
+            ...(runtimeResourcePlan.persistentStorage?.hostPath ? [runtimeResourcePlan.persistentStorage.hostPath] : [])
+        ]
     });
     const profilePath = writeSeatbeltProfile(agentName, profileContent);
 
@@ -661,8 +671,11 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
     const seatbeltAgentLibPath = ensureSeatbeltAgentLibDir(agentName, nodeModulesDir);
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
+    const runtimeResourcePlan = planRuntimeResources(manifest, { useHostStoragePath: true });
+    ensurePersistentStorageHostDir(runtimeResourcePlan);
+
     // Build environment (same as running agent)
-    const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'seatbelt');
+    const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'seatbelt', runtimeResourcePlan);
     const hostPort = record.config?.ports?.[0]?.hostPort;
     if (hostPort) envMap.PORT = String(hostPort);
     envMap.PLOINKY_AGENT_LIB_DIR = seatbeltAgentLibPath;
@@ -691,7 +704,10 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
         skillsReadOnly,
         volumes: manifest.volumes,
         extraReadPaths: getSeatbeltExtraReadPaths(),
-        extraWritePaths: [LOGS_DIR]
+        extraWritePaths: [
+            LOGS_DIR,
+            ...(runtimeResourcePlan.persistentStorage?.hostPath ? [runtimeResourcePlan.persistentStorage.hostPath] : [])
+        ]
     });
     const profilePath = writeSeatbeltProfile(agentName, profileContent);
 

@@ -162,25 +162,25 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Writes the token to encrypted .ploinky/.secrets and prints an access URL. `echo $WEBDASHBOARD_TOKEN` to print it.'
         },
         'sso': {
-            description: 'Manage SSO provider bindings.',
+            description: 'Manage the workspace SSO provider.',
             subcommands: {
                 'enable': {
                     syntax: 'sso enable [providerAgent]',
-                    description: 'Bind workspace SSO to an installed auth-provider/v1 agent.',
+                    description: 'Enable workspace SSO with an installed ssoProvider agent.',
                     examples: [
                         'sso enable',
                         'sso enable <providerAgent>'
                     ],
-                    notes: 'If no provider is passed, Ploinky reuses the existing binding, selects the sole installed provider, or requires an explicit choice when multiple providers are installed.'
+                    notes: 'If no provider is passed, Ploinky reuses the existing provider, selects the sole installed provider, or requires an explicit choice when multiple providers are installed.'
                 },
                 'disable': {
                     syntax: 'sso disable',
-                    description: 'Remove the workspace SSO provider binding. Dev-only web-token auth remains unchanged.',
+                    description: 'Disable workspace SSO. Dev-only web-token auth remains unchanged.',
                     examples: [ 'sso disable' ]
                 },
                 'status': {
                     syntax: 'sso status',
-                    description: 'Show the current SSO provider binding and detected ports.',
+                    description: 'Show the current SSO provider and detected ports.',
                     examples: [ 'sso status' ]
                 }
             }

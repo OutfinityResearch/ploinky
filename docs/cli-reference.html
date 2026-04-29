@@ -159,7 +159,7 @@ enable agent demo as demo2           # second container with alias "demo2"</code
                             <tr><th>Flag</th><th>Description</th></tr>
                             <tr><td><code>--auth none</code></td><td>No authentication (default)</td></tr>
                             <tr><td><code>--auth pwd</code></td><td>Local password auth with HMAC-JWT sessions</td></tr>
-                            <tr><td><code>--auth sso</code></td><td>OIDC via capability-bound auth-provider agent</td></tr>
+                            <tr><td><code>--auth sso</code></td><td>OIDC via the configured SSO provider agent</td></tr>
                             <tr><td><code>--user / --password</code></td><td>Set credentials for pwd mode</td></tr>
                         </table>
 
@@ -398,14 +398,14 @@ webchat --rotate     # mint a new token</code></pre>
                         <h2>Authentication</h2>
 
                         <h3>sso</h3>
-                        <p>Bind or unbind an SSO provider agent for OIDC authentication.</p>
+                        <p>Enable or disable an SSO provider agent for OIDC authentication.</p>
                         <pre><code>sso [enable|disable|status]</code></pre>
                         <pre><code># Examples
-sso enable    # Bind the SSO provider agent
-sso disable   # Unbind the SSO provider
-sso status    # Show current SSO binding</code></pre>
+	sso enable    # Enable the SSO provider agent
+	sso disable   # Disable SSO
+	sso status    # Show current SSO provider</code></pre>
                         <div class="alert alert-info">
-                            The SSO provider must be an agent that declares the <code>auth-provider/v1</code> capability contract in its manifest.
+                            The SSO provider must be an installed agent with <code>"ssoProvider": true</code> in its manifest.
                         </div>
                     </div>
 
@@ -605,8 +605,7 @@ help cli       # Help for cli command</code></pre>
   "enable": ["other-agent global", "dep devel repoName"],
   "repos": { "repo1": "https://..." },
   "volumes": { "data": "/mnt/data" },
-  "provides": { "auth-provider/v1": { "scopes": ["openid"] } },
-  "requires": { "llm/v1": {} },
+	  "ssoProvider": true,
   "profiles": {
     "default": {
       "env": { "NODE_ENV": "development" },

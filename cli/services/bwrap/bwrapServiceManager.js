@@ -42,7 +42,6 @@ import {
     applyRuntimeResourceEnv,
     ensurePersistentStorageHostDir
 } from '../runtimeResourcePlanner.js';
-import { resolveAgentDescriptor } from '../capabilityRegistry.js';
 import { deriveAgentPrincipalId } from '../agentIdentity.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {

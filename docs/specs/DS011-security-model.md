@@ -13,7 +13,7 @@ summary: Defines Ploinky's trust boundaries, master-keyed storage, authenticatio
 
 Ploinky is a workspace-local runtime. Its security model is designed for a single operator or a trusted team running agents on a controlled host, not for hostile multi-tenant execution or arbitrary third-party agent hosting. The router, workspace state, runtime backends, and enabled agents form one local trust domain.
 
-This document is the system-level security contract. DS006 defines the older authentication and capability framing, including the secure-wire design that this specification supersedes where current behavior differs. This document combines the current branch behavior across storage, authentication, routing, agent invocation, sandboxing, static file serving, uploads, transcripts, and operational gaps. Earlier security material described `PLOINKY_WIRE_SECRET` as a separate persisted workspace secret; this document is the current authority: `PLOINKY_MASTER_KEY` is the workspace root key, and every per-purpose secret — including the bytes injected into agents as `PLOINKY_WIRE_SECRET` — is derived from it through HKDF-SHA256 with a domain-separated `info` label rather than being a copy of the master.
+This document is the system-level security contract. DS006 defines the older authentication and provider-selection framing, including the secure-wire design that this specification supersedes where current behavior differs. This document combines the current branch behavior across storage, authentication, routing, agent invocation, sandboxing, static file serving, uploads, transcripts, and operational gaps. Earlier security material described `PLOINKY_WIRE_SECRET` as a separate persisted workspace secret; this document is the current authority: `PLOINKY_MASTER_KEY` is the workspace root key, and every per-purpose secret — including the bytes injected into agents as `PLOINKY_WIRE_SECRET` — is derived from it through HKDF-SHA256 with a domain-separated `info` label rather than being a copy of the master.
 
 ## Core Content
 
@@ -64,7 +64,7 @@ The local account page permits a user to change their own username and password 
 
 ### SSO and Guest Sessions
 
-SSO is workspace-bound through the capability registry. The workspace binding `workspace:sso` must point to an installed provider that implements `auth-provider/v1`. Core auth code delegates provider-specific login URL creation, callback handling, refresh, logout, and user normalization to that provider. Core owns the random pending browser state, expiry, session cookie, and in-memory session store.
+SSO is workspace-bound through direct SSO config. The configured `providerAgent` must point to an installed provider whose manifest sets `ssoProvider: true`. Core auth code delegates provider-specific login URL creation, callback handling, refresh, logout, and user normalization to that provider. Core owns the random pending browser state, expiry, session cookie, and in-memory session store.
 
 SSO pending state must be short lived. The generic bridge currently keeps pending entries for five minutes and deletes them after callback consumption. SSO sessions are server-side records containing normalized user information and opaque provider session or token material. Refresh remains provider-driven.
 
@@ -96,9 +96,9 @@ Delegated agent calls must go back through the router. A caller presents its ori
 
 The shared-HMAC model does not provide non-repudiation between agents. The security invariant is that the router is the intended issuer and that normal agents receive invocation tokens only through router-mediated calls. It is not safe to use this model for mutually hostile agents that can read their own environment.
 
-### Capabilities and Domain Authorization
+### Agent Index and Domain Authorization
 
-The capability registry is an authorization input, not a complete authorization system. Agent manifests may declare `provides` contracts and `requires` aliases. Workspace bindings pin a consumer alias to a provider and approved scopes. These bindings are used for SSO provider selection and capability discovery.
+The installed-agent index is not an authorization system. It resolves installed agent references, deterministic agent principals, runtime resources, and SSO-provider markers. It does not grant domain permissions and does not negotiate provider scopes.
 
 Invocation scopes are broad by default for first-party and delegated calls when no explicit scopes are supplied. Domain agents that protect sensitive resources must enforce their own authorization using `authInfo` or the derived actor. For example, a secrets provider must check operation-specific scopes, user or agent identity, per-resource ACLs, and provider-specific policy files before granting access. Ploinky core must not claim that a router session alone authorizes every provider operation.
 

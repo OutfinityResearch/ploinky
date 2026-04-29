@@ -6,13 +6,10 @@
  * potentially with layers of { tool, input, arguments, params } wrappers,
  * and emit their response to stdout.
  *
- * In the new secure-wire world the envelope also carries:
+ * The secure-wire envelope also carries:
  *   - invocation: a verified invocation grant (set by the AgentServer after
- *     verifying the router's signed invocation_token). Tools MUST NOT invent
+ *     verifying the router's signed invocation token). Tools MUST NOT invent
  *     caller or delegated-user data outside of what this field exposes.
- *   - legacyAuthInfo: a transitional field that carries the deprecated
- *     x-ploinky-auth-info shape during migration. Consumers should prefer
- *     `invocation` over this when both are present.
  */
 
 export function readStdinFallback(process) {
@@ -74,20 +71,9 @@ export function extractInvocationGrant(envelope) {
     return grant;
 }
 
-export function extractLegacyAuthInfo(envelope) {
-    const metadata = extractMetadata(envelope);
-    const direct = metadata.authInfo && typeof metadata.authInfo === 'object'
-        ? metadata.authInfo
-        : null;
-    if (direct) return direct;
-    // historic: sometimes stuffed into metadata.auth (MCP meta passthrough)
-    const nested = metadata.auth && typeof metadata.auth === 'object' ? metadata.auth : null;
-    return nested;
-}
-
 /**
  * Derive a normalized actor suitable for ACL checks.
- * Prefers invocation grant, falls back to legacy auth info.
+ * Uses only the router-verified invocation grant.
  *
  * Returns:
  *   {
@@ -123,35 +109,7 @@ export function deriveActor(envelope) {
             invocationToken: String(metadata.invocationToken || ''),
             scope: Array.isArray(grant.scope) ? [...grant.scope] : [],
             tool: String(grant.tool || ''),
-            bindingId: String(grant.binding_id || ''),
-            contract: String(grant.contract || ''),
             workspaceId: String(grant.workspace_id || '')
-        };
-    }
-    const legacy = extractLegacyAuthInfo(envelope);
-    if (legacy) {
-        const agent = legacy.agent && typeof legacy.agent === 'object' ? legacy.agent : null;
-        const user = legacy.user && typeof legacy.user === 'object' ? legacy.user : null;
-        const agentPrincipal = String(agent?.principalId || '').trim();
-        return {
-            authenticated: Boolean(user || agent),
-            invocationVerified: false,
-            principalId: agentPrincipal || (user?.id ? `user:${user.id}` : ''),
-            agent: agent ? { principalId: agentPrincipal, name: String(agent.name || '') } : null,
-            delegatedUser: user
-                ? {
-                      id: String(user.id || ''),
-                      username: String(user.username || ''),
-                      email: String(user.email || ''),
-                      roles: Array.isArray(user.roles) ? [...user.roles] : []
-                  }
-                : null,
-            invocationToken: '',
-            scope: [],
-            tool: '',
-            bindingId: '',
-            contract: '',
-            workspaceId: ''
         };
     }
     return {
@@ -163,8 +121,6 @@ export function deriveActor(envelope) {
         invocationToken: '',
         scope: [],
         tool: '',
-        bindingId: '',
-        contract: '',
         workspaceId: ''
     };
 }
@@ -173,41 +129,12 @@ export function writeJson(value, stream) {
     (stream || process.stdout).write(JSON.stringify(value));
 }
 
-/**
- * Legacy helper: for tools that continue to read `authInfo` during migration.
- * Produces the old-style { user, agent, sessionId, ... } blob from whichever
- * source is available. Tools SHOULD migrate to deriveActor() over time.
- */
-export function toLegacyAuthInfo(envelope) {
-    const actor = deriveActor(envelope);
-    if (!actor.authenticated) return null;
-    const legacy = {};
-    if (actor.agent) {
-        legacy.agent = {
-            principalId: actor.agent.principalId,
-            name: actor.agent.name
-        };
-    }
-    if (actor.delegatedUser) {
-        legacy.user = { ...actor.delegatedUser };
-    }
-    if (actor.workspaceId) {
-        legacy.workspaceId = actor.workspaceId;
-    }
-    if (actor.invocationToken) {
-        legacy.invocationToken = actor.invocationToken;
-    }
-    return legacy;
-}
-
 export default {
     readStdinFallback,
     safeParseJson,
     unwrapInput,
     extractMetadata,
     extractInvocationGrant,
-    extractLegacyAuthInfo,
     deriveActor,
-    writeJson,
-    toLegacyAuthInfo
+    writeJson
 };
