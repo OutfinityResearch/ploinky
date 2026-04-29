@@ -14,6 +14,8 @@ import {
     getAgentContainerName,
     getRuntime,
     isContainerRunning,
+    parseManifestPorts,
+    resolveHostPortFromRuntime,
     stopConfiguredAgents,
     destroyWorkspaceContainers,
     ensureAgentService
@@ -536,27 +538,59 @@ async function handleCommand(args) {
                         console.error(`Failed to restart agent '${agentName}' via ${agentRuntime}: ${e.message}`);
                     }
                 } else {
-                    // Container restart: existing podman stop/start logic
+                    // Container restart: keep the watchdog from racing a split stop/start.
                     if (!isContainerRunning(containerName)) {
                         console.error(`Agent '${agentName}' is not running.`);
                         return;
                     }
 
-                    console.log(`Restarting (stop/start) agent '${agentName}'...`);
-
                     const runtime = getRuntime();
+                    console.log(`Restarting (${runtime}) agent '${agentName}'...`);
                     try {
-                        execSync(`${runtime} stop ${containerName}`, { stdio: 'inherit' });
-                    } catch (e) {
-                        console.error(`Failed to stop container ${containerName}: ${e.message}`);
-                        return;
-                    }
+                        execSync(`${runtime} restart ${containerName}`, { stdio: 'inherit' });
+                        try {
+                            const { portMappings } = parseManifestPorts(manifest);
+                            const containerPortCandidates = portMappings
+                                .map((mapping) => mapping?.containerPort)
+                                .filter((port) => typeof port === 'number' && port > 0);
+                            if (!containerPortCandidates.includes(7000)) {
+                                containerPortCandidates.push(7000);
+                            }
+                            const hostPort = resolveHostPortFromRuntime(containerName, containerPortCandidates);
+                            if (hostPort) {
+                                let cfg = { routes: {} };
+                                try { cfg = JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')) || { routes: {} }; } catch (_) {}
+                                cfg.routes = cfg.routes || {};
+                                const repoName = registryRecord?.record?.repoName || resolved.repo;
+                                const routeKey = registryRecord?.record?.alias || resolved.shortAgentName;
+                                cfg.routes[routeKey] = cfg.routes[routeKey] || {};
+                                cfg.routes[routeKey].container = containerName;
+                                cfg.routes[routeKey].hostPath = path.dirname(resolved.manifestPath);
+                                cfg.routes[routeKey].repo = repoName;
+                                cfg.routes[routeKey].agent = resolved.shortAgentName;
+                                if (registryRecord?.record?.alias) cfg.routes[routeKey].alias = registryRecord.record.alias;
+                                cfg.routes[routeKey].hostPort = hostPort;
 
-                    try {
-                        execSync(`${runtime} start ${containerName}`, { stdio: 'inherit' });
+                                const staticAgent = String(cfg.static?.agent || '').trim();
+                                if (staticAgent) {
+                                    const matches = new Set([resolved.shortAgentName, `${repoName}/${resolved.shortAgentName}`, `${repoName}:${resolved.shortAgentName}`]);
+                                    if (registryRecord?.record?.alias) {
+                                        matches.add(registryRecord.record.alias);
+                                    }
+                                    if (matches.has(staticAgent)) {
+                                        cfg.static.container = containerName;
+                                        cfg.static.hostPath = path.dirname(resolved.manifestPath);
+                                    }
+                                }
+
+                                fs.writeFileSync(ROUTING_FILE, JSON.stringify(cfg, null, 2));
+                            }
+                        } catch (routeError) {
+                            console.warn(`[restart] Agent '${agentName}' restarted, but routing update failed: ${routeError?.message || routeError}`);
+                        }
                         console.log('✓ Agent restarted.');
                     } catch (e) {
-                        console.error(`Failed to start container ${containerName}: ${e.message}`);
+                        console.error(`Failed to restart container ${containerName}: ${e.message}`);
                     }
                 }
             } else {
