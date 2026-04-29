@@ -73,6 +73,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
 const AGENT_PRIVATE_KEY_CONTAINER_PATH = '/run/ploinky-agent.key';
+const PODMAN_STAGED_NODE_OPTIONS = ['--preserve-symlinks', '--preserve-symlinks-main'];
 
 function containerRuntimeSegment(agentName) {
     return String(agentName || 'agent').replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -181,6 +182,39 @@ function isPathWithin(childPath, parentPath) {
     const relativePath = path.relative(parentPath, childPath);
     return relativePath === ''
         || (relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+function decodeFormattedEnvValue(rawValue) {
+    const raw = String(rawValue || '');
+    if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
+        return raw
+            .slice(1, -1)
+            .replace(/\\n/g, '\n')
+            .replace(/\\(["\\$`])/g, '$1');
+    }
+    return raw;
+}
+
+function getLastFormattedEnvValue(envStrings, name) {
+    const prefix = `-e ${name}=`;
+    for (let i = envStrings.length - 1; i >= 0; i -= 1) {
+        const entry = String(envStrings[i] || '');
+        if (entry.startsWith(prefix)) {
+            return decodeFormattedEnvValue(entry.slice(prefix.length));
+        }
+    }
+    return '';
+}
+
+function mergeNodeOptions(existingValue, requiredOptions = []) {
+    const parts = String(existingValue || '').split(/\s+/).filter(Boolean);
+    const seen = new Set(parts);
+    for (const option of requiredOptions) {
+        if (!option || seen.has(option)) continue;
+        parts.push(option);
+        seen.add(option);
+    }
+    return parts.join(' ');
 }
 
 /**
@@ -604,6 +638,13 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
+    if (runtime === 'podman') {
+        const nodeOptions = mergeNodeOptions(
+            getLastFormattedEnvValue(envStrings, 'NODE_OPTIONS'),
+            PODMAN_STAGED_NODE_OPTIONS
+        );
+        args.push(...flagsToArgs([formatEnvFlag('NODE_OPTIONS', nodeOptions)]));
+    }
     // NODE_PATH is needed because AgentServer.mjs runs from /Agent/server/, not /code/
     // Node.js module resolution walks up from script location, so it won't find /code/node_modules
     args.push('-e', `NODE_PATH=/code/node_modules`);
@@ -945,6 +986,7 @@ export {
     codeRelativeMountPath,
     ensureAgentService,
     ensurePodmanStagedCodeDir,
+    mergeNodeOptions,
     resolveHostPort,
     resolveHostPortFromRecord,
     resolveHostPortFromRuntime,

@@ -7,6 +7,7 @@ import path from 'node:path';
 import {
     codeRelativeMountPath,
     ensurePodmanStagedCodeDir,
+    mergeNodeOptions,
 } from '../../cli/services/docker/agentServiceManager.js';
 
 function tempDir(prefix = 'podman-staging-') {
@@ -49,4 +50,11 @@ test('ensurePodmanStagedCodeDir stages source tree with dependency and /code vol
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+test('mergeNodeOptions appends podman symlink flags without duplicating existing options', () => {
+    assert.equal(
+        mergeNodeOptions('--trace-warnings --preserve-symlinks', ['--preserve-symlinks', '--preserve-symlinks-main']),
+        '--trace-warnings --preserve-symlinks --preserve-symlinks-main',
+    );
 });
