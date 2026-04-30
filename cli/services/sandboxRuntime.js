@@ -7,13 +7,18 @@ function parseBooleanEnv(value) {
     return ['1', 'true', 'yes', 'on'].includes(normalized);
 }
 
-function getSandboxConfig() {
+function readRawSandboxConfig() {
     const cfg = workspaceSvc.getConfig() || {};
-    const sandbox = cfg.sandbox && typeof cfg.sandbox === 'object' && !Array.isArray(cfg.sandbox)
+    return cfg.sandbox && typeof cfg.sandbox === 'object' && !Array.isArray(cfg.sandbox)
         ? cfg.sandbox
         : {};
+}
+
+function getSandboxConfig() {
+    // Sandbox is disabled by default; an explicit `false` opts into host sandboxes.
+    const sandbox = readRawSandboxConfig();
     return {
-        disableHostRuntimes: sandbox.disableHostRuntimes === true,
+        disableHostRuntimes: sandbox.disableHostRuntimes !== false,
     };
 }
 
@@ -38,10 +43,12 @@ function isHostSandboxDisabled() {
 
 function getSandboxStatus() {
     const envDisabled = parseBooleanEnv(process.env[ENV_DISABLE_HOST_SANDBOX]);
+    const sandbox = readRawSandboxConfig();
+    const explicit = typeof sandbox.disableHostRuntimes === 'boolean';
     const config = getSandboxConfig();
     return {
         disabled: envDisabled || config.disableHostRuntimes,
-        source: envDisabled ? 'environment' : (config.disableHostRuntimes ? 'workspace' : 'default'),
+        source: envDisabled ? 'environment' : (explicit ? 'workspace' : 'default'),
         envVar: ENV_DISABLE_HOST_SANDBOX,
     };
 }

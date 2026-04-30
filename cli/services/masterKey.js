@@ -81,12 +81,6 @@ function resolveMasterKey({ purpose = 'Ploinky encrypted storage' } = {}) {
         console.error(`[ploinky] ${message}`);
         throw new Error(message);
     }
-    // Backward compatible: a 64-hex-char value is still consumed as raw 32 key bytes
-    // so existing encrypted stores keep decrypting. Anything else is treated as a
-    // seed string and hashed to 32 bytes via SHA-256.
-    if (/^[a-fA-F0-9]{64}$/.test(raw)) {
-        return Buffer.from(raw, 'hex');
-    }
     return crypto.createHash('sha256').update(raw, 'utf8').digest();
 }
 
@@ -95,7 +89,7 @@ function resolveMasterKey({ purpose = 'Ploinky encrypted storage' } = {}) {
 // directly. Domain separation is carried in the `info` parameter so that
 // rotating one purpose (by bumping its version segment) cannot collide with
 // another. Empty salt is fine because the master key is already a
-// uniformly-random 32-byte value (or the SHA-256 digest of an operator seed).
+// SHA-256 digest of the operator-supplied seed.
 function deriveSubkey(purpose, length = 32) {
     const trimmedPurpose = String(purpose || '').trim();
     if (!trimmedPurpose) {

@@ -64,6 +64,37 @@ test('sandbox disable and enable persist workspace host sandbox setting', () => 
     }
 });
 
+test('host sandbox is disabled by default and routes lite-sandbox to containers', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-sandbox-default-'));
+
+    try {
+        const binDir = makeFakeRuntimeBin(root, 'podman');
+        const script = `
+            const { getSandboxStatus } = await import(${JSON.stringify(sandboxRuntimeUrl)});
+            const { getRuntimeForAgent } = await import(${JSON.stringify(dockerCommonUrl)});
+            console.log(JSON.stringify({
+                status: getSandboxStatus(),
+                runtime: getRuntimeForAgent({ 'lite-sandbox': true }),
+            }));
+        `;
+        const result = runModuleScript({
+            cwd: root,
+            env: {
+                PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}`,
+            },
+            script,
+        });
+
+        assert.equal(result.status, 0, result.stderr || result.stdout);
+        const output = parseLastJsonLine(result.stdout);
+        assert.equal(output.status.disabled, true);
+        assert.equal(output.status.source, 'default');
+        assert.equal(output.runtime, 'podman');
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('host sandbox disable forces lite-sandbox manifests to container runtime', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-sandbox-runtime-'));
 
@@ -167,8 +198,12 @@ test('lite-sandbox fails with guidance when host sandbox runtime is unavailable'
 
     try {
         const binDir = makeFakeRuntimeBin(root, 'podman');
+        // Sandbox is disabled by default — opt into the host sandbox before
+        // asserting the missing-runtime error path.
         const script = `
+            const { setHostSandboxDisabled } = await import(${JSON.stringify(sandboxRuntimeUrl)});
             const { getRuntimeForAgent } = await import(${JSON.stringify(dockerCommonUrl)});
+            setHostSandboxDisabled(false);
             try {
                 getRuntimeForAgent({ 'lite-sandbox': true });
                 console.log(JSON.stringify({ ok: true }));

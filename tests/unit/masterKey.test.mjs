@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,31 +40,29 @@ test('resolveMasterKey throws and logs when neither process.env nor .env defines
 });
 
 test('resolveMasterKey falls back to a .env walked up from the current directory', () => {
-    fs.writeFileSync(path.join(tempDir, '.env'), `${MASTER_KEY_VAR}=${'a'.repeat(64)}\n`);
+    const seed = 'a'.repeat(64);
+    fs.writeFileSync(path.join(tempDir, '.env'), `${MASTER_KEY_VAR}=${seed}\n`);
     try {
         const key = resolveMasterKey();
+        const expected = crypto.createHash('sha256').update(seed, 'utf8').digest();
         assert.equal(key.length, 32);
-        assert.equal(key.toString('hex'), 'a'.repeat(64));
+        assert.deepEqual(key, expected);
     } finally {
         fs.rmSync(path.join(tempDir, '.env'), { force: true });
     }
 });
 
 test('process.env value takes precedence over .env value when both define the key', () => {
-    fs.writeFileSync(path.join(tempDir, '.env'), `${MASTER_KEY_VAR}=${'a'.repeat(64)}\n`);
-    process.env[MASTER_KEY_VAR] = 'b'.repeat(64);
+    const fileSeed = 'a'.repeat(64);
+    const envSeed = 'b'.repeat(64);
+    fs.writeFileSync(path.join(tempDir, '.env'), `${MASTER_KEY_VAR}=${fileSeed}\n`);
+    process.env[MASTER_KEY_VAR] = envSeed;
     try {
-        assert.equal(resolveMasterKey().toString('hex'), 'b'.repeat(64));
+        const expected = crypto.createHash('sha256').update(envSeed, 'utf8').digest();
+        assert.deepEqual(resolveMasterKey(), expected);
     } finally {
         fs.rmSync(path.join(tempDir, '.env'), { force: true });
     }
-});
-
-test('resolveMasterKey reads 64-hex values as raw key bytes', () => {
-    process.env[MASTER_KEY_VAR] = 'b'.repeat(64);
-    const key = resolveMasterKey();
-    assert.equal(key.length, 32);
-    assert.equal(key.toString('hex'), 'b'.repeat(64));
 });
 
 test('resolveMasterKey accepts arbitrary strings as seeds and derives via SHA-256', () => {

@@ -11,9 +11,9 @@ import {
 
 const PASSWORD_STORE_FILE = path.join(PLOINKY_DIR, 'passwords.enc');
 const STORE_VERSION = 1;
-const ENVELOPE_VERSION = 1;
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
+const TAG_BYTES = 16;
 const SUBKEY_PURPOSE = 'storage/passwords';
 
 function defaultStore() {
@@ -49,87 +49,55 @@ function normalizeStore(input) {
     return normalized;
 }
 
-function decryptWithKey(envelope, key) {
-    const iv = Buffer.from(String(envelope.iv || ''), 'base64');
-    const tag = Buffer.from(String(envelope.tag || ''), 'base64');
-    const ciphertext = Buffer.from(String(envelope.ciphertext || ''), 'base64');
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([
-        decipher.update(ciphertext),
-        decipher.final(),
-    ]);
-}
-
-function decryptEnvelope(envelope) {
-    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
-        throw new Error('Encrypted password store is malformed.');
-    }
-    if (envelope.alg !== ALGORITHM) {
-        throw new Error(`Encrypted password store uses unsupported algorithm '${envelope.alg || ''}'.`);
-    }
-    const iv = Buffer.from(String(envelope.iv || ''), 'base64');
-    const tag = Buffer.from(String(envelope.tag || ''), 'base64');
-    const ciphertext = Buffer.from(String(envelope.ciphertext || ''), 'base64');
-    if (iv.length !== IV_BYTES || tag.length !== 16 || !ciphertext.length) {
+function decryptPacked(packedText) {
+    const buf = Buffer.from(String(packedText || '').trim(), 'base64');
+    if (buf.length < IV_BYTES + TAG_BYTES + 1) {
         throw new Error('Encrypted password store envelope is incomplete.');
     }
-    // Try the derived storage subkey first. Files written by older versions
-    // were encrypted with the raw master key bytes, so fall back once on
-    // auth-tag failure. The next write naturally re-encrypts with the derived
-    // key, completing the per-workspace migration in place.
-    let plaintext;
-    try {
-        plaintext = decryptWithKey(envelope, getStorageKey());
-    } catch (derivedErr) {
-        try {
-            plaintext = decryptWithKey(envelope, resolveMasterKey());
-        } catch {
-            throw derivedErr;
-        }
-    }
-    return JSON.parse(plaintext.toString('utf8'));
+    const iv = buf.subarray(0, IV_BYTES);
+    const tag = buf.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
+    const ciphertext = buf.subarray(IV_BYTES + TAG_BYTES);
+    const decipher = crypto.createDecipheriv(ALGORITHM, getStorageKey(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 }
 
-function encryptStore(store) {
+function encryptStoreToPacked(store) {
     const iv = crypto.randomBytes(IV_BYTES);
     const cipher = crypto.createCipheriv(ALGORITHM, getStorageKey(), iv);
     const plaintext = Buffer.from(JSON.stringify(normalizeStore(store)), 'utf8');
-    const ciphertext = Buffer.concat([
-        cipher.update(plaintext),
-        cipher.final(),
-    ]);
-    return {
-        version: ENVELOPE_VERSION,
-        alg: ALGORITHM,
-        iv: iv.toString('base64'),
-        tag: cipher.getAuthTag().toString('base64'),
-        ciphertext: ciphertext.toString('base64'),
-    };
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, ciphertext]).toString('base64');
 }
 
 function readPasswordStore() {
     if (!fs.existsSync(PASSWORD_STORE_FILE)) {
         return defaultStore();
     }
-    let parsed;
+    let raw;
     try {
-        parsed = JSON.parse(fs.readFileSync(PASSWORD_STORE_FILE, 'utf8'));
+        raw = fs.readFileSync(PASSWORD_STORE_FILE, 'utf8').trim();
     } catch (error) {
         throw new Error(`Unable to read encrypted password store: ${error?.message || String(error)}`);
     }
+    if (!raw) {
+        return defaultStore();
+    }
+    let plaintext;
     try {
-        return normalizeStore(decryptEnvelope(parsed));
+        plaintext = decryptPacked(raw);
     } catch (error) {
         throw new Error(`Unable to decrypt encrypted password store: ${error?.message || String(error)}`);
     }
+    return normalizeStore(JSON.parse(plaintext.toString('utf8')));
 }
 
 function writePasswordStore(store) {
-    const envelope = encryptStore(store);
+    const packed = encryptStoreToPacked(store);
     fs.mkdirSync(path.dirname(PASSWORD_STORE_FILE), { recursive: true });
     const tempPath = `${PASSWORD_STORE_FILE}.${process.pid}.${Date.now()}.tmp`;
-    fs.writeFileSync(tempPath, `${JSON.stringify(envelope, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    fs.writeFileSync(tempPath, `${packed}\n`, { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tempPath, PASSWORD_STORE_FILE);
     try {
         fs.chmodSync(PASSWORD_STORE_FILE, 0o600);
