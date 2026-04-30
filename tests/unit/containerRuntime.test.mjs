@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
     hasPreinstallRunInProcess,
@@ -13,14 +13,15 @@ import {
 } from '../../cli/services/lifecycleHooks.js';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const agentServiceManagerUrl = pathToFileURL(path.join(repoRoot, 'cli/services/docker/agentServiceManager.js')).href;
 
 function tempDir(prefix = 'ploinky-runtime-test-') {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-function runModuleSnippet(source, env = {}) {
+function runModuleSnippet(source, env = {}, options = {}) {
     return spawnSync(process.execPath, ['--input-type=module', '-e', source], {
-        cwd: repoRoot,
+        cwd: options.cwd || repoRoot,
         env: {
             ...process.env,
             ...env,
@@ -29,6 +30,54 @@ function runModuleSnippet(source, env = {}) {
         encoding: 'utf8',
     });
 }
+
+test('buildRuntimeRouterEnv prefers the startup port over stale routing state', () => {
+    const workspaceDir = tempDir();
+    try {
+        fs.mkdirSync(path.join(workspaceDir, '.ploinky'), { recursive: true });
+        fs.writeFileSync(path.join(workspaceDir, '.ploinky/routing.json'), JSON.stringify({ port: 8080 }));
+
+        const result = runModuleSnippet(
+            `const { buildRuntimeRouterEnv } = await import(${JSON.stringify(agentServiceManagerUrl)});
+process.stdout.write(JSON.stringify(buildRuntimeRouterEnv('podman', { routerPort: 8097 })));`,
+            {},
+            { cwd: workspaceDir },
+        );
+
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(JSON.parse(result.stdout), {
+            PLOINKY_ROUTER_PORT: '8097',
+            PLOINKY_ROUTER_HOST: 'host.containers.internal',
+            PLOINKY_ROUTER_URL: 'http://host.containers.internal:8097',
+        });
+    } finally {
+        fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
+});
+
+test('buildRuntimeRouterEnv reads the seeded routing file when no port override is supplied', () => {
+    const workspaceDir = tempDir();
+    try {
+        fs.mkdirSync(path.join(workspaceDir, '.ploinky'), { recursive: true });
+        fs.writeFileSync(path.join(workspaceDir, '.ploinky/routing.json'), JSON.stringify({ port: 8097 }));
+
+        const result = runModuleSnippet(
+            `const { buildRuntimeRouterEnv } = await import(${JSON.stringify(agentServiceManagerUrl)});
+process.stdout.write(JSON.stringify(buildRuntimeRouterEnv('docker')));`,
+            {},
+            { cwd: workspaceDir },
+        );
+
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(JSON.parse(result.stdout), {
+            PLOINKY_ROUTER_PORT: '8097',
+            PLOINKY_ROUTER_HOST: 'host.docker.internal',
+            PLOINKY_ROUTER_URL: 'http://host.docker.internal:8097',
+        });
+    } finally {
+        fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
+});
 
 test('collectLiveAgentContainers probes the runtime before listing live containers', () => {
     const binDir = tempDir();

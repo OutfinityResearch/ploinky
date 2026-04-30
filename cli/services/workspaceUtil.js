@@ -552,6 +552,8 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
 
     cfg.port = staticPort;
     cfg.static = { agent: staticAgent, container: staticContainer, hostPath: staticAgentPath };
+    fs.mkdirSync(path.dirname(routingFile), { recursive: true });
+    fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
     console.log(`Static: agent=${utils.colorize(staticAgent, 'cyan')} port=${utils.colorize(String(staticPort), 'yellow')}`);
     if (typeof killRouterIfRunning === 'function') {
       try { killRouterIfRunning(); } catch (_) {}
@@ -576,7 +578,11 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
           const agentPath = path.dirname(manifestPath0);
           const repoName = rec.repoName || path.basename(path.dirname(agentPath));
           const routeKey = rec.alias || shortAgentName;
-          const { containerName, hostPort } = ensureAgentService(shortAgentName, manifest, agentPath, { containerName: name, alias: rec.alias });
+          const { containerName, hostPort } = ensureAgentService(shortAgentName, manifest, agentPath, {
+            containerName: name,
+            alias: rec.alias,
+            routerPort: staticPort
+          });
           return {
             ok: true,
             shortAgentName,

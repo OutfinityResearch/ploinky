@@ -381,6 +381,42 @@ function resolveRouterHostForRuntime(runtime) {
     return '127.0.0.1';
 }
 
+function normalizeRouterPort(value) {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return '';
+    const parsed = Number.parseInt(trimmed, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '';
+}
+
+function readRouterPortFromRoutingFile() {
+    try {
+        if (!fs.existsSync(ROUTING_FILE)) return '';
+        const routing = JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')) || {};
+        return normalizeRouterPort(routing.port);
+    } catch (_) {
+        return '';
+    }
+}
+
+function buildRuntimeRouterEnv(runtime, options = {}) {
+    const routerPort = normalizeRouterPort(options.routerPort)
+        || readRouterPortFromRoutingFile()
+        || '8080';
+    const routerHost = String(options.routerHost || '').trim()
+        || resolveRouterHostForRuntime(runtime);
+    return {
+        PLOINKY_ROUTER_PORT: routerPort,
+        PLOINKY_ROUTER_HOST: routerHost,
+        PLOINKY_ROUTER_URL: `http://${routerHost}:${routerPort}`,
+    };
+}
+
+function appendRuntimeRouterEnvFlags(envStrings, routerEnv) {
+    for (const [name, value] of Object.entries(routerEnv || {})) {
+        envStrings.push(formatEnvFlag(name, value));
+    }
+}
+
 function readManifestVolumeOptions(manifest) {
     const volumeOptions = manifest?.volumeOptions && typeof manifest.volumeOptions === 'object'
         ? manifest.volumeOptions
@@ -530,7 +566,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
     const useProfileLifecycle = Boolean(profileConfig);
-    const envHash = computeEnvHash(manifest, profileConfig);
+    const runtimeRouterEnv = buildRuntimeRouterEnv(runtime, options);
+    const envHash = computeEnvHash(manifest, profileConfig, runtimeRouterEnv);
 
     // Get profile mount modes (profile overrides default if provided)
     const {
@@ -763,23 +800,6 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     });
     appendEnvFlagsFromMap(envStrings, profileEnvVars);
 
-    let routerPort = '8080';
-    try {
-        const routingFile = ROUTING_FILE;
-        if (fs.existsSync(routingFile)) {
-            const routing = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {};
-            if (routing.port) {
-                routerPort = String(routing.port);
-            }
-        }
-    } catch (_) {
-        // ignore and keep default router port
-    }
-    const routerHost = resolveRouterHostForRuntime(runtime);
-    envStrings.push(formatEnvFlag('PLOINKY_ROUTER_PORT', routerPort));
-    envStrings.push(formatEnvFlag('PLOINKY_ROUTER_HOST', routerHost));
-    envStrings.push(formatEnvFlag('PLOINKY_ROUTER_URL', `http://${routerHost}:${routerPort}`));
-
     const agentClientIdVar = `PLOINKY_AGENT_${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_ID`;
     const agentClientSecretVar = `PLOINKY_AGENT_${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_CLIENT_SECRET`;
     const agentClientId = resolveVarValue(agentClientIdVar) || resolveVarValue('PLOINKY_AGENT_CLIENT_ID');
@@ -800,6 +820,8 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         const profileSecrets = getSecrets(profileConfig.secrets);
         appendEnvFlagsFromMap(envStrings, profileSecrets);
     }
+
+    appendRuntimeRouterEnvFlags(envStrings, runtimeRouterEnv);
 
     const envFlags = flagsToArgs(envStrings);
     if (envFlags.length) args.push(...envFlags);
@@ -994,6 +1016,8 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     let aliasOverride;
     let forceRecreate = false;
     let profileNameOverride;
+    let routerPortOverride;
+    let routerHostOverride;
     if (typeof options === 'number') {
         preferredHostPort = options;
     } else if (options && typeof options === 'object') {
@@ -1002,6 +1026,8 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         aliasOverride = options.alias;
         forceRecreate = options.forceRecreate === true;
         profileNameOverride = options.profileName;
+        routerPortOverride = options.routerPort;
+        routerHostOverride = options.routerHost;
     }
 
     const repoName = path.basename(path.dirname(agentPath));
@@ -1023,6 +1049,10 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         const availableProfiles = Object.keys(manifest.profiles || {});
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
+    const runtimeRouterEnv = buildRuntimeRouterEnv(runtime, {
+        routerPort: routerPortOverride,
+        routerHost: routerHostOverride
+    });
 
     const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest, profileConfig);
     const containerPortCandidates = portMappings
@@ -1041,7 +1071,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     }
 
     if (containerExists(containerName)) {
-        const desired = computeEnvHash(manifest, profileConfig);
+        const desired = computeEnvHash(manifest, profileConfig, runtimeRouterEnv);
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
             debugLog(`[ensureAgentService] ${agentName}: env hash changed (current=${current || '<none>'}, desired=${desired.slice(0, 12)}…), recreating container`);
@@ -1091,7 +1121,9 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         publish: additionalPorts,
         containerName,
         alias: aliasOverride,
-        profileName: activeProfile
+        profileName: activeProfile,
+        routerPort: runtimeRouterEnv.PLOINKY_ROUTER_PORT,
+        routerHost: runtimeRouterEnv.PLOINKY_ROUTER_HOST
     });
 
     // Get paths for the new workspace structure
@@ -1159,6 +1191,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
 export {
     assertPodmanCodeMountAllowed,
     buildPodmanStagedTargetMounts,
+    buildRuntimeRouterEnv,
     codeRelativeMountPath,
     ensureAgentService,
     ensureManifestVolumeHostPath,

@@ -343,9 +343,12 @@ function parseHostPort(output) {
     }
 }
 
-function computeEnvHash(manifest, profileConfig) {
+function computeEnvHash(manifest, profileConfig, extraEnv = {}) {
     try {
-        const map = buildEnvMap(manifest, profileConfig || null);
+        const map = {
+            ...buildEnvMap(manifest, profileConfig || null),
+            ...(extraEnv && typeof extraEnv === 'object' && !Array.isArray(extraEnv) ? extraEnv : {}),
+        };
         const sorted = Object.keys(map).sort().reduce((acc, key) => {
             acc[key] = map[key];
             return acc;
