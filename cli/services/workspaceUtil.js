@@ -11,7 +11,8 @@ import { isBwrapProcessRunning, stopBwrapProcess } from './bwrap/bwrapFleet.js';
 import { applyManifestDirectives } from './bootstrapManifest.js';
 import { executeHostHook, markPreinstallRunInProcess, resetPreinstallRunInProcess, isInlineCommand } from './lifecycleHooks.js';
 import { getActiveProfile, getProfileConfig, getProfileEnvVars } from './profileService.js';
-import { getSecrets, createEnvWithSecrets } from './secretInjector.js';
+import { getSecrets, createEnvWithSecrets, loadEnvFile } from './secretInjector.js';
+import { readSecretsFile } from './encryptedSecretsFile.js';
 import { resolveAgentReadinessProtocol } from './startupReadiness.js';
 import { LOGS_DIR, ROUTING_FILE, RUNNING_DIR } from './config.js';
 import { resolveWorkspaceDependencyGraph, topologicallyGroupDependencyGraph } from './workspaceDependencyGraph.js';
@@ -48,13 +49,27 @@ function createAppendLogStdio(logFile) {
   }
 }
 
+// Resolve the env handed to the Watchdog (and, by inheritance, to the
+// RoutingServer it spawns and respawns). Merge order mirrors
+// secretInjector.getSecret(): walked-up `.env` -> `.ploinky/.secrets` ->
+// `process.env`, with operator-exported values winning. This way the router
+// stays able to forward LLM/auth secrets to handlers across crash-restart
+// cycles without depending on the operator having `export`'d each one.
+function buildRouterEnv() {
+  let envFile = {};
+  try { envFile = loadEnvFile() || {}; } catch (_) { envFile = {}; }
+  let secrets = {};
+  try { secrets = readSecretsFile() || {}; } catch (_) { secrets = {}; }
+  return { ...envFile, ...secrets, ...process.env };
+}
+
 function spawnWatchdog(routerPath, port, routerPidFile) {
   const logStdio = createAppendLogStdio(path.join(LOGS_DIR, 'watchdog.log'));
   const child = spawn(process.execPath, [routerPath], {
     detached: true,
     stdio: logStdio.stdio,
     env: {
-      ...process.env,
+      ...buildRouterEnv(),
       PORT: String(port),
       PLOINKY_ROUTER_PID_FILE: routerPidFile
     }

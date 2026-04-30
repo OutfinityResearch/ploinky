@@ -50,7 +50,8 @@ test('encrypted password store round-trips and enforces the master key', async (
     assert.equal(payload.users[0].rev, 3);
 
     const encryptedText = readFileSync(store.PASSWORD_STORE_FILE, 'utf8');
-    assert.match(encryptedText, /"alg": "aes-256-gcm"/);
+    // Packed-base64 envelope: a single line of base64 + trailing newline, no JSON braces.
+    assert.match(encryptedText, /^[A-Za-z0-9+/]+={0,2}\n?$/);
     assert.doesNotMatch(encryptedText, /alice|alice@example\.com|scrypt\$secret-hash|PLOINKY_AUTH_ALPHA_USERS/);
 
     // process.env wins over .env: the file was encrypted with ENV_KEY (set in

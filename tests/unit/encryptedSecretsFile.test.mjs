@@ -11,16 +11,10 @@ const REPO_ROOT = path.resolve(__dirname, '../..');
 const ENV_KEY = '3'.repeat(64);
 const FILE_KEY = '4'.repeat(64);
 
-test('encrypted .secrets migrates plaintext, round-trips, and enforces the master key', async (t) => {
+test('encrypted .secrets round-trips and enforces the master key', async (t) => {
     const workspace = mkdtempSync(path.join(os.tmpdir(), 'ploinky-secrets-file-'));
     const ploinkyDir = path.join(workspace, '.ploinky');
     mkdirSync(ploinkyDir, { recursive: true });
-    writeFileSync(path.join(ploinkyDir, '.secrets'), [
-        '# plaintext legacy file',
-        'WEBDASHBOARD_TOKEN=legacy-token',
-        'ONLYOFFICE_JWT_SECRET=legacy-office-secret',
-        '',
-    ].join('\n'));
     writeFileSync(path.join(workspace, '.env'), `PLOINKY_MASTER_KEY=${FILE_KEY}\n`);
 
     const previousCwd = process.cwd();
@@ -40,14 +34,19 @@ test('encrypted .secrets migrates plaintext, round-trips, and enforces the maste
     const nonce = Date.now();
     const store = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/services/encryptedSecretsFile.js')).href}?test=${nonce}`);
 
+    assert.deepEqual(store.readSecretsFile(), {});
+
+    store.setSecretValue('WEBDASHBOARD_TOKEN', 'token-value');
+    store.setSecretValue('ONLYOFFICE_JWT_SECRET', 'office-secret');
     assert.deepEqual(store.readSecretsFile(), {
-        WEBDASHBOARD_TOKEN: 'legacy-token',
-        ONLYOFFICE_JWT_SECRET: 'legacy-office-secret',
+        WEBDASHBOARD_TOKEN: 'token-value',
+        ONLYOFFICE_JWT_SECRET: 'office-secret',
     });
 
     let encryptedText = readFileSync(path.join(ploinkyDir, '.secrets'), 'utf8');
-    assert.match(encryptedText, /"alg": "aes-256-gcm"/);
-    assert.doesNotMatch(encryptedText, /legacy-token|legacy-office-secret|WEBDASHBOARD_TOKEN|ONLYOFFICE_JWT_SECRET/);
+    // Packed-base64 envelope: a single line of base64 + trailing newline, no JSON braces.
+    assert.match(encryptedText, /^[A-Za-z0-9+/]+={0,2}\n?$/);
+    assert.doesNotMatch(encryptedText, /token-value|office-secret|WEBDASHBOARD_TOKEN|ONLYOFFICE_JWT_SECRET/);
 
     store.setSecretValue('DPU_MASTER_KEY', 'dpu-secret');
     assert.equal(store.readSecretsFile().DPU_MASTER_KEY, 'dpu-secret');

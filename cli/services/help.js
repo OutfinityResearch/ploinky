@@ -195,7 +195,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                 'sandbox enable',
                 'enable sandbox'
             ],
-            notes: 'When disabled, agents whose manifests request `lite-sandbox: true` use podman/docker instead. This is useful for testing container behavior. Restart running agents to apply the change. Environment override: PLOINKY_DISABLE_HOST_SANDBOX=1.'
+            notes: 'Host sandbox is disabled by default; agents whose manifests request `lite-sandbox: true` use podman/docker. Run `sandbox enable` to opt into bwrap (Linux) / seatbelt (macOS). Restart running agents to apply the change. Environment override: PLOINKY_DISABLE_HOST_SANDBOX=1 forces disabled regardless of workspace setting.'
         },
         
         

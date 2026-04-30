@@ -14,10 +14,17 @@ const moduleSuffix = `?test=${Date.now()}`;
 const profileServiceUrl = new URL('../../cli/services/profileService.js', import.meta.url);
 const secretInjectorUrl = new URL('../../cli/services/secretInjector.js', import.meta.url);
 const workspaceStructureUrl = new URL('../../cli/services/workspaceStructure.js', import.meta.url);
+const encryptedSecretsUrl = new URL('../../cli/services/encryptedSecretsFile.js', import.meta.url);
 
 const profileService = await import(`${profileServiceUrl.href}${moduleSuffix}`);
 const secretInjector = await import(`${secretInjectorUrl.href}${moduleSuffix}`);
 const workspaceStructure = await import(`${workspaceStructureUrl.href}${moduleSuffix}`);
+const { setSecretValue } = await import(`${encryptedSecretsUrl.href}${moduleSuffix}`);
+
+function clearSecretsFile() {
+    const secretsPath = path.join(tempDir, '.ploinky', '.secrets');
+    fs.rmSync(secretsPath, { force: true });
+}
 
 const {
     getActiveProfile,
@@ -194,18 +201,11 @@ test('getProfileEnvVars includes profile metadata', () => {
     assert.strictEqual(path.resolve(envVars.PLOINKY_CWD), fs.realpathSync(tempDir));
 });
 
-test('loadSecretsFile parses secrets and strips quotes', () => {
-    const secretsPath = path.join(tempDir, '.ploinky', '.secrets');
-    fs.mkdirSync(path.dirname(secretsPath), { recursive: true });
-    fs.writeFileSync(
-        secretsPath,
-        [
-            '# Comment',
-            'PLAIN=value',
-            'QUOTED="value with spaces"',
-            "SINGLE='single value'"
-        ].join('\n')
-    );
+test('loadSecretsFile round-trips values written via setSecretValue', () => {
+    clearSecretsFile();
+    setSecretValue('PLAIN', 'value');
+    setSecretValue('QUOTED', 'value with spaces');
+    setSecretValue('SINGLE', 'single value');
 
     const secrets = loadSecretsFile();
     assert.deepStrictEqual(secrets, {
@@ -216,9 +216,8 @@ test('loadSecretsFile parses secrets and strips quotes', () => {
 });
 
 test('getSecret prefers environment variables over secrets file', () => {
-    const secretsPath = path.join(tempDir, '.ploinky', '.secrets');
-    fs.mkdirSync(path.dirname(secretsPath), { recursive: true });
-    fs.writeFileSync(secretsPath, 'OVERRIDE=file-value');
+    clearSecretsFile();
+    setSecretValue('OVERRIDE', 'file-value');
 
     const previousValue = process.env.OVERRIDE;
     process.env.OVERRIDE = 'env-value';
@@ -233,6 +232,7 @@ test('getSecret prefers environment variables over secrets file', () => {
 });
 
 test('getSecret falls back to .env when other sources are missing', () => {
+    clearSecretsFile();
     const envPath = path.join(tempDir, '.env');
     fs.writeFileSync(envPath, 'ENV_ONLY=env-value');
 
@@ -247,9 +247,8 @@ test('getSecret falls back to .env when other sources are missing', () => {
 });
 
 test('validateSecrets uses secrets file when env missing', () => {
-    const secretsPath = path.join(tempDir, '.ploinky', '.secrets');
-    fs.mkdirSync(path.dirname(secretsPath), { recursive: true });
-    fs.writeFileSync(secretsPath, 'FROM_FILE=yes');
+    clearSecretsFile();
+    setSecretValue('FROM_FILE', 'yes');
 
     const result = validateSecrets(['FROM_FILE', 'MISSING']);
     assert.deepStrictEqual(result.missing, ['MISSING']);
@@ -257,6 +256,7 @@ test('validateSecrets uses secrets file when env missing', () => {
 });
 
 test('validateSecrets records .env file as source', () => {
+    clearSecretsFile();
     const envPath = path.join(tempDir, '.env');
     fs.writeFileSync(envPath, 'FROM_ENV=yes');
 

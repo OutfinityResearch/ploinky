@@ -8,11 +8,12 @@ const originalCwd = process.cwd();
 const originalMasterKey = process.env.PLOINKY_MASTER_KEY;
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-runtime-'));
 fs.mkdirSync(path.join(tempDir, '.ploinky'), { recursive: true });
-fs.writeFileSync(path.join(tempDir, '.ploinky', '.secrets'), '# Ploinky secrets\nDPU_MASTER_KEY=test-master-key-123\n');
 process.chdir(tempDir);
 process.env.PLOINKY_MASTER_KEY = '6'.repeat(64);
 
 const moduleSuffix = `?test=${Date.now()}`;
+const { setSecretValue } = await import(`../../cli/services/encryptedSecretsFile.js${moduleSuffix}`);
+setSecretValue('DPU_MASTER_KEY', 'test-master-key-123');
 const plannerModule = await import(`../../cli/services/runtimeResourcePlanner.js${moduleSuffix}`);
 const { planRuntimeResources, applyRuntimeResourceEnv, ensurePersistentStorageHostDir } = plannerModule;
 

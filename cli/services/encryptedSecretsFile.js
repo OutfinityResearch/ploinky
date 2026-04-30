@@ -3,12 +3,12 @@ import fs from 'fs';
 import path from 'path';
 
 import { SECRETS_FILE } from './config.js';
-import { deriveSubkey, parseKeyValueText, resolveMasterKey } from './masterKey.js';
+import { deriveSubkey } from './masterKey.js';
 
-const ENVELOPE_VERSION = 1;
 const PAYLOAD_VERSION = 1;
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
+const TAG_BYTES = 16;
 const SUBKEY_PURPOSE = 'storage/secrets';
 
 function getStorageKey() {
@@ -26,91 +26,36 @@ function normalizeSecretsMap(input = {}) {
     return normalized;
 }
 
-function isEncryptedSecretsEnvelope(value = null) {
-    return Boolean(
-        value
-        && typeof value === 'object'
-        && !Array.isArray(value)
-        && value.alg === ALGORITHM
-        && value.ciphertext
-        && value.iv
-        && value.tag
-    );
-}
-
-function parseEnvelope(raw = '') {
-    try {
-        const parsed = JSON.parse(String(raw || ''));
-        return isEncryptedSecretsEnvelope(parsed) ? parsed : null;
-    } catch (_) {
-        return null;
-    }
-}
-
-function decryptWithKey(envelope, key) {
-    const iv = Buffer.from(String(envelope.iv || ''), 'base64');
-    const tag = Buffer.from(String(envelope.tag || ''), 'base64');
-    const ciphertext = Buffer.from(String(envelope.ciphertext || ''), 'base64');
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([
-        decipher.update(ciphertext),
-        decipher.final(),
-    ]).toString('utf8');
-}
-
-function decryptEnvelope(envelope) {
-    if (!isEncryptedSecretsEnvelope(envelope)) {
-        throw new Error('Encrypted .secrets envelope is malformed.');
-    }
-    const iv = Buffer.from(String(envelope.iv || ''), 'base64');
-    const tag = Buffer.from(String(envelope.tag || ''), 'base64');
-    const ciphertext = Buffer.from(String(envelope.ciphertext || ''), 'base64');
-    if (iv.length !== IV_BYTES || tag.length !== 16 || !ciphertext.length) {
+function decryptPacked(packedText) {
+    const buf = Buffer.from(String(packedText || '').trim(), 'base64');
+    if (buf.length < IV_BYTES + TAG_BYTES + 1) {
         throw new Error('Encrypted .secrets envelope is incomplete.');
     }
-    // Try the derived storage subkey first; fall back once to the raw master
-    // key for files written by older versions. The next write re-encrypts with
-    // the derived key, completing the per-workspace migration in place.
-    let plaintext;
-    try {
-        plaintext = decryptWithKey(envelope, getStorageKey());
-    } catch (derivedErr) {
-        try {
-            plaintext = decryptWithKey(envelope, resolveMasterKey({ purpose: 'encrypted .secrets' }));
-        } catch {
-            throw derivedErr;
-        }
-    }
-    const payload = JSON.parse(plaintext);
-    return normalizeSecretsMap(payload?.secrets);
+    const iv = buf.subarray(0, IV_BYTES);
+    const tag = buf.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
+    const ciphertext = buf.subarray(IV_BYTES + TAG_BYTES);
+    const decipher = crypto.createDecipheriv(ALGORITHM, getStorageKey(), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
 }
 
-function encryptSecretsMap(secrets = {}) {
+function encryptSecretsMapToPacked(secrets = {}) {
     const iv = crypto.randomBytes(IV_BYTES);
     const cipher = crypto.createCipheriv(ALGORITHM, getStorageKey(), iv);
     const plaintext = Buffer.from(JSON.stringify({
         version: PAYLOAD_VERSION,
         secrets: normalizeSecretsMap(secrets),
     }), 'utf8');
-    const ciphertext = Buffer.concat([
-        cipher.update(plaintext),
-        cipher.final(),
-    ]);
-    return {
-        version: ENVELOPE_VERSION,
-        alg: ALGORITHM,
-        iv: iv.toString('base64'),
-        tag: cipher.getAuthTag().toString('base64'),
-        ciphertext: ciphertext.toString('base64'),
-    };
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return Buffer.concat([iv, tag, ciphertext]).toString('base64');
 }
 
 function writeSecretsFile(secrets = {}) {
     fs.mkdirSync(path.dirname(SECRETS_FILE), { recursive: true });
-    const envelope = encryptSecretsMap(secrets);
+    const packed = encryptSecretsMapToPacked(secrets);
     const tempPath = `${SECRETS_FILE}.${process.pid}.${Date.now()}.tmp`;
-    fs.writeFileSync(tempPath, `${JSON.stringify(envelope, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    fs.writeFileSync(tempPath, `${packed}\n`, { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tempPath, SECRETS_FILE);
     try {
         fs.chmodSync(SECRETS_FILE, 0o600);
@@ -121,22 +66,18 @@ function readSecretsFile() {
     if (!fs.existsSync(SECRETS_FILE)) {
         return {};
     }
-    const raw = fs.readFileSync(SECRETS_FILE, 'utf8');
-    if (!raw.trim()) {
+    const raw = fs.readFileSync(SECRETS_FILE, 'utf8').trim();
+    if (!raw) {
         writeSecretsFile({});
         return {};
     }
-    const envelope = parseEnvelope(raw);
-    if (envelope) {
-        try {
-            return decryptEnvelope(envelope);
-        } catch (error) {
-            throw new Error(`Unable to decrypt .ploinky/.secrets: ${error?.message || String(error)}`);
-        }
+    let payload;
+    try {
+        payload = JSON.parse(decryptPacked(raw));
+    } catch (error) {
+        throw new Error(`Unable to decrypt .ploinky/.secrets: ${error?.message || String(error)}`);
     }
-    const secrets = parseKeyValueText(raw);
-    writeSecretsFile(secrets);
-    return secrets;
+    return normalizeSecretsMap(payload?.secrets);
 }
 
 function setSecretValue(name, value) {
@@ -170,7 +111,6 @@ export {
     ALGORITHM,
     deleteSecretValue,
     ensureEncryptedSecretsFile,
-    isEncryptedSecretsEnvelope,
     readSecretsFile,
     setSecretValue,
     writeSecretsFile,
