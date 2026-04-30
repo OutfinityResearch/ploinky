@@ -7,6 +7,7 @@ import { resolveVarValue } from '../services/secretVars.js';
 import { resolveEnabledAgentRecord } from '../services/agents.js';
 import { ROUTING_FILE } from '../services/config.js';
 import { findAgent } from '../services/utils.js';
+import { readRouterSettings, updateRouterSettings } from '../services/routerSettings.js';
 import { createAuthService } from './auth/service.js';
 import { authenticateLocalUser, createLocalAuthUser, deleteLocalAuthUser, GUEST_SESSION_TTL_SECONDS, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, isLocalAdminUser, listLocalAuthUsers, mintGuestSessionJwt, mintSessionJwt, resolveLocalAuthConfig, resolveUserRev, revokeSession as revokeLocalSession, updateLocalAuthUser, updateLocalCredentials, verifySessionJwt } from './auth/localService.js';
 import { waitForAgentReady } from './utils/agentReadiness.js';
@@ -81,7 +82,6 @@ function renderLoggedOutHtml(nextPath) {
 <body>
   <main class="auth-shell">
     <section class="auth-card">
-      <div class="auth-kicker">Workspace Access</div>
       <h1>Signed out</h1>
       <p>Your session was closed. Sign in again to return to the workspace.</p>
       <a class="auth-btn" href="${escapeHtml(loginUrl)}">Sign in</a>
@@ -325,14 +325,13 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
     const safeReturnTo = escapeHtml(normalizeRelativePath(returnTo, '/'));
     const safeError = escapeHtml(error || '');
     const safeNotice = escapeHtml(notice || '');
-    const safeUsersVar = escapeHtml(usersVar || '');
-    const safeAccountUrl = escapeHtml(`/auth/account?agent=${encodeURIComponent(agentName || '')}&returnTo=${encodeURIComponent(normalizeRelativePath(returnTo, '/'))}`);
+    const safeBrandingName = escapeHtml(readRouterSettings().loginBrandingName);
     return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sign in</title>
+  <title>${safeBrandingName}</title>
   <style>
     ${getAuthPageStyles()}
   </style>
@@ -340,9 +339,7 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
 <body>
   <main class="auth-shell">
     <section class="auth-card">
-      <div class="auth-kicker">Workspace Access</div>
-      <h1>Sign in</h1>
-      <p>Local authentication is enabled for ${safeAgent}.</p>
+      <h1>${safeBrandingName}</h1>
       ${safeNotice ? `<div class="auth-notice">${safeNotice}</div>` : ''}
       ${safeError ? `<div class="auth-error">${safeError}</div>` : ''}
       <form method="post" action="/auth/login">
@@ -354,8 +351,6 @@ function renderLocalLoginHtml({ agentName, returnTo = '/', error = '', notice = 
         <input id="password" name="password" type="password" autocomplete="current-password" required />
         <button class="auth-btn" type="submit">Sign in</button>
       </form>
-      <div class="auth-meta">After signing in, you can change the username or password in <a href="${safeAccountUrl}">account settings</a>.</div>
-      ${safeUsersVar ? `<div class="auth-meta">Workspace variable: ${safeUsersVar}</div>` : ''}
     </section>
   </main>
   <script>
@@ -692,6 +687,7 @@ function getUserAdminErrorStatus(code = '') {
             return 403;
         case 'local_auth_disabled':
         case 'user_not_found':
+        case 'not_found':
             return 404;
         case 'username_taken':
         case 'last_admin_required':
@@ -717,6 +713,8 @@ function getUserAdminErrorMessage(code = '') {
             return 'Local auth is not enabled for this agent.';
         case 'user_not_found':
             return 'User not found.';
+        case 'not_found':
+            return 'Not found.';
         case 'username_taken':
             return 'Username is already in use.';
         case 'last_admin_required':
@@ -919,7 +917,10 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
 
 function parseUserAdminPath(pathname = '') {
     const parts = String(pathname || '').split('/').filter(Boolean);
-    if (parts.length < 4 || parts[0] !== 'api' || parts[1] !== 'agents' || parts[3] !== 'users') {
+    if (parts.length < 4 || parts[0] !== 'api' || parts[1] !== 'agents') {
+        return null;
+    }
+    if (parts[3] !== 'users' && parts[3] !== 'settings') {
         return null;
     }
     if (parts.length > 5) {
@@ -927,6 +928,7 @@ function parseUserAdminPath(pathname = '') {
     }
     return {
         agent: decodeURIComponent(parts[2] || ''),
+        resource: parts[3],
         userId: parts[4] ? decodeURIComponent(parts[4]) : ''
     };
 }
@@ -981,6 +983,36 @@ export async function handleUserAdminRoutes(req, res, parsedUrl) {
             sameSite: 'Lax'
         });
         res.setHeader('Set-Cookie', cookie);
+
+        if (route.resource === 'settings') {
+            if (route.userId) {
+                sendUserAdminError(res, 'not_found');
+                return true;
+            }
+            if (method === 'GET') {
+                sendJson(res, 200, {
+                    ok: true,
+                    agent: authContext.routeKey,
+                    settings: readRouterSettings()
+                });
+                return true;
+            }
+            if (method === 'PATCH') {
+                const body = await readUserAdminBody(req);
+                const settings = updateRouterSettings({
+                    loginBrandingName: body?.loginBrandingName
+                });
+                sendJson(res, 200, {
+                    ok: true,
+                    agent: authContext.routeKey,
+                    settings
+                });
+                return true;
+            }
+            res.writeHead(405, { 'Content-Type': 'application/json', Allow: 'GET, PATCH' });
+            res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
+            return true;
+        }
 
         if (method === 'GET' && !route.userId) {
             const users = listLocalAuthUsers(authContext.policy)

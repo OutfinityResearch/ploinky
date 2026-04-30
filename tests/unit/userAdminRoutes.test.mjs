@@ -184,6 +184,24 @@ test('user admin routes enforce admin access, CRUD, rev invalidation, and agent 
     assert.match(String(result.headers.get('set-cookie') || ''), /ploinky_jwt=/);
 
     result = await invoke(authHandlers.handleUserAdminRoutes, {
+        url: '/api/agents/explorer/settings',
+        cookie: authCookie(explorerAdmin.sessionId),
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.body.settings.loginBrandingName, 'Login');
+
+    result = await invoke(authHandlers.handleUserAdminRoutes, {
+        method: 'PATCH',
+        url: '/api/agents/explorer/settings',
+        cookie: authCookie(explorerAdmin.sessionId),
+        body: {
+            loginBrandingName: 'Acme Workspace',
+        },
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.body.settings.loginBrandingName, 'Acme Workspace');
+
+    result = await invoke(authHandlers.handleUserAdminRoutes, {
         url: '/api/agents/explorer/users',
         cookie: authCookie(explorerUser.sessionId),
     });
