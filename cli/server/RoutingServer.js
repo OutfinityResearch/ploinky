@@ -18,6 +18,7 @@ import { loadApiRoutes, handleRouterMcp, handleHttpServiceRoute, isPublicHttpSer
 
 // Logging
 import { appendLog, logBootEvent, logMemoryUsage } from './utils/logger.js';
+import { isRouteMount } from './utils/routeMounts.js';
 
 // New modular components
 import { agentSessionStore, buildInvocationContextForProviderCall, handleAgentMcpRequest } from './mcp-proxy/index.js';
@@ -88,7 +89,8 @@ function serveMcpBrowserClient(req, res) {
     appendLog('mcp_client_request', { method: req.method });
     res.writeHead(200, {
         'Content-Type': 'application/javascript',
-        'Content-Length': stats.size
+        'Content-Length': stats.size,
+        'Cache-Control': 'public, max-age=300'
     });
 
     if (req.method === 'HEAD') {
@@ -232,19 +234,19 @@ async function processRequest(req, res) {
     }
 
     // Route to appropriate handler
-    if (pathname.startsWith('/webtty')) {
+    if (isRouteMount(pathname, '/webtty')) {
         return handleWebTTY(req, res, config.webtty, globalState.webtty);
-    } else if (pathname.startsWith('/webchat')) {
+    } else if (isRouteMount(pathname, '/webchat')) {
         return handleWebChat(req, res, config.webchat, globalState.webchat);
-    } else if (pathname.startsWith('/dashboard')) {
+    } else if (isRouteMount(pathname, '/dashboard')) {
         return handleDashboard(req, res, config.dashboard, globalState.dashboard);
-    } else if (pathname.startsWith('/webmeet')) {
+    } else if (isRouteMount(pathname, '/webmeet')) {
         return handleWebMeet(req, res, config.webmeet, globalState.webmeet);
-    } else if (pathname.startsWith('/status')) {
+    } else if (isRouteMount(pathname, '/status')) {
         return handleStatus(req, res, config.status, globalState.status);
     } else if (pathname === '/upload') {
         return handleWorkspaceUpload(req, res);
-    } else if (pathname.startsWith('/blobs')) {
+    } else if (isRouteMount(pathname, '/blobs')) {
         return handleBlobs(req, res);
     } else if (handleHttpServiceRoute(req, res, parsedUrl)) {
         return;

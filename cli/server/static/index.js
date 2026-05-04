@@ -296,14 +296,8 @@ async function serveStaticRequest(req, res) {
         const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
         const pathname = decodeURIComponent(parsed.pathname || '/');
         if (pathname === MCP_BROWSER_CLIENT_URL) {
-            try {
-                const data = fs.readFileSync(MCP_BROWSER_CLIENT_FILE);
-                res.writeHead(200, { 'Content-Type': 'application/javascript' });
-                res.end(data);
-                return true;
-            } catch (err) {
-                return false;
-            }
+            if (sendFile(res, MCP_BROWSER_CLIENT_FILE)) return true;
+            return false;
         }
 
         const root = getStaticHostPath();
@@ -362,16 +356,45 @@ function getMimeType(filePath) {
         '.jpg': 'image/jpeg',
         '.jpeg': 'image/jpeg',
         '.gif': 'image/gif',
-        '.ico': 'image/x-icon'
+        '.ico': 'image/x-icon',
+        '.woff2': 'font/woff2',
+        '.woff': 'font/woff',
+        '.ttf': 'font/ttf',
+        '.otf': 'font/otf',
+        '.eot': 'application/vnd.ms-fontobject',
+        '.webp': 'image/webp'
     };
     return map[ext] || 'application/octet-stream';
+}
+
+function getCacheControl(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.woff2' || ext === '.woff' || ext === '.ttf' || ext === '.otf' || ext === '.eot') {
+        return 'public, max-age=31536000, immutable';
+    }
+    if (ext === '.png' || ext === '.jpg' || ext === '.jpeg' || ext === '.gif' || ext === '.ico' || ext === '.svg') {
+        return 'public, max-age=86400';
+    }
+    if (ext === '.js' || ext === '.mjs' || ext === '.css') {
+        return 'public, max-age=300';
+    }
+    return 'public, max-age=60';
 }
 
 function sendFile(res, filePath) {
     try {
         const mime = getMimeType(filePath);
-        res.writeHead(200, { 'Content-Type': mime });
-        res.end(fs.readFileSync(filePath));
+        const headers = {
+            'Content-Type': mime,
+            'Cache-Control': getCacheControl(filePath)
+        };
+        res.writeHead(200, headers);
+        const stream = fs.createReadStream(filePath);
+        stream.on('error', () => {
+            if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Internal Server Error');
+        });
+        stream.pipe(res);
         return true;
     } catch (err) {
         return false;
@@ -383,7 +406,7 @@ function sendFileStream(res, filePath) {
         const mime = getMimeType(filePath);
         res.writeHead(200, {
             'Content-Type': mime,
-            'Cache-Control': 'no-store'
+            'Cache-Control': getCacheControl(filePath)
         });
         const stream = fs.createReadStream(filePath);
         stream.on('error', () => {
