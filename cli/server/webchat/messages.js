@@ -1086,7 +1086,7 @@ export function createMessages({
             trimmedNormalized.includes('"text"') &&
             trimmedNormalized.includes('"attachments"')) {
             // This looks like a raw envelope echo - skip it
-            return;
+            return false;
         }
 
         if (lastClientCommand) {
@@ -1106,7 +1106,7 @@ export function createMessages({
             lastServerMsg.bubble = null;
             lastServerMsg.fullText = '';
             userInputSent = false;
-            return;
+            return false;
         }
 
         const previousFullText = typeof lastServerMsg.fullText === 'string' ? lastServerMsg.fullText : '';
@@ -1141,6 +1141,7 @@ export function createMessages({
         if (chatList) {
             chatList.scrollTop = chatList.scrollHeight;
         }
+        return true;
     }
 
     return {

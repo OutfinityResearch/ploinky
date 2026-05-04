@@ -73,6 +73,19 @@ function stripProcessingPrefix(text) {
     return text.slice(match[0].length);
 }
 
+function looksLikeReadlinePromptEcho(text, pendingClientText) {
+    if (!text || !pendingClientText) {
+        return false;
+    }
+    const trimmed = String(text).trim();
+    const clientText = String(pendingClientText).trim();
+    if (!clientText) {
+        return false;
+    }
+    return trimmed === clientText
+        || (trimmed.startsWith('you> ') && trimmed.slice(5).trim() === clientText);
+}
+
 function looksLikeEnvelopeEcho(text) {
     const normalized = String(text || '').trim();
     return normalized.includes('"__webchatMessage"')
@@ -125,7 +138,7 @@ function handleTranscriptAssistantLine(tab, rawLine) {
         return null;
     }
     const pendingEcho = String(transcript.lastClientText || '').trim();
-    if (pendingEcho && normalized === pendingEcho) {
+    if (pendingEcho && looksLikeReadlinePromptEcho(normalized, pendingEcho)) {
         transcript.lastClientText = '';
         return null;
     }
@@ -865,8 +878,9 @@ async function handleWebChat(req, res, appConfig, appState) {
         let body = '';
         req.on('data', chunk => body += chunk.toString());
         req.on('end', () => {
+            let envelope;
             try {
-                const envelope = parseInputEnvelope(body);
+                envelope = parseInputEnvelope(body);
                 if (tab.transcript && (String(envelope.text || '').trim() || (Array.isArray(envelope.attachments) && envelope.attachments.length))) {
                     const turnId = crypto.randomUUID();
                     const created = appendTranscriptMessage(tab.transcript.conversationId, {
@@ -886,7 +900,10 @@ async function handleWebChat(req, res, appConfig, appState) {
             } catch (_) {
                 // Ignore transcript capture errors.
             }
-            try { tab.tty.write(body); } catch (_) { }
+            try {
+                const text = (envelope && typeof envelope.text === 'string') ? envelope.text : body;
+                tab.tty.write(`${text}\n`);
+            } catch (_) { }
             res.writeHead(204); res.end();
         });
         return;

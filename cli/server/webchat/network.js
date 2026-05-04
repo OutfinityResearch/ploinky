@@ -145,10 +145,10 @@ export function createNetwork({
         if (!stripped.trim()) {
             return;
         }
-        if (pendingUploads === 0) {
+        const displayed = addServerMsg(stripped);
+        if (displayed && pendingUploads === 0) {
             hideTypingIndicator();
         }
-        addServerMsg(stripped);
     }
 
     function pushSrvFromBuffer() {
@@ -337,6 +337,9 @@ export function createNetwork({
         const message = typeof cmd === 'string' ? cmd : '';
         addClientMsg(message);
         postEnvelope({ text: message });
+        if (pendingUploads === 0) {
+            showTypingIndicator();
+        }
         return true;
     }
 
