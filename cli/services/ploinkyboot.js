@@ -4,33 +4,40 @@ import { execSync } from 'child_process';
 import { PLOINKY_DIR } from './config.js';
 import * as repos from './repos.js';
 
-const DEFAULT_REPO_URL = 'https://github.com/PloinkyRepos/Basic.git';
+const DEFAULT_REPOS = [
+    { name: 'basic', url: 'https://github.com/PloinkyRepos/Basic.git' },
+    { name: 'AchillesCLI', url: 'https://github.com/OutfinityResearch/AchillesCLI.git' },
+];
 
-function ensureDefaultRepo() {
+function ensureRepo(name, url) {
     const reposDir = path.join(PLOINKY_DIR, 'repos');
-    const defaultRepoPath = path.join(reposDir, 'basic');
+    const repoPath = path.join(reposDir, name);
     try {
         fs.mkdirSync(reposDir, { recursive: true });
     } catch (_) {}
-    if (!fs.existsSync(defaultRepoPath)) {
-        console.log("Default 'basic' repository not found. Cloning...");
+    if (!fs.existsSync(repoPath)) {
+        console.log(`Default '${name}' repository not found. Cloning...`);
         try {
-            execSync(`git clone ${DEFAULT_REPO_URL} ${defaultRepoPath}`, { stdio: 'inherit' });
-            console.log('Default repository cloned successfully.');
+            execSync(`git clone ${url} ${repoPath}`, { stdio: 'inherit' });
+            console.log(`${name} repository cloned successfully.`);
         } catch (error) {
-            console.error(`Error cloning default repository: ${error.message}`);
+            console.error(`Error cloning ${name} repository: ${error.message}`);
         }
     }
 }
 
 export function bootstrap() {
-    ensureDefaultRepo();
+    for (const { name, url } of DEFAULT_REPOS) {
+        ensureRepo(name, url);
+    }
     try {
         const list = repos.loadEnabledRepos();
-        const basicPath = path.join(PLOINKY_DIR, 'repos', 'basic');
-        if (fs.existsSync(basicPath) && !list.includes('basic')) {
-            list.push('basic');
-            repos.saveEnabledRepos(list);
+        for (const { name } of DEFAULT_REPOS) {
+            const repoPath = path.join(PLOINKY_DIR, 'repos', name);
+            if (fs.existsSync(repoPath) && !list.includes(name)) {
+                list.push(name);
+                repos.saveEnabledRepos(list);
+            }
         }
     } catch (_) {}
 }
