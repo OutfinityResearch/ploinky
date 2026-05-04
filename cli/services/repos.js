@@ -172,11 +172,23 @@ export function updateRepo(name, { rebase = true, autostash = true } = {}) {
     if (!fs.existsSync(repoPath)) {
         throw new Error(`Repository '${name}' is not installed.`);
     }
+    if (!isGitRepository(repoPath)) {
+        throw new Error(`Repository '${name}' is not a git repository.`);
+    }
     const args = ['-C', repoPath, 'pull'];
     if (rebase) args.push('--rebase');
     if (autostash) args.push('--autostash');
     execFileSync('git', args, { stdio: 'inherit' });
     return true;
+}
+
+export function isGitRepository(repoPath) {
+    if (!repoPath) return false;
+    try {
+        return fs.existsSync(path.join(repoPath, '.git'));
+    } catch (_) {
+        return false;
+    }
 }
 
 export function findWorkspaceGitRepos(workspaceRoot) {

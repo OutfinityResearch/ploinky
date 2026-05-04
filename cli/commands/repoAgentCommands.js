@@ -21,6 +21,20 @@ function getRepoNames() {
     return fs.readdirSync(REPOS_DIR).filter(file => fs.statSync(path.join(REPOS_DIR, file)).isDirectory());
 }
 
+function getGitRepoNames() {
+    const repoNames = getRepoNames();
+    const gitRepoNames = [];
+    for (const repoName of repoNames) {
+        const repoPath = path.join(REPOS_DIR, repoName);
+        if (reposSvc.isGitRepository(repoPath)) {
+            gitRepoNames.push(repoName);
+        } else {
+            console.warn(`  ! Skipping ${repoName}: not a git repository.`);
+        }
+    }
+    return gitRepoNames;
+}
+
 function getAgentNames() {
     const summary = collectAgentsSummary();
     if (!summary.length) return [];
@@ -84,7 +98,7 @@ async function updateRepo(repoName) {
 }
 
 async function updatePloinkyRepos() {
-    const ploinkyRepos = getRepoNames();
+    const ploinkyRepos = getGitRepoNames();
     const failed = [];
     let updated = 0;
 
@@ -133,7 +147,7 @@ async function updateAllRepos(folderPath, options = {}) {
     const ploinkyRoot = resolvePloinkyRoot();
     const workspaceRepos = reposSvc.findWorkspaceGitRepos(projectsRoot)
         .filter(repo => !pathsReferToSameLocation(repo.path, ploinkyRoot));
-    const ploinkyRepos = getRepoNames();
+    const ploinkyRepos = getGitRepoNames();
     const failed = [];
     let updated = 0;
 

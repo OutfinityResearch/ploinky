@@ -4,7 +4,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { findWorkspaceGitRepos } from '../../cli/services/repos.js';
+import { findWorkspaceGitRepos, isGitRepository } from '../../cli/services/repos.js';
 import { resolveUpdateProjectsRoot } from '../../cli/commands/repoAgentCommands.js';
 
 function mkdir(dir) {
@@ -54,6 +54,22 @@ test('findWorkspaceGitRepos skips unreadable runtime data directories', () => {
 test('findWorkspaceGitRepos rejects missing search roots', () => {
     const missing = path.join(os.tmpdir(), `ploinky-missing-${Date.now()}`);
     assert.throws(() => findWorkspaceGitRepos(missing), /is not a directory/);
+});
+
+test('isGitRepository detects only directories with git metadata', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-git-check-'));
+    try {
+        const gitRepo = path.join(root, 'git-repo');
+        const plainDir = path.join(root, 'plain-dir');
+        mkdir(path.join(gitRepo, '.git'));
+        mkdir(plainDir);
+
+        assert.equal(isGitRepository(gitRepo), true);
+        assert.equal(isGitRepository(plainDir), false);
+        assert.equal(isGitRepository(path.join(root, 'missing')), false);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
 });
 
 test('resolveUpdateProjectsRoot defaults to the current working directory', () => {
