@@ -82,7 +82,7 @@ Dashboard access has two modes. If router auth has established `req.user`, the D
 
 The Status surface is protected by the router auth context when a route policy requires auth. Its handler does not implement an additional token challenge. If the active route context resolves to auth mode `none`, Status data is effectively public on the router port.
 
-Public service routes under `/public-services/...` intentionally bypass router auth. Protected service routes under `/services/...` may pass a plain `x-ploinky-auth-info` header derived from `req.user` to a downstream HTTP service. That header is not a signed secure-wire grant; downstream services must trust it only when the request came through a protected router path and must not accept caller-supplied equivalents as authoritative.
+Public service routes under `/public-services/...` intentionally bypass router auth. Protected service routes under `/services/...` may pass a plain `x-ploinky-auth-info` header derived from `req.user` to a downstream HTTP service. When the downstream service may need to make delegated agent calls, the router includes a router-issued invocation token in that auth-info payload so the service can re-enter `/mcps/<agent>/mcp` with `X-Ploinky-Caller-JWT`. The identity fields in `x-ploinky-auth-info` are not a signed secure-wire grant by themselves; downstream services must trust them only when the request came through a protected router path and must not accept caller-supplied equivalents as authoritative.
 
 ### Secure-Wire Invocation Model
 

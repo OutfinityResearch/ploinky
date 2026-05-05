@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 
 import { sendJson } from './authHandlers.js';
 import { createAgentClient } from './AgentClient.js';
+import { buildInvocationContextForProviderCall } from './mcp-proxy/index.js';
 import { ROUTING_FILE } from '../services/config.js';
 
 const ROUTING_DIR = path.dirname(ROUTING_FILE);
@@ -124,20 +125,24 @@ export function proxyHttpPassthrough(req, res, targetPort, agentPath, extraHeade
     req.pipe(upstream, { end: true });
 }
 
-function buildPlainAuthInfoHeader(req) {
+export function buildPlainAuthInfoHeader(req, invocation = null) {
     if (!req.user || typeof req.user !== 'object') {
         return {};
     }
+    const authInfo = {
+        user: {
+            id: req.user.id || '',
+            username: req.user.username || req.user.name || req.user.email || '',
+            email: req.user.email || '',
+            roles: Array.isArray(req.user.roles) ? [...req.user.roles] : []
+        },
+        sessionId: req.sessionId || ''
+    };
+    if (invocation?.token) {
+        authInfo.invocationToken = invocation.token;
+    }
     return {
-        'x-ploinky-auth-info': JSON.stringify({
-            user: {
-                id: req.user.id || '',
-                username: req.user.username || req.user.name || req.user.email || '',
-                email: req.user.email || '',
-                roles: Array.isArray(req.user.roles) ? [...req.user.roles] : []
-            },
-            sessionId: req.sessionId || ''
-        })
+        'x-ploinky-auth-info': JSON.stringify(authInfo)
     };
 }
 
@@ -160,7 +165,7 @@ const HTTP_SERVICE_ROUTE_DEFINITIONS = [
         internalPrefix: '/office/',
         isPublic: false,
         notFoundMessage: 'Explorer route not found.',
-        buildHeaders: req => buildPlainAuthInfoHeader(req)
+        buildHeaders: (req, invocation) => buildPlainAuthInfoHeader(req, invocation)
     },
     {
         agentName: 'explorer',
@@ -196,12 +201,28 @@ export function handleHttpServiceRoute(req, res, parsedUrl, apiRoutes = loadApiR
         return true;
     }
 
+    const serviceAgentRef = route.repo && route.agent
+        ? `${route.repo}/${route.agent}`
+        : definition.agentName;
+    const invocation = definition.isPublic
+        ? null
+        : buildInvocationContextForProviderCall({
+            req,
+            agentName: serviceAgentRef,
+            toolName: '__http_service__',
+            toolArgs: {
+                method: req.method || 'GET',
+                path: pathname,
+                search: parsedUrl?.search || ''
+            }
+        });
+
     proxyHttpPassthrough(
         req,
         res,
         route.hostPort,
         buildServiceAgentPath(pathname, parsedUrl?.search, definition.externalPrefix, definition.internalPrefix),
-        definition.buildHeaders ? definition.buildHeaders(req) : {}
+        definition.buildHeaders ? definition.buildHeaders(req, invocation) : {}
     );
     return true;
 }
