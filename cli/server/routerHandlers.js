@@ -176,6 +176,14 @@ const HTTP_SERVICE_ROUTE_DEFINITIONS = [
     },
     {
         agentName: 'webmeetAgent',
+        externalPrefix: '/services/webmeet/',
+        internalPrefix: '/api/',
+        isPublic: false,
+        notFoundMessage: 'WebMeet route not found.',
+        buildHeaders: (req, invocation) => buildPlainAuthInfoHeader(req, invocation)
+    },
+    {
+        agentName: 'webmeetAgent',
         externalPrefix: '/public-services/webmeet/',
         internalPrefix: '/api/',
         isPublic: false,
