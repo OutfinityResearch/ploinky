@@ -26,13 +26,21 @@ function getGitRepoNames() {
     const gitRepoNames = [];
     for (const repoName of repoNames) {
         const repoPath = path.join(REPOS_DIR, repoName);
-        if (reposSvc.isGitRepository(repoPath)) {
+        if (reposSvc.isGitRepository(repoPath) || reposSvc.resolveRepoSourceUrl(repoName)) {
             gitRepoNames.push(repoName);
         } else {
-            console.warn(`  ! Skipping ${repoName}: not a git repository.`);
+            console.warn(`  ! Skipping ${repoName}: not a git repository and no source URL is known.`);
         }
     }
     return gitRepoNames;
+}
+
+function logRepoUpdateSuccess(repoName, result, indent = '') {
+    if (result?.recloned) {
+        console.log(`${indent}✓ ${repoName} (recloned; previous copy moved to ${result.backupPath})`);
+        return;
+    }
+    console.log(`${indent}✓ ${repoName}`);
 }
 
 function getAgentNames() {
@@ -84,8 +92,12 @@ function addRepo(repoName, repoUrl, branch = null) {
 async function updateRepo(repoName) {
     if (!repoName) throw new Error('Usage: update repo <name>');
     try {
-        reposSvc.updateRepo(repoName);
-        console.log(`✓ Repo '${repoName}' updated.`);
+        const result = reposSvc.updateRepo(repoName);
+        if (result?.recloned) {
+            console.log(`✓ Repo '${repoName}' recloned; previous copy moved to ${result.backupPath}.`);
+        } else {
+            console.log(`✓ Repo '${repoName}' updated.`);
+        }
         const repoPath = path.join(REPOS_DIR, repoName);
         const achilles = refreshAchillesDependenciesInRepos({ reposRoot: repoPath });
         if (achilles.failed.length) {
@@ -106,8 +118,8 @@ async function updatePloinkyRepos() {
         console.log('Updating ploinky repositories...');
         for (const repoName of ploinkyRepos) {
             try {
-                reposSvc.updateRepo(repoName);
-                console.log(`  ✓ ${repoName}`);
+                const result = reposSvc.updateRepo(repoName);
+                logRepoUpdateSuccess(repoName, result, '  ');
                 updated += 1;
             } catch (err) {
                 const message = err?.message || String(err);
@@ -185,8 +197,8 @@ async function updateAllRepos(folderPath, options = {}) {
         console.log('Updating ploinky repositories...');
         for (const repoName of ploinkyRepos) {
             try {
-                reposSvc.updateRepo(repoName);
-                console.log(`  ✓ ${repoName}`);
+                const result = reposSvc.updateRepo(repoName);
+                logRepoUpdateSuccess(repoName, result, '  ');
                 updated += 1;
             } catch (err) {
                 const message = err?.message || String(err);

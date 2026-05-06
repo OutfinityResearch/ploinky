@@ -1,9 +1,72 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync, execFileSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { PLOINKY_DIR } from './config.js';
 
 export const ENABLED_REPOS_FILE = path.join(PLOINKY_DIR, 'enabled_repos.json');
+export const REPO_SOURCES_FILE = path.join(PLOINKY_DIR, 'repo_sources.json');
+const REPOS_DIR = path.join(PLOINKY_DIR, 'repos');
+
+function loadRepoSources() {
+    try {
+        const raw = fs.readFileSync(REPO_SOURCES_FILE, 'utf8');
+        const data = JSON.parse(raw || '{}');
+        return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function saveRepoSources(sources) {
+    try {
+        fs.mkdirSync(PLOINKY_DIR, { recursive: true });
+        fs.writeFileSync(REPO_SOURCES_FILE, JSON.stringify(sources || {}, null, 2));
+    } catch (_) {}
+}
+
+function normalizeRepoBranch(branch) {
+    const value = String(branch || '').trim();
+    if (!value || value === 'default') return null;
+    return value;
+}
+
+function normalizeRepoSourceValue(value) {
+    if (typeof value === 'string') {
+        const url = value.trim();
+        return url ? { url, branch: null } : null;
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return null;
+    }
+    const url = String(value.url || '').trim();
+    if (!url) return null;
+    return {
+        url,
+        branch: normalizeRepoBranch(value.branch),
+    };
+}
+
+function readStoredRepoSource(name) {
+    const repoName = String(name || '').trim();
+    if (!repoName) return null;
+    return normalizeRepoSourceValue(loadRepoSources()[repoName]);
+}
+
+function recordRepoSource(name, url, branch = null) {
+    const repoName = String(name || '').trim();
+    const repoUrl = String(url || '').trim();
+    if (!repoName || !repoUrl) return;
+    const previous = readStoredRepoSource(repoName);
+    const repoBranch = normalizeRepoBranch(branch)
+        || (previous?.url === repoUrl ? previous.branch : null);
+    const next = { url: repoUrl };
+    if (repoBranch) next.branch = repoBranch;
+    const sources = loadRepoSources();
+    const current = normalizeRepoSourceValue(sources[repoName]);
+    if (current?.url === next.url && current?.branch === (next.branch || null)) return;
+    sources[repoName] = next;
+    saveRepoSources(sources);
+}
 
 export function loadEnabledRepos() {
     try {
@@ -110,24 +173,98 @@ export function resolveRepoUrl(name, url) {
     return preset ? preset.url : null;
 }
 
-export function addRepo(name, url, branch = null) {
+function findManifestRepoSource(repoName) {
+    const targetName = String(repoName || '').trim();
+    if (!targetName) return null;
+    const ignoredDirNames = new Set(['.git', 'node_modules']);
+
+    function inspectManifest(filePath) {
+        try {
+            const manifest = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            const repos = manifest?.repos;
+            if (!repos || typeof repos !== 'object' || Array.isArray(repos)) return null;
+            return normalizeRepoSourceValue(repos[targetName]);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function visit(dir) {
+        const manifestPath = path.join(dir, 'manifest.json');
+        if (fs.existsSync(manifestPath)) {
+            const url = inspectManifest(manifestPath);
+            if (url) return url;
+        }
+
+        let entries;
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch (_) {
+            return null;
+        }
+
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            if (entry.name.startsWith('.') || ignoredDirNames.has(entry.name)) continue;
+            const found = visit(path.join(dir, entry.name));
+            if (found) return found;
+        }
+        return null;
+    }
+
+    try {
+        if (!fs.existsSync(REPOS_DIR) || !fs.statSync(REPOS_DIR).isDirectory()) return null;
+    } catch (_) {
+        return null;
+    }
+
+    return visit(REPOS_DIR);
+}
+
+export function resolveRepoSource(name, url = null, branch = null) {
+    const repoName = String(name || '').trim();
+    const directUrl = resolveRepoUrl(name, url);
+    const stored = readStoredRepoSource(repoName);
+    const manifest = findManifestRepoSource(repoName);
+    const sourceUrl = directUrl || stored?.url || manifest?.url || null;
+    if (!sourceUrl) return null;
+
+    const sourceBranch = normalizeRepoBranch(branch)
+        || (stored?.url === sourceUrl ? stored.branch : null)
+        || (manifest?.url === sourceUrl ? manifest.branch : null)
+        || null;
+
+    if (manifest?.url === sourceUrl || stored?.url === sourceUrl) {
+        recordRepoSource(repoName, sourceUrl, sourceBranch);
+    }
+    return { url: sourceUrl, branch: sourceBranch };
+}
+
+export function resolveRepoSourceUrl(name, url = null) {
+    return resolveRepoSource(name, url)?.url || null;
+}
+
+export function addRepo(name, url, branch = null, { stdio = 'inherit' } = {}) {
     if (!name) throw new Error('Missing repository name.');
     const REPOS_DIR = ensureReposDir();
     const repoPath = path.join(REPOS_DIR, name);
+    const source = resolveRepoSource(name, url, branch);
+    const actualUrl = source?.url || null;
+    const actualBranch = source?.branch || null;
     if (fs.existsSync(repoPath)) {
-        return { status: 'exists', path: repoPath, branch: null };
+        recordRepoSource(name, actualUrl, actualBranch);
+        return { status: 'exists', path: repoPath, branch: actualBranch };
     }
-    const actualUrl = resolveRepoUrl(name, url);
     if (!actualUrl) throw new Error(`Missing repository URL for '${name}'.`);
-    let cloneCmd = `git clone ${actualUrl} ${repoPath}`;
-    if (branch) {
-        cloneCmd = `git clone --branch ${branch} ${actualUrl} ${repoPath}`;
-    }
-    execSync(cloneCmd, { stdio: 'inherit' });
-    return { status: 'cloned', path: repoPath, branch: branch || 'default' };
+    const args = ['clone'];
+    if (actualBranch) args.push('--branch', actualBranch);
+    args.push(actualUrl, repoPath);
+    execFileSync('git', args, { stdio });
+    recordRepoSource(name, actualUrl, actualBranch);
+    return { status: 'cloned', path: repoPath, branch: actualBranch || 'default' };
 }
 
-export function enableRepo(name, branch = null) {
+export function enableRepo(name, branch = null, { stdio = 'inherit' } = {}) {
     if (!name) throw new Error('Missing repository name.');
 
     if (PREDEFINED_REPOS[name]?.kind === 'skills') {
@@ -136,14 +273,17 @@ export function enableRepo(name, branch = null) {
 
     const REPOS_DIR = ensureReposDir();
     const repoPath = path.join(REPOS_DIR, name);
+    const source = resolveRepoSource(name, null, branch);
     if (!fs.existsSync(repoPath)) {
-        const url = resolveRepoUrl(name, null);
+        const url = source?.url || null;
         if (!url) throw new Error(`No URL configured for repo '${name}'.`);
-        let cloneCmd = `git clone ${url} ${repoPath}`;
-        if (branch) {
-            cloneCmd = `git clone --branch ${branch} ${url} ${repoPath}`;
-        }
-        execSync(cloneCmd, { stdio: 'inherit' });
+        const args = ['clone'];
+        if (source.branch) args.push('--branch', source.branch);
+        args.push(url, repoPath);
+        execFileSync('git', args, { stdio });
+        recordRepoSource(name, url, source.branch);
+    } else if (source?.url) {
+        recordRepoSource(name, source.url, source.branch);
     }
 
     if (classifyRepoKind(name) === 'skills') {
@@ -165,7 +305,39 @@ export function disableRepo(name) {
     return true;
 }
 
-export function updateRepo(name, { rebase = true, autostash = true } = {}) {
+function recloneNonGitRepo(name, repoPath, url, { branch = null, stdio = 'inherit' } = {}) {
+    const reposRoot = path.dirname(repoPath);
+    const safeName = String(name || 'repo').replace(/[^a-zA-Z0-9_.-]+/g, '-');
+    const stamp = new Date().toISOString().replace(/[^0-9A-Za-z]+/g, '-');
+    const tempPath = path.join(reposRoot, `.${safeName}.clone-${process.pid}-${Date.now()}`);
+    const backupRoot = path.join(PLOINKY_DIR, 'repo-backups');
+    const backupPath = path.join(backupRoot, `${safeName}-${stamp}`);
+    const args = ['clone'];
+    if (branch) args.push('--branch', branch);
+    args.push(url, tempPath);
+
+    execFileSync('git', args, { stdio });
+
+    try {
+        fs.mkdirSync(backupRoot, { recursive: true });
+        fs.renameSync(repoPath, backupPath);
+        fs.renameSync(tempPath, repoPath);
+    } catch (err) {
+        try {
+            if (!fs.existsSync(repoPath) && fs.existsSync(backupPath)) {
+                fs.renameSync(backupPath, repoPath);
+            }
+        } catch (_) {}
+        throw err;
+    } finally {
+        try { fs.rmSync(tempPath, { recursive: true, force: true }); } catch (_) {}
+    }
+
+    recordRepoSource(name, url);
+    return { recloned: true, backupPath };
+}
+
+export function updateRepo(name, { rebase = true, autostash = true, stdio = 'inherit' } = {}) {
     if (!name) throw new Error('Missing repository name.');
     const REPOS_DIR = ensureReposDir();
     const repoPath = path.join(REPOS_DIR, name);
@@ -173,13 +345,17 @@ export function updateRepo(name, { rebase = true, autostash = true } = {}) {
         throw new Error(`Repository '${name}' is not installed.`);
     }
     if (!isGitRepository(repoPath)) {
-        throw new Error(`Repository '${name}' is not a git repository.`);
+        const source = resolveRepoSource(name, null);
+        if (!source?.url) {
+            throw new Error(`Repository '${name}' is not a git repository and no source URL is known.`);
+        }
+        return recloneNonGitRepo(name, repoPath, source.url, { branch: source.branch, stdio });
     }
     const args = ['-C', repoPath, 'pull'];
     if (rebase) args.push('--rebase');
     if (autostash) args.push('--autostash');
-    execFileSync('git', args, { stdio: 'inherit' });
-    return true;
+    execFileSync('git', args, { stdio });
+    return { pulled: true };
 }
 
 export function isGitRepository(repoPath) {
