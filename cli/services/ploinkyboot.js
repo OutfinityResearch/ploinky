@@ -6,8 +6,13 @@ import * as repos from './repos.js';
 
 const DEFAULT_REPOS = [
     { name: 'basic', url: 'https://github.com/PloinkyRepos/Basic.git' },
+    { name: 'AchillesIDE', url: 'https://github.com/PloinkyRepos/AssistOSExplorer.git' },
     { name: 'AchillesCLI', url: 'https://github.com/OutfinityResearch/AchillesCLI.git' },
 ];
+
+export function getDefaultBootRepos() {
+    return DEFAULT_REPOS.map(repo => ({ ...repo }));
+}
 
 function ensureRepo(name, url) {
     const reposDir = path.join(PLOINKY_DIR, 'repos');
@@ -27,12 +32,12 @@ function ensureRepo(name, url) {
 }
 
 export function bootstrap() {
-    for (const { name, url } of DEFAULT_REPOS) {
+    for (const { name, url } of getDefaultBootRepos()) {
         ensureRepo(name, url);
     }
     try {
         const list = repos.loadEnabledRepos();
-        for (const { name } of DEFAULT_REPOS) {
+        for (const { name } of getDefaultBootRepos()) {
             const repoPath = path.join(PLOINKY_DIR, 'repos', name);
             if (fs.existsSync(repoPath) && !list.includes(name)) {
                 list.push(name);
