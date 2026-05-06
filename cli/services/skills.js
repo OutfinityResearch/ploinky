@@ -8,6 +8,10 @@ export const AGENT_SKILL_TARGETS = Object.freeze({
     'agents':      '.agents/skills',
 });
 
+const CANONICAL_AGENT_DIR = '.agents';
+const CLAUDE_SYMLINK = '.claude';
+const CANONICAL_SKILLS_DIR = AGENT_SKILL_TARGETS['agents'];
+
 const GITIGNORE_MARKER_START = '# >>> ploinky default-skills >>>';
 const GITIGNORE_MARKER_END = '# <<< ploinky default-skills <<<';
 
@@ -25,7 +29,27 @@ function listSkillDirectories(skillsRoot) {
 }
 
 export function copySkill(srcDir, destDir) {
+    fs.rmSync(destDir, { recursive: true, force: true });
     fs.cpSync(srcDir, destDir, { recursive: true, force: true });
+}
+
+function pathExists(targetPath) {
+    try {
+        fs.lstatSync(targetPath);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+function listExistingSkillDirectories(skillsDir) {
+    try {
+        return fs.readdirSync(skillsDir, { withFileTypes: true })
+            .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+            .map(entry => entry.name);
+    } catch (_) {
+        return [];
+    }
 }
 
 export function ensureGitignoreEntries(workspaceRoot, relPaths) {
@@ -37,17 +61,17 @@ export function ensureGitignoreEntries(workspaceRoot, relPaths) {
         content = '';
     }
 
-    const desired = relPaths.map(p => (p.endsWith('/') ? p : `${p}/`));
+    const desired = relPaths.map(p => {
+        if (p.includes('/')) return p.endsWith('/') ? p : `${p}/`;
+        return p;
+    });
     const startIdx = content.indexOf(GITIGNORE_MARKER_START);
     const endIdx = content.indexOf(GITIGNORE_MARKER_END);
 
     if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
         const before = content.slice(0, startIdx);
         const after = content.slice(endIdx + GITIGNORE_MARKER_END.length);
-        const blockBody = content.slice(startIdx + GITIGNORE_MARKER_START.length, endIdx);
-        const existing = blockBody.split('\n').map(s => s.trim()).filter(Boolean);
-        const union = Array.from(new Set([...existing, ...desired]));
-        const newBlock = `${GITIGNORE_MARKER_START}\n${union.join('\n')}\n${GITIGNORE_MARKER_END}`;
+        const newBlock = `${GITIGNORE_MARKER_START}\n${desired.join('\n')}\n${GITIGNORE_MARKER_END}`;
         const newContent = `${before}${newBlock}${after}`;
         if (newContent === content) return false;
         fs.writeFileSync(gitignorePath, newContent);
@@ -60,6 +84,86 @@ export function ensureGitignoreEntries(workspaceRoot, relPaths) {
     return true;
 }
 
+function migrateLegacyClaudeSkills(destRoot, incomingSkills, agentsSkillsDir) {
+    const claudePath = path.join(destRoot, CLAUDE_SYMLINK);
+    const claudeSkillsDir = path.join(claudePath, 'skills');
+    const incoming = new Set(incomingSkills);
+    const migratedSkills = [];
+    const skippedExistingSkills = [];
+
+    let claudeStat;
+    try { claudeStat = fs.lstatSync(claudePath); } catch (_) { claudeStat = null; }
+    if (!claudeStat) {
+        return { migratedSkills, skippedExistingSkills };
+    }
+
+    if (claudeStat.isSymbolicLink()) {
+        try {
+            const canonicalReal = fs.realpathSync(path.join(destRoot, CANONICAL_AGENT_DIR));
+            const claudeReal = fs.realpathSync(claudePath);
+            if (canonicalReal === claudeReal) {
+                return { migratedSkills, skippedExistingSkills };
+            }
+        } catch (_) { }
+    }
+
+    for (const skill of listExistingSkillDirectories(claudeSkillsDir)) {
+        if (incoming.has(skill)) continue;
+
+        const srcDir = path.join(claudeSkillsDir, skill);
+        const destDir = path.join(agentsSkillsDir, skill);
+        if (pathExists(destDir)) {
+            skippedExistingSkills.push(skill);
+            continue;
+        }
+        fs.cpSync(srcDir, destDir, { recursive: true, force: true });
+        migratedSkills.push(skill);
+    }
+
+    if (!claudeStat.isSymbolicLink() && pathExists(claudeSkillsDir)) {
+        fs.rmSync(claudeSkillsDir, { recursive: true, force: true });
+    }
+
+    return { migratedSkills, skippedExistingSkills };
+}
+
+function ensureClaudeSymlink(destRoot) {
+    const symlinkPath = path.join(destRoot, CLAUDE_SYMLINK);
+    const target = CANONICAL_AGENT_DIR;
+
+    let stat;
+    try { stat = fs.lstatSync(symlinkPath); } catch (_) { stat = null; }
+
+    if (stat) {
+        if (stat.isSymbolicLink()) {
+            const existing = fs.readlinkSync(symlinkPath);
+            if (existing === target) return { changed: false, mode: 'root' };
+            fs.unlinkSync(symlinkPath);
+        } else if (stat.isDirectory()) {
+            const entries = fs.readdirSync(symlinkPath).filter(name => name !== '.DS_Store');
+            if (entries.length) {
+                const skillsSymlinkPath = path.join(symlinkPath, 'skills');
+                if (pathExists(skillsSymlinkPath)) {
+                    const skillsStat = fs.lstatSync(skillsSymlinkPath);
+                    if (skillsStat.isSymbolicLink()
+                        && fs.readlinkSync(skillsSymlinkPath) === `../${CANONICAL_SKILLS_DIR}`) {
+                        return { changed: false, mode: 'skills' };
+                    }
+                    fs.rmSync(skillsSymlinkPath, { recursive: true, force: true });
+                }
+                fs.symlinkSync(`../${CANONICAL_SKILLS_DIR}`, skillsSymlinkPath, 'dir');
+                return { changed: true, mode: 'skills' };
+            }
+            fs.rmSync(symlinkPath, { recursive: true, force: true });
+        } else {
+            fs.unlinkSync(symlinkPath);
+        }
+    }
+
+    fs.symlinkSync(target, symlinkPath, 'dir');
+    return { changed: true, mode: 'root' };
+}
+
 export function installDefaultSkills(repoName, { only, skip, targetRoot } = {}) {
     if (!repoName || typeof repoName !== 'string') {
         throw new Error('Missing repository name.');
@@ -68,14 +172,11 @@ export function installDefaultSkills(repoName, { only, skip, targetRoot } = {}) 
     const destRoot = targetRoot || process.cwd();
 
     const knownAgents = Object.keys(AGENT_SKILL_TARGETS);
-    let selectedAgents = knownAgents.slice();
-
     if (Array.isArray(only) && only.length) {
         const unknown = only.filter(agent => !AGENT_SKILL_TARGETS[agent]);
         if (unknown.length) {
             throw new Error(`Unknown agent(s) in --only: ${unknown.join(', ')}. Known: ${knownAgents.join(', ')}`);
         }
-        selectedAgents = only.slice();
     }
 
     if (Array.isArray(skip) && skip.length) {
@@ -83,11 +184,6 @@ export function installDefaultSkills(repoName, { only, skip, targetRoot } = {}) 
         if (unknown.length) {
             throw new Error(`Unknown agent(s) in --skip: ${unknown.join(', ')}. Known: ${knownAgents.join(', ')}`);
         }
-        selectedAgents = selectedAgents.filter(agent => !skip.includes(agent));
-    }
-
-    if (!selectedAgents.length) {
-        throw new Error('No target agents selected (all were skipped).');
     }
 
     const repoPath = ensureRepoCloned(repoName);
@@ -110,21 +206,32 @@ export function installDefaultSkills(repoName, { only, skip, targetRoot } = {}) 
         throw new Error(`No skill subdirectories found under ${skillsRoot}.`);
     }
 
-    const targets = [];
-    for (const agent of selectedAgents) {
-        const relDir = AGENT_SKILL_TARGETS[agent];
-        const absBase = path.join(destRoot, relDir);
-        fs.mkdirSync(absBase, { recursive: true });
-        for (const skill of skills) {
-            copySkill(path.join(skillsRoot, skill), path.join(absBase, skill));
-        }
-        targets.push({ agent, relDir, skills });
+    const agentsSkillsDir = path.join(destRoot, CANONICAL_SKILLS_DIR);
+    fs.mkdirSync(agentsSkillsDir, { recursive: true });
+    const legacyMigration = migrateLegacyClaudeSkills(destRoot, skills, agentsSkillsDir);
+    for (const skill of skills) {
+        copySkill(path.join(skillsRoot, skill), path.join(agentsSkillsDir, skill));
     }
 
-    const gitignoreUpdated = ensureGitignoreEntries(
-        destRoot,
-        selectedAgents.map(agent => AGENT_SKILL_TARGETS[agent])
-    );
+    const claudeLink = ensureClaudeSymlink(destRoot);
 
-    return { repoName, repoPath, skills, targets, destRoot, gitignoreUpdated };
+    const targets = [{ agent: 'agents', relDir: CANONICAL_SKILLS_DIR, skills }];
+
+    const gitignoreEntries = [
+        CLAUDE_SYMLINK,
+        ...skills.map(skill => `${CANONICAL_SKILLS_DIR}/${skill}`),
+    ];
+    const gitignoreUpdated = ensureGitignoreEntries(destRoot, gitignoreEntries);
+
+    return {
+        repoName,
+        repoPath,
+        skills,
+        targets,
+        destRoot,
+        gitignoreUpdated,
+        symlinkCreated: claudeLink.changed,
+        claudeLink,
+        legacyMigration,
+    };
 }

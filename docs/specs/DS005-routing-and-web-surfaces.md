@@ -27,7 +27,9 @@ The router must also expose:
 - `/mcp` for router-level MCP aggregation.
 - `/mcps/<agent>/mcp` and `/mcp/<agent>/mcp` for agent MCP proxying.
 - `/mcps/<agent>/task` for task-status passthrough.
-- configured HTTP service prefixes for special downstream HTTP services.
+- manifest-declared HTTP service prefixes for downstream HTTP services.
+
+HTTP service routes must be declared by the target agent rather than hard-coded into router handlers. An enabled agent may provide `httpServices` entries with an external prefix, internal upstream prefix, and auth mode. The router resolves those declarations from the route table and agent manifest, then forwards matching requests to the owning agent route. Public service declarations with `auth: "none"` intentionally run without router identity; `auth: "guest"` follows the normal guest policy, honoring an existing local session unless the declaration explicitly sets `forceGuest: true`, and otherwise mints a scoped guest session; protected declarations reuse the owning route's normal auth policy.
 
 When the static agent is not yet ready to serve its own static assets, the router may serve a temporary bootstrap page that reloads until the agent becomes ready. This bootstrap behavior is part of the current user-facing contract and should remain documented.
 

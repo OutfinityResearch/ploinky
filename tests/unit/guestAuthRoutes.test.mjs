@@ -56,9 +56,28 @@ function makeRequest({ method = 'GET', url, body, cookie = '', accept = 'applica
 function writeWorkspaceConfig(ploinkyDir) {
     writeFileSync(path.join(ploinkyDir, '.secrets'), '# test secrets\n');
     const webAdminManifestDir = path.join(ploinkyDir, 'repos', 'webassist', 'webAdmin');
+    const serviceManifestDir = path.join(ploinkyDir, 'repos', 'services', 'guestAgent');
     mkdirSync(webAdminManifestDir, { recursive: true });
+    mkdirSync(serviceManifestDir, { recursive: true });
     writeFileSync(path.join(webAdminManifestDir, 'manifest.json'), JSON.stringify({
         webchat: { auth: 'static' },
+    }, null, 2));
+    writeFileSync(path.join(serviceManifestDir, 'manifest.json'), JSON.stringify({
+        httpServices: [
+            {
+                externalPrefix: '/public-services/meeting-room/',
+                internalPrefix: '/api/',
+                auth: 'guest',
+                guestScope: 'meeting-room-public-service',
+                forceGuest: true,
+            },
+            {
+                externalPrefix: '/public-services/visitor-support/',
+                internalPrefix: '/api/',
+                auth: 'guest',
+                guestScope: 'visitor-support-public-service',
+            },
+        ],
     }, null, 2));
     writeFileSync(path.join(ploinkyDir, 'agents.json'), JSON.stringify({
         explorer: {
@@ -79,12 +98,24 @@ function writeWorkspaceConfig(ploinkyDir) {
             repoName: 'webassist',
             auth: { mode: 'none' },
         },
+        guestAgent: {
+            type: 'agent',
+            agentName: 'guestAgent',
+            repoName: 'services',
+            auth: { mode: 'none' },
+        },
     }, null, 2));
     writeFileSync(path.join(ploinkyDir, 'routing.json'), JSON.stringify({
         routes: {
             explorer: { agent: 'explorer', repo: 'AchillesIDE', hostPort: 55289 },
             webAssist: { agent: 'webAssist', repo: 'webassist', hostPort: 53659 },
             webAdmin: { agent: 'webAdmin', repo: 'webassist', hostPort: 41155 },
+            guestAgent: {
+                agent: 'guestAgent',
+                repo: 'services',
+                hostPort: 43111,
+                hostPath: serviceManifestDir,
+            },
         },
         static: {
             agent: 'explorer',
@@ -115,7 +146,8 @@ async function withAuthModules(t) {
 
     const nonce = `${Date.now()}-${Math.random()}`;
     const authHandlers = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/server/authHandlers.js')).href}?test=${nonce}`);
-    return { authHandlers };
+    const localService = await import(`${pathToFileURL(path.join(REPO_ROOT, 'cli/server/auth/localService.js')).href}?test=${nonce}`);
+    return { authHandlers, localService };
 }
 
 test('guest routes use the guest agent policy instead of the static Explorer policy', async (t) => {
@@ -203,4 +235,80 @@ test('guest routes use the guest agent policy instead of the static Explorer pol
     assert.equal(webAssistChatReq.authMode, 'guest');
     assert.equal(webAssistChatReq.user?.username, 'visitor');
     assert.match(String(webAssistChatRes.getHeader('set-cookie') || ''), /^ploinky_guest=/);
+});
+
+test('guest public services use scoped forced guest sessions', async (t) => {
+    const { authHandlers, localService } = await withAuthModules(t);
+    const localJwt = localService.mintSessionJwt({
+        id: 'local:admin',
+        username: 'admin',
+        name: 'Admin',
+        roles: ['local', 'admin']
+    }, 1);
+
+    const guestServiceReq = makeRequest({
+        url: '/public-services/meeting-room/guest?room=room-1&token=invite',
+        cookie: `ploinky_jwt=${localJwt}`
+    });
+    const guestServiceRes = new MockResponse();
+    const guestServiceParsedUrl = new URL(guestServiceReq.url, 'http://localhost');
+
+    const guestServiceResult = await authHandlers.ensureAuthenticated(guestServiceReq, guestServiceRes, guestServiceParsedUrl);
+
+    assert.equal(guestServiceResult.ok, true);
+    assert.equal(guestServiceReq.authMode, 'guest');
+    assert.equal(guestServiceReq.user?.username, 'visitor');
+    assert.deepEqual(guestServiceReq.user?.roles, ['guest']);
+    assert.match(String(guestServiceRes.getHeader('set-cookie') || ''), /^ploinky_guest=/);
+
+    const guestServiceJwt = String(guestServiceReq.sessionId || '');
+    assert.equal(localService.getSession(guestServiceJwt, { policy: { mode: 'guest' } }), null);
+    assert.equal(
+        localService.getSession(guestServiceJwt, { policy: { mode: 'guest', guestScope: 'meeting-room-public-service' } })?.user?.username,
+        'visitor'
+    );
+});
+
+test('guest public services follow normal guest policy unless forceGuest is set', async (t) => {
+    const { authHandlers, localService } = await withAuthModules(t);
+    const localJwt = localService.mintSessionJwt({
+        id: 'local:admin',
+        username: 'admin',
+        name: 'Admin',
+        roles: ['local', 'admin']
+    }, 1);
+
+    const localReq = makeRequest({
+        url: '/public-services/visitor-support/chat',
+        cookie: `ploinky_jwt=${localJwt}`
+    });
+    const localRes = new MockResponse();
+    const localParsedUrl = new URL(localReq.url, 'http://localhost');
+
+    const localResult = await authHandlers.ensureAuthenticated(localReq, localRes, localParsedUrl);
+
+    assert.equal(localResult.ok, true);
+    assert.equal(localReq.authMode, 'local');
+    assert.equal(localReq.user?.username, 'admin');
+    assert.doesNotMatch(String(localRes.getHeader('set-cookie') || ''), /^ploinky_guest=/);
+
+    const guestReq = makeRequest({
+        url: '/public-services/visitor-support/chat',
+    });
+    const guestRes = new MockResponse();
+    const guestParsedUrl = new URL(guestReq.url, 'http://localhost');
+
+    const guestResult = await authHandlers.ensureAuthenticated(guestReq, guestRes, guestParsedUrl);
+
+    assert.equal(guestResult.ok, true);
+    assert.equal(guestReq.authMode, 'guest');
+    assert.equal(guestReq.user?.username, 'visitor');
+    assert.match(String(guestRes.getHeader('set-cookie') || ''), /^ploinky_guest=/);
+
+    const guestJwt = String(guestReq.sessionId || '');
+    assert.equal(localService.getSession(guestJwt, { policy: { mode: 'guest' } }), null);
+    assert.equal(
+        localService.getSession(guestJwt, { policy: { mode: 'guest', guestScope: 'visitor-support-public-service' } })?.user?.username,
+        'visitor'
+    );
 });

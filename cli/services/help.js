@@ -31,7 +31,7 @@ export function showHelp(args = []) {
   var <VAR> <value>              Set a variable value
   echo <VAR|$VAR>                Print the resolved value of a variable
   expose <ENV_NAME> [<$VAR|value>] [agent]  Expose to agent environment
-  default-skills <repoName>      Copy or refresh skills/ from .ploinky/repos/<repoName> into gitignored skill dirs
+  default-skills <repoName>      Refresh repo skills into .agents/skills while preserving other skills
   list agents | repos            List agents (manifests) or predefined repos
 
 
@@ -270,19 +270,15 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             notes: 'Resolves chained aliases like VAR=$OTHER.'
         },
         'default-skills': {
-            description: 'Copy each subdirectory of <repoName>/skills/ into per-agent discovery dirs so coding agents can find them. Writes to .claude/skills/ (Claude Code) and .agents/skills/ (the cross-tool convention read by Codex, OpenCode, GitHub Copilot, etc.). The repo is auto-cloned into .ploinky/repos/<repoName> on first use, and the target paths are written to .gitignore so the copies are not committed.',
-            syntax: 'default-skills <repoName> [--only agent[,agent...]] [--skip agent[,agent...]]',
+            description: 'Copy each subdirectory of <repoName>/skills/ into .agents/skills/. Existing skill directories with the same names are replaced from the repo, while other skill directories already under .agents/skills/ are preserved. Legacy .claude/skills/ entries for other skills are migrated into .agents/skills/ before .claude compatibility symlinks are created.',
+            syntax: 'default-skills <repoName>',
             params: {
-                '<repoName>': 'Predefined repo name (e.g. AchillesCopilotBasicSkills) or a repo already cloned under .ploinky/repos/',
-                '[--only]': 'Comma-separated target IDs to write to (claude-code, agents)',
-                '[--skip]': 'Comma-separated target IDs to exclude'
+                '<repoName>': 'Predefined repo name (e.g. AchillesCopilotBasicSkills) or a repo already cloned under .ploinky/repos/'
             },
             examples: [
-                'default-skills AchillesCopilotBasicSkills',
-                'default-skills AchillesCopilotBasicSkills --only claude-code',
-                'default-skills AchillesCopilotBasicSkills --skip agents'
+                'default-skills AchillesCopilotBasicSkills'
             ],
-            notes: 'Targets: .claude/skills, .agents/skills. Re-running the command replaces existing copied skill folders; the .gitignore marker block is updated idempotently.'
+            notes: 'New workspaces get .claude as a symlink to .agents. If an existing non-empty .claude directory must be preserved, .claude/skills is symlinked to ../.agents/skills instead. The managed .gitignore block lists .claude and only the refreshed repo skill directories under .agents/skills/.'
         },
         'start': {
             description: 'Start enabled agents and the local Router',

@@ -1,6 +1,6 @@
 import * as skillsSvc from '../services/skills.js';
 
-const USAGE = 'Usage: default-skills <repoName> [--only agent[,agent...]] [--skip agent[,agent...]]';
+const USAGE = 'Usage: default-skills <repoName>';
 
 function parseOptions(options = []) {
     const positional = [];
@@ -37,8 +37,11 @@ export function handleDefaultSkillsCommand(options = []) {
     });
 
     console.log(`✓ Installed ${result.skills.length} skill(s) from '${result.repoName}' into ${result.destRoot}:`);
-    for (const target of result.targets) {
-        console.log(`    - ${target.relDir}/  (${target.skills.join(', ')})`);
+    console.log(`    - .agents/skills/  (${result.skills.join(', ')})`);
+    if (result.claudeLink?.mode === 'skills') {
+        console.log(`    - .claude/skills → ../.agents/skills (symlink; existing .claude preserved)`);
+    } else {
+        console.log(`    - .claude → .agents (symlink)`);
     }
     if (result.gitignoreUpdated) {
         console.log('✓ Updated .gitignore (marker block).');
