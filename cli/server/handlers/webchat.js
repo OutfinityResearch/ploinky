@@ -120,6 +120,29 @@ function buildTranscriptContext(req, appState, tabId) {
     };
 }
 
+function buildWebchatQuery(parsedUrl, agentName = '') {
+    const params = new URLSearchParams(parsedUrl.searchParams);
+    if (agentName) {
+        params.set('agent', agentName);
+    }
+    params.delete('tabId');
+    return params.toString();
+}
+
+function resolveWebchatLaunchOptions(parsedUrl) {
+    const cliArgs = [];
+    for (const [rawKey, rawValue] of parsedUrl.searchParams.entries()) {
+        const key = String(rawKey || '').trim();
+        if (!key || key === 'agent' || key === 'tabId') {
+            continue;
+        }
+        cliArgs.push(rawValue === '' ? `--${key}` : `--${key}=${String(rawValue)}`);
+    }
+    return {
+        cliArgs
+    };
+}
+
 function handleTranscriptAssistantLine(tab, rawLine) {
     if (!tab?.transcript) {
         return null;
@@ -565,11 +588,14 @@ async function handleWebChat(req, res, appConfig, appState) {
     const pathname = parsedUrl.pathname.substring(`/${appName}`.length) || '/';
     const agentOverrideRaw = parsedUrl.searchParams.get('agent') || '';
     const agentOverride = agentOverrideRaw.trim();
+    const launchOptions = resolveWebchatLaunchOptions(parsedUrl);
     let effectiveConfig = appConfig;
     let agentQuery = '';
 
     if (agentOverride) {
-        const overrideCommands = resolveWebchatCommandsForAgent(agentOverride);
+        const overrideCommands = resolveWebchatCommandsForAgent(agentOverride, {
+            cliArgs: launchOptions.cliArgs
+        });
         if (!overrideCommands) {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
             res.end('Agent not found or not enabled.');
@@ -587,7 +613,7 @@ async function handleWebChat(req, res, appConfig, appState) {
             return;
         }
         effectiveConfig = overrideConfig;
-        agentQuery = `agent=${encodeURIComponent(overrideCommands.agentName || agentOverride)}`;
+        agentQuery = buildWebchatQuery(parsedUrl, overrideCommands.agentName || agentOverride);
     }
 
     if (pathname === '/auth' && req.method === 'POST') {

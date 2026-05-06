@@ -50,7 +50,7 @@
               </tr>
               <tr>
                 <td><code>/webchat</code></td>
-                <td>TTY-backed chat surface that persists encrypted transcripts, supports uploads, and can stream speech-to-text or text-to-speech through browser or server strategies.</td>
+                <td>TTY-backed chat surface that persists encrypted transcripts, supports uploads, can stream speech-to-text or text-to-speech through browser or server strategies, and forwards arbitrary URL query parameters to the selected agent CLI as long-form flags encoded as single <code>--key=value</code> tokens.</td>
               </tr>
               <tr>
                 <td><code>/webmeet</code></td>
@@ -69,6 +69,7 @@
           <div class="callout">
             <p>The root-level <code>dashboard/</code> directory is not the active fallback for routed <code>/dashboard</code>. The current implementation resolves fallback dashboard assets from <code>cli/server/dashboard/</code>, which is why the product documentation follows that path.</p>
           </div>
+          <p>For <code>/webchat</code>, the router treats <code>agent</code> as the agent selector and preserves any other query parameters on the browser session URL. When an explicit agent is selected, those additional query parameters are forwarded to <code>ploinky cli &lt;agent&gt;</code> as long-form CLI arguments encoded as single <code>--key=value</code> tokens using the same values carried in the URL.</p>
         </section>
 
         <section class="chapter-section">

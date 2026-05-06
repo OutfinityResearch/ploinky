@@ -85,6 +85,16 @@ ploinky webchat --rotate # regenerate the token</code></pre>
                 </div>
 
                 <div class="doc-section">
+                    <h2>URL Parameters and CLI Arguments</h2>
+                    <p>WebChat accepts arbitrary query parameters in its URL. When an explicit <code>agent</code> query parameter is present, the router keeps the remaining query parameters attached to the WebChat session and forwards them to that agent's CLI command as long-form CLI flags encoded as single tokens.</p>
+                    <pre><code>/webchat?agent=achilles-cli&amp;path=/absolute/path
+
+# launches the selected agent as:
+ploinky cli achilles-cli --path=/absolute/path</code></pre>
+                    <p>The router reserves <code>agent</code> for agent selection and <code>tabId</code> for the browser session stream. Agent CLIs are responsible for interpreting any forwarded flags and values.</p>
+                </div>
+
+                <div class="doc-section">
                     <h2>Session Experience</h2>
                     <h3>Message Rendering</h3>
                     <ul style="margin-left: 2rem;">
@@ -117,6 +127,7 @@ ploinky webchat --rotate # regenerate the token</code></pre>
                         <li><strong>Blank session?</strong> Verify the static agent has a <code>cli</code> command in its manifest.</li>
                         <li><strong>401 errors?</strong> Run <code>ploinky webchat</code> again to confirm the token and URL.</li>
                         <li><strong>Need a different command?</strong> Update the agent manifest and restart the workspace so WebChat picks up the change.</li>
+                        <li><strong>Custom launch flags ignored?</strong> Confirm you opened <code>/webchat</code> with <code>?agent=&lt;name&gt;</code>; without an explicit agent selection the router uses the default WebChat target and does not synthesize agent-specific CLI flags.</li>
                     </ul>
                 </div>
             </div>

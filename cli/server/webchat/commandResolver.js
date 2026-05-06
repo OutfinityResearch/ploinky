@@ -1,10 +1,26 @@
 import fs from 'fs';
 import path from 'path';
 import { ROUTING_FILE } from '../../services/config.js';
+
 function trimCommand(value) {
     if (!value) return '';
     const text = String(value).trim();
     return text.length ? text : '';
+}
+
+function shellEscapeCommandArg(value) {
+    const text = trimCommand(value);
+    if (!text) return '';
+    return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function normalizeCliArgs(rawArgs) {
+    if (!Array.isArray(rawArgs)) {
+        return [];
+    }
+    return rawArgs
+        .map((entry) => trimCommand(entry))
+        .filter(Boolean);
 }
 
 function readRoutingConfig(routingFilePath) {
@@ -56,6 +72,19 @@ function resolveCliTarget(record = {}, fallbackName = '') {
     return '';
 }
 
+function buildHostCliCommand(cliTarget, options = {}) {
+    const target = trimCommand(cliTarget);
+    if (!target) {
+        return '';
+    }
+    let command = `ploinky cli ${target}`;
+    const cliArgs = normalizeCliArgs(options.cliArgs);
+    if (cliArgs.length) {
+        command += ` ${cliArgs.map((arg) => shellEscapeCommandArg(arg)).join(' ')}`;
+    }
+    return command;
+}
+
 function resolveWebchatCommands(options = {}) {
     const routingFilePath = options.routingFilePath || ROUTING_FILE;
     const { agentName: staticAgentName, hostPath, containerName, alias } = resolveStaticAgentDetails(routingFilePath);
@@ -83,7 +112,7 @@ function resolveWebchatCommands(options = {}) {
     }
 
     const cliTarget = resolveCliTarget({ alias, container: containerName }, staticAgentName);
-    const hostCommand = cliTarget ? `ploinky cli ${cliTarget}` : '';
+    const hostCommand = buildHostCliCommand(cliTarget, options);
     return {
         host: hostCommand,
         container: manifestCli,
@@ -122,14 +151,15 @@ function resolveWebchatCommandsForAgent(agentRef, options = {}) {
         manifestCli = '';
     }
     const cliTarget = resolveCliTarget(record, agentRef);
-    const hostCommand = cliTarget ? `ploinky cli ${cliTarget}` : '';
+    const hostCommand = buildHostCliCommand(cliTarget, options);
+    const cacheSuffix = normalizeCliArgs(options.cliArgs).join('\u0000');
     return {
         host: hostCommand,
         container: manifestCli,
         source: 'manifest',
         agentName: agentRef,
         cliTarget,
-        cacheKey: `webchat:${agentRef}`
+        cacheKey: cacheSuffix ? `webchat:${agentRef}:${cacheSuffix}` : `webchat:${agentRef}`
     };
 }
 

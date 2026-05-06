@@ -22,7 +22,7 @@ export function showHelp(args = []) {
   cli <agentName> [args...]      Run manifest "cli" command (attached TTY)
   webconsole [shell] [--rotate]  Prepare WebTTY (alias). Prints URL; login happens in router.
   webtty [shell] [--rotate]      Prepare WebTTY and print access URL. Optional shell.
-  webchat [--rotate]             Print the WebChat access URL
+  webchat [--rotate]             Print the WebChat access URL and support agent URL params
   webmeet [moderatorAgent] [--rotate]  Print the WebMeet access URL
   dashboard [--rotate]           Show or rotate Dashboard token and print access URL
   sso enable|disable|status  Bind or inspect SSO provider agents
@@ -124,7 +124,7 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     description: 'Run manifest "cli" command interactively (attached TTY).',
                     params: { '<agentName>': 'Agent name', '[args...]': 'Arguments appended to the cli command' },
                     examples: [ 'cli MyAPI --help' ],
-                    notes: 'Attaches to a persistent container. REPLs stay attached until exit. Requires the agent manifest to define a "cli" entry.'
+                    notes: 'Attaches to a persistent container. REPLs stay attached until exit. Requires the agent manifest to define a "cli" entry. WebChat uses the same launch path and appends forwarded URL parameters as long-form CLI flags.'
                 }
             }
         },
@@ -145,9 +145,10 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
             syntax: 'webchat [--rotate]',
             examples: [
                 'webchat',
-                'webchat --rotate'
+                'webchat --rotate',
+                '/webchat?agent=achilles-cli&path=/absolute/path'
             ],
-            notes: 'WebChat now uses the normal router login flow. `--rotate` no longer changes anything for this surface.'
+            notes: 'WebChat now uses the normal router login flow. `--rotate` no longer changes anything for this surface. When `/webchat` is opened with `?agent=<name>&...`, every extra query parameter except internal router/session fields is forwarded to `ploinky cli <name>` as a single-token long-form CLI flag in the form `--key=value`.'
         },
         'webmeet': {
             description: 'Print the WebMeet URL served at /webmeet, optionally storing a moderator agent.',

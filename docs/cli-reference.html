@@ -226,6 +226,9 @@ start</code></pre>
                         <pre><code># Examples
 cli MyAPI --help
 cli PyBot --version</code></pre>
+                        <div class="alert alert-info">
+                            Any extra arguments after <code>cli &lt;agentName&gt;</code> are appended directly to the manifest CLI command. This is also how routed WebChat launches pass query parameters through to an agent CLI.
+                        </div>
 
                         <h3>WebTTY Agent Shortcuts</h3>
                         <p>Inside the Web Console/WebTTY, you can prefix a command with an agent name to run it inside that agent’s container via its CLI.</p>
@@ -363,6 +366,7 @@ webchat --rotate     # mint a new token</code></pre>
                         <div class="alert alert-info">
                             Access at: http://127.0.0.1:8080/webchat?token=&lt;WEBCHAT_TOKEN&gt;
                         </div>
+                        <p>When opening WebChat with an explicit agent selection such as <code>/webchat?agent=achilles-cli&amp;path=/absolute/path</code>, the router forwards every additional query parameter except its internal session parameters to <code>ploinky cli achilles-cli</code> as single-token long-form CLI arguments such as <code>--path=/absolute/path</code>.</p>
 
                         <h3>dashboard</h3>
                         <p>Prepare access for the Dashboard. Prints URL with token. Use --rotate to mint a new token.</p>

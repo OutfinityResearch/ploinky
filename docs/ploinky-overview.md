@@ -36,7 +36,7 @@ Ploinky is a workspace-local runtime for repository-backed agents.
 ## Web surfaces
 
 - `/webtty`: browser terminal.
-- `/webchat`: chat surface over the same TTY stream, with encrypted transcript storage.
+- `/webchat`: chat surface over the same TTY stream, with encrypted transcript storage. When opened as `/webchat?agent=<name>&...`, the router forwards every additional query parameter except `tabId` to `ploinky cli <name>` as long-form CLI flags encoded as `--key=value`.
 - `/webmeet`: meeting and moderator UI.
 - `/dashboard`: management surface, including transcript and feedback views.
 - `/status`: read-only browser view that shells out to `ploinky status` and adds router-side server and agent summaries.
