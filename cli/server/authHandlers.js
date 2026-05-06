@@ -592,6 +592,10 @@ function resolveAuthRouteKey(parsedUrl) {
 }
 
 function resolveAuthContext(parsedUrl) {
+    const pathname = parsedUrl?.pathname || '';
+    if (pathname.startsWith('/public-services/webmeet/')) {
+        return { routeKey: 'explorer', mode: 'guest', policy: { mode: 'guest' }, record: null };
+    }
     const routeKey = resolveAuthRouteKey(parsedUrl);
     if (!routeKey) {
         return { routeKey: null, mode: 'none', policy: { mode: 'none' }, record: null };
