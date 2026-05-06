@@ -19,6 +19,7 @@ import { resolveWorkspaceDependencyGraph, topologicallyGroupDependencyGraph } fr
 import { getAgentWorkDir } from './workspaceStructure.js';
 import { needsHostInstall } from './dependencyInstaller.js';
 import { waitForAgentReady } from '../server/utils/agentReadiness.js';
+import { ensureStaticAgentBootstrapRepo } from './staticAgentBootstrap.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,6 +77,16 @@ function spawnWatchdog(routerPath, port, routerPidFile) {
   });
   logStdio.closeParentFds();
   return child;
+}
+
+function findAgentWithStaticBootstrap(agentRef) {
+  try {
+    return utils.findAgent(agentRef);
+  } catch (err) {
+    const bootstrapped = ensureStaticAgentBootstrapRepo(agentRef);
+    if (!bootstrapped) throw err;
+    return utils.findAgent(agentRef);
+  }
 }
 
 function getCliCmd(manifest) {
@@ -377,7 +388,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
       let alreadyEnabled = false;
       let resolvedAgent = null;
       try {
-        resolvedAgent = utils.findAgent(aliasResolved || staticAgentArg);
+        resolvedAgent = findAgentWithStaticBootstrap(aliasResolved || staticAgentArg);
       } catch (_) { resolvedAgent = null; }
 
       if (resolvedAgent) {
@@ -459,7 +470,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     try {
       const staticAgentForPreinstall = cfg0.static.agent;
       if (staticAgentForPreinstall) {
-        const resolved = utils.findAgent(staticAgentForPreinstall);
+        const resolved = findAgentWithStaticBootstrap(staticAgentForPreinstall);
         if (resolved) {
           const agentPath = path.dirname(resolved.manifestPath);
           const activeProfile = getActiveProfile();
@@ -509,7 +520,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     let staticShortAgent = null;
 
     try {
-      const resolvedStaticAgent = utils.findAgent(staticAgent);
+      const resolvedStaticAgent = findAgentWithStaticBootstrap(staticAgent);
       staticManifestPath = resolvedStaticAgent.manifestPath;
       staticAgentPath = path.dirname(staticManifestPath);
       staticRepoName = resolvedStaticAgent.repo;
