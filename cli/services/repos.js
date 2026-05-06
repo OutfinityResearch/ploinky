@@ -308,33 +308,34 @@ export function disableRepo(name) {
 function recloneNonGitRepo(name, repoPath, url, { branch = null, stdio = 'inherit' } = {}) {
     const reposRoot = path.dirname(repoPath);
     const safeName = String(name || 'repo').replace(/[^a-zA-Z0-9_.-]+/g, '-');
-    const stamp = new Date().toISOString().replace(/[^0-9A-Za-z]+/g, '-');
     const tempPath = path.join(reposRoot, `.${safeName}.clone-${process.pid}-${Date.now()}`);
-    const backupRoot = path.join(PLOINKY_DIR, 'repo-backups');
-    const backupPath = path.join(backupRoot, `${safeName}-${stamp}`);
-    const args = ['clone'];
+    const args = ['clone', '--quiet'];
     if (branch) args.push('--branch', branch);
     args.push(url, tempPath);
 
     execFileSync('git', args, { stdio });
 
+    let installed = false;
     try {
-        fs.mkdirSync(backupRoot, { recursive: true });
-        fs.renameSync(repoPath, backupPath);
+        fs.rmSync(repoPath, { recursive: true, force: true });
         fs.renameSync(tempPath, repoPath);
+        installed = true;
     } catch (err) {
-        try {
-            if (!fs.existsSync(repoPath) && fs.existsSync(backupPath)) {
-                fs.renameSync(backupPath, repoPath);
-            }
-        } catch (_) {}
+        if (!fs.existsSync(repoPath) && fs.existsSync(tempPath)) {
+            try {
+                fs.renameSync(tempPath, repoPath);
+                installed = true;
+            } catch (_) {}
+        }
         throw err;
     } finally {
-        try { fs.rmSync(tempPath, { recursive: true, force: true }); } catch (_) {}
+        if (installed || fs.existsSync(repoPath)) {
+            try { fs.rmSync(tempPath, { recursive: true, force: true }); } catch (_) {}
+        }
     }
 
     recordRepoSource(name, url);
-    return { recloned: true, backupPath };
+    return { recloned: true, replaced: true };
 }
 
 export function updateRepo(name, { rebase = true, autostash = true, stdio = 'inherit' } = {}) {

@@ -37,7 +37,7 @@ function getGitRepoNames() {
 
 function logRepoUpdateSuccess(repoName, result, indent = '') {
     if (result?.recloned) {
-        console.log(`${indent}✓ ${repoName} (recloned; previous copy moved to ${result.backupPath})`);
+        console.log(`${indent}✓ ${repoName} (repaired by recloning)`);
         return;
     }
     console.log(`${indent}✓ ${repoName}`);
@@ -94,7 +94,7 @@ async function updateRepo(repoName) {
     try {
         const result = reposSvc.updateRepo(repoName);
         if (result?.recloned) {
-            console.log(`✓ Repo '${repoName}' recloned; previous copy moved to ${result.backupPath}.`);
+            console.log(`✓ Repo '${repoName}' repaired by recloning.`);
         } else {
             console.log(`✓ Repo '${repoName}' updated.`);
         }

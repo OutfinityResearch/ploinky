@@ -88,7 +88,6 @@ test('updateRepo reclones non-git installed repo when a manifest source URL is k
     const providerName = `unit-provider-${process.pid}-${Date.now()}`;
     const repoPath = path.join(REPOS_DIR, repoName);
     const providerPath = path.join(REPOS_DIR, providerName);
-    const backupRoot = path.join(path.dirname(REPOS_DIR), 'repo-backups');
     const originalSources = fs.existsSync(REPO_SOURCES_FILE)
         ? fs.readFileSync(REPO_SOURCES_FILE, 'utf8')
         : null;
@@ -122,21 +121,15 @@ test('updateRepo reclones non-git installed repo when a manifest source URL is k
         const result = updateRepo(repoName, { stdio: 'ignore' });
 
         assert.equal(result.recloned, true);
+        assert.equal(result.replaced, true);
+        assert.equal(Object.prototype.hasOwnProperty.call(result, 'backupPath'), false);
         assert.equal(isGitRepository(repoPath), true);
         assert.equal(fs.existsSync(path.join(repoPath, 'README.md')), true);
         assert.equal(fs.existsSync(path.join(repoPath, 'stale.txt')), false);
-        assert.equal(fs.existsSync(path.join(result.backupPath, 'stale.txt')), true);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
         fs.rmSync(repoPath, { recursive: true, force: true });
         fs.rmSync(providerPath, { recursive: true, force: true });
-        try {
-            for (const entry of fs.readdirSync(backupRoot, { withFileTypes: true })) {
-                if (entry.isDirectory() && entry.name.startsWith(repoName)) {
-                    fs.rmSync(path.join(backupRoot, entry.name), { recursive: true, force: true });
-                }
-            }
-        } catch (_) {}
         if (originalSources === null) {
             fs.rmSync(REPO_SOURCES_FILE, { force: true });
         } else {
@@ -150,7 +143,6 @@ test('updateRepo preserves recorded branch when repairing a non-git repo', () =>
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ploinky-reclone-branch-'));
     const repoName = `unit-branch-${process.pid}-${Date.now()}`;
     const repoPath = path.join(REPOS_DIR, repoName);
-    const backupRoot = path.join(path.dirname(REPOS_DIR), 'repo-backups');
     const originalSources = fs.existsSync(REPO_SOURCES_FILE)
         ? fs.readFileSync(REPO_SOURCES_FILE, 'utf8')
         : null;
@@ -195,19 +187,14 @@ test('updateRepo preserves recorded branch when repairing a non-git repo', () =>
         const result = updateRepo(repoName, { stdio: 'ignore' });
 
         assert.equal(result.recloned, true);
+        assert.equal(result.replaced, true);
+        assert.equal(Object.prototype.hasOwnProperty.call(result, 'backupPath'), false);
         assert.equal(fs.existsSync(path.join(repoPath, 'BRANCH.txt')), true);
         assert.equal(String(execFileSync('git', ['-C', repoPath, 'branch', '--show-current'])).trim(), 'feature/test-branch');
         assert.equal(fs.existsSync(path.join(repoPath, 'stale.txt')), false);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
         fs.rmSync(repoPath, { recursive: true, force: true });
-        try {
-            for (const entry of fs.readdirSync(backupRoot, { withFileTypes: true })) {
-                if (entry.isDirectory() && entry.name.startsWith(repoName)) {
-                    fs.rmSync(path.join(backupRoot, entry.name), { recursive: true, force: true });
-                }
-            }
-        } catch (_) {}
         if (originalSources === null) {
             fs.rmSync(REPO_SOURCES_FILE, { force: true });
         } else {
