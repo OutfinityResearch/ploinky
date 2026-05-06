@@ -54,13 +54,15 @@ function verifySessionJwt(token) {
 
 const GUEST_SESSION_TTL_SECONDS = 60 * 60;
 
-function mintGuestSessionJwt() {
+function mintGuestSessionJwt(options = {}) {
     const guestId = crypto.randomUUID();
+    const guestScope = String(options?.guestScope || options?.policy?.guestScope || '').trim();
     const iat = Math.floor(Date.now() / 1000);
     const payload = {
         typ: 'session',
         iss: 'ploinky-router',
         sub: `user:guest:${guestId}`,
+        gscope: guestScope || undefined,
         usr: {
             id: `guest:${guestId}`,
             username: 'visitor',
@@ -260,6 +262,19 @@ function getSession(sessionId, options = {}) {
     const payloadUsersVar = String(payload.uvar || '').trim();
     if (usersVar && payloadUsersVar !== usersVar) {
         return null;
+    }
+    const roles = Array.isArray(payload.usr?.roles) ? payload.usr.roles : [];
+    const isGuestSession = roles.some((role) => String(role || '').trim().toLowerCase() === 'guest');
+    if (isGuestSession) {
+        const expectedGuestScope = String(options?.guestScope || options?.policy?.guestScope || '').trim();
+        const payloadGuestScope = String(payload.gscope || payload.guestScope || '').trim();
+        if (expectedGuestScope) {
+            if (payloadGuestScope !== expectedGuestScope) {
+                return null;
+            }
+        } else if (payloadGuestScope) {
+            return null;
+        }
     }
     if (usersVar && payload.usr?.username) {
         const currentRev = resolveUserRev(usersVar, payload.usr.username);

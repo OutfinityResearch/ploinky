@@ -8,6 +8,7 @@ import { resolveEnabledAgentRecord } from '../services/agents.js';
 import { ROUTING_FILE } from '../services/config.js';
 import { findAgent } from '../services/utils.js';
 import { readRouterSettings, updateRouterSettings } from '../services/routerSettings.js';
+import { resolveHttpServiceRoute } from './httpServiceRoutes.js';
 import { createAuthService } from './auth/service.js';
 import { authenticateLocalUser, createLocalAuthUser, deleteLocalAuthUser, GUEST_SESSION_TTL_SECONDS, getSession as getLocalSession, getSessionCookieMaxAge as getLocalSessionCookieMaxAge, isLocalAdminUser, listLocalAuthUsers, mintGuestSessionJwt, mintSessionJwt, resolveLocalAuthConfig, resolveUserRev, revokeSession as revokeLocalSession, updateLocalAuthUser, updateLocalCredentials, verifySessionJwt } from './auth/localService.js';
 import { waitForAgentReady } from './utils/agentReadiness.js';
@@ -482,8 +483,11 @@ function renderSsoLoginHtml({ agentName, returnTo = '/', redirectUrl = '' } = {}
 }
 
 function readRouting() {
+    const dynamicRoutingFile = process.env.PLOINKY_ROUTING_FILE
+        || path.join(process.cwd(), '.ploinky', 'routing.json');
+    const routingFile = fs.existsSync(dynamicRoutingFile) ? dynamicRoutingFile : ROUTING_FILE;
     try {
-        return JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')) || {};
+        return JSON.parse(fs.readFileSync(routingFile, 'utf8')) || {};
     } catch (_) {
         return {};
     }
@@ -593,8 +597,24 @@ function resolveAuthRouteKey(parsedUrl) {
 
 function resolveAuthContext(parsedUrl) {
     const pathname = parsedUrl?.pathname || '';
-    if (pathname.startsWith('/public-services/webmeet/')) {
-        return { routeKey: 'explorer', mode: 'guest', policy: { mode: 'guest' }, record: null };
+    const serviceRoute = resolveHttpServiceRoute(pathname, readRouting());
+    if (serviceRoute) {
+        if (serviceRoute.authMode === 'none') {
+            return { routeKey: serviceRoute.routeKey, mode: 'none', policy: { mode: 'none' }, record: null };
+        }
+        if (serviceRoute.authMode === 'guest') {
+            return {
+                routeKey: serviceRoute.routeKey,
+                mode: 'guest',
+                policy: {
+                    mode: 'guest',
+                    guestScope: serviceRoute.guestScope,
+                    forceGuest: serviceRoute.forceGuest
+                },
+                record: null
+            };
+        }
+        return resolveAuthContextForRouteKey(serviceRoute.routeKey);
     }
     const routeKey = resolveAuthRouteKey(parsedUrl);
     if (!routeKey) {
@@ -827,20 +847,23 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
     const cookies = parseCookies(req);
 
     if (authContext.mode === 'guest') {
+        const forceGuest = authContext.policy?.forceGuest === true;
+        if (!forceGuest) {
             const existingAuth = cookies.get(LOCAL_AUTH_COOKIE_NAME);
             if (existingAuth) {
                 const authSession = getLocalSession(existingAuth, { policy: authContext.policy });
-            if (authSession) {
-                req.user = authSession.user;
-                req.session = authSession;
-                req.sessionId = existingAuth;
-                req.authMode = 'local';
-                return { ok: true, session: authSession };
+                if (authSession) {
+                    req.user = authSession.user;
+                    req.session = authSession;
+                    req.sessionId = existingAuth;
+                    req.authMode = 'local';
+                    return { ok: true, session: authSession };
+                }
             }
         }
         const guestCookie = cookies.get(GUEST_AUTH_COOKIE_NAME);
         if (guestCookie) {
-        const guestSession = getLocalSession(guestCookie, { policy: authContext.policy });
+            const guestSession = getLocalSession(guestCookie, { policy: authContext.policy });
             if (guestSession) {
                 req.user = guestSession.user;
                 req.session = guestSession;
@@ -849,7 +872,7 @@ export async function ensureAuthenticated(req, res, parsedUrl) {
                 return { ok: true, session: guestSession };
             }
         }
-        const guestJwt = mintGuestSessionJwt();
+        const guestJwt = mintGuestSessionJwt({ policy: authContext.policy });
         const guestSession = getLocalSession(guestJwt, { policy: authContext.policy });
         const cookie = buildCookie(GUEST_AUTH_COOKIE_NAME, guestJwt, req, '/', {
             maxAge: GUEST_SESSION_TTL_SECONDS,

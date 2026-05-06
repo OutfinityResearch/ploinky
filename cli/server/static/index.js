@@ -572,4 +572,38 @@ function serveAgentStaticRequest(req, res) {
     return false;
 }
 
-export { getAgentHostPath, resolveAgentStaticFile, serveAgentStaticRequest };
+const PUBLIC_ASSET_EXTS = new Set([
+    '.woff2', '.woff', '.ttf', '.otf', '.eot',
+    '.png', '.jpg', '.jpeg', '.gif', '.ico', '.svg', '.webp',
+    '.css'
+]);
+
+function isPublicAssetPath(pathname) {
+    const ext = path.extname(pathname).toLowerCase();
+    return PUBLIC_ASSET_EXTS.has(ext);
+}
+
+function servePublicAssetRequest(req, res) {
+    try {
+        const parsed = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+        const pathname = decodeURIComponent(parsed.pathname || '/');
+        if (!isPublicAssetPath(pathname)) return false;
+
+        const parts = pathname.split('/').filter(Boolean);
+        if (parts.length >= 2) {
+            const agent = parts[0];
+            const rest = parts.slice(1).join('/');
+            const target = resolveAgentStaticFile(agent, rest);
+            if (target && sendFile(res, target)) return true;
+        }
+
+        const root = getStaticHostPath();
+        if (root) {
+            const target = resolveStaticFile(pathname.replace(/^\/+/, ''));
+            if (target && sendFile(res, target)) return true;
+        }
+    } catch (_) { }
+    return false;
+}
+
+export { getAgentHostPath, resolveAgentStaticFile, serveAgentStaticRequest, servePublicAssetRequest };

@@ -1,14 +1,16 @@
 import http from 'http';
-import fs from 'fs';
-import path from 'path';
 import { randomUUID } from 'node:crypto';
 
 import { sendJson } from './authHandlers.js';
 import { createAgentClient } from './AgentClient.js';
 import { buildInvocationContextForProviderCall } from './mcp-proxy/index.js';
+import {
+    buildServiceAgentPath,
+    isAnonymousHttpServiceRoute,
+    loadRoutingConfig,
+    resolveHttpServiceRoute
+} from './httpServiceRoutes.js';
 import { ROUTING_FILE } from '../services/config.js';
-
-const ROUTING_DIR = path.dirname(ROUTING_FILE);
 
 const ROUTER_PROTOCOL_VERSION = '2025-06-18';
 const ROUTER_SERVER_INFO = { name: 'ploinky-router', version: '1.0.0' };
@@ -17,11 +19,7 @@ const ROUTER_INSTRUCTIONS = 'Ploinky Router aggregates tools and resources from 
 const routerSessions = new Map();
 
 export function loadApiRoutes() {
-    try {
-        return JSON.parse(fs.readFileSync(ROUTING_FILE, 'utf8')).routes || {};
-    } catch (_) {
-        return {};
-    }
+    return loadRoutingConfig().routes || {};
 }
 
 export function buildAgentPath(parsedUrl, includeSearch = true) {
@@ -146,53 +144,8 @@ export function buildPlainAuthInfoHeader(req, invocation = null) {
     };
 }
 
-function matchesServicePrefix(pathname, prefix) {
-    return typeof pathname === 'string' && pathname.startsWith(prefix);
-}
-
-function buildServiceAgentPath(pathname, search = '', externalPrefix, internalPrefix) {
-    const suffix = matchesServicePrefix(pathname, externalPrefix)
-        ? pathname.slice(externalPrefix.length)
-        : '';
-    const normalizedSuffix = suffix.replace(/^\/+/, '');
-    return `${internalPrefix}${normalizedSuffix}${search || ''}`;
-}
-
-const HTTP_SERVICE_ROUTE_DEFINITIONS = [
-    {
-        agentName: 'explorer',
-        externalPrefix: '/services/explorer/office/',
-        internalPrefix: '/office/',
-        isPublic: false,
-        notFoundMessage: 'Explorer route not found.',
-        buildHeaders: (req, invocation) => buildPlainAuthInfoHeader(req, invocation)
-    },
-    {
-        agentName: 'explorer',
-        externalPrefix: '/public-services/explorer/office/',
-        internalPrefix: '/office/',
-        isPublic: true,
-        notFoundMessage: 'Explorer route not found.'
-    },
-    {
-        agentName: 'webmeetAgent',
-        externalPrefix: '/public-services/webmeet/',
-        internalPrefix: '/api/',
-        isPublic: false,
-        notFoundMessage: 'WebMeet route not found.',
-        buildHeaders: (req, invocation) => buildPlainAuthInfoHeader(req, invocation)
-    }
-];
-
-function resolveHttpServiceRoute(pathname) {
-    return HTTP_SERVICE_ROUTE_DEFINITIONS.find(definition =>
-        matchesServicePrefix(pathname, definition.externalPrefix)
-    ) || null;
-}
-
 export function isPublicHttpServiceRoute(pathname) {
-    const definition = resolveHttpServiceRoute(pathname);
-    return Boolean(definition?.isPublic);
+    return isAnonymousHttpServiceRoute(pathname);
 }
 
 export function handleHttpServiceRoute(req, res, parsedUrl, apiRoutes = loadApiRoutes()) {
@@ -202,7 +155,7 @@ export function handleHttpServiceRoute(req, res, parsedUrl, apiRoutes = loadApiR
         return false;
     }
 
-    const route = apiRoutes[definition.agentName];
+    const route = apiRoutes[definition.routeKey];
     if (!route || !route.hostPort) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: definition.notFoundMessage }));
@@ -211,10 +164,9 @@ export function handleHttpServiceRoute(req, res, parsedUrl, apiRoutes = loadApiR
 
     const serviceAgentRef = route.repo && route.agent
         ? `${route.repo}/${route.agent}`
-        : definition.agentName;
-    const invocation = definition.isPublic
-        ? null
-        : buildInvocationContextForProviderCall({
+        : definition.routeKey;
+    const invocation = definition.issueInvocation
+        ? buildInvocationContextForProviderCall({
             req,
             agentName: serviceAgentRef,
             toolName: '__http_service__',
@@ -223,14 +175,18 @@ export function handleHttpServiceRoute(req, res, parsedUrl, apiRoutes = loadApiR
                 path: pathname,
                 search: parsedUrl?.search || ''
             }
-        });
+        })
+        : null;
+    const identityHeaders = definition.includeAuthInfo
+        ? buildPlainAuthInfoHeader(req, invocation)
+        : {};
 
     proxyHttpPassthrough(
         req,
         res,
         route.hostPort,
         buildServiceAgentPath(pathname, parsedUrl?.search, definition.externalPrefix, definition.internalPrefix),
-        definition.buildHeaders ? definition.buildHeaders(req, invocation) : {}
+        identityHeaders
     );
     return true;
 }
