@@ -62,7 +62,7 @@ Ploinky is a workspace-local runtime for repository-backed agents.
 
 - `ploinky vars`, `ploinky var <NAME> <value>`, and `ploinky echo <NAME>` manage `.ploinky/.secrets`.
 - `ploinky expose <ENV_NAME> [<$VAR|value>] [agent]` maps values into agent environments.
-- `ploinky default-skills <repoName>` copies skills from a skills repository into `.claude/skills/` and `.agents/skills/`, replacing existing copied skill folders and updating `.gitignore` through a managed marker block.
+- `ploinky default-skills <repoName>` refreshes the repo's skill directories under `.agents/skills/`. Skill directories with matching names are replaced from the repo, unrelated existing skills are preserved, and legacy `.claude/skills/` skills are migrated into `.agents/skills/` before compatibility symlinks are created. The managed `.gitignore` block lists `.claude` and only the refreshed repo skill directories; `.agents/` itself stays tracked.
 
 ## LLM helper behavior
 
