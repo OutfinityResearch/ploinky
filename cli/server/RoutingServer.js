@@ -118,9 +118,12 @@ async function proxyAgentTaskStatus(req, res, route, parsedUrl, agentName) {
     }
     const pathWithQuery = `/getTaskStatus${parsedUrl.search || ''}`;
     const taskId = parsedUrl.searchParams.get('taskId') || '';
+    const providerAgentRef = route?.repo && route?.agent
+        ? `${route.repo}/${route.agent}`
+        : agentName;
     const invocation = buildInvocationContextForProviderCall({
         req,
-        agentName,
+        agentName: providerAgentRef,
         toolName: '__task_status__',
         toolArgs: { taskId }
     });
