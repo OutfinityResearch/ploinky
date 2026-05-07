@@ -51,13 +51,6 @@ function resolveProviderAgentRef(agentName) {
     return agentName;
 }
 
-function resolveRouteProviderAgentRef(route, agentName) {
-    const repo = typeof route?.repo === 'string' ? route.repo.trim() : '';
-    const agent = typeof route?.agent === 'string' ? route.agent.trim() : '';
-    if (repo && agent) return `${repo}/${agent}`;
-    return resolveProviderAgentRef(agentName);
-}
-
 function readCallerJwt(req) {
     const raw = req.headers?.[CALLER_JWT_HEADER] || req.headers?.[CALLER_JWT_HEADER.toLowerCase()];
     return typeof raw === 'string' && raw.trim() ? raw.trim() : '';
@@ -169,10 +162,9 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
     }
 
     function buildRequestHeadersForToolCall(toolName, toolArgs) {
-        const providerAgentRef = resolveRouteProviderAgentRef(route, agentName);
         const ctx = buildInvocationContextForProviderCall({
             req,
-            agentName: providerAgentRef,
+            agentName,
             toolName,
             toolArgs: toolArgs || {}
         });
@@ -314,7 +306,7 @@ async function handleAgentMcpRequest(req, res, route, agentName) {
             }
             try {
                 req.delegatedAgentVerified = verifyDelegatedToolCall({
-                    providerAgentRef: resolveRouteProviderAgentRef(route, agentName),
+                    providerAgentRef: agentName,
                     callerJwt: readCallerJwt(req)
                 });
             } catch (error) {
