@@ -4,6 +4,7 @@ import { getConfig } from './workspace.js';
 import { findAgent } from './utils.js';
 import { loadSecretsFile, loadEnvFile } from './secretInjector.js';
 import { deleteSecretValue, readSecretsFile, setSecretValue } from './encryptedSecretsFile.js';
+import { deriveAgentSecret } from './masterKey.js';
 
 export function parseSecrets() {
     return readSecretsFile();
@@ -223,7 +224,7 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
      * @param {boolean} required - Whether the variable is required
      * @param {*} defaultValue - Default value if not found
      */
-    function addSpec(insideName, sourceName, required, defaultValue) {
+    function addSpec(insideName, sourceName, required, defaultValue, derive = null) {
         // Check if this is a wildcard pattern
         if (isWildcardPattern(insideName)) {
             // Expand the wildcard into matching variable names
@@ -235,7 +236,8 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                     insideName: expandedName,
                     sourceName: expandedName,
                     required: false, // Wildcards are not required by default
-                    defaultValue: undefined
+                    defaultValue: undefined,
+                    derive: null
                 });
             }
         } else {
@@ -246,7 +248,8 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                 insideName,
                 sourceName,
                 required,
-                defaultValue
+                defaultValue,
+                derive
             });
         }
     }
@@ -255,12 +258,30 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
         for (const entry of env) {
             if (entry === undefined || entry === null) continue;
             if (typeof entry === 'object' && !Array.isArray(entry)) {
-                const { name, value, default: defaultValue, varName, required } = entry;
+                const {
+                    name,
+                    value,
+                    default: defaultValue,
+                    varName,
+                    required,
+                    derive,
+                    deriveName,
+                    deriveBytes,
+                    deriveFormat,
+                } = entry;
                 const insideName = typeof name === 'string' ? name.trim() : '';
                 if (!insideName) continue;
                 const sourceName = typeof varName === 'string' && varName.trim() ? varName.trim() : insideName;
                 const resolvedDefault = value !== undefined ? value : defaultValue;
-                addSpec(insideName, sourceName, toBool(required, false), resolvedDefault);
+                const deriveSpec = derive === 'derived-master'
+                    ? {
+                        type: 'derived-master',
+                        name: typeof deriveName === 'string' && deriveName.trim() ? deriveName.trim() : sourceName,
+                        bytes: deriveBytes,
+                        format: deriveFormat,
+                    }
+                    : null;
+                addSpec(insideName, sourceName, toBool(required, false), resolvedDefault, deriveSpec);
                 continue;
             }
             const text = String(entry).trim();
@@ -273,7 +294,7 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                 defaultValue = text.slice(eqIdx + 1);
             }
             if (!insideName) continue;
-            addSpec(insideName, insideName, false, defaultValue);
+            addSpec(insideName, insideName, false, defaultValue, null);
         }
         return specs;
     }
@@ -287,6 +308,7 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
             let sourceName = insideName;
             let required = false;
             let defaultValue;
+            let deriveSpec = null;
             if (rawSpec && typeof rawSpec === 'object' && !Array.isArray(rawSpec)) {
                 if (typeof rawSpec.varName === 'string' && rawSpec.varName.trim()) {
                     sourceName = rawSpec.varName.trim();
@@ -301,13 +323,23 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                 } else if (Object.prototype.hasOwnProperty.call(rawSpec, 'value')) {
                     defaultValue = rawSpec.value;
                 }
-                addSpec(insideName, sourceName, required, defaultValue);
+                if (rawSpec.derive === 'derived-master') {
+                    deriveSpec = {
+                        type: 'derived-master',
+                        name: typeof rawSpec.deriveName === 'string' && rawSpec.deriveName.trim()
+                            ? rawSpec.deriveName.trim()
+                            : sourceName,
+                        bytes: rawSpec.deriveBytes,
+                        format: rawSpec.deriveFormat,
+                    };
+                }
+                addSpec(insideName, sourceName, required, defaultValue, deriveSpec);
                 continue;
             } else {
                 defaultValue = rawSpec;
             }
 
-            addSpec(insideName, sourceName, required, defaultValue);
+            addSpec(insideName, sourceName, required, defaultValue, deriveSpec);
         }
     }
 
@@ -321,7 +353,7 @@ function isEmptyValue(value) {
 }
 
 function resolveManifestEnv(manifest, secrets, options = {}) {
-    const { profileConfig } = options;
+    const { profileConfig, agentName = '', repoName = '' } = options;
     const specs = getManifestEnvSpecs(manifest, profileConfig);
     const resolved = [];
     const missing = [];
@@ -342,7 +374,15 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
         let usedDefault = false;
         const hasSecret = spec.sourceName
             && Object.prototype.hasOwnProperty.call(secrets, spec.sourceName);
-        if (hasSecret) {
+        if (spec.derive?.type === 'derived-master') {
+            resolvedValue = deriveAgentSecret({
+                repoName,
+                agentName,
+                name: spec.derive.name || spec.sourceName || spec.insideName,
+                length: spec.derive.bytes,
+                encoding: spec.derive.format || 'hex',
+            });
+        } else if (hasSecret) {
             resolvedValue = resolveAlias(secrets[spec.sourceName], secrets);
         } else if (spec.sourceName && Object.prototype.hasOwnProperty.call(process.env, spec.sourceName)) {
             resolvedValue = process.env[spec.sourceName];
@@ -397,9 +437,9 @@ export function getManifestEnvNames(manifest, profileConfig) {
     return getManifestEnvSpecs(manifest, profileConfig).map(spec => spec.insideName);
 }
 
-export function collectManifestEnv(manifest, { enforceRequired = false, profileConfig } = {}) {
+export function collectManifestEnv(manifest, { enforceRequired = false, profileConfig, agentName = '', repoName = '' } = {}) {
     const secrets = parseSecrets();
-    return resolveManifestEnv(manifest, secrets, { enforceRequired, profileConfig });
+    return resolveManifestEnv(manifest, secrets, { enforceRequired, profileConfig, agentName, repoName });
 }
 
 export function getExposedNames(manifest, profileConfig) {
@@ -425,9 +465,14 @@ export function formatEnvFlag(name, value) {
     return `-e ${name}=${quoteEnvValue(value)}`;
 }
 
-export function buildEnvFlags(manifest, profileConfig) {
+export function buildEnvFlags(manifest, profileConfig, options = {}) {
     const secrets = parseSecrets();
-    const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: true, profileConfig }).resolved;
+    const envEntries = resolveManifestEnv(manifest, secrets, {
+        enforceRequired: true,
+        profileConfig,
+        agentName: options.agentName,
+        repoName: options.repoName,
+    }).resolved;
     const out = [];
     for (const entry of envEntries) {
         if (entry.value !== undefined) {
@@ -458,10 +503,15 @@ export function buildEnvFlags(manifest, profileConfig) {
     return out;
 }
 
-export function buildEnvMap(manifest, profileConfig) {
+export function buildEnvMap(manifest, profileConfig, options = {}) {
     const secrets = parseSecrets();
     const out = {};
-    const envEntries = resolveManifestEnv(manifest, secrets, { enforceRequired: false, profileConfig }).resolved;
+    const envEntries = resolveManifestEnv(manifest, secrets, {
+        enforceRequired: false,
+        profileConfig,
+        agentName: options.agentName,
+        repoName: options.repoName,
+    }).resolved;
     for (const entry of envEntries) {
         if (entry.value !== undefined) {
             out[entry.insideName] = entry.value;

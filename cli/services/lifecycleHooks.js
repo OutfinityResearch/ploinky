@@ -5,6 +5,8 @@ import { getRuntime } from './docker/common.js';
 import { debugLog } from './utils.js';
 import { getProfileConfig, getProfileEnvVars, getHookNames, getActiveProfile } from './profileService.js';
 import { validateSecrets, getSecrets, createEnvWithSecrets, formatMissingSecretsError } from './secretInjector.js';
+import { buildEnvMap } from './secretVars.js';
+import { deriveDerivedMasterKey } from './masterKey.js';
 import { installDependencies } from './dependencyInstaller.js';
 import {
     initWorkspaceStructure,
@@ -35,6 +37,28 @@ function sanitizeMarkerPart(value) {
 }
 
 const preinstallRunKeys = new Set();
+
+function readManifest(agentPath) {
+    try {
+        const manifestPath = path.join(agentPath || '', 'manifest.json');
+        return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    } catch (_) {
+        return {};
+    }
+}
+
+function buildLifecycleHookEnv({ agentName, repoName, profileName, profileConfig, agentPath, containerInfo = {} }) {
+    const envVars = getProfileEnvVars(agentName, repoName, profileName || getActiveProfile(), containerInfo);
+    const manifest = readManifest(agentPath);
+    const manifestEnv = buildEnvMap(manifest, profileConfig, { agentName, repoName });
+    const profileEnv = normalizeProfileEnv(profileConfig?.env);
+    const secrets = profileConfig?.secrets ? getSecrets(profileConfig.secrets) : {};
+    let derivedMasterEnv = {};
+    try {
+        derivedMasterEnv = { PLOINKY_DERIVED_MASTER_KEY: deriveDerivedMasterKey().toString('hex') };
+    } catch (_) { }
+    return createEnvWithSecrets({ ...envVars, ...derivedMasterEnv, ...manifestEnv, ...profileEnv }, secrets);
+}
 
 function getPreinstallRunKey(agentName, repoName, profileName) {
     return [
@@ -265,11 +289,10 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
     // Get profile configuration
     const profileConfig = getProfileConfig(`${repoName}/${agentName}`, profileName) || {};
 
-    // Build environment variables
-    const envVars = getProfileEnvVars(agentName, repoName, profileName, {
+    const containerInfo = {
         containerName,
         containerId: containerName // We use container name as ID for simplicity
-    });
+    };
 
     // Validate secrets
     if (profileConfig.secrets && profileConfig.secrets.length > 0) {
@@ -280,10 +303,15 @@ export function runProfileLifecycle(agentName, profileName, options = {}) {
         }
     }
 
-    // Get secrets for hooks
-    const profileEnv = normalizeProfileEnv(profileConfig.env);
-    const secrets = profileConfig.secrets ? getSecrets(profileConfig.secrets) : {};
-    const hookEnv = createEnvWithSecrets({ ...envVars, ...profileEnv }, secrets);
+    // Get manifest env and secrets for hooks.
+    const hookEnv = buildLifecycleHookEnv({
+        agentName,
+        repoName,
+        profileName,
+        profileConfig,
+        agentPath,
+        containerInfo,
+    });
 
     // Step 1: Workspace Structure Init [HOST]
     log('[lifecycle] Step 1: Initializing workspace structure...');
@@ -457,11 +485,14 @@ export function runPreContainerLifecycle(agentName, repoName, agentPath, profile
                     ? profileConfig.preinstall
                     : path.join(agentPath || '', profileConfig.preinstall);
                 
-                // Build environment for the hook
-                const envVars = getProfileEnvVars(agentName, repoName, profileName || getActiveProfile(), {});
-                const profileEnv = normalizeProfileEnv(profileConfig.env);
-                const secrets = profileConfig.secrets ? getSecrets(profileConfig.secrets) : {};
-                const hookEnv = createEnvWithSecrets({ ...envVars, ...profileEnv }, secrets);
+                // Build environment for the hook.
+                const hookEnv = buildLifecycleHookEnv({
+                    agentName,
+                    repoName,
+                    profileName,
+                    profileConfig,
+                    agentPath,
+                });
                 
                 debugLog(`[lifecycle] Running preinstall [HOST]: ${hookValue}`);
                 // Run from workspace root so ploinky var commands can find .ploinky directory
@@ -503,10 +534,6 @@ export function runPostStartLifecycle(containerName, agentName, profileName, opt
     // Get profile configuration
     const profileConfig = getProfileConfig(`${repoName}/${agentName}`, profileName) || {};
 
-    // Build environment variables
-    const envVars = getProfileEnvVars(agentName, repoName, profileName, { containerName });
-    const profileEnv = normalizeProfileEnv(profileConfig.env);
-
     // Validate secrets
     if (profileConfig.secrets && profileConfig.secrets.length > 0) {
         const secretValidation = validateSecrets(profileConfig.secrets);
@@ -516,8 +543,14 @@ export function runPostStartLifecycle(containerName, agentName, profileName, opt
         }
     }
 
-    const secrets = profileConfig.secrets ? getSecrets(profileConfig.secrets) : {};
-    const hookEnv = createEnvWithSecrets({ ...envVars, ...profileEnv }, secrets);
+    const hookEnv = buildLifecycleHookEnv({
+        agentName,
+        repoName,
+        profileName,
+        profileConfig,
+        agentPath,
+        containerInfo: { containerName },
+    });
 
     // Dependencies
     log('[lifecycle] Installing dependencies...');

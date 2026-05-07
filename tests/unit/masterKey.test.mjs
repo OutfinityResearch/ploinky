@@ -10,7 +10,13 @@ const originalCwd = process.cwd();
 process.chdir(tempDir);
 
 const moduleSuffix = `?test=${Date.now()}`;
-const { deriveSubkey, resolveMasterKey, MASTER_KEY_VAR } = await import(`../../cli/services/masterKey.js${moduleSuffix}`);
+const {
+    deriveAgentSecret,
+    deriveSubkey,
+    deriveDerivedMasterKey,
+    resolveMasterKey,
+    MASTER_KEY_VAR,
+} = await import(`../../cli/services/masterKey.js${moduleSuffix}`);
 
 test.after(() => {
     process.chdir(originalCwd);
@@ -89,4 +95,36 @@ test('deriveSubkey produces distinct, deterministic 32-byte subkeys per purpose'
     assert.notDeepEqual(invocation, resolveMasterKey());
     // Deterministic per (master, purpose) pair
     assert.deepEqual(deriveSubkey('invocation'), invocation);
+});
+
+test('deriveDerivedMasterKey is the derived-master subkey', () => {
+    process.env[MASTER_KEY_VAR] = 'd'.repeat(64);
+    assert.deepEqual(deriveDerivedMasterKey(), deriveSubkey('derived-master'));
+    assert.notDeepEqual(deriveDerivedMasterKey(), deriveSubkey('invocation'));
+});
+
+test('deriveAgentSecret derives deterministic per-agent secrets from the derived master key', () => {
+    process.env[MASTER_KEY_VAR] = 'e'.repeat(64);
+
+    const dpuKey = deriveAgentSecret({
+        repoName: 'AssistOSExplorer',
+        agentName: 'dpuAgent',
+        name: 'DPU_MASTER_KEY',
+    });
+    const dpuKeyAgain = deriveAgentSecret({
+        repoName: 'AssistOSExplorer',
+        agentName: 'dpuAgent',
+        name: 'DPU_MASTER_KEY',
+    });
+    const livekitKey = deriveAgentSecret({
+        repoName: 'AssistOSExplorer',
+        agentName: 'webmeetLivekitServer',
+        name: 'WEBMEET_LIVEKIT_API_SECRET',
+    });
+
+    assert.equal(dpuKey.length, 64);
+    assert.equal(dpuKey, dpuKeyAgain);
+    assert.notEqual(dpuKey, livekitKey);
+    assert.notEqual(dpuKey, deriveDerivedMasterKey().toString('hex'));
+    assert.notEqual(dpuKey, resolveMasterKey().toString('hex'));
 });

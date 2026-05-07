@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 
 import { signHmacJwt, bodyHashForRequest } from '../../../Agent/lib/jwtSign.mjs';
 import { verifyInvocationToken } from '../../../Agent/lib/jwtVerify.mjs';
-import { deriveSubkey } from '../../services/masterKey.js';
+import { deriveDerivedMasterKey } from '../../services/masterKey.js';
 import { resolveAgentDescriptor } from '../../services/agentRegistry.js';
 
 /**
@@ -21,8 +21,8 @@ import { resolveAgentDescriptor } from '../../services/agentRegistry.js';
 
 const DEFAULT_INVOCATION_TTL_SECONDS = 60;
 
-function getWireSecretBuffer() {
-    return deriveSubkey('invocation');
+function getDerivedMasterKeyBuffer() {
+    return deriveDerivedMasterKey();
 }
 
 function nowSec() { return Math.floor(Date.now() / 1000); }
@@ -93,7 +93,7 @@ export function buildFirstPartyInvocation({
         iat,
         exp: iat + Math.max(5, Math.min(Number(ttlSeconds) || DEFAULT_INVOCATION_TTL_SECONDS, 120))
     };
-    const token = signHmacJwt({ payload, secret: getWireSecretBuffer() });
+    const token = signHmacJwt({ payload, secret: getDerivedMasterKeyBuffer() });
     return { token, payload };
 }
 
@@ -124,7 +124,7 @@ export function buildDelegatedInvocation({
         iat,
         exp: iat + Math.max(5, Math.min(Number(ttlSeconds) || DEFAULT_INVOCATION_TTL_SECONDS, 120))
     };
-    const token = signHmacJwt({ payload, secret: getWireSecretBuffer() });
+    const token = signHmacJwt({ payload, secret: getDerivedMasterKeyBuffer() });
     return { token, payload };
 }
 
@@ -138,7 +138,7 @@ export function verifyDelegatedToolCall({
         throw new Error('invocationMinter: caller JWT required');
     }
     const { payload } = verifyInvocationToken(callerJwt, {
-        secret: getWireSecretBuffer(),
+        secret: getDerivedMasterKeyBuffer(),
         maxTtlSeconds: 120
     });
     const callerPrincipal = String(payload.aud || '').trim();

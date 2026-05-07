@@ -3,6 +3,7 @@ import path from 'path';
 
 import { WORKSPACE_ROOT, PLOINKY_DIR } from './config.js';
 import { ensurePersistentSecret, resolveVarValue } from './secretVars.js';
+import { deriveAgentSecret } from './masterKey.js';
 
 /**
  * runtimeResourcePlanner.js
@@ -22,6 +23,7 @@ import { ensurePersistentSecret, resolveVarValue } from './secretVars.js';
  *       {{STORAGE_CONTAINER_PATH}}   (only when persistentStorage declared)
  *       {{STORAGE_HOST_PATH}}
  *       {{secret:<NAME>}}            (ensurePersistentSecret)
+ *       {{derivedMasterSecret:<NAME>}}        (HKDF from PLOINKY_DERIVED_MASTER_KEY)
  *       {{var:<NAME>}}               (resolveVarValue / process.env)
  *
  * The plan is pure: planRuntimeResources reads the manifest only. Applying
@@ -48,7 +50,7 @@ function resolveDataRootForKey(key) {
     return path.join(DEFAULT_DATA_ROOT, String(key || 'default'));
 }
 
-function expandTemplate(raw, { hostPath, containerPath, useHostStoragePath = false }) {
+function expandTemplate(raw, { hostPath, containerPath, useHostStoragePath = false, agentName = '', repoName = '' }) {
     if (typeof raw !== 'string') return raw == null ? '' : String(raw);
     return raw.replace(/\{\{([^}]+)\}\}/g, (match, exprRaw) => {
         const expr = String(exprRaw).trim();
@@ -61,6 +63,15 @@ function expandTemplate(raw, { hostPath, containerPath, useHostStoragePath = fal
             if (!name) return '';
             try {
                 return ensurePersistentSecret(name);
+            } catch (_) {
+                return '';
+            }
+        }
+        if (expr.startsWith('derivedMasterSecret:')) {
+            const name = expr.slice('derivedMasterSecret:'.length).trim();
+            if (!name) return '';
+            try {
+                return deriveAgentSecret({ repoName, agentName, name });
             } catch (_) {
                 return '';
             }
@@ -101,7 +112,9 @@ export function planRuntimeResources(manifest, options = {}) {
     const ctx = {
         hostPath: plan.persistentStorage?.hostPath || '',
         containerPath: plan.persistentStorage?.containerPath || '',
-        useHostStoragePath: options.useHostStoragePath === true
+        useHostStoragePath: options.useHostStoragePath === true,
+        agentName: options.agentName || '',
+        repoName: options.repoName || '',
     };
     for (const [name, rawValue] of Object.entries(rawEnv)) {
         if (!name) continue;

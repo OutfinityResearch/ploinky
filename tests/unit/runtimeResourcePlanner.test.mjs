@@ -14,6 +14,7 @@ process.env.PLOINKY_MASTER_KEY = '6'.repeat(64);
 const moduleSuffix = `?test=${Date.now()}`;
 const { setSecretValue } = await import(`../../cli/services/encryptedSecretsFile.js${moduleSuffix}`);
 setSecretValue('DPU_MASTER_KEY', 'test-master-key-123');
+const { deriveAgentSecret } = await import(`../../cli/services/masterKey.js${moduleSuffix}`);
 const plannerModule = await import(`../../cli/services/runtimeResourcePlanner.js${moduleSuffix}`);
 const { planRuntimeResources, applyRuntimeResourceEnv, ensurePersistentStorageHostDir } = plannerModule;
 
@@ -49,6 +50,28 @@ test('planRuntimeResources resolves persistentStorage and templated env', () => 
     assert.match(plan.persistentStorage.hostPath, /dpu-data$/);
     assert.equal(plan.env.DPU_DATA_ROOT, '/dpu-data');
     assert.equal(plan.env.DPU_MASTER_KEY, 'test-master-key-123');
+});
+
+test('planRuntimeResources resolves derived-master secret templates', () => {
+    const plan = planRuntimeResources({
+        runtime: {
+            resources: {
+                env: {
+                    DPU_MASTER_KEY: '{{derivedMasterSecret:DPU_MASTER_KEY}}'
+                }
+            }
+        }
+    }, {
+        repoName: 'AssistOSExplorer',
+        agentName: 'dpuAgent',
+    });
+
+    assert.equal(plan.env.DPU_MASTER_KEY, deriveAgentSecret({
+        repoName: 'AssistOSExplorer',
+        agentName: 'dpuAgent',
+        name: 'DPU_MASTER_KEY',
+    }));
+    assert.notEqual(plan.env.DPU_MASTER_KEY, 'test-master-key-123');
 });
 
 test('planRuntimeResources can expand storage container path to host path for host sandboxes', () => {

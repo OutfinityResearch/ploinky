@@ -21,12 +21,11 @@ export function expectedAudienceForSelf(env = process.env) {
     return agentName ? `agent:${agentName}` : '';
 }
 
-export function readWireSecret(env = process.env) {
-    // Agents must only see the router-derived wire secret. Falling back to
-    // PLOINKY_MASTER_KEY would let an agent process verify (and, via the same
-    // bytes, mint) JWTs with the workspace root key — violating the invariant
-    // that every secret is derived per-purpose from the master.
-    const hex = String(env?.PLOINKY_WIRE_SECRET || '').trim();
+export function readDerivedMasterKey(env = process.env) {
+    // Agents must only see the router-derived master key. Falling back to
+    // PLOINKY_MASTER_KEY would let an agent process verify and mint JWTs with
+    // the workspace root key, violating per-purpose derivation.
+    const hex = String(env?.PLOINKY_DERIVED_MASTER_KEY || '').trim();
     return hex ? Buffer.from(hex, 'hex') : null;
 }
 
@@ -43,9 +42,9 @@ export function verifyInvocationFromHeaders(headers = {}, bodyObject, {
     if (!rawToken) {
         return { ok: false, reason: 'empty invocation token' };
     }
-    const secret = readWireSecret(env);
+    const secret = readDerivedMasterKey(env);
     if (!secret) {
-        return { ok: false, reason: 'PLOINKY_WIRE_SECRET not configured' };
+        return { ok: false, reason: 'PLOINKY_DERIVED_MASTER_KEY not configured' };
     }
     const audience = expectedAudienceForSelf(env);
     if (!audience) {
@@ -69,6 +68,6 @@ export default {
     readHeaderValue,
     hasInvocationTokenHeader,
     expectedAudienceForSelf,
-    readWireSecret,
+    readDerivedMasterKey,
     verifyInvocationFromHeaders
 };

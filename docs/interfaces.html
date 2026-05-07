@@ -81,7 +81,7 @@
         <section class="chapter-section">
           <h2>Capabilities and Secure Delegation</h2>
           <p>Ploinky reads installed manifests into a small agent index for route names, principals, runtime resources, and SSO-provider markers. Provider-specific domain authorization lives in the target agent.</p>
-          <p>For delegated tool calls, the router signs short-lived invocation tokens with the workspace invocation subkey, forwards user claims when needed, and requires agents to verify the target audience, tool, body hash, expiry, and replay id.</p>
+          <p>For delegated tool calls, the router signs short-lived invocation tokens with <code>PLOINKY_DERIVED_MASTER_KEY</code>, forwards user claims when needed, and requires agents to verify the target audience, tool, body hash, expiry, and replay id.</p>
         </section>
 
         <section class="chapter-section">

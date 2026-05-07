@@ -46,7 +46,7 @@ function runCommandInContainer(agentName, repoName, manifest, command, interacti
     if (!containerExists(containerName)) {
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
         const envVarParts = [
-            ...getSecretsForAgent(manifest),
+            ...getSecretsForAgent(manifest, { agentName, repoName }),
             formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH),
             // Set NODE_PATH to project directory node_modules (in the passthrough mount)
             formatEnvFlag('NODE_PATH', `${projectDir}/node_modules`)
@@ -231,7 +231,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         : null;
 
     if (containerExists(containerName)) {
-        const desired = computeEnvHash(manifest, profileConfig);
+        const desired = computeEnvHash(manifest, profileConfig, {}, { agentName, repoName });
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
             try { execSync(`${runtime} rm -f ${containerName}`, { stdio: 'ignore' }); } catch (_) {}
@@ -241,7 +241,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
     if (!containerExists(containerName)) {
         console.log(`Creating container '${containerName}' for agent '${agentName}'...`);
         const envVarParts = [
-            ...getSecretsForAgent(manifest),
+            ...getSecretsForAgent(manifest, { agentName, repoName }),
             // Set NODE_PATH to project directory node_modules (in the passthrough mount)
             formatEnvFlag('NODE_PATH', `${projectDir}/node_modules`)
         ];
@@ -249,7 +249,7 @@ function ensureAgentContainer(agentName, repoName, manifest) {
         const volZ = (runtime === 'podman') ? ':z' : '';
         const roOpt = (runtime === 'podman') ? ':ro,z' : ':ro';
         let containerImage = manifest.container;
-        const envHash = computeEnvHash(manifest, profileConfig);
+        const envHash = computeEnvHash(manifest, profileConfig, {}, { agentName, repoName });
         const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest);
         const portOptions = manifestPorts.map(p => `-p ${p}`).join(' ');
         try {

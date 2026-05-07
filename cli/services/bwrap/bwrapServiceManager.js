@@ -9,7 +9,7 @@ import {
     getManifestEnvNames,
     resolveVarValue
 } from '../secretVars.js';
-import { deriveSubkey } from '../masterKey.js';
+import { deriveDerivedMasterKey } from '../masterKey.js';
 import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
@@ -362,7 +362,7 @@ function buildBwrapArgs(options) {
  */
 function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, runtimeName = 'bwrap', runtimeResourcePlan = null) {
     // Start with manifest env vars (resolved from secrets)
-    const env = buildEnvMap(manifest, profileConfig);
+    const env = buildEnvMap(manifest, profileConfig, { agentName, repoName });
 
     // Ploinky internal vars
     env.PLOINKY_MCP_CONFIG_PATH = CONTAINER_CONFIG_PATH;
@@ -382,7 +382,7 @@ function buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoN
     try {
         const principalId = deriveAgentPrincipalId(repoName, agentName);
         env.PLOINKY_AGENT_PRINCIPAL = principalId;
-        env.PLOINKY_WIRE_SECRET = deriveSubkey('invocation').toString('hex');
+        env.PLOINKY_DERIVED_MASTER_KEY = deriveDerivedMasterKey().toString('hex');
     } catch (err) {
         debugLog(`[invocationAuth/bwrap] could not set agent identity: ${err?.message || err}`);
     }
@@ -508,14 +508,14 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
 
-    const envHash = computeEnvHash(manifest, profileConfig);
+    const envHash = computeEnvHash(manifest, profileConfig, {}, { agentName, repoName });
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
     // Resolve paths
     const agentCodePath = resolveSymlinkPath(getAgentCodePath(agentName));
     const agentSkillsPath = resolveSymlinkPath(getAgentSkillsPath(agentName));
     const agentWorkDir = getAgentWorkDir(agentName);
-    const runtimeResourcePlan = planRuntimeResources(manifest);
+    const runtimeResourcePlan = planRuntimeResources(manifest, { agentName, repoName });
 
     // Pre-container lifecycle (workspace init, symlinks, preinstall HOST hook)
     const preLifecycle = runPreContainerLifecycle(agentName, repoName, agentPath, activeProfile);
@@ -760,7 +760,7 @@ function ensureBwrapService(agentName, manifest, agentPath, options = {}) {
     // Check if already running
     if (isBwrapProcessRunning(agentName)) {
         // Compare env hash
-        const desired = computeEnvHash(manifest, profileConfig);
+        const desired = computeEnvHash(manifest, profileConfig, {}, { agentName, repoName });
         const current = existingRecord.envHash || '';
         if (desired && desired !== current) {
             console.log(`[bwrap] ${agentName}: env hash changed, restarting...`);
@@ -822,7 +822,7 @@ function attachBwrapInteractive(agentName, manifest, agentPath, workdir, entryCo
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
     // Build environment (same as running agent)
-    const runtimeResourcePlan = planRuntimeResources(manifest);
+    const runtimeResourcePlan = planRuntimeResources(manifest, { agentName, repoName });
     const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'bwrap', runtimeResourcePlan);
     const agentPrivateKeyPath = envMap.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH || '';
     delete envMap.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH;

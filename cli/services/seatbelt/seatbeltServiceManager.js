@@ -341,7 +341,7 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
 
-    const envHash = computeEnvHash(manifest, profileConfig);
+    const envHash = computeEnvHash(manifest, profileConfig, {}, { agentName, repoName });
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
     // Resolve paths (real host paths — no mount namespaces)
@@ -385,7 +385,7 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
     }
     const hostPort = allPortMappings[0]?.hostPort;
 
-    const runtimeResourcePlan = planRuntimeResources(manifest, { useHostStoragePath: true });
+    const runtimeResourcePlan = planRuntimeResources(manifest, { useHostStoragePath: true, agentName, repoName });
     ensurePersistentStorageHostDir(runtimeResourcePlan);
 
     // Build environment map (reuse bwrap's builder with 'seatbelt' runtimeName)
@@ -615,7 +615,7 @@ function ensureSeatbeltService(agentName, manifest, agentPath, options = {}) {
 
     // Check if already running
     if (isBwrapProcessRunning(agentName)) {
-        const desired = computeEnvHash(manifest, profileConfig);
+        const desired = computeEnvHash(manifest, profileConfig, {}, { agentName, repoName });
         const current = existingRecord.envHash || '';
         if (desired && desired !== current) {
             console.log(`[seatbelt] ${agentName}: env hash changed, restarting...`);
@@ -694,7 +694,7 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
     const seatbeltAgentLibPath = ensureSeatbeltAgentLibDir(agentName, nodeModulesDir);
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
-    const runtimeResourcePlan = planRuntimeResources(manifest, { useHostStoragePath: true });
+    const runtimeResourcePlan = planRuntimeResources(manifest, { useHostStoragePath: true, agentName, repoName });
     ensurePersistentStorageHostDir(runtimeResourcePlan);
 
     // Build environment (same as running agent)

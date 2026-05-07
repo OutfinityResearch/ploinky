@@ -88,7 +88,7 @@ test('local auth credentials update through the encrypted password store', async
 
     const secretsText = readFileSync(path.join(ploinkyDir, '.secrets'), 'utf8');
     assert.doesNotMatch(secretsText, /PLOINKY_AUTH_TEST_USERS/);
-    assert.doesNotMatch(secretsText, /PLOINKY_WIRE_SECRET/);
+    assert.doesNotMatch(secretsText, /PLOINKY_DERIVED_MASTER_KEY/);
     const encryptedText = readFileSync(passwordStore.PASSWORD_STORE_FILE, 'utf8');
     assert.doesNotMatch(encryptedText, /maintainer|reviewer|adminpass|reviewpass|newpass123/);
 

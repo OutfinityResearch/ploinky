@@ -9,7 +9,7 @@ import {
     getManifestEnvNames,
     resolveVarValue
 } from '../secretVars.js';
-import { deriveSubkey } from '../masterKey.js';
+import { deriveDerivedMasterKey } from '../masterKey.js';
 import { debugLog } from '../utils.js';
 import {
     CONTAINER_CONFIG_PATH,
@@ -567,7 +567,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     }
     const useProfileLifecycle = Boolean(profileConfig);
     const runtimeRouterEnv = buildRuntimeRouterEnv(runtime, options);
-    const envHash = computeEnvHash(manifest, profileConfig, runtimeRouterEnv);
+    const envHash = computeEnvHash(manifest, profileConfig, runtimeRouterEnv, { agentName, repoName });
 
     // Get profile mount modes (profile overrides default if provided)
     const {
@@ -766,13 +766,16 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     // Manifest-driven runtime resources (persistent storage + declared env).
     // Replaces former agentName-specific runtime wiring with manifest-driven resources.
-    const resourcePlan = planRuntimeResources(manifest);
+    const resourcePlan = planRuntimeResources(manifest, { agentName, repoName });
     if (resourcePlan.persistentStorage) {
         ensurePersistentStorageHostDir(resourcePlan);
         args.push('-v', `${resourcePlan.persistentStorage.hostPath}:${resourcePlan.persistentStorage.containerPath}${runtime === 'podman' ? ':z' : ''}`);
     }
 
-    const envStrings = [...buildEnvFlags(manifest, profileConfig), formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)];
+    const envStrings = [
+        ...buildEnvFlags(manifest, profileConfig, { agentName, repoName }),
+        formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)
+    ];
     envStrings.push(formatEnvFlag('AGENT_NAME', agentName));
     envStrings.push(formatEnvFlag('WORKSPACE_PATH', agentWorkDir));
     envStrings.push(formatEnvFlag('PLOINKY_WORKSPACE_ROOT', WORKSPACE_ROOT));
@@ -784,9 +787,9 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     try {
         const repoName = path.basename(path.dirname(agentPath));
         const principalId = deriveAgentPrincipalId(repoName, agentName);
-        const wireSecret = deriveSubkey('invocation').toString('hex');
+        const derivedMasterSecret = deriveDerivedMasterKey().toString('hex');
         envStrings.push(formatEnvFlag('PLOINKY_AGENT_PRINCIPAL', principalId));
-        envStrings.push(formatEnvFlag('PLOINKY_WIRE_SECRET', wireSecret));
+        envStrings.push(formatEnvFlag('PLOINKY_DERIVED_MASTER_KEY', derivedMasterSecret));
     } catch (err) {
         debugLog(`[invocationAuth] could not set agent identity for ${agentName}: ${err?.message || err}`);
     }
@@ -1071,7 +1074,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     }
 
     if (containerExists(containerName)) {
-        const desired = computeEnvHash(manifest, profileConfig, runtimeRouterEnv);
+        const desired = computeEnvHash(manifest, profileConfig, runtimeRouterEnv, { agentName, repoName });
         const current = getContainerLabel(containerName, 'ploinky.envhash');
         if (desired && desired !== current) {
             debugLog(`[ensureAgentService] ${agentName}: env hash changed (current=${current || '<none>'}, desired=${desired.slice(0, 12)}…), recreating container`);

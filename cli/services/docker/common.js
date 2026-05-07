@@ -149,8 +149,11 @@ function containerExists(containerName) {
     }
 }
 
-function getSecretsForAgent(manifest) {
-    const vars = buildEnvFlags(manifest);
+function getSecretsForAgent(manifest, options = {}) {
+    const vars = buildEnvFlags(manifest, null, {
+        agentName: options.agentName,
+        repoName: options.repoName,
+    });
     debugLog(`Formatted env vars for ${probeContainerRuntime() || 'container'} command: ${vars.join(' ')}`);
     return vars;
 }
@@ -343,10 +346,13 @@ function parseHostPort(output) {
     }
 }
 
-function computeEnvHash(manifest, profileConfig, extraEnv = {}) {
+function computeEnvHash(manifest, profileConfig, extraEnv = {}, options = {}) {
     try {
         const map = {
-            ...buildEnvMap(manifest, profileConfig || null),
+            ...buildEnvMap(manifest, profileConfig || null, {
+                agentName: options.agentName,
+                repoName: options.repoName,
+            }),
             ...(extraEnv && typeof extraEnv === 'object' && !Array.isArray(extraEnv) ? extraEnv : {}),
         };
         const sorted = Object.keys(map).sort().reduce((acc, key) => {
