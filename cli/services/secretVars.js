@@ -266,6 +266,10 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                     required,
                     derive,
                     deriveName,
+                    deriveRepoName,
+                    deriveRepo,
+                    deriveAgentName,
+                    deriveAgent,
                     deriveBytes,
                     deriveFormat,
                 } = entry;
@@ -277,6 +281,12 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                     ? {
                         type: 'derived-master',
                         name: typeof deriveName === 'string' && deriveName.trim() ? deriveName.trim() : sourceName,
+                        repoName: typeof deriveRepoName === 'string' && deriveRepoName.trim()
+                            ? deriveRepoName.trim()
+                            : (typeof deriveRepo === 'string' && deriveRepo.trim() ? deriveRepo.trim() : ''),
+                        agentName: typeof deriveAgentName === 'string' && deriveAgentName.trim()
+                            ? deriveAgentName.trim()
+                            : (typeof deriveAgent === 'string' && deriveAgent.trim() ? deriveAgent.trim() : ''),
                         bytes: deriveBytes,
                         format: deriveFormat,
                     }
@@ -329,6 +339,12 @@ export function getManifestEnvSpecs(manifest, profileConfig) {
                         name: typeof rawSpec.deriveName === 'string' && rawSpec.deriveName.trim()
                             ? rawSpec.deriveName.trim()
                             : sourceName,
+                        repoName: typeof rawSpec.deriveRepoName === 'string' && rawSpec.deriveRepoName.trim()
+                            ? rawSpec.deriveRepoName.trim()
+                            : (typeof rawSpec.deriveRepo === 'string' && rawSpec.deriveRepo.trim() ? rawSpec.deriveRepo.trim() : ''),
+                        agentName: typeof rawSpec.deriveAgentName === 'string' && rawSpec.deriveAgentName.trim()
+                            ? rawSpec.deriveAgentName.trim()
+                            : (typeof rawSpec.deriveAgent === 'string' && rawSpec.deriveAgent.trim() ? rawSpec.deriveAgent.trim() : ''),
                         bytes: rawSpec.deriveBytes,
                         format: rawSpec.deriveFormat,
                     };
@@ -376,8 +392,8 @@ function resolveManifestEnv(manifest, secrets, options = {}) {
             && Object.prototype.hasOwnProperty.call(secrets, spec.sourceName);
         if (spec.derive?.type === 'derived-master') {
             resolvedValue = deriveAgentSecret({
-                repoName,
-                agentName,
+                repoName: spec.derive.repoName || repoName,
+                agentName: spec.derive.agentName || agentName,
                 name: spec.derive.name || spec.sourceName || spec.insideName,
                 length: spec.derive.bytes,
                 encoding: spec.derive.format || 'hex',

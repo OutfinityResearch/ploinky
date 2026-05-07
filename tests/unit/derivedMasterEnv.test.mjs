@@ -51,3 +51,31 @@ test('buildEnvMap derives derived-master env entries from the derived master key
     }));
     assert.notEqual(env.DERIVED_MASTER_TEST_SECRET, 'operator-value');
 });
+
+test('buildEnvMap can share a derived-master identity across agents', () => {
+    const manifest = {
+        env: [
+            {
+                name: 'SHARED_SECRET',
+                derive: 'derived-master',
+                deriveRepoName: 'logical-repo',
+                deriveAgentName: 'logical-agent',
+                deriveName: 'shared-secret',
+            },
+        ],
+    };
+    const first = buildEnvMap(manifest, null, {
+        repoName: 'repo-one',
+        agentName: 'agent-one',
+    });
+    const second = buildEnvMap(manifest, null, {
+        repoName: 'repo-two',
+        agentName: 'agent-two',
+    });
+    assert.equal(first.SHARED_SECRET, second.SHARED_SECRET);
+    assert.equal(first.SHARED_SECRET, deriveAgentSecret({
+        repoName: 'logical-repo',
+        agentName: 'logical-agent',
+        name: 'shared-secret',
+    }));
+});
