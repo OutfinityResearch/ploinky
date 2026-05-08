@@ -555,6 +555,25 @@ export function buildEnvMap(manifest, profileConfig, options = {}) {
     return out;
 }
 
+export function resolveManifestImage(manifest, profileConfig, options = {}) {
+    const raw = String(manifest?.container || manifest?.image || 'node:18-alpine');
+    if (!raw.includes('${')) return raw;
+    let envMap = {};
+    try {
+        envMap = buildEnvMap(manifest, profileConfig, options);
+    } catch (_) {
+        // Encrypted secrets unavailable (e.g. no master key in this context).
+        // Fall back to process.env only.
+    }
+    return raw.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => {
+        const fromManifest = Object.prototype.hasOwnProperty.call(envMap, name) ? envMap[name] : undefined;
+        if (fromManifest !== undefined && fromManifest !== '') return String(fromManifest);
+        const fromProcess = process.env[name];
+        if (fromProcess !== undefined && fromProcess !== '') return String(fromProcess);
+        throw new Error(`[manifest] image '${raw}' references ${match}, but no value is set in the agent's manifest env, ploinky vars, or process.env`);
+    });
+}
+
 export function updateAgentExpose(manifestPath, exposedName, src) {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
     if (!manifest.expose) manifest.expose = [];

@@ -7,6 +7,7 @@ import {
     formatEnvFlag,
     getExposedNames,
     getManifestEnvNames,
+    resolveManifestImage,
     resolveVarValue
 } from '../secretVars.js';
 import { deriveDerivedMasterKey } from '../masterKey.js';
@@ -547,7 +548,6 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const containerName = options.containerName || getAgentContainerName(agentName, repoName);
     removeContainerForRecreate(runtime, containerName, `startAgentContainer:${agentName}`);
 
-    const image = manifest.container || manifest.image || 'node:18-alpine';
     const { raw: explicitAgentCmd } = readManifestAgentCommand(manifest);
     const startCmd = readManifestStartCommand(manifest);
     const useStartEntry = Boolean(startCmd);
@@ -565,6 +565,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         const availableProfiles = Object.keys(manifest.profiles || {});
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
+    const image = resolveManifestImage(manifest, profileConfig, { agentName, repoName });
     const useProfileLifecycle = Boolean(profileConfig);
     const runtimeRouterEnv = buildRuntimeRouterEnv(runtime, options);
     const envHash = computeEnvHash(manifest, profileConfig, runtimeRouterEnv, { agentName, repoName });
@@ -1047,7 +1048,6 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
     if (!aliasOverride && existingRecord.alias) {
         aliasOverride = existingRecord.alias;
     }
-    const image = manifest.container || manifest.image || 'node:18-alpine';
 
     // Resolve profile config early - needed for port resolution
     const activeProfile = String(profileNameOverride || existingRecord.profile || getActiveProfile()).trim() || getActiveProfile();
@@ -1059,6 +1059,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         const availableProfiles = Object.keys(manifest.profiles || {});
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
+    const image = resolveManifestImage(manifest, profileConfig, { agentName, repoName });
     const runtimeRouterEnv = buildRuntimeRouterEnv(runtime, {
         routerPort: routerPortOverride,
         routerHost: routerHostOverride
