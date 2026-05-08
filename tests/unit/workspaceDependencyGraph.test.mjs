@@ -151,27 +151,42 @@ test('resolveWorkspaceDependencyGraph skips cyclic dependency edges with a reada
     assert.match(errors[0], /Dependency cycle detected: cycle\/a -> cycle\/b -> cycle\/a/);
 });
 
-test('resolveWorkspaceDependencyGraph skips invalid dependency entries while preserving valid ones', () => {
+test('resolveWorkspaceDependencyGraph fails closed when a dependency entry cannot be resolved', () => {
     writeManifest('demo', 'simulator', { container: 'node:20-alpine' });
-    writeManifest('demo', 'app-with-stale-enable', {
+    writeManifest('demo', 'app-with-missing-dep', {
         container: 'node:20-alpine',
-        enable: ['simulator', 'missing-agent', 'broken alias as']
+        enable: ['simulator', 'missing-agent']
+    });
+
+    assert.throws(
+        () => resolveWorkspaceDependencyGraph({ staticAgentRef: 'demo/app-with-missing-dep' }),
+        /Failed to resolve dependency 'missing-agent'/
+    );
+});
+
+test('resolveWorkspaceDependencyGraph still truncates cycles instead of throwing', () => {
+    writeManifest('cycleTrunc', 'a', {
+        container: 'node:20-alpine',
+        enable: ['cycleTrunc/b']
+    });
+    writeManifest('cycleTrunc', 'b', {
+        container: 'node:20-alpine',
+        enable: ['cycleTrunc/a']
     });
 
     const originalError = console.error;
     const errors = [];
     console.error = (...args) => errors.push(args.join(' '));
     try {
-        const graph = resolveWorkspaceDependencyGraph({ staticAgentRef: 'demo/app-with-stale-enable' });
+        const graph = resolveWorkspaceDependencyGraph({ staticAgentRef: 'cycleTrunc/a' });
         assert.deepEqual(
             topologicallyGroupDependencyGraph(graph),
-            [['demo/simulator'], ['demo/app-with-stale-enable']]
+            [['cycleTrunc/b'], ['cycleTrunc/a']]
         );
     } finally {
         console.error = originalError;
     }
 
-    assert.equal(errors.length, 2);
-    assert.match(errors[0], /Failed to resolve dependency 'missing-agent'/);
-    assert.match(errors[1], /Failed to resolve dependency 'broken alias as'/);
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /Dependency cycle detected/);
 });

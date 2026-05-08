@@ -562,9 +562,12 @@ export function resolveManifestImage(manifest, profileConfig, options = {}) {
     let envMap = {};
     try {
         envMap = buildEnvMap(manifest, profileConfig, options);
-    } catch (_) {
-        // Encrypted secrets unavailable (e.g. no master key in this context).
-        // Fall through to other sources below.
+    } catch (error) {
+        const message = error?.message || String(error);
+        const secretsUnavailable = message.startsWith('PLOINKY_MASTER_KEY is required');
+        if (!secretsUnavailable) {
+            throw error;
+        }
     }
 
     // Manifest env declarations carry their own defaults and do not require

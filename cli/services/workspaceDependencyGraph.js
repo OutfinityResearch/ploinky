@@ -198,7 +198,13 @@ function resolveWorkspaceDependencyGraph({ staticAgentRef, registry = {} } = {})
                 nodes.get(childId)?.dependents.add(nodeId);
             } catch (dependencyError) {
                 const message = dependencyError?.message || String(dependencyError);
-                console.error(`[manifest enable] Failed to resolve dependency '${rawDependency}' for '${node.agentRef}': ${message}`);
+                // Cycles are an existing intentional truncation case: log and continue so the parent build can still proceed.
+                // All other resolution failures (missing agents, malformed enable specs, manifest parse errors) fail-closed.
+                if (message.startsWith('Dependency cycle detected:')) {
+                    console.error(`[manifest enable] Failed to resolve dependency '${rawDependency}' for '${node.agentRef}': ${message}`);
+                    continue;
+                }
+                throw new Error(`[manifest enable] Failed to resolve dependency '${rawDependency}' for '${node.agentRef}': ${message}`);
             }
         }
         state.set(nodeId, 'visited');

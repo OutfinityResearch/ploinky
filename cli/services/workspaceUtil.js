@@ -308,7 +308,11 @@ async function waitForReadinessEntries(readinessEntries) {
 
   for (const entry of readinessEntries) {
     const waitLabel = entry.kind === 'static' ? 'static agent' : 'dependent agent';
-    console.log(`[start] Waiting for ${waitLabel} '${entry.label}' to become ready on port ${entry.route.hostPort}...`);
+    if (entry.protocol === 'none') {
+      console.log(`[start] Marking ${waitLabel} '${entry.label}' ready (no port-bound readiness probe).`);
+    } else {
+      console.log(`[start] Waiting for ${waitLabel} '${entry.label}' to become ready on port ${entry.route.hostPort}...`);
+    }
     if (entry.installState?.needsInstall) {
       console.log(`[start] ${entry.label}: startup cache cold or invalid (${entry.installState.reason}); using extended readiness timeout ${entry.timeoutMs}ms.`);
     }
