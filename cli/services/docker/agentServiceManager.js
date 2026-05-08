@@ -731,12 +731,19 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         args.push('-v', `${agentSkillsPath}:/code/skills${skillsMountMode}`);
     }
     const manifestNetwork = manifest?.network && typeof manifest.network === 'object' ? manifest.network : null;
+    const manifestNetworkMode = String(manifestNetwork?.mode || '').trim().toLowerCase();
     const manifestNetworkName = String(manifestNetwork?.name || '').trim();
     const manifestNetworkAliases = Array.isArray(manifestNetwork?.aliases)
         ? manifestNetwork.aliases.map((entry) => String(entry || '').trim()).filter(Boolean)
         : [];
+    const useHostNetwork = manifestNetworkMode === 'host';
 
-    if (manifestNetworkName) {
+    if (useHostNetwork) {
+        args.splice(1, 0, '--network', 'host');
+        if (runtime === 'podman') {
+            args.splice(1, 0, '--replace');
+        }
+    } else if (manifestNetworkName) {
         ensureNamedRuntimeNetwork(runtime, manifestNetworkName);
         args.splice(1, 0, '--network', manifestNetworkName);
         for (const alias of manifestNetworkAliases) {
@@ -758,7 +765,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
 
     const { publishArgs: manifestPorts, portMappings } = parseManifestPorts(manifest, profileConfig);
     const runtimePorts = (options && Array.isArray(options.publish)) ? options.publish : [];
-    const pubs = [...manifestPorts, ...runtimePorts];
+    const pubs = useHostNetwork ? [] : [...manifestPorts, ...runtimePorts];
     for (const p of pubs) {
         if (!p) continue;
         args.splice(1, 0, '-p', String(p));
