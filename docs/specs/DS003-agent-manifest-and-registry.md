@@ -28,6 +28,8 @@ The manifest `container` (or `image`) field may template `${VAR}` references aga
 
 The manifest `network` object selects the container's network namespace. The default is a workspace-defined bridge selected by `network.name` (with optional `network.aliases` for sibling DNS). When an agent declares `network.mode: "host"`, the runtime must run the container with `--network host`, must not create or attach a named bridge, must not emit `-p` port publishes, and must not register network aliases. Host-network agents still declare `ports` for documentation and readiness probing; the runtime treats those declarations as probe metadata only. Sibling agents on a bridge can reach a host-network agent through the runtime-provided host gateway entry (for example `host.containers.internal`) rather than through a bridge alias.
 
+The optional manifest `entrypoint` field overrides the container image's `ENTRYPOINT` at run time. Setting it to `/bin/sh` lets agents that ship with a CLI-style entrypoint (for example `certbot/certbot` whose entrypoint is `["certbot"]`) run a manifest-supplied `start` script instead of being interpreted as a CLI subcommand. The runtime must emit `--entrypoint <value>` immediately before the image argument when this field is set; the `start` field then becomes the argument(s) passed to the new entrypoint.
+
 ## Decisions & Questions
 
 ### Question #1: Why are SSO-provider dependencies conditionally enabled?
@@ -49,6 +51,11 @@ Some workloads, notably WebRTC SFUs such as LiveKit, are broken by the source-ad
 
 Response:
 The image tag is part of the deploy contract that operators tune through workspace vars and CI inputs (for example `WEBMEET_LIVEKIT_VERSION`). Allowing `${VAR}` in `container` lets a single manifest serve `dev`, `qa`, and `prod` profiles with profile-specific or operator-overridden versions without forking the manifest. Failing closed on an unresolved reference forces the operator to set the var, which is preferable to silently running a stale or wrong image.
+
+### Question #5: Why is `entrypoint` exposed at the manifest level instead of always relying on the image's default?
+
+Response:
+Some upstream images, including `certbot/certbot`, ship a CLI-style `ENTRYPOINT` that is incompatible with running a Ploinky-supplied `start` script directly (the script path would be passed as a CLI argument). Forcing every such workload into a wrapper image or a custom build would multiply the moving parts. Modeling `entrypoint` as a manifest field keeps the override visible in the same source of truth as the image tag and the start command, and it lets the runtime continue to derive everything else (env injection, mounts, networking) from the manifest contract.
 
 ## Conclusion
 

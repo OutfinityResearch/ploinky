@@ -847,6 +847,10 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     // Node.js module resolution walks up from script location, so it won't find /code/node_modules
     args.push('-e', `NODE_PATH=/code/node_modules`);
 
+    const manifestEntrypoint = typeof manifest?.entrypoint === 'string' ? manifest.entrypoint.trim() : '';
+    if (manifestEntrypoint) {
+        args.push('--entrypoint', manifestEntrypoint);
+    }
     args.push(image);
     let entrySummary = DEFAULT_AGENT_ENTRY;
     if (useStartEntry) {
