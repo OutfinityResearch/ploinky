@@ -325,6 +325,17 @@ async function waitForReadinessEntries(readinessEntries) {
   }
 
   await Promise.all(readinessEntries.map(async (entry) => {
+    if (entry.protocol === 'none') {
+      readinessProgress.set(entry.key, {
+        elapsedMs: 0,
+        ready: true,
+        stage: 'ready',
+        portOpen: false,
+        lastError: null
+      });
+      summarizeReadiness();
+      return;
+    }
     const ready = await waitForAgentReady(entry.route, {
       timeoutMs: entry.timeoutMs,
       intervalMs: entry.intervalMs,

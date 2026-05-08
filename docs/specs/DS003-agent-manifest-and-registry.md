@@ -30,6 +30,8 @@ The manifest `network` object selects the container's network namespace. The def
 
 The optional manifest `entrypoint` field overrides the container image's `ENTRYPOINT` at run time. Setting it to `/bin/sh` lets agents that ship with a CLI-style entrypoint (for example `certbot/certbot` whose entrypoint is `["certbot"]`) run a manifest-supplied `start` script instead of being interpreted as a CLI subcommand. The runtime must emit `--entrypoint <value>` immediately before the image argument when this field is set; the `start` field then becomes the argument(s) passed to the new entrypoint.
 
+The manifest `enable` directive may also appear inside a profile block (`manifest.profiles.<profile>.enable`). When the workspace dependency graph is built, profile-level `enable` entries are merged with the top-level `manifest.enable` list against the active profile only. This is the supported way to pin an optional dependency to specific profiles (for example "the production TLS terminator only ships in prod"). The leaf agent's manifest stays unaware of profile selection; the choice lives in the parent that knows when to chain it in.
+
 ## Decisions & Questions
 
 ### Question #1: Why are SSO-provider dependencies conditionally enabled?

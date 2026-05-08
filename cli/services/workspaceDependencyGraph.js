@@ -3,6 +3,7 @@ import path from 'path';
 import { parseEnableDirective } from './bootstrapManifest.js';
 import { findAgent } from './utils.js';
 import { isSsoProviderManifest } from './agentRegistry.js';
+import { getActiveProfile } from './profileService.js';
 
 function normalizeAuthMode(value) {
     const normalized = String(value || '').trim().toLowerCase();
@@ -166,7 +167,19 @@ function resolveWorkspaceDependencyGraph({ staticAgentRef, registry = {} } = {})
 
         state.set(nodeId, 'visiting');
         const nextStack = [...stack, nodeId];
-        for (const rawDependency of Array.isArray(node.manifest.enable) ? node.manifest.enable : []) {
+        const baseEnable = Array.isArray(node.manifest.enable) ? node.manifest.enable : [];
+        let profileEnable = [];
+        try {
+            const activeProfile = getActiveProfile();
+            const profileBlock = node.manifest?.profiles?.[activeProfile];
+            if (profileBlock && Array.isArray(profileBlock.enable)) {
+                profileEnable = profileBlock.enable;
+            }
+        } catch (_) {
+            // No active profile available (or profile lookup failed); fall back to top-level enable only.
+        }
+        const enableList = [...baseEnable, ...profileEnable];
+        for (const rawDependency of enableList) {
             try {
                 const parsedDependency = parseEnableDirective(rawDependency);
                 if (!parsedDependency) continue;

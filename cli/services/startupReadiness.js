@@ -1,6 +1,9 @@
 function normalizeProtocol(value) {
     const normalized = String(value || '').trim().toLowerCase();
-    return normalized === 'tcp' || normalized === 'mcp' ? normalized : '';
+    if (normalized === 'tcp' || normalized === 'mcp' || normalized === 'none') {
+        return normalized;
+    }
+    return '';
 }
 
 function readManifestStartCommand(manifest) {

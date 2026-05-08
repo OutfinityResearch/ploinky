@@ -26,6 +26,8 @@ Readiness must probe TCP or MCP according to the manifest-derived protocol. Mani
 
 Readiness probes target a host-side port, derived from the manifest's `ports` declarations. Agents using `network.mode: "host"` must still declare `ports` even though the runtime does not emit `-p` flags for them; the declarations are probe metadata only and let the runtime know which port to reach on `127.0.0.1`. A manifest with no `ports` and no AgentServer-style command falls back to a randomly allocated AgentServer mapping, which is unreachable for a server that binds a different port and will appear as an `ECONNREFUSED` readiness loop. Manifests for service agents that bind a known port must declare it.
 
+Some agents are workers rather than servers — they do not bind a port and have no readiness signal beyond "the process is running." Such agents must set `readiness.protocol: "none"`. The runtime treats them as immediately ready and does not probe a port; the dependency wave still tracks them so dependents wait for the container to start, but it does not require a port-open or MCP-handshake response. Use this only for true workers (renewal loops, batch jobs); serving agents must keep a real probe.
+
 ## Decisions & Questions
 
 ### Question #1: Why are dependency caches keyed by runtime and merged package hash?
