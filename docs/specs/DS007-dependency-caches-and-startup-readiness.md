@@ -24,6 +24,8 @@ Workspace startup must expand the static agent into a dependency graph using man
 
 Readiness must probe TCP or MCP according to the manifest-derived protocol. Manifests with only a `start` command default to TCP readiness. Other agent modes default to MCP readiness unless the manifest explicitly sets `readiness.protocol`. Cold-cache or invalid-cache scenarios may use an extended readiness timeout because installation and warm-up can materially delay the first healthy response.
 
+Readiness probes target a host-side port, derived from the manifest's `ports` declarations. Agents using `network.mode: "host"` must still declare `ports` even though the runtime does not emit `-p` flags for them; the declarations are probe metadata only and let the runtime know which port to reach on `127.0.0.1`. A manifest with no `ports` and no AgentServer-style command falls back to a randomly allocated AgentServer mapping, which is unreachable for a server that binds a different port and will appear as an `ECONNREFUSED` readiness loop. Manifests for service agents that bind a known port must declare it.
+
 ## Decisions & Questions
 
 ### Question #1: Why are dependency caches keyed by runtime and merged package hash?
@@ -35,6 +37,11 @@ The same JavaScript dependency tree is not safe to reuse across incompatible run
 
 Response:
 The graph contains explicit dependency edges, and tests on this branch validate that dependents wait until their prerequisites are ready. Wave-based gating preserves that contract and avoids exposing partially booted dependency chains that appear “started” but are not yet able to serve requests.
+
+### Question #3: Why does the runtime require explicit `ports` for host-network agents to probe readiness?
+
+Response:
+With bridge networking, the runtime uses the manifest's port mappings to learn which host port the agent listens on. With host networking it strips `-p` emission, so the only structured signal of the agent's port is the manifest declaration itself. Without it, the runtime cannot distinguish a service agent that binds `:7880` from a quiet AgentServer wrapper, and falls back to a random `127.0.0.1:<random>:7000` AgentServer mapping. Keeping `ports` declared for host-mode service agents preserves the readiness contract without re-introducing port publishing.
 
 ## Conclusion
 

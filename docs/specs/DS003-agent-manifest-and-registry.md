@@ -24,6 +24,10 @@ The manifest surface may define startup commands, CLI commands, readiness hints,
 
 Manifest enablement is conditional for SSO providers. If a dependency manifest sets `ssoProvider: true`, it should only be auto-enabled for a dependent manifest when that dependent resolved to SSO mode. This keeps password-only or no-auth workspaces from booting unused SSO-provider dependencies.
 
+The manifest `container` (or `image`) field may template `${VAR}` references against the agent's resolved environment. Resolution order is the agent's manifest env (decrypted Ploinky secrets and manifest-declared defaults, via the same env map the runtime injects into the container) and then `process.env`. An unresolved reference must fail at agent start with a clear error rather than running a malformed image string. Templating is the supported way to pin a container version (for example `livekit/livekit-server:${WEBMEET_LIVEKIT_VERSION}`) while keeping the version in a workspace var or operator-controlled deploy input rather than baking a tag into the manifest.
+
+The manifest `network` object selects the container's network namespace. The default is a workspace-defined bridge selected by `network.name` (with optional `network.aliases` for sibling DNS). When an agent declares `network.mode: "host"`, the runtime must run the container with `--network host`, must not create or attach a named bridge, must not emit `-p` port publishes, and must not register network aliases. Host-network agents still declare `ports` for documentation and readiness probing; the runtime treats those declarations as probe metadata only. Sibling agents on a bridge can reach a host-network agent through the runtime-provided host gateway entry (for example `host.containers.internal`) rather than through a bridge alias.
+
 ## Decisions & Questions
 
 ### Question #1: Why are SSO-provider dependencies conditionally enabled?
@@ -35,6 +39,16 @@ The implementation checks whether a dependent manifest resolves to SSO mode befo
 
 Response:
 The router needs a stable per-instance route key, and the runtime needs a stable per-instance container or process identity. Using the alias for both preserves a single operator-visible naming surface for multi-instance agents and avoids having route names diverge from runtime names.
+
+### Question #3: Why is `network.mode: "host"` exposed instead of letting agents define ports more aggressively?
+
+Response:
+Some workloads, notably WebRTC SFUs such as LiveKit, are broken by the source-address rewriting that podman's bridge UDP port-publishing performs. The SFU learns peers at bridge-internal addresses and sends server-initiated UDP back inside the bridge, so subscriber media never reaches the real client. Modeling host networking as an explicit manifest-level mode keeps the workspace decision visible, scoped to a single agent, and consistent with the rest of the manifest contract instead of relying on out-of-band container flags.
+
+### Question #4: Why is `${VAR}` expanded in the `container` field instead of forcing a hard-coded image tag?
+
+Response:
+The image tag is part of the deploy contract that operators tune through workspace vars and CI inputs (for example `WEBMEET_LIVEKIT_VERSION`). Allowing `${VAR}` in `container` lets a single manifest serve `dev`, `qa`, and `prod` profiles with profile-specific or operator-overridden versions without forking the manifest. Failing closed on an unresolved reference forces the operator to set the var, which is preferable to silently running a stale or wrong image.
 
 ## Conclusion
 
