@@ -558,19 +558,38 @@ export function buildEnvMap(manifest, profileConfig, options = {}) {
 export function resolveManifestImage(manifest, profileConfig, options = {}) {
     const raw = String(manifest?.container || manifest?.image || 'node:18-alpine');
     if (!raw.includes('${')) return raw;
+
     let envMap = {};
     try {
         envMap = buildEnvMap(manifest, profileConfig, options);
     } catch (_) {
         // Encrypted secrets unavailable (e.g. no master key in this context).
-        // Fall back to process.env only.
+        // Fall through to other sources below.
     }
+
+    // Manifest env declarations carry their own defaults and do not require
+    // secrets decryption. Read them directly so a non-templated default still
+    // resolves the image even when the secrets store is unreachable.
+    const manifestDefaults = {};
+    try {
+        const specs = getManifestEnvSpecs(manifest, profileConfig);
+        for (const spec of specs) {
+            if (spec.defaultValue !== undefined && spec.defaultValue !== null && spec.defaultValue !== '') {
+                manifestDefaults[spec.insideName] = String(spec.defaultValue);
+            }
+        }
+    } catch (_) {
+        // Spec extraction itself should not fail, but stay defensive.
+    }
+
     return raw.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name) => {
-        const fromManifest = Object.prototype.hasOwnProperty.call(envMap, name) ? envMap[name] : undefined;
-        if (fromManifest !== undefined && fromManifest !== '') return String(fromManifest);
+        const fromMap = Object.prototype.hasOwnProperty.call(envMap, name) ? envMap[name] : undefined;
+        if (fromMap !== undefined && fromMap !== '') return String(fromMap);
         const fromProcess = process.env[name];
         if (fromProcess !== undefined && fromProcess !== '') return String(fromProcess);
-        throw new Error(`[manifest] image '${raw}' references ${match}, but no value is set in the agent's manifest env, ploinky vars, or process.env`);
+        const fromDefault = manifestDefaults[name];
+        if (fromDefault !== undefined && fromDefault !== '') return fromDefault;
+        throw new Error(`[manifest] image '${raw}' references ${match}, but no value is set in the agent's manifest env, ploinky vars, process.env, or manifest defaults`);
     });
 }
 
