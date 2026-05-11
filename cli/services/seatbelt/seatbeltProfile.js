@@ -9,7 +9,9 @@ import {
     ROUTING_FILE,
     SECRETS_FILE,
     SERVERS_CONFIG_FILE,
+    WORKSPACE_ROOT,
 } from '../config.js';
+import { normalizeManifestVolumeHostPaths } from '../manifestVolumePolicy.js';
 
 const SEATBELT_PROFILES_DIR = path.join(PLOINKY_DIR, 'seatbelt-profiles');
 
@@ -32,12 +34,16 @@ function buildSeatbeltProfile(options) {
         codeReadOnly,
         skillsReadOnly,
         volumes,
+        workspaceRoot = WORKSPACE_ROOT,
         extraReadPaths = [],
         extraWritePaths = []
     } = options;
 
     const normalizedExtraWritePaths = normalizePathList(extraWritePaths);
-    const normalizedVolumes = normalizeVolumeHostPaths(volumes, cwd);
+    const normalizedVolumes = normalizeManifestVolumeHostPaths(volumes, {
+        workspaceRoot,
+        ploinkyDir: path.join(workspaceRoot, '.ploinky'),
+    });
     const protectedWritePaths = collectProtectedWritePaths({
         agentCodePath,
         agentLibPath,
@@ -192,13 +198,6 @@ function normalizePathList(paths) {
     return Array.from(new Set(paths
         .filter((value) => typeof value === 'string' && value.trim())
         .map((value) => path.resolve(value))));
-}
-
-function normalizeVolumeHostPaths(volumes, cwd) {
-    if (!volumes || typeof volumes !== 'object') return [];
-    return Array.from(new Set(Object.keys(volumes).map((hostPath) => (
-        path.isAbsolute(hostPath) ? hostPath : path.resolve(cwd, hostPath)
-    ))));
 }
 
 function collectProtectedWritePaths({

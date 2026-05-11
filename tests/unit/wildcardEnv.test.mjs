@@ -4,8 +4,10 @@ import {
     isWildcardPattern,
     wildcardToRegex,
     isApiKeyVariable,
+    isSensitiveEnvVariableName,
     expandEnvWildcard,
-    getManifestEnvSpecs
+    getManifestEnvSpecs,
+    validateManifestEnvProfileCompleteness
 } from '../../cli/services/secretVars.js';
 
 // ================================
@@ -328,4 +330,70 @@ test('getManifestEnvSpecs: mixed wildcards and explicit variables', () => {
         delete process.env.MIX_LLM_MODEL_02;
         delete process.env.MIX_DATABASE_URL;
     }
+});
+
+test('validateManifestEnvProfileCompleteness rejects required non-sensitive env without defaults', () => {
+    const manifest = {
+        profiles: {
+            prod: {
+                env: [
+                    {
+                        name: 'PUBLIC_SERVICE_URL',
+                        required: true
+                    }
+                ]
+            }
+        }
+    };
+
+    const result = validateManifestEnvProfileCompleteness(manifest, manifest.profiles.prod, {
+        agentName: 'exampleAgent',
+        profileName: 'prod'
+    });
+
+    assert.strictEqual(result.valid, false);
+    assert.match(result.issues[0], /PUBLIC_SERVICE_URL/);
+});
+
+test('validateManifestEnvProfileCompleteness allows derived and sensitive required env without defaults', () => {
+    const manifest = {
+        profiles: {
+            prod: {
+                env: [
+                    {
+                        name: 'PUBLIC_SERVICE_URL',
+                        required: true,
+                        default: 'https://example.test'
+                    },
+                    {
+                        name: 'SERVICE_API_KEY',
+                        required: true
+                    },
+                    {
+                        name: 'SERVICE_PASSWORD',
+                        required: true
+                    },
+                    {
+                        name: 'SERVICE_MASTER_KEY',
+                        required: true
+                    },
+                    {
+                        name: 'DERIVED_SECRET',
+                        required: true,
+                        derive: 'derived-master'
+                    }
+                ]
+            }
+        }
+    };
+
+    const result = validateManifestEnvProfileCompleteness(manifest, manifest.profiles.prod, {
+        profileName: 'prod'
+    });
+
+    assert.strictEqual(result.valid, true);
+    assert.ok(isSensitiveEnvVariableName('SERVICE_API_KEY'));
+    assert.ok(isSensitiveEnvVariableName('SERVICE_PASSWORD'));
+    assert.ok(isSensitiveEnvVariableName('SERVICE_MASTER_KEY'));
+    assert.ok(!isSensitiveEnvVariableName('KEYCLOAK_URL'));
 });

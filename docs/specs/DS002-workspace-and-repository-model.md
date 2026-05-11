@@ -23,6 +23,7 @@ The repository must store workspace runtime state under `.ploinky/`, including a
 - `repos/` for cloned repositories.
 - `agents/`, `code/`, and `skills/` for working directories and symlink projections.
 - `logs/`, `running/`, `deps/`, `keys/`, and `transcripts/` for live runtime state.
+- `data/` for manifest-declared durable service data and runtime-resource persistent storage.
 - `.secrets` and `profile` for workspace-local configuration.
 
 Repository installation must clone into `.ploinky/repos/<name>/`. Predefined repositories are resolved through the built-in catalog in `cli/services/repos.js`, while custom repositories may provide their own URL and optional branch. Custom repository URLs and branch selections discovered from manifest `repos` directives or explicit install arguments must be retained as workspace metadata so later update operations can repair or refresh that installed repository without switching branches. Skills-only repositories are not valid targets for `enable repo`; they must instead be consumed through `default-skills`.
@@ -32,6 +33,8 @@ The all-repository `update` flow must update repositories under `.ploinky/repos/
 Enabled repositories constrain discovery when `enabled_repos.json` is populated. If no repositories are explicitly enabled, installed repositories remain discoverable by default. This fallback is part of the user-facing repository model and must remain documented as such.
 
 Agent source and skill trees must be projected into `.ploinky/code/<agent>/` and `.ploinky/skills/<agent>/` through symlinks when an agent is enabled. If a real directory blocks a symlink target, the runtime may warn and skip that symlink rather than destroying the existing path.
+
+Manifest-declared extra host mounts must resolve under `.ploinky/`. Durable data belongs under `.ploinky/data/<agent-or-service>/...`; generated startup inputs belong under `.ploinky/agents/<agent>/...`. Agents must not create sibling top-level runtime directories such as `postgres/`, `webmeet/`, or `webmeetAgent/` in the user's workspace root.
 
 ## Decisions & Questions
 
@@ -49,6 +52,11 @@ This preserves a workable default for freshly initialized workspaces and matches
 
 Response:
 The command is intended to act on the directory where the operator runs it, matching the normal shell expectation for commands that accept an optional root path. Operators can still provide a folder path to broaden, narrow, or redirect discovery, including pointing directly at a single repository root.
+
+### Question #4: Why must extra manifest mounts live under `.ploinky/`?
+
+Response:
+Ploinky already owns `.ploinky/` as the workspace runtime boundary. Keeping extra service data, generated config, dependency state, logs, transcripts, and repository clones under that boundary makes `destroy`, cleanup, backup, smoke tests, and repository browsing predictable. It also avoids polluting the user's project tree with infrastructure folders that look like source files or user artifacts.
 
 ## Conclusion
 

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+    assertManifestVolumeHostPathUnderPloinky,
     assertPodmanCodeMountAllowed,
     buildPodmanStagedTargetMounts,
     codeRelativeMountPath,
@@ -14,6 +15,7 @@ import {
     mergeNodeOptions,
     podmanMountSuffix,
 } from '../../cli/services/docker/agentServiceManager.js';
+import { PLOINKY_DIR, WORKSPACE_ROOT } from '../../cli/services/config.js';
 import {
     prepareFreshRuntimeRoot,
     pruneStaleRuntimeEntries,
@@ -223,6 +225,22 @@ test('mergeNodeOptions appends podman symlink flags without duplicating existing
 test('podmanMountSuffix places z before ro for absolute self-mount targets', () => {
     assert.equal(podmanMountSuffix(true), ':z,ro');
     assert.equal(podmanMountSuffix(false), ':z');
+});
+
+test('manifest volume host paths must stay under workspace .ploinky', () => {
+    assert.doesNotThrow(() => {
+        assertManifestVolumeHostPathUnderPloinky(
+            path.join(PLOINKY_DIR, 'data', 'demo', 'state'),
+            '/data',
+        );
+    });
+    assert.throws(
+        () => assertManifestVolumeHostPathUnderPloinky(
+            path.join(WORKSPACE_ROOT, 'demo', 'state'),
+            '/data',
+        ),
+        /Extra manifest volumes must live under/,
+    );
 });
 
 test('generated required manifest volumes must be produced by hooks', () => {

@@ -159,6 +159,60 @@ test('validateProfile reports missing secrets', () => {
     }
 });
 
+test('validateProfile reports required non-sensitive env without profile defaults', () => {
+    writeManifest('repo-profile-env', 'agent-profile-env', {
+        profiles: {
+            default: {},
+            prod: {
+                env: [
+                    {
+                        name: 'PUBLIC_ENDPOINT',
+                        required: true
+                    },
+                    {
+                        name: 'SERVICE_API_KEY',
+                        required: true
+                    }
+                ]
+            }
+        }
+    });
+
+    const result = validateProfile('repo-profile-env/agent-profile-env', 'prod');
+    assert.strictEqual(result.valid, false);
+    assert.ok(result.issues.some(issue => issue.includes('PUBLIC_ENDPOINT')));
+    assert.ok(!result.issues.some(issue => issue.includes('SERVICE_API_KEY')));
+});
+
+test('validateProfile accepts complete non-sensitive env defaults and derived secrets', () => {
+    writeManifest('repo-profile-complete', 'agent-profile-complete', {
+        profiles: {
+            default: {},
+            prod: {
+                env: [
+                    {
+                        name: 'PUBLIC_ENDPOINT',
+                        required: true,
+                        default: 'https://example.test'
+                    },
+                    {
+                        name: 'SERVICE_SECRET',
+                        required: true
+                    },
+                    {
+                        name: 'DERIVED_MASTER_SECRET',
+                        required: true,
+                        derive: 'derived-master'
+                    }
+                ]
+            }
+        }
+    });
+
+    const result = validateProfile('repo-profile-complete/agent-profile-complete', 'prod');
+    assert.strictEqual(result.valid, true);
+});
+
 test('validateProfile succeeds when secrets and hooks are present', () => {
     const agentDir = writeManifest('repo-four', 'agent-four', {
         profiles: {

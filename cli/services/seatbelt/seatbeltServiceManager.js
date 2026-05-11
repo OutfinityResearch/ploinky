@@ -18,7 +18,7 @@ import {
     readManifestAgentCommand,
     readManifestStartCommand
 } from '../docker/agentCommands.js';
-import { LOGS_DIR, PLOINKY_DIR } from '../config.js';
+import { LOGS_DIR, PLOINKY_DIR, WORKSPACE_ROOT } from '../config.js';
 import { ensureSharedHostDir } from '../docker/agentHooks.js';
 import {
     runPreContainerLifecycle,
@@ -44,6 +44,7 @@ import {
 } from '../workspaceStructure.js';
 import { ensureAgentCacheForFamily } from '../dependencyCache.js';
 import {
+    assertManifestEnvProfileCompleteness,
     getExposedNames,
     getManifestEnvNames
 } from '../secretVars.js';
@@ -341,6 +342,7 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
 
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, { agentName, repoName, profileName: activeProfile });
     const envHash = computeEnvHash(manifest, profileConfig, {}, { agentName, repoName });
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
@@ -424,6 +426,7 @@ function startSeatbeltProcess(agentName, manifest, agentPath, options = {}) {
         codeReadOnly,
         skillsReadOnly,
         volumes: manifest.volumes,
+        workspaceRoot: WORKSPACE_ROOT,
         extraReadPaths: getSeatbeltExtraReadPaths(),
         extraWritePaths: [
             LOGS_DIR,
@@ -600,6 +603,7 @@ function ensureSeatbeltService(agentName, manifest, agentPath, options = {}) {
         ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
         : null;
 
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, { agentName, repoName, profileName: activeProfile });
     const { portMappings } = parseManifestPorts(manifest, profileConfig);
     let allPortMappings = [...portMappings];
     if (!allPortMappings.length) {
@@ -698,6 +702,7 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
     ensurePersistentStorageHostDir(runtimeResourcePlan);
 
     // Build environment (same as running agent)
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, { agentName, repoName, profileName: activeProfile });
     const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'seatbelt', runtimeResourcePlan);
     const hostPort = record.config?.ports?.[0]?.hostPort;
     if (hostPort) envMap.PORT = String(hostPort);
@@ -726,6 +731,7 @@ function attachSeatbeltInteractive(agentName, manifest, agentPath, workdir, entr
         codeReadOnly,
         skillsReadOnly,
         volumes: manifest.volumes,
+        workspaceRoot: WORKSPACE_ROOT,
         extraReadPaths: getSeatbeltExtraReadPaths(),
         extraWritePaths: [
             LOGS_DIR,

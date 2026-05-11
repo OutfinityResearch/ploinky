@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
+    assertManifestEnvProfileCompleteness,
     buildEnvMap,
     formatEnvFlag,
     getExposedNames,
@@ -74,36 +75,18 @@ import {
     clearBwrapPid,
     getBwrapPid
 } from './bwrapFleet.js';
+import {
+    assertManifestVolumeHostPathUnderPloinky,
+    ensureManifestVolumeHostPath,
+    readManifestVolumeOptions,
+    resolveManifestVolumeHostPath
+} from '../manifestVolumePolicy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const AGENT_LIB_PATH = path.resolve(__dirname, '../../../Agent');
 const AGENT_PRIVATE_KEY_CONTAINER_PATH = '/run/ploinky-agent.key';
 
-function ensureManifestVolumeHostPath(resolvedHostPath, _containerPath, options = {}) {
-    if (!resolvedHostPath) return;
-    if (!fs.existsSync(resolvedHostPath)) {
-        fs.mkdirSync(resolvedHostPath, { recursive: true });
-    }
-    if (options && typeof options.chmod === 'number') {
-        try { fs.chmodSync(resolvedHostPath, options.chmod); } catch (_) {}
-        if (Array.isArray(options.makeWorldWritableSubdirs)) {
-            for (const sub of options.makeWorldWritableSubdirs) {
-                const subDir = path.join(resolvedHostPath, String(sub));
-                try {
-                    fs.mkdirSync(subDir, { recursive: true });
-                    fs.chmodSync(subDir, options.chmod);
-                } catch (_) {}
-            }
-        }
-    }
-}
-
-function readManifestVolumeOptions(manifest) {
-    return manifest?.volumeOptions && typeof manifest.volumeOptions === 'object'
-        ? manifest.volumeOptions
-        : {};
-}
 const BWRAP_PATH = '/usr/bin/bwrap';
 
 function resolveRouterHostForRuntime() {
@@ -307,9 +290,8 @@ function buildBwrapArgs(options) {
     if (volumes && typeof volumes === 'object') {
         const volumeOptions = options.volumeOptions || {};
         for (const [hostPath, containerPath] of Object.entries(volumes)) {
-            const resolvedHostPath = path.isAbsolute(hostPath)
-                ? hostPath
-                : path.resolve(WORKSPACE_ROOT, hostPath);
+            const resolvedHostPath = resolveManifestVolumeHostPath(hostPath);
+            assertManifestVolumeHostPathUnderPloinky(resolvedHostPath, containerPath);
             const mountOptions = volumeOptions[containerPath]
                 || volumeOptions[String(containerPath || '').replace(/\/+$/, '')]
                 || {};
@@ -508,6 +490,7 @@ function startBwrapProcess(agentName, manifest, agentPath, options = {}) {
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
 
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, { agentName, repoName, profileName: activeProfile });
     const envHash = computeEnvHash(manifest, profileConfig, {}, { agentName, repoName });
     const { codeReadOnly, skillsReadOnly } = getProfileMountModes(activeProfile, profileConfig || {});
 
@@ -744,6 +727,7 @@ function ensureBwrapService(agentName, manifest, agentPath, options = {}) {
         ? getProfileConfig(`${repoName}/${agentName}`, activeProfile)
         : null;
 
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, { agentName, repoName, profileName: activeProfile });
     const { portMappings } = parseManifestPorts(manifest, profileConfig);
     let allPortMappings = [...portMappings];
     if (!allPortMappings.length) {
@@ -823,6 +807,7 @@ function attachBwrapInteractive(agentName, manifest, agentPath, workdir, entryCo
 
     // Build environment (same as running agent)
     const runtimeResourcePlan = planRuntimeResources(manifest, { agentName, repoName });
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, { agentName, repoName, profileName: activeProfile });
     const envMap = buildFullEnvMap(agentName, manifest, profileConfig, agentWorkDir, repoName, activeProfile, 'bwrap', runtimeResourcePlan);
     const agentPrivateKeyPath = envMap.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH || '';
     delete envMap.__PLOINKY_AGENT_PRIVATE_KEY_HOST_PATH;

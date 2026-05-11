@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { PROFILE_FILE, PLOINKY_DIR, REPOS_DIR } from './config.js';
 import { validateSecrets } from './secretInjector.js';
+import { validateManifestEnvProfileCompleteness } from './secretVars.js';
 import { debugLog, findAgent } from './utils.js';
 
 // Valid profile names (default is always applied as base)
@@ -268,6 +269,12 @@ export function validateProfile(agentName, profileName) {
             issues.push(`Could not resolve profile configuration for '${profileName}'`);
             return { valid: false, issues, config: null };
         }
+
+        const envProfileValidation = validateManifestEnvProfileCompleteness(manifest, config, {
+            agentName,
+            profileName,
+        });
+        issues.push(...envProfileValidation.issues);
 
         // Validate required secrets
         if (config.secrets && Array.isArray(config.secrets)) {

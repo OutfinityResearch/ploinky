@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
+    assertManifestEnvProfileCompleteness,
     buildEnvFlags,
     formatEnvFlag,
     getExposedNames,
@@ -73,6 +74,12 @@ import {
     prepareFreshRuntimeRoot,
     runtimeSegment
 } from '../runtimeStaging.js';
+import {
+    assertManifestVolumeHostPathUnderPloinky,
+    ensureManifestVolumeHostPath,
+    readManifestVolumeOptions,
+    resolveManifestVolumeHostPath
+} from '../manifestVolumePolicy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -310,68 +317,6 @@ function resolveSymlinkPath(symlinkPath) {
     return symlinkPath;
 }
 
-function ensureManifestVolumeHostPath(resolvedHostPath, _containerPath, options = {}) {
-    if (!resolvedHostPath) return;
-    const containerPath = typeof _containerPath === 'string' ? _containerPath.trim() : '';
-    const hostLooksLikeFile = path.extname(resolvedHostPath) !== '';
-    const containerLooksLikeFile = path.extname(containerPath) !== '';
-    const shouldCreateFile = hostLooksLikeFile || containerLooksLikeFile;
-    if (!fs.existsSync(resolvedHostPath)) {
-        if (options?.generated === true) {
-            if (options.required === true) {
-                throw new Error(
-                    `[volume] Missing or empty required generated volume '${containerPath || resolvedHostPath}': ${resolvedHostPath}`
-                );
-            }
-            // Non-required generated volumes: pre-create the parent slot so
-            // a later hook can drop the file in without racing on mkdir.
-            const parentDir = shouldCreateFile ? path.dirname(resolvedHostPath) : resolvedHostPath;
-            fs.mkdirSync(parentDir, { recursive: true });
-            return;
-        }
-        if (shouldCreateFile) {
-            fs.mkdirSync(path.dirname(resolvedHostPath), { recursive: true });
-            fs.writeFileSync(resolvedHostPath, '');
-        } else {
-            fs.mkdirSync(resolvedHostPath, { recursive: true });
-        }
-    }
-    if (options?.generated === true && options.required === true) {
-        try {
-            const stat = fs.statSync(resolvedHostPath);
-            if (stat.isFile() && stat.size === 0) {
-                throw new Error(
-                    `[volume] Missing or empty required generated volume '${containerPath || resolvedHostPath}': ${resolvedHostPath}`
-                );
-            }
-            if (stat.isDirectory() && fs.readdirSync(resolvedHostPath).length === 0) {
-                throw new Error(
-                    `[volume] Missing or empty required generated volume '${containerPath || resolvedHostPath}': ${resolvedHostPath}`
-                );
-            }
-        } catch (err) {
-            if (err && err.code === 'ENOENT') {
-                throw new Error(
-                    `[volume] Missing or empty required generated volume '${containerPath || resolvedHostPath}': ${resolvedHostPath}`
-                );
-            }
-            throw err;
-        }
-    }
-    if (options && typeof options.chmod === 'number') {
-        try { fs.chmodSync(resolvedHostPath, options.chmod); } catch (_) {}
-        if (options.makeWorldWritableSubdirs && Array.isArray(options.makeWorldWritableSubdirs)) {
-            for (const sub of options.makeWorldWritableSubdirs) {
-                const subDir = path.join(resolvedHostPath, String(sub));
-                try {
-                    fs.mkdirSync(subDir, { recursive: true });
-                    fs.chmodSync(subDir, options.chmod);
-                } catch (_) {}
-            }
-        }
-    }
-}
-
 function resolveRouterHostForRuntime(runtime) {
     if (runtime === 'podman') {
         return 'host.containers.internal';
@@ -418,21 +363,12 @@ function appendRuntimeRouterEnvFlags(envStrings, routerEnv) {
     }
 }
 
-function readManifestVolumeOptions(manifest) {
-    const volumeOptions = manifest?.volumeOptions && typeof manifest.volumeOptions === 'object'
-        ? manifest.volumeOptions
-        : {};
-    return volumeOptions;
-}
-
 function ensureManifestVolumeHostPaths(manifest) {
     if (!manifest?.volumes || typeof manifest.volumes !== 'object') return;
-    const workspaceRoot = WORKSPACE_ROOT;
     const volumeOptions = readManifestVolumeOptions(manifest);
     for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
-        const resolvedHostPath = path.isAbsolute(hostPath)
-            ? hostPath
-            : path.resolve(workspaceRoot, hostPath);
+        const resolvedHostPath = resolveManifestVolumeHostPath(hostPath);
+        assertManifestVolumeHostPathUnderPloinky(resolvedHostPath, containerPath);
         const options = volumeOptions[containerPath]
             || volumeOptions[String(containerPath || '').replace(/\/+$/, '')]
             || {};
@@ -565,6 +501,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         const availableProfiles = Object.keys(manifest.profiles || {});
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, { agentName, repoName, profileName: activeProfile });
     const image = resolveManifestImage(manifest, profileConfig, { agentName, repoName });
     const useProfileLifecycle = Boolean(profileConfig);
     const runtimeRouterEnv = buildRuntimeRouterEnv(runtime, options);
@@ -633,12 +570,10 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const podmanCodeLinks = new Map();
     const manifestVolumeMounts = [];
     if (manifest.volumes && typeof manifest.volumes === 'object') {
-        const workspaceRoot = WORKSPACE_ROOT;
         const volumeOptions = readManifestVolumeOptions(manifest);
         for (const [hostPath, containerPath] of Object.entries(manifest.volumes)) {
-            const resolvedHostPath = path.isAbsolute(hostPath)
-                ? hostPath
-                : path.resolve(workspaceRoot, hostPath);
+            const resolvedHostPath = resolveManifestVolumeHostPath(hostPath);
+            assertManifestVolumeHostPathUnderPloinky(resolvedHostPath, containerPath);
             const options = volumeOptions[containerPath]
                 || volumeOptions[String(containerPath || '').replace(/\/+$/, '')]
                 || {};
@@ -785,7 +720,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     }
 
     const envStrings = [
-        ...buildEnvFlags(manifest, profileConfig, { agentName, repoName }),
+        ...buildEnvFlags(manifest, profileConfig, { agentName, repoName, profileName: activeProfile }),
         formatEnvFlag('PLOINKY_MCP_CONFIG_PATH', CONTAINER_CONFIG_PATH)
     ];
     envStrings.push(formatEnvFlag('AGENT_NAME', agentName));
@@ -1067,6 +1002,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         const availableProfiles = Object.keys(manifest.profiles || {});
         throw new Error(`[profile] ${agentName}: profile '${activeProfile}' not found. Available: ${availableProfiles.join(', ')}`);
     }
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, { agentName, repoName, profileName: activeProfile });
     const image = resolveManifestImage(manifest, profileConfig, { agentName, repoName });
     const runtimeRouterEnv = buildRuntimeRouterEnv(runtime, {
         routerPort: routerPortOverride,
@@ -1208,6 +1144,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
 }
 
 export {
+    assertManifestVolumeHostPathUnderPloinky,
     assertPodmanCodeMountAllowed,
     buildPodmanStagedTargetMounts,
     buildRuntimeRouterEnv,

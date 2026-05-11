@@ -119,6 +119,20 @@ function isApiKeyVariable(name) {
     return upper.includes('API_KEY') || upper.includes('APIKEY');
 }
 
+function isSensitiveEnvVariableName(name) {
+    if (!name || typeof name !== 'string') return false;
+    const upper = name.toUpperCase();
+    return (
+        /(^|_)(SECRET|TOKEN|PASSWORD|PASS|CREDENTIAL|CREDENTIALS)($|_)/.test(upper)
+        || upper.includes('API_KEY')
+        || upper.includes('APIKEY')
+        || upper.includes('PRIVATE_KEY')
+        || upper.includes('MASTER_KEY')
+        || upper.includes('ENCRYPTION_KEY')
+        || upper.includes('JWT_SECRET')
+    );
+}
+
 /**
  * Get all available environment variable names from all sources.
  * Sources checked (in order):
@@ -368,8 +382,58 @@ function isEmptyValue(value) {
     return str.trim().length === 0;
 }
 
+function formatEnvSpecName(spec) {
+    return (spec.sourceName && spec.sourceName !== spec.insideName)
+        ? `${spec.insideName} (source: ${spec.sourceName})`
+        : spec.insideName;
+}
+
+export function getIncompleteManifestEnvProfileEntries(manifest, profileConfig) {
+    return getManifestEnvSpecs(manifest, profileConfig).filter(spec => {
+        if (!spec.required) return false;
+        if (spec.derive?.type === 'derived-master') return false;
+        if (!isEmptyValue(spec.defaultValue)) return false;
+        return !isSensitiveEnvVariableName(spec.insideName)
+            && !isSensitiveEnvVariableName(spec.sourceName);
+    });
+}
+
+export function validateManifestEnvProfileCompleteness(manifest, profileConfig, options = {}) {
+    const missing = getIncompleteManifestEnvProfileEntries(manifest, profileConfig);
+    if (!missing.length) {
+        return { valid: true, issues: [], missing: [] };
+    }
+
+    const profileLabel = options.profileName ? ` profile '${options.profileName}'` : ' profile';
+    const agentLabel = options.agentName ? ` for ${options.agentName}` : '';
+    const details = missing.map(formatEnvSpecName);
+    return {
+        valid: false,
+        missing,
+        issues: [
+            `Required non-sensitive env entries${agentLabel}${profileLabel} must define profile defaults: ${details.join(', ')}`
+        ]
+    };
+}
+
+export function assertManifestEnvProfileCompleteness(manifest, profileConfig, options = {}) {
+    const result = validateManifestEnvProfileCompleteness(manifest, profileConfig, options);
+    if (result.valid) return;
+    const error = new Error(result.issues[0]);
+    error.code = 'PLOINKY_PROFILE_CONFIG_INCOMPLETE';
+    error.missing = result.missing.map(spec => spec.insideName);
+    throw error;
+}
+
 function resolveManifestEnv(manifest, secrets, options = {}) {
     const { profileConfig, agentName = '', repoName = '' } = options;
+    if (options.enforceProfileCompleteness) {
+        assertManifestEnvProfileCompleteness(manifest, profileConfig, {
+            agentName,
+            repoName,
+            profileName: options.profileName,
+        });
+    }
     const specs = getManifestEnvSpecs(manifest, profileConfig);
     const resolved = [];
     const missing = [];
@@ -482,12 +546,15 @@ export function formatEnvFlag(name, value) {
 }
 
 export function buildEnvFlags(manifest, profileConfig, options = {}) {
+    assertManifestEnvProfileCompleteness(manifest, profileConfig, options);
     const secrets = parseSecrets();
     const envEntries = resolveManifestEnv(manifest, secrets, {
         enforceRequired: true,
+        enforceProfileCompleteness: false,
         profileConfig,
         agentName: options.agentName,
         repoName: options.repoName,
+        profileName: options.profileName,
     }).resolved;
     const out = [];
     for (const entry of envEntries) {
@@ -662,6 +729,7 @@ export {
     isWildcardPattern,
     wildcardToRegex,
     isApiKeyVariable,
+    isSensitiveEnvVariableName,
     getAllAvailableEnvNames,
     expandEnvWildcard
 };

@@ -41,6 +41,7 @@ test('buildSeatbeltProfile grants root and parent literals for scoped paths', ()
         volumes: {
             '.ploinky/repos/webassist/data': '/data',
         },
+        workspaceRoot: '/Users/alice/workspace',
         extraReadPaths: ['/opt/homebrew'],
         extraWritePaths: ['/Users/alice/workspace/.ploinky/logs'],
     });
