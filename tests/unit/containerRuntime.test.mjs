@@ -14,6 +14,7 @@ import {
 
 const repoRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const agentServiceManagerUrl = pathToFileURL(path.join(repoRoot, 'cli/services/docker/agentServiceManager.js')).href;
+const dockerCommonUrl = pathToFileURL(path.join(repoRoot, 'cli/services/docker/common.js')).href;
 
 function tempDir(prefix = 'ploinky-runtime-test-') {
     return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -74,6 +75,57 @@ process.stdout.write(JSON.stringify(buildRuntimeRouterEnv('docker')));`,
             PLOINKY_ROUTER_HOST: 'host.docker.internal',
             PLOINKY_ROUTER_URL: 'http://host.docker.internal:8097',
         });
+    } finally {
+        fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
+});
+
+test('computeEnvHash preserves legacy shape when no network is declared', () => {
+    const workspaceDir = tempDir();
+    try {
+        const result = runModuleSnippet(
+            `import crypto from 'node:crypto';
+const { computeEnvHash } = await import(${JSON.stringify(dockerCommonUrl)});
+const manifest = { env: [{ name: 'DEMO_VALUE', default: 'one' }] };
+const expected = crypto.createHash('sha256').update(JSON.stringify({ DEMO_VALUE: 'one' })).digest('hex');
+process.stdout.write(JSON.stringify({ actual: computeEnvHash(manifest), expected }));`,
+            {},
+            { cwd: workspaceDir },
+        );
+
+        assert.equal(result.status, 0, result.stderr);
+        const output = JSON.parse(result.stdout);
+        assert.equal(output.actual, output.expected);
+    } finally {
+        fs.rmSync(workspaceDir, { recursive: true, force: true });
+    }
+});
+
+test('computeEnvHash changes when the effective profile network changes', () => {
+    const workspaceDir = tempDir();
+    try {
+        const result = runModuleSnippet(
+            `const { computeEnvHash } = await import(${JSON.stringify(dockerCommonUrl)});
+const manifest = {
+    env: [{ name: 'DEMO_VALUE', default: 'one' }],
+    network: { name: 'root-network', aliases: ['rootAgent'] },
+};
+const bridgeProfile = { network: { name: 'webmeet', aliases: ['webmeetLivekitServer'] } };
+const hostProfile = { network: { mode: 'host' } };
+process.stdout.write(JSON.stringify({
+    rootHash: computeEnvHash(manifest, null),
+    bridgeHash: computeEnvHash(manifest, bridgeProfile),
+    hostHash: computeEnvHash(manifest, hostProfile),
+}));`,
+            {},
+            { cwd: workspaceDir },
+        );
+
+        assert.equal(result.status, 0, result.stderr);
+        const output = JSON.parse(result.stdout);
+        assert.notEqual(output.rootHash, output.bridgeHash);
+        assert.notEqual(output.bridgeHash, output.hostHash);
+        assert.notEqual(output.rootHash, output.hostHash);
     } finally {
         fs.rmSync(workspaceDir, { recursive: true, force: true });
     }

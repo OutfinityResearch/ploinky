@@ -346,6 +346,42 @@ function parseHostPort(output) {
     }
 }
 
+function hasOwnObject(target, key) {
+    return Boolean(
+        target
+        && Object.prototype.hasOwnProperty.call(target, key)
+        && target[key]
+        && typeof target[key] === 'object'
+        && !Array.isArray(target[key])
+    );
+}
+
+function normalizeHashValue(value) {
+    if (typeof value === 'string') {
+        return value.trim();
+    }
+    if (Array.isArray(value)) {
+        return value.map((entry) => normalizeHashValue(entry));
+    }
+    if (value && typeof value === 'object') {
+        return Object.keys(value).sort().reduce((acc, key) => {
+            acc[key] = normalizeHashValue(value[key]);
+            return acc;
+        }, {});
+    }
+    return value;
+}
+
+function resolveNetworkConfigForHash(manifest, profileConfig) {
+    if (hasOwnObject(profileConfig, 'network')) {
+        return normalizeHashValue(profileConfig.network);
+    }
+    if (hasOwnObject(manifest, 'network')) {
+        return normalizeHashValue(manifest.network);
+    }
+    return null;
+}
+
 function computeEnvHash(manifest, profileConfig, extraEnv = {}, options = {}) {
     try {
         const map = {
@@ -355,11 +391,14 @@ function computeEnvHash(manifest, profileConfig, extraEnv = {}, options = {}) {
             }),
             ...(extraEnv && typeof extraEnv === 'object' && !Array.isArray(extraEnv) ? extraEnv : {}),
         };
+        const network = resolveNetworkConfigForHash(manifest, profileConfig || null);
         const sorted = Object.keys(map).sort().reduce((acc, key) => {
             acc[key] = map[key];
             return acc;
         }, {});
-        const data = JSON.stringify(sorted);
+        const data = network === null
+            ? JSON.stringify(sorted)
+            : JSON.stringify({ env: sorted, network });
         return crypto.createHash('sha256').update(data).digest('hex');
     } catch (_) {
         return '';

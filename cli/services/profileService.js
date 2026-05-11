@@ -130,6 +130,11 @@ export function mergeProfiles(defaultProfile, activeProfile) {
         merged.ports = activeProfile.ports;
     }
 
+    // Merge network - active replaces default because the namespace is selected as a unit.
+    if (activeProfile.network !== undefined) {
+        merged.network = activeProfile.network;
+    }
+
     return merged;
 }
 

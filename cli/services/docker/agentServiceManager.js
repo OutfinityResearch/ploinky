@@ -731,7 +731,11 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     if (skillsPathExists && !skillsPathInsideCode && runtime !== 'podman') {
         args.push('-v', `${agentSkillsPath}:/code/skills${skillsMountMode}`);
     }
-    const manifestNetwork = manifest?.network && typeof manifest.network === 'object' ? manifest.network : null;
+    // Profile-level network overrides root manifest.network (mirrors how ports/env behave).
+    // Lets one manifest declare e.g. host networking for prod and bridge networking for dev.
+    const profileNetwork = profileConfig?.network && typeof profileConfig.network === 'object' ? profileConfig.network : null;
+    const rootNetwork = manifest?.network && typeof manifest.network === 'object' ? manifest.network : null;
+    const manifestNetwork = profileNetwork || rootNetwork;
     const manifestNetworkMode = String(manifestNetwork?.mode || '').trim().toLowerCase();
     const manifestNetworkName = String(manifestNetwork?.name || '').trim();
     const manifestNetworkAliases = Array.isArray(manifestNetwork?.aliases)

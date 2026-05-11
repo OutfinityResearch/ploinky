@@ -118,6 +118,27 @@ test('getProfileConfig returns the profile config when present', () => {
     assert.deepStrictEqual(config, { env: { NODE_ENV: 'development' } });
 });
 
+test('getProfileConfig lets active profile network replace default network', () => {
+    writeManifest('repo-network', 'agent-network', {
+        profiles: {
+            default: {
+                network: {
+                    name: 'webmeet',
+                    aliases: ['webmeetLivekitServer'],
+                },
+            },
+            prod: {
+                network: {
+                    mode: 'host',
+                },
+            },
+        },
+    });
+
+    const config = getProfileConfig('repo-network/agent-network', 'prod');
+    assert.deepStrictEqual(config.network, { mode: 'host' });
+});
+
 test('validateProfile reports missing secrets', () => {
     writeManifest('repo-three', 'agent-three', {
         profiles: {
