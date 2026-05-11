@@ -7,14 +7,17 @@ import {
     buildDelegatedInvocation,
     verifyDelegatedToolCall
 } from './invocationMinter.js';
+import { sanitizeArgumentsForTool } from './toolArguments.js';
 import { getAgentDescriptorByPrincipal } from '../../services/agentRegistry.js';
 
 const AGENT_PROXY_PROTOCOL_VERSION = '2025-06-18';
 const AGENT_PROXY_SERVER_INFO = { name: 'ploinky-router-proxy', version: '1.0.0' };
 const CALLER_JWT_HEADER = 'x-ploinky-caller-jwt';
+const TOOL_SCHEMA_CACHE_TTL_MS = 30_000;
 
 // Session store for agent MCP connections
 const agentSessionStore = new Map();
+const agentToolSchemaCache = new Map();
 
 /**
  * Read MCP session ID from request headers
@@ -64,6 +67,26 @@ function extractDelegatedUser(req) {
         email: req.user.email || '',
         roles: Array.isArray(req.user.roles) ? [...req.user.roles] : []
     };
+}
+
+async function getToolSchemasForAgent(agentName, agentClient) {
+    const now = Date.now();
+    const cached = agentToolSchemaCache.get(agentName);
+    if (cached && now - cached.loadedAt < TOOL_SCHEMA_CACHE_TTL_MS) {
+        return cached.tools;
+    }
+    const tools = await agentClient.listTools();
+    agentToolSchemaCache.set(agentName, { loadedAt: now, tools });
+    return tools;
+}
+
+async function canonicalizeToolArguments(agentName, agentClient, toolName, args) {
+    try {
+        const tools = await getToolSchemasForAgent(agentName, agentClient);
+        return sanitizeArgumentsForTool(args, tools, toolName);
+    } catch (_) {
+        return args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+    }
 }
 
 export function buildInvocationContextForProviderCall({ req, agentName, toolName, toolArgs }) {
@@ -179,6 +202,7 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
         switch (message.method) {
             case 'tools/list': {
                 const tools = await agentClient.listTools();
+                agentToolSchemaCache.set(agentName, { loadedAt: Date.now(), tools });
                 sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result: { tools } }, sessionIdHeader);
                 break;
             }
@@ -198,14 +222,15 @@ async function handleAgentJsonRpc(req, res, route, agentName, payload) {
                 const args = argPayload && typeof argPayload === 'object' && !Array.isArray(argPayload)
                     ? { ...argPayload }
                     : {};
+                const canonicalArgs = await canonicalizeToolArguments(agentName, agentClient, name, args);
 
                 // Mint a router-signed invocation token scoped to this tool call
                 // and open a short-lived client with that token in the header.
-                const toolHeaders = buildRequestHeadersForToolCall(name, args);
+                const toolHeaders = buildRequestHeadersForToolCall(name, canonicalArgs);
                 const toolClient = createAgentClient(baseUrl, toolHeaders ? { requestHeaders: toolHeaders } : undefined);
 
                 try {
-                    const result = await toolClient.callTool(name, args);
+                    const result = await toolClient.callTool(name, canonicalArgs);
                     sendResponse(200, { jsonrpc: '2.0', id: message.id ?? null, result }, sessionIdHeader);
                 } finally {
                     await toolClient.close().catch(() => {});
