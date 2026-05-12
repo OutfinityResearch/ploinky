@@ -520,12 +520,23 @@ export function createNetwork({
         });
     }
 
+    function sendControl(controlSeq) {
+        return fetch(toEndpoint(`control?tabId=${TAB_ID}`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: controlSeq
+        }).catch((error) => {
+            dlog('control send error', error);
+        });
+    }
+
     return {
         start,
         stop,
         sendCommand,
         sendQuickCommand,
         sendAttachments,
-        sendFeedback
+        sendFeedback,
+        sendControl
     };
 }

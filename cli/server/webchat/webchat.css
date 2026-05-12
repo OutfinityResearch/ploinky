@@ -1613,6 +1613,107 @@ body {
     background: var(--wa-accent-hover);
 }
 
+.wa-cancel-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #ff8c8c 0%, #ff5252 35%, #d92d20 100%);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: white;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
+    flex-shrink: 0;
+    position: relative;
+    box-shadow: 0 0 0 0 rgba(217, 45, 32, 0.45);
+    animation: wa-cancel-pulse 1.6s ease-out infinite;
+}
+
+.wa-cancel-btn:hover {
+    filter: brightness(1.04);
+    transform: scale(1.08);
+}
+
+.wa-cancel-btn-core {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes wa-cancel-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(217, 45, 32, 0.42);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(217, 45, 32, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(217, 45, 32, 0);
+    }
+}
+
+/* --- Slash Autocomplete Menu --- */
+.wa-slash-menu {
+    position: absolute;
+    z-index: 100;
+    background: var(--wa-bg-panel, #ffffff);
+    border: 1px solid var(--wa-border, #e0e0e0);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    max-height: 320px;
+    overflow-y: auto;
+    display: none;
+}
+
+.wa-slash-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background 0.12s;
+    gap: 12px;
+}
+
+.wa-slash-menu-item:first-child {
+    border-radius: 10px 10px 0 0;
+}
+
+.wa-slash-menu-item:last-child {
+    border-radius: 0 0 10px 10px;
+}
+
+.wa-slash-menu-item:only-child {
+    border-radius: 10px;
+}
+
+.wa-slash-menu-item-active,
+.wa-slash-menu-item:hover {
+    background: var(--wa-accent, #2196f3);
+    color: #ffffff;
+}
+
+.wa-slash-menu-label {
+    font-size: 13.5px;
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    white-space: nowrap;
+}
+
+.wa-slash-menu-desc {
+    font-size: 12px;
+    opacity: 0.7;
+    text-align: right;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 
 @media (max-width: 640px) {
     .wa-composer {

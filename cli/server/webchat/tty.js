@@ -25,6 +25,10 @@ function shellEscape(str) {
     return String(str);
 }
 
+function buildRawTtyPrefix() {
+    return 'command -v stty >/dev/null 2>&1 && stty -icanon -echo 2>/dev/null || true';
+}
+
 function shouldAppendIdentityArgs(command) {
     const raw = String(command || '').trim();
     if (!raw) {
@@ -73,6 +77,8 @@ function createTTYFactory({ runtime, containerName, ptyLib, workdir, entry }) {
         if (ssoCliArgs.length > 0 && shouldAppendIdentityArgs(shellCmd)) {
             shellCmd = `${shellCmd} ${ssoCliArgs.join(' ')}`;
         }
+
+        shellCmd = `${buildRawTtyPrefix()}; ${shellCmd}`;
 
         // Use interactive mode but NO TTY allocation - this ensures stdin EOF propagates
         // to the container process when the host connection closes
@@ -234,7 +240,10 @@ function createLocalTTYFactory({ ptyLib, workdir, command }) {
                 useEntry = `${useEntry} ${ssoCliArgs.join(' ')}`;
             }
 
-            const shCmd = `cd '${wd}' && ${useEntry}`;
+            const rawTtyPrefix = buildRawTtyPrefix();
+            const shCmd = hasCustom
+                ? `cd '${wd}' && ${rawTtyPrefix} && exec ${useEntry}`
+                : `cd '${wd}' && ${rawTtyPrefix} && ${useEntry}`;
             if (!ptyLib) throw new Error("'node-pty' is required for local WebChat sessions.");
             try {
                 ptyProc = ptyLib.spawn(parentShell, ['-lc', shCmd], {

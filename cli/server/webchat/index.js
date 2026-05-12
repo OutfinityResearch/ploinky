@@ -6,6 +6,7 @@ import { initSpeechToText } from './speechToText.js';
 import { initTextToSpeech } from './textToSpeech.js';
 import { createNetwork } from './network.js';
 import { createUploader } from './upload.js';
+import { createSlashAutocomplete } from './slashAutocomplete.js';
 
 const SEND_TRIGGER_RE = /\bsend\b/i;
 const PURGE_TRIGGER_RE = /\bpurge\b/i;
@@ -57,7 +58,8 @@ const {
     cameraActionBtn,
     fileUploadInput,
     filePreviewContainer,
-    attachmentContainer
+    attachmentContainer,
+    cancelBtn
 } = elements;
 
 const sidePanelApi = createSidePanel({
@@ -85,7 +87,10 @@ const messages = createMessages({
     initialViewMoreLineLimit: getViewMoreLineLimit(),
     sidePanel: sidePanelApi,
     onServerOutput: textToSpeech.handleServerOutput,
-    onQuickCommand: null
+    onQuickCommand: null,
+    onTypingStateChange: (typing) => {
+        composer.setProcessingState(Boolean(typing));
+    }
 });
 
 dom.setViewMoreChangeHandler((limit) => {
@@ -116,10 +121,27 @@ const network = createNetwork({
 
 const composer = createComposer({
     cmdInput,
-    sendBtn
+    sendBtn,
+    cancelBtn
 }, {
     purgeTriggerRe: PURGE_TRIGGER_RE
 });
+
+const slashAutocomplete = createSlashAutocomplete({
+    cmdInput
+}, {
+    agentName: dom.agentName,
+    dlog
+});
+
+if (cmdInput) {
+    cmdInput.addEventListener('keydown', (event) => {
+        if (slashAutocomplete.handleKeydown(event)) return;
+    }, true);
+    cmdInput.addEventListener('input', () => {
+        slashAutocomplete.onInputChange();
+    });
+}
 
 const uploader = createUploader({
     attachmentBtn,
@@ -491,6 +513,10 @@ composer.setSendHandler((cmdText) => {
     return false;
 });
 
+composer.setCancelHandler(() => {
+    network.sendControl('\x1b');
+});
+
 messages.setQuickCommandHandler((command) => {
     if (!command || typeof command !== 'string') {
         return false;
@@ -562,6 +588,7 @@ document.addEventListener('keydown', (event) => {
             return;
         }
     }
+    slashAutocomplete.fetchCommandCatalog();
 })();
 
 network.start();

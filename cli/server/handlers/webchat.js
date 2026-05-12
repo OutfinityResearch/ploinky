@@ -935,6 +935,23 @@ async function handleWebChat(req, res, appConfig, appState) {
         return;
     }
 
+    if (pathname === '/control' && req.method === 'POST') {
+        const sid = getSession(req, appState);
+        const session = appState.sessions.get(sid);
+        const tabId = parsedUrl.searchParams.get('tabId');
+        const tab = session && session.tabs.get(tabId);
+        if (!tab) { res.writeHead(400); return res.end(); }
+        let body = '';
+        req.on('data', chunk => body += chunk.toString());
+        req.on('end', () => {
+            try {
+                tab.tty.write(body);
+            } catch (_) { }
+            res.writeHead(204); res.end();
+        });
+        return;
+    }
+
     res.writeHead(404); res.end(', Not Found in App');
 }
 

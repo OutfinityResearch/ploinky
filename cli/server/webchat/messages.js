@@ -17,7 +17,8 @@ export function createMessages({
     initialViewMoreLineLimit,
     sidePanel,
     onServerOutput,
-    onQuickCommand
+    onQuickCommand,
+    onTypingStateChange
 }) {
     const lastServerMsg = { bubble: null, fullText: '' };
     let userInputSent = false;
@@ -25,6 +26,7 @@ export function createMessages({
     let viewMoreLineLimit = Math.max(1, initialViewMoreLineLimit || 1);
     let serverSpeechHandler = typeof onServerOutput === 'function' ? onServerOutput : null;
     let quickCommandHandler = typeof onQuickCommand === 'function' ? onQuickCommand : null;
+    let typingStateHandler = typeof onTypingStateChange === 'function' ? onTypingStateChange : null;
     let speechDebounceTimer = null;
     const tableScrollHintBindings = new WeakMap();
 
@@ -56,6 +58,9 @@ export function createMessages({
         typingActive = true;
         typingIndicator.classList.add('show');
         typingIndicator.setAttribute('aria-hidden', 'false');
+        if (typingStateHandler) {
+            typingStateHandler(true);
+        }
         try {
             chatList.scrollTop = chatList.scrollHeight;
         } catch (_) {
@@ -73,6 +78,9 @@ export function createMessages({
         typingActive = false;
         typingIndicator.classList.remove('show');
         typingIndicator.setAttribute('aria-hidden', 'true');
+        if (typingStateHandler) {
+            typingStateHandler(false);
+        }
     }
 
     function renderMarkdown(text) {
@@ -1173,6 +1181,9 @@ export function createMessages({
         setQuickCommandHandler: (fn) => {
             quickCommandHandler = typeof fn === 'function' ? fn : null;
             applyViewMoreSettingToAllBubbles();
+        },
+        setTypingStateHandler: (fn) => {
+            typingStateHandler = typeof fn === 'function' ? fn : null;
         }
     };
 }

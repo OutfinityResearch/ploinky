@@ -375,6 +375,12 @@ webchat --rotate     # mint a new token</code></pre>
                         </div>
                         <p>When opening WebChat with an explicit agent selection such as <code>/webchat?agent=achilles-cli&amp;path=/absolute/path</code>, the router forwards every additional query parameter except its internal session parameters to <code>ploinky cli achilles-cli</code> as single-token long-form CLI arguments such as <code>--path=/absolute/path</code>.</p>
 
+                        <h4>Slash Command Autocomplete</h4>
+                        <p>Inside WebChat, typing <code>/</code> opens a command suggestion menu populated from the agent's MCP tool catalog. Navigate with Arrow Up/Down, insert with Enter or Tab. The menu filters as you continue typing. If the agent exposes no MCP tools, the menu stays silent (no error).</p>
+
+                        <h4>Cancel Button</h4>
+                        <p>While the agent is processing, the Send button is replaced by a Cancel button. Clicking Cancel sends an interrupt signal (ESC) to the agent's TTY session, aborting the current operation. The Send button returns when the agent produces output or the session closes.</p>
+
                         <h3>dashboard</h3>
                         <p>Prepare access for the Dashboard. Prints URL with token. Use --rotate to mint a new token.</p>
                         <pre><code>dashboard [--rotate]</code></pre>

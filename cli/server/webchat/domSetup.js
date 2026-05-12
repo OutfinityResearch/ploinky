@@ -48,6 +48,7 @@ export function initDom() {
     const typingIndicator = document.getElementById('typingIndicator');
     const cmdInput = document.getElementById('cmd');
     const sendBtn = document.getElementById('send');
+    const cancelBtn = document.getElementById('cancelBtn');
     const chatContainer = document.getElementById('chatContainer');
     const chatArea = document.getElementById('chatArea');
     const sidePanel = document.getElementById('sidePanel');
@@ -222,6 +223,7 @@ export function initDom() {
             typingIndicator,
             cmdInput,
             sendBtn,
+            cancelBtn,
             chatContainer,
             chatArea,
             sidePanel,

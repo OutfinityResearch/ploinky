@@ -1,9 +1,11 @@
 const MAX_TEXTAREA_HEIGHT_PX = 72;
 const INITIAL_FOCUS_DELAY_MS = 120;
 
-export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
+export function createComposer({ cmdInput, sendBtn, cancelBtn }, { purgeTriggerRe }) {
     let onSend = null;
     let onPurge = null;
+    let onCancel = null;
+    let isProcessing = false;
 
     function focusAfterAction() {
         if (!cmdInput) {
@@ -193,6 +195,9 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
             }
         });
         cmdInput.addEventListener('keydown', (event) => {
+            if (event.defaultPrevented) {
+                return;
+            }
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 submit();
@@ -202,6 +207,28 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
 
     if (sendBtn) {
         sendBtn.onclick = () => submit();
+    }
+
+    if (cancelBtn) {
+        cancelBtn.onclick = () => {
+            if (typeof onCancel === 'function') {
+                onCancel();
+            }
+        };
+    }
+
+    function setProcessingState(processing) {
+        isProcessing = processing;
+        if (cancelBtn) {
+            cancelBtn.style.display = processing ? 'flex' : 'none';
+            cancelBtn.toggleAttribute('hidden', !processing);
+            cancelBtn.setAttribute('aria-hidden', processing ? 'false' : 'true');
+        }
+        if (sendBtn) {
+            sendBtn.style.display = processing ? 'none' : 'flex';
+            sendBtn.toggleAttribute('hidden', processing);
+            sendBtn.setAttribute('aria-hidden', processing ? 'true' : 'false');
+        }
     }
 
     return {
@@ -214,11 +241,15 @@ export function createComposer({ cmdInput, sendBtn }, { purgeTriggerRe }) {
         autoResize,
         typeFromKeyEvent,
         focus: focusInput,
+        setProcessingState,
         setSendHandler: (handler) => {
             onSend = typeof handler === 'function' ? handler : null;
         },
         setPurgeHandler: (handler) => {
             onPurge = typeof handler === 'function' ? handler : null;
+        },
+        setCancelHandler: (handler) => {
+            onCancel = typeof handler === 'function' ? handler : null;
         }
     };
 }
