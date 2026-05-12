@@ -21,12 +21,16 @@ process.chdir(tempDir);
 const moduleSuffix = `?test=${Date.now()}`;
 const graphModuleUrl = new URL('../../cli/services/workspaceDependencyGraph.js', import.meta.url);
 const graphModule = await import(`${graphModuleUrl.href}${moduleSuffix}`);
+const bootstrapModuleUrl = new URL('../../cli/services/bootstrapManifest.js', import.meta.url);
+const bootstrapModule = await import(`${bootstrapModuleUrl.href}${moduleSuffix}`);
 const {
+    classifyDependencyGraphWaitMode,
     createGraphNodeId,
     parseManifestDependencyRef,
     resolveWorkspaceDependencyGraph,
     topologicallyGroupDependencyGraph
 } = graphModule;
+const { parseEnableDirective } = bootstrapModule;
 
 test.after(() => {
     process.chdir(originalCwd);
@@ -162,6 +166,174 @@ test('resolveWorkspaceDependencyGraph fails closed when a dependency entry canno
         () => resolveWorkspaceDependencyGraph({ staticAgentRef: 'demo/app-with-missing-dep' }),
         /Failed to resolve dependency 'missing-agent'/
     );
+});
+
+test('parseEnableDirective strips no-wait modifier from any position', () => {
+    assert.deepEqual(
+        parseEnableDirective('worker'),
+        { spec: 'worker', alias: undefined, noWait: false }
+    );
+    assert.deepEqual(
+        parseEnableDirective('worker no-wait'),
+        { spec: 'worker', alias: undefined, noWait: true }
+    );
+    assert.deepEqual(
+        parseEnableDirective('worker global no-wait'),
+        { spec: 'worker global', alias: undefined, noWait: true }
+    );
+    assert.deepEqual(
+        parseEnableDirective('worker devel repo no-wait'),
+        { spec: 'worker devel repo', alias: undefined, noWait: true }
+    );
+    assert.deepEqual(
+        parseEnableDirective('worker global no-wait as ai'),
+        { spec: 'worker global', alias: 'ai', noWait: true }
+    );
+    assert.deepEqual(
+        parseEnableDirective('worker global as ai no-wait'),
+        { spec: 'worker global', alias: 'ai', noWait: true }
+    );
+    assert.deepEqual(
+        parseEnableDirective('worker No-Wait'),
+        { spec: 'worker', alias: undefined, noWait: true }
+    );
+});
+
+test('resolveWorkspaceDependencyGraph records no-wait metadata on the requesting edge only', () => {
+    writeManifest('nw', 'leaf', { container: 'node:20-alpine' });
+    writeManifest('nw', 'worker', {
+        container: 'node:20-alpine',
+        enable: ['nw/leaf']
+    });
+    writeManifest('nw', 'app', {
+        container: 'node:20-alpine',
+        enable: ['nw/worker no-wait', 'nw/leaf']
+    });
+
+    const graph = resolveWorkspaceDependencyGraph({ staticAgentRef: 'nw/app' });
+    const appNode = graph.nodes.get('nw/app');
+    const workerNode = graph.nodes.get('nw/worker');
+
+    // The no-wait modifier rides the explicit edge from app -> worker.
+    assert.equal(appNode.dependencyEdges.get('nw/worker').noWait, true);
+    // The leaf edge from app stays blocking even though leaf is also reached
+    // (blockingly) through the worker.
+    assert.equal(appNode.dependencyEdges.get('nw/leaf').noWait, false);
+    // The worker's own edge to leaf is unrelated to the app -> worker decoration.
+    assert.equal(workerNode.dependencyEdges.get('nw/leaf').noWait, false);
+});
+
+test('classifyDependencyGraphWaitMode treats reachability through no-wait edges as no-wait', () => {
+    writeManifest('cls', 'leaf', { container: 'node:20-alpine' });
+    writeManifest('cls', 'opt', {
+        container: 'node:20-alpine',
+        enable: ['cls/leaf']
+    });
+    writeManifest('cls', 'critical', {
+        container: 'node:20-alpine',
+        enable: ['cls/leaf']
+    });
+    writeManifest('cls', 'app', {
+        container: 'node:20-alpine',
+        enable: ['cls/critical', 'cls/opt no-wait']
+    });
+
+    const graph = resolveWorkspaceDependencyGraph({ staticAgentRef: 'cls/app' });
+    const { blocking, noWait } = classifyDependencyGraphWaitMode(graph);
+
+    assert.ok(blocking.has('cls/app'));
+    assert.ok(blocking.has('cls/critical'));
+    // leaf has a blocking path through critical, so it stays blocking even
+    // though there is also a no-wait path through opt.
+    assert.ok(blocking.has('cls/leaf'));
+    assert.ok(noWait.has('cls/opt'));
+    assert.equal(noWait.has('cls/leaf'), false);
+});
+
+test('classifyDependencyGraphWaitMode marks pure no-wait subtrees as no-wait', () => {
+    writeManifest('sub', 'innerLeaf', { container: 'node:20-alpine' });
+    writeManifest('sub', 'optWorker', {
+        container: 'node:20-alpine',
+        enable: ['sub/innerLeaf']
+    });
+    writeManifest('sub', 'app', {
+        container: 'node:20-alpine',
+        enable: ['sub/optWorker no-wait']
+    });
+
+    const graph = resolveWorkspaceDependencyGraph({ staticAgentRef: 'sub/app' });
+    const { blocking, noWait } = classifyDependencyGraphWaitMode(graph);
+
+    assert.ok(blocking.has('sub/app'));
+    assert.ok(noWait.has('sub/optWorker'));
+    // innerLeaf is reachable only through the no-wait edge to optWorker.
+    assert.ok(noWait.has('sub/innerLeaf'));
+    assert.equal(blocking.has('sub/optWorker'), false);
+    assert.equal(blocking.has('sub/innerLeaf'), false);
+});
+
+test('classifyDependencyGraphWaitMode prefers blocking when two parents disagree', () => {
+    writeManifest('mix', 'shared', { container: 'node:20-alpine' });
+    writeManifest('mix', 'parentA', {
+        container: 'node:20-alpine',
+        enable: ['mix/shared no-wait']
+    });
+    writeManifest('mix', 'parentB', {
+        container: 'node:20-alpine',
+        enable: ['mix/shared']
+    });
+    writeManifest('mix', 'app', {
+        container: 'node:20-alpine',
+        enable: ['mix/parentA', 'mix/parentB']
+    });
+
+    const graph = resolveWorkspaceDependencyGraph({ staticAgentRef: 'mix/app' });
+    const { blocking } = classifyDependencyGraphWaitMode(graph);
+
+    // shared has one blocking parent (parentB) and one no-wait parent
+    // (parentA); the blocking path wins so shared stays in the blocking set.
+    assert.ok(blocking.has('mix/shared'));
+});
+
+test('AssistOSExplorer-shaped wiring routes the LiveKit AI worker as no-wait while truncating its inverse edge', () => {
+    // Mirrors the shipped consumer wiring: webmeetAgent declares the optional
+    // LiveKit AI worker with `no-wait`, and the worker's own manifest still
+    // lists webmeetAgent so it can be enabled standalone. Cycle truncation
+    // drops the inverse edge cleanly so the worker stays in the no-wait set.
+    writeManifest('webmeetInfra', 'stack', { container: 'node:20' });
+    writeManifest('AchillesIDE', 'webmeetLivekitAiAgent', {
+        container: 'node:20',
+        enable: ['webmeetInfra/stack', 'webmeetAgent global']
+    });
+    writeManifest('AchillesIDE', 'webmeetAgent', {
+        container: 'node:20',
+        enable: ['webmeetInfra/stack', 'webmeetLivekitAiAgent global no-wait']
+    });
+    writeManifest('AchillesIDE', 'explorer', {
+        container: 'node:20',
+        enable: ['webmeetAgent global']
+    });
+
+    const originalError = console.error;
+    const errors = [];
+    console.error = (...args) => errors.push(args.join(' '));
+    let graph;
+    try {
+        graph = resolveWorkspaceDependencyGraph({ staticAgentRef: 'AchillesIDE/explorer' });
+    } finally {
+        console.error = originalError;
+    }
+
+    const { blocking, noWait } = classifyDependencyGraphWaitMode(graph);
+    assert.deepEqual(
+        Array.from(blocking).sort(),
+        ['AchillesIDE/explorer', 'AchillesIDE/webmeetAgent', 'webmeetInfra/stack']
+    );
+    assert.deepEqual(Array.from(noWait), ['AchillesIDE/webmeetLivekitAiAgent']);
+    // The inverse edge from the LiveKit AI worker back to webmeetAgent must be
+    // truncated by the existing cycle handling, not promoted to a hard error.
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /Dependency cycle detected:/);
 });
 
 test('resolveWorkspaceDependencyGraph still truncates cycles instead of throwing', () => {

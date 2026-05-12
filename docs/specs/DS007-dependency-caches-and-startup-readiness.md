@@ -28,6 +28,15 @@ Readiness probes target a host-side port, derived from the manifest's `ports` de
 
 Some agents are workers rather than servers — they do not bind a port and have no readiness signal beyond "the process is running." Such agents must set `readiness.protocol: "none"`. The runtime treats them as immediately ready and does not probe a port; the dependency wave still tracks them so dependents wait for the container to start, but it does not require a port-open or MCP-handshake response. Use this only for true workers (renewal loops, batch jobs); serving agents must keep a real probe.
 
+A manifest `enable[]` entry tagged with `no-wait` (see DS003) opts that dependency out of wave-by-wave gating. The runtime must still enable the dependency, register it in the workspace registry, and launch it, but it must do so without blocking on dependency-cache preparation, container creation, runtime startup, or readiness checks. A node is treated as no-wait when every path from the static agent to that node traverses at least one no-wait edge; a node with any blocking path remains in the blocking set and is gated normally. Static-agent startup must still wait on its full blocking dependency chain.
+
+For each no-wait node, startup spawns a detached helper that calls the standard `ensureAgentService` path in the background and writes durable progress records:
+
+- a log stream at `.ploinky/logs/no-wait/<container>.log`, capturing stdout and stderr of the worker
+- a status JSON at `.ploinky/running/no-wait/<container>.json` with at minimum `state` (`starting`, `running`, or `failed`), `startedAt`, `finishedAt`, `pid`, the resolved container name, the host port when assigned, and any captured error message and stack
+
+The main `ploinky start <staticAgent>` command must succeed even when a no-wait launch is still in progress or has failed. A no-wait failure must surface only through the durable log and status records, never as a non-zero exit from the main command. The helper is responsible for updating `routing.json` with its own route entry when its container exposes a host port, so the router can discover the background dependency once it is up without forcing the main start to wait. Runtime route writes from the foreground start path and no-wait helper must use a serialized merge so a background route cannot be overwritten by a later blocking dependency wave. Blocking dependencies remain fail-closed as before.
+
 ## Decisions & Questions
 
 ### Question #1: Why are dependency caches keyed by runtime and merged package hash?
@@ -49,6 +58,11 @@ With bridge networking, the runtime uses the manifest's port mappings to learn w
 
 Response:
 Some agent dependencies pull large native runtime packages, and the package manager may legitimately spend minutes resolving, downloading, or unpacking them without producing useful npm output. Startup must make that state visible so operators can distinguish an active cold install from a stalled dependency process.
+
+### Question #5: Why does the no-wait path still write durable log and status files?
+
+Response:
+The blocking wave path produces visible startup output: the wave list, the readiness summary, and any failure message. A no-wait dependency runs after the CLI has already moved on, so an operator who only watches stdout cannot tell whether the worker eventually came up or quietly crashed. Writing the launch into `.ploinky/logs/no-wait/<container>.log` and the lifecycle into `.ploinky/running/no-wait/<container>.json` gives the same level of inspectability without forcing the main start command to block. It also keeps `ploinky start` idempotent: re-running it after a no-wait failure overwrites the previous status with the new run instead of hiding the prior failure inside ephemeral console output.
 
 ## Conclusion
 

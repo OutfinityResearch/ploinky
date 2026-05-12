@@ -40,6 +40,8 @@ Manifest `volumes` declare additional host-to-container mounts beyond Ploinky's 
 
 The manifest `enable` directive may also appear inside a profile block (`manifest.profiles.<profile>.enable`). When the workspace dependency graph is built, profile-level `enable` entries are merged with the top-level `manifest.enable` list against the active profile only. This is the supported way to pin an optional dependency to specific profiles (for example "the production TLS terminator only ships in prod"). The leaf agent's manifest stays unaware of profile selection; the choice lives in the parent that knows when to chain it in.
 
+A manifest `enable` string entry may also carry the `no-wait` modifier. The token is case-insensitive and can appear before, after, or interleaved with other modifiers such as `global`, `devel <repo>`, and `as <alias>` (for example `"webmeetLivekitAiAgent global no-wait"`, `"worker global no-wait as ai"`, or `"worker devel repo no-wait"`). Parsing must strip every occurrence of `no-wait` before resolving the agent reference, so the cleaned `spec` remains a valid input to existing alias/mode handling. The modifier is edge-local: it decorates the specific parent-to-child enable[] edge, and the same child agent may be no-wait for one parent and blocking for another. When two declarations of the same child disagree (for example a top-level `enable[]` entry and a profile `enable[]` entry, or two distinct parents in the merged graph), a blocking declaration wins over a no-wait declaration so dependents that need readiness still get it. See DS007 for the startup readiness consequences.
+
 ## Decisions & Questions
 
 ### Question #1: Why are SSO-provider dependencies conditionally enabled?
@@ -78,6 +80,11 @@ Manifest volumes are broad writable filesystem grants. If each agent chooses arb
 
 Response:
 Profiles are the reproducible deployment contract. If a production profile requires a non-secret URL or hostname but leaves it only in a workspace variable, a fresh deployment can pass profile selection and still fail at start because hidden operator state is missing. Keeping non-sensitive topology values in the profile preserves one-command startup, while the normal env resolution order still lets operators override those defaults through `ploinky var` or deployment environment variables.
+
+### Question #8: Why is `no-wait` a per-edge modifier instead of a per-agent flag?
+
+Response:
+The same dependency can be load-bearing for one parent and an optional adjunct for another. A WebMeet base agent that requires its infra stack to be ready cannot share a single "this agent is no-wait" flag with the Explorer that only opportunistically launches an experimental worker. Pinning the modifier to the enable[] edge that asked for it keeps each parent's startup contract local to its own manifest and avoids action-at-a-distance from leaf-agent metadata. The merge rule — blocking wins when two declarations of the same child disagree — keeps fail-closed behavior for any parent that still needs readiness, even when a sibling parent has opted into background launch.
 
 ## Conclusion
 

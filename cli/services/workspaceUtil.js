@@ -15,9 +15,10 @@ import { getSecrets, createEnvWithSecrets, loadEnvFile } from './secretInjector.
 import { readSecretsFile } from './encryptedSecretsFile.js';
 import { resolveAgentReadinessProtocol } from './startupReadiness.js';
 import { LOGS_DIR, ROUTING_FILE, RUNNING_DIR } from './config.js';
-import { resolveWorkspaceDependencyGraph, topologicallyGroupDependencyGraph } from './workspaceDependencyGraph.js';
+import { classifyDependencyGraphWaitMode, resolveWorkspaceDependencyGraph, topologicallyGroupDependencyGraph } from './workspaceDependencyGraph.js';
 import { getAgentWorkDir } from './workspaceStructure.js';
 import { needsHostInstall } from './dependencyInstaller.js';
+import { mergeRoutingConfig, readRoutingConfig } from './routingFile.js';
 import { waitForAgentReady } from '../server/utils/agentReadiness.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,6 +62,41 @@ function buildRouterEnv() {
   let secrets = {};
   try { secrets = readSecretsFile() || {}; } catch (_) { secrets = {}; }
   return { ...envFile, ...secrets, ...process.env };
+}
+
+function spawnNoWaitWorker({ node, registryName, routeKey, registryAlias, routerPort }) {
+  const containerName = registryName;
+  const noWaitLogDir = path.join(LOGS_DIR, 'no-wait');
+  const noWaitStatusDir = path.join(RUNNING_DIR, 'no-wait');
+  fs.mkdirSync(noWaitLogDir, { recursive: true });
+  fs.mkdirSync(noWaitStatusDir, { recursive: true });
+  const logFile = path.join(noWaitLogDir, `${containerName}.log`);
+  const statusFile = path.join(noWaitStatusDir, `${containerName}.json`);
+  const workerScript = path.resolve(__dirname, 'noWaitWorker.js');
+  const args = [
+    workerScript,
+    '--container', containerName,
+    '--short-agent', node.shortAgentName,
+    '--repo', node.repoName,
+    '--manifest-path', node.manifestPath,
+    '--agent-path', node.agentPath,
+    '--route-key', String(routeKey || registryAlias || node.shortAgentName),
+  ];
+  if (registryAlias) {
+    args.push('--alias', registryAlias);
+  }
+  if (routerPort) {
+    args.push('--router-port', String(routerPort));
+  }
+  const logStdio = createAppendLogStdio(logFile);
+  const child = spawn(process.execPath, args, {
+    detached: true,
+    stdio: logStdio.stdio,
+    env: { ...process.env }
+  });
+  logStdio.closeParentFds();
+  child.unref();
+  return { pid: child.pid, logFile, statusFile };
 }
 
 function spawnWatchdog(routerPath, port, routerPidFile) {
@@ -511,9 +547,7 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
     workspaceSvc.saveAgents(reg);
 
     const { getAgentContainerName, ensureAgentService } = dockerSvc;
-    const routingFile = ROUTING_FILE;
-    let cfg = { routes: {} };
-    try { cfg = JSON.parse(fs.readFileSync(routingFile, 'utf8')) || { routes: {} }; } catch (_) {}
+    let cfg = readRoutingConfig();
     cfg.routes = cfg.routes || {};
 
     const staticAgent = normalizedStaticAgent || cfg0.static.agent;
@@ -550,7 +584,9 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
 
     const allNames = Object.keys(reg || {}).filter((name) => name !== '_config');
     const graphWaves = topologicallyGroupDependencyGraph(dependencyGraph);
+    const { noWait: noWaitNodeIds } = classifyDependencyGraphWaitMode(dependencyGraph);
     const graphRegistryNames = new Set();
+    const registryNameByNodeId = new Map();
     const graphWaveNames = graphWaves.map((waveNodeIds) => waveNodeIds.map((nodeId) => {
       const node = dependencyGraph.nodes.get(nodeId);
       const registryEntry = findRegistryEntryForGraphNode(reg, node, getAgentContainerName);
@@ -558,8 +594,16 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
         throw new Error(`Graph node '${nodeId}' is not enabled in the workspace registry.`);
       }
       graphRegistryNames.add(registryEntry.key);
+      registryNameByNodeId.set(nodeId, registryEntry.key);
       return registryEntry.key;
     }));
+    if (noWaitNodeIds.size) {
+      const labels = Array.from(noWaitNodeIds).map((nodeId) => {
+        const node = dependencyGraph.nodes.get(nodeId);
+        return node ? formatGraphNodeLabel(node, staticAgent) : nodeId;
+      });
+      console.log(`[start] No-wait dependencies (background launch): ${labels.join(', ')}`);
+    }
 
     const staticNode = dependencyGraph.nodes.get(dependencyGraph.staticNodeId);
     const staticRegistryEntry = findRegistryEntryForGraphNode(reg, staticNode, getAgentContainerName);
@@ -567,8 +611,14 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
 
     cfg.port = staticPort;
     cfg.static = { agent: staticAgent, container: staticContainer, hostPath: staticAgentPath };
-    fs.mkdirSync(path.dirname(routingFile), { recursive: true });
-    fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+    cfg = await mergeRoutingConfig((current) => ({
+      ...current,
+      ...cfg,
+      routes: {
+        ...(current.routes || {}),
+        ...(cfg.routes || {})
+      }
+    }));
     console.log(`Static: agent=${utils.colorize(staticAgent, 'cyan')} port=${utils.colorize(String(staticPort), 'yellow')}`);
     if (typeof killRouterIfRunning === 'function') {
       try { killRouterIfRunning(); } catch (_) {}
@@ -628,7 +678,21 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
         }
         cfg.routes[result.routeKey] = result.route;
       }
-      fs.writeFileSync(routingFile, JSON.stringify(cfg, null, 2));
+      cfg = await mergeRoutingConfig((current) => {
+        const next = {
+          ...current,
+          ...cfg,
+          routes: {
+            ...(current.routes || {}),
+            ...(cfg.routes || {})
+          }
+        };
+        for (const result of routeResults) {
+          if (!result?.ok) continue;
+          next.routes[result.routeKey] = result.route;
+        }
+        return next;
+      });
       if (failedAgents.length > 0) {
         const message = `${failedAgents.length} agent(s) failed to start: ${failedAgents.join(', ')}`;
         if (allowFailures) {
@@ -641,16 +705,68 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
 
     for (let waveIndex = 0; waveIndex < graphWaves.length; waveIndex += 1) {
       const waveNodeIds = graphWaves[waveIndex];
-      const waveNames = graphWaveNames[waveIndex];
       const waveNodes = waveNodeIds
         .map((nodeId) => dependencyGraph.nodes.get(nodeId))
         .filter(Boolean);
       if (!waveNodes.length) continue;
 
-      console.log(`[start] Dependency wave ${waveIndex + 1}/${graphWaves.length}: ${waveNodes.map((node) => formatGraphNodeLabel(node, staticAgent)).join(', ')}`);
-      await updateRoutes(waveNames);
+      // Split the wave: blocking nodes follow the existing wave-by-wave
+      // ensureAgentService + readiness path; no-wait nodes get spawned as
+      // detached background workers that report their progress through
+      // .ploinky/logs/no-wait/ and .ploinky/running/no-wait/ without delaying
+      // later waves or the static agent.
+      const blockingNodes = [];
+      const blockingNames = [];
+      const noWaitWaveNodes = [];
+      for (const node of waveNodes) {
+        const registryName = registryNameByNodeId.get(node.id);
+        if (noWaitNodeIds.has(node.id)) {
+          noWaitWaveNodes.push({ node, registryName });
+        } else {
+          blockingNodes.push(node);
+          if (registryName) blockingNames.push(registryName);
+        }
+      }
 
-      const readinessEntries = waveNodes.map((node) => {
+      const blockingLabel = blockingNodes.length
+        ? blockingNodes.map((node) => formatGraphNodeLabel(node, staticAgent)).join(', ')
+        : '<none>';
+      const noWaitLabel = noWaitWaveNodes.length
+        ? noWaitWaveNodes.map(({ node }) => formatGraphNodeLabel(node, staticAgent)).join(', ')
+        : '';
+      const waveSummary = noWaitLabel
+        ? `${blockingLabel}${noWaitLabel ? ` (no-wait: ${noWaitLabel})` : ''}`
+        : blockingLabel;
+      console.log(`[start] Dependency wave ${waveIndex + 1}/${graphWaves.length}: ${waveSummary}`);
+
+      for (const { node, registryName } of noWaitWaveNodes) {
+        if (!registryName) {
+          console.warn(`[start] no-wait node '${formatGraphNodeLabel(node, staticAgent)}' missing registry entry; skipping background launch.`);
+          continue;
+        }
+        const rec = reg[registryName] || {};
+        const routeKey = rec.alias || node.shortAgentName;
+        try {
+          const { pid, logFile, statusFile } = spawnNoWaitWorker({
+            node,
+            registryName,
+            routeKey,
+            registryAlias: rec.alias || node.alias || '',
+            routerPort: staticPort
+          });
+          console.log(`[start] ${formatGraphNodeLabel(node, staticAgent)}: no-wait launch started (pid ${pid}). log=${logFile} status=${statusFile}`);
+        } catch (spawnErr) {
+          console.error(`[start] no-wait launch for '${formatGraphNodeLabel(node, staticAgent)}' failed to spawn: ${spawnErr?.message || spawnErr}`);
+        }
+      }
+
+      if (blockingNames.length) {
+        await updateRoutes(blockingNames);
+      }
+
+      if (!blockingNodes.length) continue;
+
+      const readinessEntries = blockingNodes.map((node) => {
         const routeKey = node.alias || node.shortAgentName;
         const route = cfg.routes?.[routeKey] || null;
         if (!route?.hostPort) {

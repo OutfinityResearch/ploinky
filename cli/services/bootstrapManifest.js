@@ -10,8 +10,20 @@ export function parseEnableDirective(entry) {
     const raw = typeof entry === 'string' ? entry : String(entry || '').trim();
     const trimmed = raw.trim();
     if (!trimmed) return null;
-    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    let tokens = trimmed.split(/\s+/).filter(Boolean);
     if (!tokens.length) return null;
+
+    // `no-wait` is an edge-local modifier and can appear anywhere in the
+    // directive. Strip every occurrence before parsing alias/spec so the
+    // remaining tokens form a clean agent reference.
+    let noWait = false;
+    tokens = tokens.filter((token) => {
+        if (token.toLowerCase() === 'no-wait') {
+            noWait = true;
+            return false;
+        }
+        return true;
+    });
 
     const aliasIndex = tokens.findIndex(token => token.toLowerCase() === 'as');
     let alias;
@@ -27,7 +39,7 @@ export function parseEnableDirective(entry) {
     if (!spec) {
         throw new Error(`manifest enable entry '${entry}' is missing agent reference`);
     }
-    return { spec, alias };
+    return { spec, alias, noWait };
 }
 
 function parsePloinkyDirectives(rawValue) {
