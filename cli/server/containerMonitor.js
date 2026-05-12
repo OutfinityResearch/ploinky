@@ -4,7 +4,7 @@ import { Worker } from 'worker_threads';
 import { fileURLToPath } from 'url';
 
 import * as workspaceSvc from '../services/workspace.js';
-import { REPOS_DIR } from '../services/config.js';
+import { REPOS_DIR, RUNNING_DIR } from '../services/config.js';
 import { ensureAgentService, isContainerRunning } from '../services/docker/index.js';
 import { isSandboxRuntime } from '../services/docker/common.js';
 import { isBwrapProcessRunning } from '../services/bwrap/bwrapFleet.js';
@@ -180,6 +180,37 @@ function startProbeWorker(monitor, target) {
             handleProbeFailure(monitor, target, `Probe worker exited with code ${code}`);
         }
     });
+}
+
+function readNoWaitStatus(containerName) {
+    if (!containerName) return null;
+    const statusPath = path.join(RUNNING_DIR, 'no-wait', `${containerName}.json`);
+    try {
+        const parsed = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function shouldDeferNoWaitRestart(monitor, target) {
+    const status = readNoWaitStatus(target?.containerName || '');
+    const state = String(status?.state || '').trim().toLowerCase();
+    if (state !== 'starting' && state !== 'failed') {
+        target.noWaitDeferredState = null;
+        return false;
+    }
+    if (target.noWaitDeferredState !== state) {
+        target.noWaitDeferredState = state;
+        logEvent(monitor, 'info', 'container_no_wait_restart_deferred', {
+            container: target.containerName,
+            agent: target.agentName,
+            repo: target.repoName,
+            state,
+            statusFile: path.join(RUNNING_DIR, 'no-wait', `${target.containerName}.json`)
+        });
+    }
+    return true;
 }
 
 function syncManagedContainers(monitor) {
@@ -410,6 +441,7 @@ function monitorTick(monitor) {
         if (running) {
             const now = Date.now();
             target.lastSeenRunningAt = now;
+            target.noWaitDeferredState = null;
             if (!target.lastStartTime) target.lastStartTime = now;
             const resetAfter = 60000;
             if ((now - target.lastStartTime) > resetAfter && target.currentBackoff !== (monitor?.config?.INITIAL_BACKOFF_MS ?? 1000)) {
@@ -427,6 +459,10 @@ function monitorTick(monitor) {
         }
 
         if (target.probeState === 'running') {
+            continue;
+        }
+
+        if (shouldDeferNoWaitRestart(monitor, target)) {
             continue;
         }
 
