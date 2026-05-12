@@ -45,8 +45,8 @@ Current in-progress `AssistOSExplorer` conversion:
   - It owns rooms, guest invites, LiveKit token issuance, chat, transcripts, recordings, artifacts, and AI dispatch metadata.
   - `webmeetAgent/scripts/startAgent.sh` no longer imports `@livekit/agents` or starts `server/livekit-agent.mjs`.
   - `webmeetAgent/package.json` must remain absent so default Explorer startup does not prepare the heavy LiveKit Agents dependency tree under `webmeetAgent`.
-  - `WEBMEET_LIVEKIT_AGENT_ENABLED=false` remains the default dispatch guard.
-  - If the guard is true, `webmeetAgent` now logs that the worker must be run by the separate `webmeetLivekitAiAgent` Ploinky agent instead of trying to start the worker itself.
+  - Admin attach requests create LiveKit dispatches directly and succeed only when the separate `webmeetLivekitAiAgent` worker accepts the dispatch.
+  - `webmeetAgent` logs that the worker is owned by the separate `webmeetLivekitAiAgent` Ploinky agent instead of trying to start the worker itself.
 - A new optional `webmeetLivekitAiAgent` agent owns the self-hosted LiveKit Agents worker.
   - New files live under `AssistOSExplorer/webmeetLivekitAiAgent/`.
   - `manifest.json` runs `node /code/server/livekit-agent.mjs` in `node:20`.
@@ -83,7 +83,7 @@ The expected steady state is:
 - Fresh `ploinky start explorer` starts the WebMeet base app without blocking on the LiveKit AI worker dependency install.
 - The no-wait worker starts in the background and prepares its own dependency cache under `webmeetLivekitAiAgent`.
 - If the background worker install or startup fails, the no-wait log/status path makes that failure visible.
-- `WEBMEET_LIVEKIT_AGENT_ENABLED` should be set to `true` only when the operator wants admin AI dispatch to be active; otherwise attach requests should continue to fail clearly.
+- Admin attach requests should fail clearly if the worker is not running or does not accept the dispatch.
 
 ## WebMeet Verification After No-wait Lands
 
@@ -111,7 +111,6 @@ Background worker smoke:
 
 ```bash
 cd /home/ubuntu/explorer-no-wait-smoke/workspace
-PLOINKY_MASTER_KEY=ubuntu-smoke-key ploinky var WEBMEET_LIVEKIT_AGENT_ENABLED true
 PLOINKY_MASTER_KEY=ubuntu-smoke-key ploinky start explorer 18086
 ```
 
@@ -125,7 +124,6 @@ Expected background worker result:
 
 Full AI dispatch smoke, when credentials/provider setup is available:
 
-- Ensure `WEBMEET_LIVEKIT_AGENT_ENABLED=true`.
 - Ensure `webmeetLivekitAiAgent` is running and has accepted its LiveKit worker registration.
 - Create a WebMeet room as an admin.
 - Use the WebMeet admin attach flow.
