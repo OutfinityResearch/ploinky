@@ -31,7 +31,6 @@
         "url": "https://github.com/PloinkyCloud/ploinky.git"
     },
     "dependencies": {
-        "flexsearch": "github:PloinkyRepos/flexsearch#main",
         "mcp-sdk": "github:PloinkyRepos/MCPSDK#main",
         "node-pty": "^1.0.0"
     }
