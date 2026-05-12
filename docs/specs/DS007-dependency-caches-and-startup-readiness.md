@@ -18,7 +18,7 @@ Global Node dependencies must be prepared from `globalDeps/package.json` into `.
 
 A cache is valid only when the runtime key, the relevant package hash, the stamp version, and the core marker module all match the current workspace inputs. Cache preparation must use the correct installation backend for the target runtime family. Container-family runtime keys must install inside an install container for the target image. Sandbox-family runtime keys must install on the host and must reject preparation for a foreign host runtime key.
 
-The `deps prepare`, `deps status`, and `deps clean` commands form the operator-facing contract for cache maintenance. When no explicit target is provided to `deps prepare`, the command must prepare caches for every enabled agent that actually requires a Node dependency cache. Startup must also prepare or refresh missing and stale caches before runtime launch rather than letting agents run `npm install` inside their service runtime. Operators should expect cold startup to require npm, git, network access, and native build tools when caches are absent.
+The `deps prepare`, `deps status`, and `deps clean` commands form the operator-facing contract for cache maintenance. When no explicit target is provided to `deps prepare`, the command must prepare caches for every enabled agent that actually requires a Node dependency cache. Startup must also prepare or refresh missing and stale caches before runtime launch rather than letting agents run `npm install` inside their service runtime. Cache installs must avoid nonessential startup-time network work such as npm audit/funding checks, use noninteractive package-manager settings inside install containers, and keep long cold installs visibly alive with progress output. Operators should expect cold startup to require npm, git, network access, and native build tools when caches are absent.
 
 Workspace startup must expand the static agent into a dependency graph using manifest enable directives. The graph must be grouped topologically into waves. A later wave must not start until the earlier wave has been started and all of its members have passed readiness checks.
 
@@ -44,6 +44,11 @@ The graph contains explicit dependency edges, and tests on this branch validate 
 
 Response:
 With bridge networking, the runtime uses the manifest's port mappings to learn which host port the agent listens on. With host networking it strips `-p` emission, so the only structured signal of the agent's port is the manifest declaration itself. Without it, the runtime cannot distinguish a service agent that binds `:7880` from a quiet AgentServer wrapper, and falls back to a random `127.0.0.1:<random>:7000` AgentServer mapping. Keeping `ports` declared for host-mode service agents preserves the readiness contract without re-introducing port publishing.
+
+### Question #4: Why should dependency cache installs print progress?
+
+Response:
+Some agent dependencies pull large native runtime packages, and the package manager may legitimately spend minutes resolving, downloading, or unpacking them without producing useful npm output. Startup must make that state visible so operators can distinguish an active cold install from a stalled dependency process.
 
 ## Conclusion
 

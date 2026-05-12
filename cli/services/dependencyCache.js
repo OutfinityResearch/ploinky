@@ -18,6 +18,8 @@ export const STAMP_VERSION = 1;
 export const STAMP_FILENAME = 'stamp.json';
 export const LOCK_FILENAME = '.lock';
 export const CORE_MARKER_MODULE = 'mcp-sdk';
+export const NPM_INSTALL_ARGS = ['install', '--no-package-lock', '--no-audit', '--no-fund'];
+const INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 function assertRuntimeKey(runtimeKey) {
     const parsed = parseRuntimeKey(runtimeKey);
@@ -198,11 +200,11 @@ function withGithubHttpsGitConfig(env = process.env, { cwd = '' } = {}) {
 
 function runNpmInstall(cwd, { log = debugLog } = {}) {
     log(`[deps-cache] npm install in ${cwd}`);
-    const result = spawnSync('npm', ['install', '--no-package-lock'], {
+    const result = spawnSync('npm', NPM_INSTALL_ARGS, {
         cwd,
         env: withGithubHttpsGitConfig(process.env, { cwd }),
         stdio: 'inherit',
-        timeout: 10 * 60 * 1000,
+        timeout: INSTALL_TIMEOUT_MS,
     });
     if (result.error) {
         throw new Error(`npm install failed: ${result.error.message}`);
@@ -210,6 +212,39 @@ function runNpmInstall(cwd, { log = debugLog } = {}) {
     if (result.status !== 0) {
         throw new Error(`npm install exited with code ${result.status}`);
     }
+}
+
+function shellQuote(value) {
+    return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+export function buildContainerInstallScript({ installDir = '/install', heartbeatSeconds = 30 } = {}) {
+    const installLabel = shellQuote(installDir);
+    const npmArgs = NPM_INSTALL_ARGS.map(shellQuote).join(' ');
+    const interval = Number.isFinite(Number(heartbeatSeconds)) && Number(heartbeatSeconds) > 0
+        ? String(Number(heartbeatSeconds))
+        : '30';
+    return [
+        'export DEBIAN_FRONTEND="${DEBIAN_FRONTEND:-noninteractive}"',
+        '&& (',
+        '  command -v git >/dev/null 2>&1 ||',
+        '  (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
+        '  (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
+        ') 2>/dev/null',
+        '&& git config --global url.https://github.com/.insteadOf ssh://git@github.com/',
+        '&& git config --global --add url.https://github.com/.insteadOf git@github.com:',
+        '&& (',
+        `  printf '[deps-cache] npm install started in %s; cold native dependency caches can take several minutes.\\n' ${installLabel};`,
+        `  (while true; do sleep ${interval}; printf '[deps-cache] npm install still running in %s at %s\\n' ${installLabel} "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; done) &`,
+        '  heartbeat_pid=$!;',
+        '  trap \'kill "$heartbeat_pid" 2>/dev/null || true\' EXIT INT TERM;',
+        `  GIT_CEILING_DIRECTORIES=${installLabel} npm ${npmArgs};`,
+        '  install_status=$?;',
+        '  kill "$heartbeat_pid" 2>/dev/null || true;',
+        '  wait "$heartbeat_pid" 2>/dev/null || true;',
+        '  exit "$install_status"',
+        ')',
+    ].join(' ');
 }
 
 function resolveInstallBackend(runtimeKey, { image = '', runtime = null, log = debugLog } = {}) {
@@ -253,16 +288,7 @@ function runNpmInstallInContainer(cwd, { image, runtime = null, log = debugLog }
     const roArgs = resolvedRuntime === 'podman'
         ? ['--network', 'slirp4netns:allow_host_loopback=true']
         : [];
-    const installScript = [
-        '(',
-        '  command -v git >/dev/null 2>&1 ||',
-        '  (command -v apk >/dev/null 2>&1 && apk add --no-cache git python3 make g++) ||',
-        '  (command -v apt-get >/dev/null 2>&1 && apt-get update && apt-get install -y git python3 make g++)',
-        ') 2>/dev/null',
-        '&& git config --global url.https://github.com/.insteadOf ssh://git@github.com/',
-        '&& git config --global --add url.https://github.com/.insteadOf git@github.com:',
-        '&& GIT_CEILING_DIRECTORIES=/install npm install --no-package-lock',
-    ].join(' ');
+    const installScript = buildContainerInstallScript();
     const args = [
         'run', '--rm',
         ...roArgs,
@@ -274,7 +300,7 @@ function runNpmInstallInContainer(cwd, { image, runtime = null, log = debugLog }
         installScript,
     ];
     log(`[deps-cache] npm install in container ${image} at ${cwd}`);
-    const result = spawnSync(resolvedRuntime, args, { stdio: 'inherit', timeout: 10 * 60 * 1000 });
+    const result = spawnSync(resolvedRuntime, args, { stdio: 'inherit', timeout: INSTALL_TIMEOUT_MS });
     if (result.error) {
         throw new Error(`container npm install failed: ${result.error.message}`);
     }

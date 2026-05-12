@@ -8,6 +8,8 @@ import {
     STAMP_VERSION,
     STAMP_FILENAME,
     CORE_MARKER_MODULE,
+    NPM_INSTALL_ARGS,
+    buildContainerInstallScript,
     sha256,
     hashFile,
     hashMergedPackage,
@@ -60,6 +62,17 @@ test('hashMergedPackage changes when deps change', () => {
     const a = { name: 'x', dependencies: { a: '1' } };
     const b = { name: 'x', dependencies: { a: '2' } };
     assert.notEqual(hashMergedPackage(a), hashMergedPackage(b));
+});
+
+test('container dependency installer disables audit/fund and emits a heartbeat', () => {
+    const script = buildContainerInstallScript({ installDir: '/install', heartbeatSeconds: 7 });
+    assert.match(script, /DEBIAN_FRONTEND/);
+    assert.match(script, /npm install/);
+    assert.match(script, /--no-audit/);
+    assert.match(script, /--no-fund/);
+    assert.match(script, /still running/);
+    assert.match(script, /sleep 7/);
+    assert.deepEqual(NPM_INSTALL_ARGS, ['install', '--no-package-lock', '--no-audit', '--no-fund']);
 });
 
 test('writeStamp + readStamp round-trip', () => {
