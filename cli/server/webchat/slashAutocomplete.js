@@ -32,6 +32,22 @@ export function applySlashSelectionToValue(value, cmd) {
     };
 }
 
+function applySlashInsertTextToValue(value, insertText) {
+    const inputValue = typeof value === 'string' ? value : '';
+    const safeInsertText = typeof insertText === 'string' ? insertText : '';
+    const slashIdx = inputValue.lastIndexOf('/');
+    if (slashIdx === -1 || !safeInsertText) {
+        return null;
+    }
+
+    const afterSlash = inputValue.slice(slashIdx + 1);
+    const replaceEnd = slashIdx + 1 + afterSlash.length;
+    return {
+        value: inputValue.slice(0, slashIdx) + safeInsertText + inputValue.slice(replaceEnd),
+        cursor: slashIdx + safeInsertText.length
+    };
+}
+
 export function createSlashAutocomplete({ cmdInput }, { agentName, dlog }) {
     let commands = [];
     let selectedIndex = -1;
@@ -83,24 +99,18 @@ export function createSlashAutocomplete({ cmdInput }, { agentName, dlog }) {
         const hasSubToken = spaceIdx !== -1;
         const subToken = hasSubToken ? afterSlash.slice(spaceIdx + 1) : '';
 
-        const filtered = commands.filter((cmd) => {
-            if (hasSubToken && cmd.subCommands && cmd.subCommands.length) {
-                const cmdName = cmd.name.replace('/', '');
-                const prefixMatch = cmdName.startsWith(currentToken.trim().toLowerCase());
-                if (!prefixMatch) return false;
-                return cmd.subCommands.some((sub) =>
-                    sub.toLowerCase().includes(subToken.trim().toLowerCase())
-                );
-            }
-            return cmd.name.replace('/', '').toLowerCase().includes(currentToken.trim().toLowerCase());
+        const suggestions = buildSuggestions(commands, {
+            currentToken,
+            hasSubToken,
+            subToken
         });
 
-        if (filtered.length === 0) {
+        if (suggestions.length === 0) {
             hideMenu();
             return;
         }
 
-        if (selectedIndex >= filtered.length) {
+        if (selectedIndex >= suggestions.length) {
             selectedIndex = 0;
         }
 
@@ -108,9 +118,9 @@ export function createSlashAutocomplete({ cmdInput }, { agentName, dlog }) {
         const startIdx = selectedIndex >= SLASH_MENU_MAX_VISIBLE
             ? selectedIndex - SLASH_MENU_MAX_VISIBLE + 1
             : 0;
-        const visible = filtered.slice(startIdx, startIdx + SLASH_MENU_MAX_VISIBLE);
+        const visible = suggestions.slice(startIdx, startIdx + SLASH_MENU_MAX_VISIBLE);
 
-        visible.forEach((cmd, i) => {
+        visible.forEach((suggestion, i) => {
             const item = document.createElement('div');
             item.className = 'wa-slash-menu-item' + (i + startIdx === selectedIndex ? ' wa-slash-menu-item-active' : '');
             item.setAttribute('role', 'option');
@@ -118,20 +128,11 @@ export function createSlashAutocomplete({ cmdInput }, { agentName, dlog }) {
 
             const label = document.createElement('span');
             label.className = 'wa-slash-menu-label';
-
-            if (hasSubToken && cmd.subCommands && cmd.subCommands.length) {
-                const cmdName = cmd.name.replace('/', '');
-                const matchingSubs = cmd.subCommands.filter((sub) =>
-                    sub.toLowerCase().includes(subToken.trim().toLowerCase())
-                );
-                label.textContent = `/${cmdName} ${matchingSubs[0]}`;
-            } else {
-                label.textContent = cmd.name;
-            }
+            label.textContent = suggestion.label;
 
             const desc = document.createElement('span');
             desc.className = 'wa-slash-menu-desc';
-            desc.textContent = cmd.description || '';
+            desc.textContent = suggestion.description || '';
 
             item.appendChild(label);
             item.appendChild(desc);
@@ -140,7 +141,7 @@ export function createSlashAutocomplete({ cmdInput }, { agentName, dlog }) {
                 e.preventDefault();
                 e.stopPropagation();
                 selectedIndex = i + startIdx;
-                applySelection(filtered[selectedIndex]);
+                applySelection(suggestions[selectedIndex]);
             });
 
             menuEl.appendChild(item);
@@ -158,9 +159,11 @@ export function createSlashAutocomplete({ cmdInput }, { agentName, dlog }) {
         selectedIndex = -1;
     }
 
-    function applySelection(cmd) {
-        if (!cmd || !cmdInput) return;
-        const selection = applySlashSelectionToValue(cmdInput.value || '', cmd);
+    function applySelection(suggestion) {
+        if (!suggestion || !cmdInput) return;
+        const selection = suggestion.insertText
+            ? applySlashInsertTextToValue(cmdInput.value || '', suggestion.insertText)
+            : applySlashSelectionToValue(cmdInput.value || '', suggestion.command);
         if (!selection) return;
         cmdInput.value = selection.value;
 
@@ -170,6 +173,11 @@ export function createSlashAutocomplete({ cmdInput }, { agentName, dlog }) {
 
         cmdInput.dispatchEvent(new Event('input', { bubbles: true }));
         cmdInput.focus();
+        if (suggestion.keepMenuOpen) {
+            active = true;
+            renderMenu();
+            return;
+        }
         hideMenu();
     }
 
@@ -436,4 +444,56 @@ export function createSlashAutocomplete({ cmdInput }, { agentName, dlog }) {
         destroy,
         get isActive() { return active; }
     };
+}
+
+function buildSuggestions(commands, {
+    currentToken,
+    hasSubToken,
+    subToken
+}) {
+    const normalizedToken = currentToken.trim().toLowerCase();
+    const normalizedSubToken = subToken.trim().toLowerCase();
+    const suggestions = [];
+
+    for (const cmd of commands) {
+        const cmdName = cmd.name.replace('/', '');
+        const normalizedCmdName = cmdName.toLowerCase();
+        const subCommands = Array.isArray(cmd.subCommands) ? cmd.subCommands : [];
+        const shouldExpandSubCommands = subCommands.length > 0
+            && (
+                (hasSubToken && normalizedCmdName.startsWith(normalizedToken))
+                || (!hasSubToken && normalizedToken === normalizedCmdName)
+            );
+
+        if (shouldExpandSubCommands) {
+            const matchingSubs = subCommands.filter((sub) =>
+                sub.toLowerCase().includes(normalizedSubToken)
+            );
+            for (const sub of matchingSubs) {
+                suggestions.push({
+                    label: `/${cmdName} ${sub}`,
+                    description: cmd.description || '',
+                    command: {
+                        ...cmd,
+                        subCommands: [sub]
+                    },
+                    insertText: `/${cmdName} ${sub} `,
+                    keepMenuOpen: false
+                });
+            }
+            continue;
+        }
+
+        if (normalizedCmdName.includes(normalizedToken)) {
+            suggestions.push({
+                label: cmd.name,
+                description: cmd.description || '',
+                command: cmd,
+                insertText: `${cmd.name} `,
+                keepMenuOpen: subCommands.length > 0
+            });
+        }
+    }
+
+    return suggestions;
 }
