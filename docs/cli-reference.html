@@ -185,6 +185,13 @@ disable repoName/demo      # remove agent using repo-qualified name</code></pre>
                         <div class="alert alert-warning">
                             <strong>Note:</strong> If the agent is configured as the static workspace agent (via <code>start</code>), disabling it also clears the static configuration once the agent entry is removed.
                         </div>
+
+                        <h3>disable agents-all</h3>
+                        <p>Attempt to disable every enabled agent in <code>.ploinky/agents.json</code> without destroying containers.</p>
+                        <pre><code>disable agents-all</code></pre>
+                        <div class="alert alert-info">
+                            <strong>Note:</strong> This command is non-destructive. Agents whose containers still exist are reported as skipped, and the command prints a summary of removed/skipped/failed entries.
+                        </div>
                     </div>
 
                     <div class="doc-section" id="workspace">

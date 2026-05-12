@@ -42,6 +42,7 @@ export function showHelp(args = []) {
   client status <agent>          One-line status (HTTP code, parsed)
 
   status | restart               Show state | restart enabled agents + Router
+  disable agents-all             Disable all enabled agents (non-destructive)
   reinstall <agentName>          Re-create a running agent container (destructive)
   stop | shutdown | clean        Stop containers | remove containers
   logs tail [router]             Follow router logs
@@ -343,6 +344,12 @@ function showDetailedHelp(topic, subtopic, subsubtopic) {
                     syntax: 'disable <agentName>',
                     description: 'Remove an enabled agent from .ploinky/agents.json (container must be destroyed first)',
                     examples: [ 'disable demo', 'disable agent repoName/demo' ]
+                },
+                'agents-all': {
+                    syntax: 'disable agents-all',
+                    description: 'Attempt to disable all enabled agents from .ploinky/agents.json without destroying containers',
+                    examples: [ 'disable agents-all' ],
+                    notes: 'Non-destructive: agents with existing containers are reported and skipped. Use stop/destroy first for full cleanup.'
                 }
             }
         },

@@ -163,7 +163,7 @@ function completer(line) {
                 } else if (subcommand === 'sandbox') {
                     completions = [];
                 } else {
-                    completions = [...new Set(['sandbox', ...getAgentNames()])];
+                    completions = [...new Set(['sandbox', 'agents-all', ...getAgentNames()])];
                 }
             } else if (command === 'enable' && subcommand === 'sandbox') {
                 completions = [];

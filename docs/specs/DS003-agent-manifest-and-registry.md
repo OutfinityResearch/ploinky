@@ -20,6 +20,8 @@ When an operator enables an agent, Ploinky must persist a registry record in `.p
 
 Alias handling is part of the stable contract. Aliases must be unique inside the workspace, must follow the repository’s allowed character set, and must be treated as route keys and container-name differentiators. Commands that target a specific running alias must be able to use that alias instead of the canonical short agent name.
 
+Bulk disable behavior is part of the registry contract. `disable agents-all` must iterate all enabled agent entries in `.ploinky/agents.json` and attempt to remove each one using the same safety checks as single-agent disable. The operation must remain non-destructive: entries with existing containers are reported and skipped rather than force-removed, and the command reports a final summary of removed, skipped, unchanged, and failed outcomes.
+
 The manifest surface may define startup commands, CLI commands, readiness hints, dependencies, profiles, runtime resources, local password defaults, SSO-provider markers, repository bootstrap directives, and enable directives. Manifest `enable` entries may pull in additional agents and may attach aliases. Manifest `repos` entries may clone and enable repositories before dependent agents are resolved.
 
 Manifest enablement is conditional for SSO providers. If a dependency manifest sets `ssoProvider: true`, it should only be auto-enabled for a dependent manifest when that dependent resolved to SSO mode. This keeps password-only or no-auth workspaces from booting unused SSO-provider dependencies.

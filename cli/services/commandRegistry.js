@@ -3,7 +3,7 @@ const rawCommands = {
     update: ['repo', 'repos', 'all'],
     reinstall: ['agent'],
     enable: ['repo', 'agent', 'sandbox'],
-    disable: ['repo', 'agent', 'sandbox'],
+    disable: ['repo', 'agent', 'sandbox', 'agents-all'],
     sandbox: ['status', 'disable', 'enable'],
     shell: [],
     cli: [],
