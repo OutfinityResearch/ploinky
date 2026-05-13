@@ -22,9 +22,9 @@ Ploinky is a workspace-local runtime for repository-backed agents.
 - `ploinky restart`: restart enabled agents and the router.
 - `ploinky shell <agent>`: open `/bin/sh` inside the running agent backend.
 - `ploinky cli <agent> [args...]`: run the manifest CLI command interactively.
-- `ploinky stop`: stop enabled agents and the router without removing runtime state.
-- `ploinky shutdown`: stop the router and remove containers recorded for this workspace in `.ploinky/agents.json`.
-- `ploinky destroy`: stop the router, remove all Ploinky containers for the workspace, and clear `.ploinky/agents/`.
+- `ploinky stop`: stop enabled agents and the router without removing runtime state. Host-sandboxed agents are signaled in a batch before Ploinky waits.
+- `ploinky shutdown`: stop the router and remove runtimes recorded for this workspace in `.ploinky/agents.json`.
+- `ploinky destroy`: stop the router, remove all Ploinky runtimes for the workspace, and clear `.ploinky/agents/`.
 - `ploinky clean`: alias for `destroy`.
 - `ploinky logs tail [router]` and `ploinky logs last <N> [router]`: inspect router logs. Router logs are the only logs exposed through the CLI.
 - `ploinky webtty [shell] [--rotate]` and `ploinky webconsole [shell] [--rotate]`: show or rotate the WebTTY token and optionally set the interactive shell.

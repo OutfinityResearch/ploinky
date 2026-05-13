@@ -501,7 +501,7 @@ MCP ping succeeded.</code></pre>
                         <h2>System Management</h2>
                         
                         <h3>stop</h3>
-                        <p>Stop the router and all agent containers without removing them. Containers can be restarted later.</p>
+                        <p>Stop the router and all agent runtimes without removing reusable runtime state. Containers can be restarted later. Host-sandboxed agents are signaled in a batch before Ploinky waits for exits.</p>
                         <pre><code>stop</code></pre>
 
                         <h3>shutdown</h3>
@@ -509,7 +509,7 @@ MCP ping succeeded.</code></pre>
                         <pre><code>shutdown</code></pre>
 
                         <h3>destroy</h3>
-                        <p>Stop the router and remove ALL Ploinky containers in the workspace. <code>clean</code> is an alias for <code>destroy</code>.</p>
+                        <p>Stop the router and remove ALL Ploinky runtimes in the workspace. <code>clean</code> is an alias for <code>destroy</code>. Host-sandboxed agents receive the graceful signal together, then any remaining process groups are force-killed after the shared timeout.</p>
                         <pre><code>destroy
 clean</code></pre>
                     </div>
