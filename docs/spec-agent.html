@@ -221,7 +221,7 @@
                             <tr>
                                 <td><code>lite-sandbox</code></td>
                                 <td>No</td>
-                                <td>Boolean. Enables sandbox runtime auto-detection (selects <code>bwrap</code> or <code>seatbelt</code> based on platform).</td>
+                                <td>Boolean. Enables host sandbox runtime auto-detection for the whole agent process (selects <code>bwrap</code> on Linux or <code>seatbelt</code> on macOS). This is the whole-agent host sandbox path; for one-off sandboxed jobs from inside a container, use the Basic catalog <code>bwrap-runner</code> agent's <code>sandbox_exec</code> tool instead; it does not change <code>lite-sandbox</code> dispatch.</td>
                             </tr>
                             <tr>
                                 <td><code>runtime</code></td>
