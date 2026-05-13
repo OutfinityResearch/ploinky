@@ -286,8 +286,50 @@ function initMessageToolbar() {
         if (!visibleMenuBubble) {
             return;
         }
+        const menu = visibleMenuBubble.querySelector('.wa-context-menu');
+        if (menu) {
+            delete menu.dataset.align;
+        }
         visibleMenuBubble.classList.remove('wa-context-menu-visible');
         visibleMenuBubble = null;
+    };
+
+    const updateMenuPlacement = (bubble) => {
+        if (!bubble) {
+            return;
+        }
+        const menu = bubble.querySelector('.wa-context-menu');
+        if (!menu) {
+            return;
+        }
+
+        delete menu.dataset.align;
+        const viewportWidth = window.innerWidth || document.documentElement?.clientWidth || 0;
+        if (!viewportWidth) {
+            return;
+        }
+
+        const rect = menu.getBoundingClientRect();
+        const edgePadding = 10;
+        if (rect.left < edgePadding) {
+            menu.dataset.align = 'left';
+            return;
+        }
+        if (rect.right > viewportWidth - edgePadding) {
+            menu.dataset.align = 'right';
+        }
+    };
+
+    const scheduleMenuPlacement = (bubble) => {
+        if (!bubble) {
+            return;
+        }
+        const run = () => updateMenuPlacement(bubble);
+        if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(run);
+        } else {
+            window.setTimeout(run, 0);
+        }
     };
 
     const showMenuForBubble = (bubble) => {
@@ -299,6 +341,7 @@ function initMessageToolbar() {
         }
         bubble.classList.add('wa-context-menu-visible');
         visibleMenuBubble = bubble;
+        scheduleMenuPlacement(bubble);
     };
 
     const bindLongPressMenu = (bubble) => {
@@ -365,6 +408,14 @@ function initMessageToolbar() {
             event.preventDefault();
             event.stopPropagation();
         });
+
+        bubble.addEventListener('mouseenter', () => {
+            scheduleMenuPlacement(bubble);
+        });
+
+        bubble.addEventListener('focusin', () => {
+            scheduleMenuPlacement(bubble);
+        });
     };
 
     const attachMenuToBubble = (bubble) => {
@@ -381,6 +432,9 @@ function initMessageToolbar() {
             const isAssistantMessage = !!(message && message.classList.contains('in'));
             menu = document.createElement('div');
             menu.className = 'wa-context-menu';
+            if (!isAssistantMessage) {
+                menu.classList.add('wa-context-menu-compact');
+            }
             menu.innerHTML = `
                 <button type="button" data-action="copy" title="Copy">Copy</button>
                 <button type="button" data-action="insert" title="Insert into prompt">Insert</button>
@@ -423,6 +477,12 @@ function initMessageToolbar() {
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
             hideVisibleMenu();
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (visibleMenuBubble) {
+            updateMenuPlacement(visibleMenuBubble);
         }
     });
 
