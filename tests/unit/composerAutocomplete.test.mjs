@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { findTriggerAt } from '../../cli/server/webchat/composerAutocomplete.js';
 import {
     extractMentionTokenAt,
+    findMentionRanges,
     renderMentionHighlightHtml,
 } from '../../cli/server/webchat/composerMentionHighlights.js';
 
@@ -41,4 +42,19 @@ test('renderMentionHighlightHtml bolds only recorded mention tokens', () => {
     const html = renderMentionHighlightHtml('ask @open-interpreter about @op', ['@open-interpreter']);
     assert.match(html, /<strong class="wa-composer-mention">@open-interpreter<\/strong>/);
     assert.match(html, /about @op$/);
+});
+
+test('findMentionRanges detects sent-message agent and path mentions', () => {
+    assert.deepEqual(findMentionRanges('ask @open-interpreter hello'), [
+        { start: 4, end: 21, token: '@open-interpreter' },
+    ]);
+    assert.deepEqual(findMentionRanges('read @file:ploinky/cli/server'), [
+        { start: 5, end: 29, token: '@file:ploinky/cli/server' },
+    ]);
+});
+
+test('findMentionRanges ignores embedded email-like at signs', () => {
+    assert.deepEqual(findMentionRanges('email user@example.com about @open-interpreter'), [
+        { start: 29, end: 46, token: '@open-interpreter' },
+    ]);
 });

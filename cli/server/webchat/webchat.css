@@ -1676,6 +1676,10 @@ body {
     color: var(--wa-text-primary);
 }
 
+.wa-message-mention {
+    font-weight: 700;
+}
+
 .wa-composer-input {
     flex: 1;
     border: none;

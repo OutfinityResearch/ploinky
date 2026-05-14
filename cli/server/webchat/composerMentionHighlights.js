@@ -23,6 +23,11 @@ function isEndBoundary(value, index) {
     return /\s/.test(value.charAt(index));
 }
 
+function isDetectedEndBoundary(value, index) {
+    if (isEndBoundary(value, index)) return true;
+    return /[),;:!?]/.test(value.charAt(index));
+}
+
 export function extractMentionTokenAt(value, cursor) {
     const text = typeof value === 'string' ? value : '';
     if (!text) return '';
@@ -39,6 +44,26 @@ export function extractMentionTokenAt(value, cursor) {
         end += 1;
     }
     return normalizeToken(text.slice(start, end));
+}
+
+export function findMentionRanges(value) {
+    const text = typeof value === 'string' ? value : '';
+    if (!text) return [];
+
+    const ranges = [];
+    const mentionPattern = /@(?:file:[^\s<>()),;:!?]+|[A-Za-z][A-Za-z0-9_-]{0,63})/g;
+    let match;
+    while ((match = mentionPattern.exec(text)) !== null) {
+        const token = normalizeToken(match[0]);
+        if (!token) continue;
+        const start = match.index;
+        const end = start + token.length;
+        if (!isStartBoundary(text, start) || !isDetectedEndBoundary(text, end)) {
+            continue;
+        }
+        ranges.push({ start, end, token });
+    }
+    return ranges;
 }
 
 function normalizeTokens(tokens) {
