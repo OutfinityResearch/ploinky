@@ -411,7 +411,44 @@ function canonicalCommand(command) {
     }
 }
 
-async function executeRouterCommand(command, payload = {}) {
+function buildToolRequestHeaders(req, agentName, toolName, toolArgs) {
+    const invocation = buildInvocationContextForProviderCall({
+        req: req || { headers: {} },
+        agentName,
+        toolName,
+        toolArgs: toolArgs || {}
+    });
+    if (!invocation?.token) return null;
+    return { authorization: `Bearer ${invocation.token}` };
+}
+
+async function callEntryTool(entry, toolName, args, req) {
+    const requestHeaders = buildToolRequestHeaders(req, entry.agentName, toolName, args);
+    if (!requestHeaders) {
+        return await entry.client.callTool(toolName, args);
+    }
+    const client = createAgentClient(entry.baseUrl, { requestHeaders });
+    try {
+        return await client.callTool(toolName, args);
+    } finally {
+        await client.close().catch(() => {});
+    }
+}
+
+async function readEntryResource(entry, uri, req) {
+    const requestHeaders = buildToolRequestHeaders(req, entry.agentName, 'resources/read', { uri });
+    if (!requestHeaders) {
+        return await entry.client.readResource(uri);
+    }
+    const client = createAgentClient(entry.baseUrl, { requestHeaders });
+    try {
+        return await client.readResource(uri);
+    } finally {
+        await client.close().catch(() => {});
+    }
+}
+
+async function executeRouterCommand(command, payload = {}, req = null) {
     const normalized = canonicalCommand(command);
     const entries = createAgentRouteEntries();
     if (!entries.length) {
@@ -509,7 +546,7 @@ async function executeRouterCommand(command, payload = {}) {
                     }
                 }
 
-                const response = await resolved.entry.client.callTool(toolName, args);
+                const response = await callEntryTool(resolved.entry, toolName, args, req);
                 return {
                     statusCode: 200,
                     body: {
@@ -551,7 +588,7 @@ async function executeRouterCommand(command, payload = {}) {
                     return { statusCode: 404, body: { error: `resource '${uri}' was not found`, errors } };
                 }
                 try {
-                    const resource = await resolvedEntry.client.readResource(uri);
+                    const resource = await readEntryResource(resolvedEntry, uri, req);
                     return { statusCode: 200, body: { resource, agent: resolvedEntry.agentName, errors } };
                 } catch (err) {
                     const message = summarizeMcpError(err, 'readResource');
@@ -653,14 +690,14 @@ async function handleRouterJsonRpc(req, res, payload) {
             let rpcResultPayload = null;
             switch (message.method) {
                 case 'tools/list':
-                    result = await executeRouterCommand('list_tools');
+                    result = await executeRouterCommand('list_tools', {}, req);
                     if (result.statusCode < 400) {
                         const tools = Array.isArray(result.body?.tools) ? result.body.tools : [];
                         rpcResultPayload = { tools };
                     }
                     break;
                 case 'resources/list':
-                    result = await executeRouterCommand('list_resources');
+                    result = await executeRouterCommand('list_resources', {}, req);
                     if (result.statusCode < 400) {
                         const resources = Array.isArray(result.body?.resources) ? result.body.resources : [];
                         rpcResultPayload = { resources };
@@ -689,7 +726,7 @@ async function handleRouterJsonRpc(req, res, payload) {
                     if (metaAgent && !commandPayload.agent) {
                         commandPayload.agent = metaAgent;
                     }
-                    result = await executeRouterCommand('tool', commandPayload);
+                    result = await executeRouterCommand('tool', commandPayload, req);
                     if (result.statusCode < 400) {
                         rpcResultPayload = result.body?.result;
                     }
@@ -700,7 +737,7 @@ async function handleRouterJsonRpc(req, res, payload) {
                     if (params._meta && params._meta.router && typeof params._meta.router.agent === 'string' && params.agent === undefined) {
                         params.agent = params._meta.router.agent;
                     }
-                    result = await executeRouterCommand('resources/read', params);
+                    result = await executeRouterCommand('resources/read', params, req);
                     if (result.statusCode < 400) {
                         rpcResultPayload = result.body?.resource;
                     }
@@ -711,7 +748,7 @@ async function handleRouterJsonRpc(req, res, payload) {
                     if (params._meta && params._meta.router && typeof params._meta.router.agent === 'string' && params.agent === undefined) {
                         params.agent = params._meta.router.agent;
                     }
-                    result = await executeRouterCommand('ping', params);
+                    result = await executeRouterCommand('ping', params, req);
                     if (result.statusCode < 400) {
                         rpcResultPayload = result.body?.result ?? {};
                     }
@@ -791,7 +828,7 @@ export async function handleRouterMcp(req, res) {
             }
 
             const command = payload && typeof payload.command === 'string' ? payload.command : '';
-            const { statusCode, body } = await executeRouterCommand(command, payload);
+            const { statusCode, body } = await executeRouterCommand(command, payload, req);
             res.writeHead(statusCode, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(body));
         } catch (err) {

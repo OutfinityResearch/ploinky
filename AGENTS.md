@@ -17,6 +17,8 @@
 - JavaScript/Node modules use ES module syntax with `import`/`export`, four-space indentation, and trailing commas for multi-line literals.
 - New files should live beside related logic (e.g., `cli/server/` for router concerns) and use descriptive camelCase filenames.
 - Configuration JSON (routing, agent manifests) is formatted with two-space indentation for readability.
+- Follow SOLID and DRY principles: keep framework responsibilities narrow, extract repeated integration logic into shared helpers, and do not solve an agent-specific problem by expanding a generic router surface.
+- Ploinky framework code must not hardcode optional Ploinky agent ids, backend tags, or agent-owned MCP tool names. Cross-agent behavior belongs in manifests, plugins, selected agents, or explicit configuration, not in core router or WebChat handlers.
 
 ## Testing Guidelines
 - Smoke scripts live in `tests/smoke/` and must avoid redundant container restarts; add new checks as discrete functions that rely on the shared harness in `tests/smoke/common.sh`.

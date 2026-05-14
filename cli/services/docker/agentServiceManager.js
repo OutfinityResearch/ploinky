@@ -34,6 +34,7 @@ import {
 } from './common.js';
 import { clearLivenessState } from './healthProbes.js';
 import { stopAndRemove } from './containerFleet.js';
+import { buildContainerSecurityArgs, resolveContainerSecurity } from './containerSecurity.js';
 import { DEFAULT_AGENT_ENTRY, launchAgentSidecar, readManifestAgentCommand, readManifestStartCommand, splitCommandArgs } from './agentCommands.js';
 import { PLOINKY_DIR, ROUTING_FILE, WORKSPACE_ROOT } from '../config.js';
 import {
@@ -544,7 +545,7 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
     const needsCoreDeps = !useStartEntry || agentHasPackageJson;
     let preparedNodeModulesDir = path.join(agentWorkDir, 'node_modules');
     if (needsCoreDeps) {
-        const runtimeKey = detectRuntimeKeyForAgent(manifest, repoName, agentName);
+        const runtimeKey = detectRuntimeKeyForAgent(manifest, repoName, agentName, profileConfig);
         const agentPackagePath = agentHasPackageJson ? path.join(agentCodePath, 'package.json') : null;
         const prepared = prepareAgentCache({
             repoName,
@@ -677,6 +678,10 @@ function startAgentContainer(agentName, manifest, agentPath, options = {}) {
         ? manifestNetwork.aliases.map((entry) => String(entry || '').trim()).filter(Boolean)
         : [];
     const useHostNetwork = manifestNetworkMode === 'host';
+    const containerSecurityArgs = buildContainerSecurityArgs(resolveContainerSecurity(manifest, profileConfig));
+    if (containerSecurityArgs.length) {
+        args.splice(1, 0, ...containerSecurityArgs);
+    }
 
     if (useHostNetwork) {
         args.splice(1, 0, '--network', 'host');

@@ -683,8 +683,8 @@ async function startWorkspace(staticAgentArg, portArg, { refreshComponentToken, 
           ...current,
           ...cfg,
           routes: {
-            ...(current.routes || {}),
-            ...(cfg.routes || {})
+            ...(cfg.routes || {}),
+            ...(current.routes || {})
           }
         };
         for (const result of routeResults) {

@@ -5,7 +5,9 @@ import crypto from 'crypto';
 import { resolveWebchatCommandsForAgent } from '../webchat/commandResolver.js';
 import { parseCookies, buildCookie, appendSetCookie, parseMultipartFormData } from './common.js';
 import * as staticSrv from '../static/index.js';
+import { WORKSPACE_ROOT } from '../../services/config.js';
 import { createServerTtsStrategy } from './ttsStrategies/index.js';
+import { buildInvocationContextForProviderCall } from '../mcp-proxy/index.js';
 import {
     appendMessage as appendTranscriptMessage,
     appendToMessage as appendTranscriptToMessage,
@@ -110,6 +112,72 @@ function parseInputEnvelope(rawBody) {
     return { text: fallbackText, attachments: [] };
 }
 
+function sanitizeWebchatAttachmentsForEnvelope(attachments = []) {
+    return Array.isArray(attachments)
+        ? attachments
+            .filter((entry) => entry && typeof entry === 'object')
+            .map((entry) => ({
+                id: typeof entry.id === 'string' ? entry.id : null,
+                filename: typeof entry.filename === 'string' ? entry.filename : null,
+                mime: typeof entry.mime === 'string' ? entry.mime : null,
+                size: Number.isFinite(entry.size) ? entry.size : null,
+                downloadUrl: typeof entry.downloadUrl === 'string' ? entry.downloadUrl : null,
+                localPath: typeof entry.localPath === 'string' ? entry.localPath : null
+            }))
+        : [];
+}
+
+function buildWebchatInvocationToken({ req, effectiveConfig, tabId, envelope }) {
+    const agentName = String(effectiveConfig?.agentName || '').trim();
+    if (!agentName) {
+        return '';
+    }
+    try {
+        const invocation = buildInvocationContextForProviderCall({
+            req,
+            agentName,
+            toolName: '__webchat_message__',
+            toolArgs: {
+                surface: 'webchat',
+                tabId: String(tabId || ''),
+                text: typeof envelope?.text === 'string' ? envelope.text : '',
+                attachments: sanitizeWebchatAttachmentsForEnvelope(envelope?.attachments)
+            }
+        });
+        return invocation?.token || '';
+    } catch (_) {
+        return '';
+    }
+}
+
+function serializeWebchatEnvelopeForAgent({ req, effectiveConfig, tabId, envelope, fallbackText = '' }) {
+    const payload = {
+        __webchatMessage: 1,
+        version: 1,
+        text: (envelope && typeof envelope.text === 'string') ? envelope.text : String(fallbackText || ''),
+        attachments: sanitizeWebchatAttachmentsForEnvelope(envelope?.attachments)
+    };
+    const token = buildWebchatInvocationToken({
+        req,
+        effectiveConfig,
+        tabId,
+        envelope: payload
+    });
+    if (token) {
+        payload.invocation = { token };
+    }
+    return JSON.stringify(payload);
+}
+
+function isTruthyQueryValue(value) {
+    return /^(1|true|yes|on)$/i.test(String(value || '').trim());
+}
+
+function shouldForwardWebchatEnvelope(parsedUrl) {
+    return isTruthyQueryValue(parsedUrl.searchParams.get('forward-envelope'))
+        || isTruthyQueryValue(parsedUrl.searchParams.get('forwardEnvelope'));
+}
+
 function buildTranscriptContext(req, appState, tabId) {
     const sid = getSession(req, appState) || '';
     return {
@@ -129,11 +197,39 @@ function buildWebchatQuery(parsedUrl, agentName = '') {
     return params.toString();
 }
 
+function resolveWorkspaceScopedQueryPath(value) {
+    const raw = String(value || '').trim();
+    if (!raw || raw.includes('\0') || path.isAbsolute(raw)) {
+        return '';
+    }
+    const root = path.resolve(process.env.PLOINKY_WORKSPACE_ROOT || WORKSPACE_ROOT || process.cwd());
+    const resolved = path.resolve(root, raw);
+    const relative = path.relative(root, resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        return '';
+    }
+    return resolved;
+}
+
 function resolveWebchatLaunchOptions(parsedUrl) {
     const cliArgs = [];
     for (const [rawKey, rawValue] of parsedUrl.searchParams.entries()) {
         const key = String(rawKey || '').trim();
         if (!key || key === 'agent' || key === 'tabId') {
+            continue;
+        }
+        if (key === 'workspace-dir' || key === 'workspaceDir') {
+            const resolved = resolveWorkspaceScopedQueryPath(rawValue);
+            if (resolved) {
+                cliArgs.push(`--dir=${resolved}`);
+            }
+            continue;
+        }
+        if (key === 'workspace-skill-root' || key === 'workspaceSkillRoot') {
+            const resolved = resolveWorkspaceScopedQueryPath(rawValue);
+            if (resolved) {
+                cliArgs.push(`--skill-root=${resolved}`);
+            }
             continue;
         }
         cliArgs.push(rawValue === '' ? `--${key}` : `--${key}=${String(rawValue)}`);
@@ -903,7 +999,7 @@ async function handleWebChat(req, res, appConfig, appState) {
         if (!tab) { res.writeHead(400); return res.end(); }
         let body = '';
         req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => {
+        req.on('end', async () => {
             let envelope;
             try {
                 envelope = parseInputEnvelope(body);
@@ -926,10 +1022,16 @@ async function handleWebChat(req, res, appConfig, appState) {
             } catch (_) {
                 // Ignore transcript capture errors.
             }
-            try {
-                const text = (envelope && typeof envelope.text === 'string') ? envelope.text : body;
-                tab.tty.write(`${text}\n`);
-            } catch (_) { }
+            const text = shouldForwardWebchatEnvelope(parsedUrl)
+                ? serializeWebchatEnvelopeForAgent({
+                    req,
+                    effectiveConfig,
+                    tabId,
+                    envelope: envelope || { text: body, attachments: [] },
+                    fallbackText: body
+                })
+                : ((envelope && typeof envelope.text === 'string') ? envelope.text : body);
+            tab.tty.write(`${text}\n`);
             res.writeHead(204); res.end();
         });
         return;
@@ -955,4 +1057,9 @@ async function handleWebChat(req, res, appConfig, appState) {
     res.writeHead(404); res.end(', Not Found in App');
 }
 
-export { handleWebChat };
+export {
+    handleWebChat,
+    resolveWebchatLaunchOptions,
+    serializeWebchatEnvelopeForAgent,
+    resolveWorkspaceScopedQueryPath
+};

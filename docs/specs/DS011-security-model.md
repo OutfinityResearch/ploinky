@@ -136,7 +136,7 @@ WebChat transcripts must be encrypted at rest independently from the main worksp
 
 Transcript records must store hashed session, user, and tab identifiers rather than raw identity values. Dashboard transcript and feedback APIs require transcript viewer access. SSO users must hold an allowed role from `PLOINKY_TRANSCRIPT_VIEWER_ROLES` unless the role list is `*`. Local or legacy Dashboard sessions may read transcripts only when `PLOINKY_TRANSCRIPT_VIEWER_ALLOW_LOCAL` explicitly allows it.
 
-Router logs and agent logs are diagnostic surfaces and must not intentionally record secrets, passwords, cookies, bearer tokens, JWTs, or API keys. Some agent execution paths sanitize known sensitive fields before logging payloads, but `appendLog()` itself trusts the caller. New logging code must redact sensitive fields before writing to `.ploinky/logs/`.
+Router logs and agent logs are diagnostic surfaces and must not intentionally record secrets, passwords, cookies, bearer tokens, JWTs, API keys, raw prompts, materialized resource content, base64 resource bodies, command stdin payloads, or internal tool payloads. `AgentServer` tool-argument and payload logging must redact prompt, message, content, base64, resource, stdin, task, and payload-shaped fields before writing to stdout/stderr. Some agent execution paths sanitize known sensitive fields before logging payloads, but `appendLog()` itself trusts the caller. New logging code must redact sensitive fields before writing to `.ploinky/logs/`.
 
 ### Browser Media and Third-Party API Keys
 

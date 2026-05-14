@@ -36,6 +36,16 @@ The `network` object may also be set inside a profile block (`manifest.profiles.
 
 The optional manifest `entrypoint` field overrides the container image's `ENTRYPOINT` at run time. Setting it to `/bin/sh` lets agents that ship with a CLI-style entrypoint (for example `certbot/certbot` whose entrypoint is `["certbot"]`) run a manifest-supplied `start` script instead of being interpreted as a CLI subcommand. The runtime must emit `--entrypoint <value>` immediately before the image argument when this field is set; the `start` field then becomes the argument(s) passed to the new entrypoint.
 
+The optional manifest `containerSecurity` object grants allowlisted outer-OCI
+security policy to the whole agent container. The supported v1 field is
+`privileged: true`, which emits `--privileged` for Docker or Podman. This is a
+deployment-policy switch, not a generic raw-flag escape hatch: unrecognized
+keys must not be converted into runtime arguments. `containerSecurity` may also
+appear inside a profile block and profile-level values override the root
+manifest value. Agents should use this only when the container is itself a
+sandbox host or similar runtime primitive that cannot function under the
+default OCI confinement.
+
 Manifest `volumes` declare additional host-to-container mounts beyond Ploinky's default `/Agent`, `/code`, dependency cache, `/shared`, and workspace/run-mode mounts. The host side of every manifest volume must resolve under the workspace `.ploinky/` directory. Relative host paths are resolved against the workspace root and are valid only when they point into `.ploinky/`, such as `.ploinky/data/postgres/data` or `.ploinky/agents/webmeetLivekitServer/livekit.yaml`. Container destinations should use stable semantic paths such as `/data` for agent-owned durable data and `/working-data/generated` for generated config when the agent controls the command line. Mounting into image-specific paths such as `/var/lib/postgresql/data`, `/opt/keycloak/data`, `/etc/letsencrypt`, or `/var/log/onlyoffice` is reserved for upstream images that require those locations.
 
 The manifest `enable` directive may also appear inside a profile block (`manifest.profiles.<profile>.enable`). When the workspace dependency graph is built, profile-level `enable` entries are merged with the top-level `manifest.enable` list against the active profile only. This is the supported way to pin an optional dependency to specific profiles (for example "the production TLS terminator only ships in prod"). The leaf agent's manifest stays unaware of profile selection; the choice lives in the parent that knows when to chain it in.
@@ -71,17 +81,28 @@ The image tag is part of the deploy contract that operators tune through workspa
 Response:
 Some upstream images, including `certbot/certbot`, ship a CLI-style `ENTRYPOINT` that is incompatible with running a Ploinky-supplied `start` script directly (the script path would be passed as a CLI argument). Forcing every such workload into a wrapper image or a custom build would multiply the moving parts. Modeling `entrypoint` as a manifest field keeps the override visible in the same source of truth as the image tag and the start command, and it lets the runtime continue to derive everything else (env injection, mounts, networking) from the manifest contract.
 
-### Question #6: Why reject manifest volumes outside `.ploinky/`?
+### Question #6: Why expose `containerSecurity.privileged` instead of raw container flags?
+
+Response:
+Some catalog agents intentionally host a second isolation boundary inside their
+own container, such as `basic/bwrap-runner`. Those agents may need outer OCI
+privileges before the inner sandbox can create namespaces and mount `/proc`.
+Ploinky models this as a small allowlisted manifest contract so the elevated
+policy is visible in the agent source and profile selection. Raw runtime flags
+would blur deployment policy with command construction and would make auditing
+container privilege harder.
+
+### Question #7: Why reject manifest volumes outside `.ploinky/`?
 
 Response:
 Manifest volumes are broad writable filesystem grants. If each agent chooses arbitrary sibling folders in the workspace root, a normal project checkout accumulates service data, generated configs, databases, and recording trees that are hard to distinguish from user files. Requiring the host side to live under `.ploinky/` keeps runtime state disposable and auditable while still allowing the container side to match the service's expected filesystem contract.
 
-### Question #7: Why require profile defaults for non-sensitive required env?
+### Question #8: Why require profile defaults for non-sensitive required env?
 
 Response:
 Profiles are the reproducible deployment contract. If a production profile requires a non-secret URL or hostname but leaves it only in a workspace variable, a fresh deployment can pass profile selection and still fail at start because hidden operator state is missing. Keeping non-sensitive topology values in the profile preserves one-command startup, while the normal env resolution order still lets operators override those defaults through `ploinky var` or deployment environment variables.
 
-### Question #8: Why is `no-wait` a per-edge modifier instead of a per-agent flag?
+### Question #9: Why is `no-wait` a per-edge modifier instead of a per-agent flag?
 
 Response:
 The same dependency can be load-bearing for one parent and an optional adjunct for another. A WebMeet base agent that requires its infra stack to be ready cannot share a single "this agent is no-wait" flag with the Explorer that only opportunistically launches an experimental worker. Pinning the modifier to the enable[] edge that asked for it keeps each parent's startup contract local to its own manifest and avoids action-at-a-distance from leaf-agent metadata. The merge rule — blocking wins when two declarations of the same child disagree — keeps fail-closed behavior for any parent that still needs readiness, even when a sibling parent has opted into background launch.

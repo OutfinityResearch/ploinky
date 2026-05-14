@@ -103,6 +103,29 @@ test('detectContainerRuntimeKey accepts injected probe executor', () => {
     assert.equal(key, 'container-linux-x64-musl-node20');
 });
 
+test('detectContainerRuntimeKey resolves manifest image templates before probing', () => {
+    let probedImage = '';
+    const key = detectContainerRuntimeKey({
+        manifest: {
+            container: 'example/service:${SERVICE_VERSION}',
+            env: [
+                {
+                    name: 'SERVICE_VERSION',
+                    default: 'v9',
+                },
+            ],
+        },
+        runtime: 'podman',
+        execProbe({ image }) {
+            probedImage = image;
+            return '{"platform":"linux","arch":"x64","nodeMajor":20,"libc":"glibc"}';
+        },
+    });
+
+    assert.equal(probedImage, 'example/service:v9');
+    assert.equal(key, 'container-linux-x64-glibc-node20');
+});
+
 test('detectContainerRuntimeKey requires an image', () => {
     assert.throws(() => detectContainerRuntimeKey({ execProbe: () => '' }), /requires an image/);
 });
