@@ -102,6 +102,19 @@ function looksLikeEnvelopeEcho(text) {
         && normalized.includes('"attachments"');
 }
 
+function looksLikeProgressEnvelope(text) {
+    const normalized = String(text || '').trim();
+    if (!normalized.includes('"__webchatProgress"')) {
+        return false;
+    }
+    try {
+        const parsed = JSON.parse(normalized);
+        return Boolean(parsed && parsed.__webchatProgress);
+    } catch (_) {
+        return true;
+    }
+}
+
 function parseInputEnvelope(rawBody) {
     const fallbackText = typeof rawBody === 'string' ? rawBody : '';
     try {
@@ -593,7 +606,7 @@ function handleTranscriptAssistantLine(tab, rawLine) {
     }
     const stripped = stripProcessingPrefix(originalText);
     const normalized = stripped.trim();
-    if (!normalized || looksLikeEnvelopeEcho(normalized)) {
+    if (!normalized || looksLikeEnvelopeEcho(normalized) || looksLikeProgressEnvelope(normalized)) {
         return null;
     }
     const pendingEcho = String(transcript.lastClientText || '').trim();

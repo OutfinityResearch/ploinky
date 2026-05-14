@@ -93,6 +93,7 @@
         <section class="chapter-section">
           <h2>Runtime Backends and Mount Policy</h2>
           <p>The container path is the default backend and auto-detects <code>podman</code> before <code>docker</code>. Agents with <code>lite-sandbox: true</code> run through the host sandbox backend when available: <code>bwrap</code> on Linux and <code>seatbelt</code> on macOS. Ploinky does not silently fall back from a requested host sandbox to containers; use <code>ploinky sandbox disable</code> when podman/docker testing is desired.</p>
+          <p>When stopping or destroying multiple host-sandboxed agents, Ploinky sends the graceful signal to all selected sandbox process groups before waiting. It then uses one shared deadline and force-kills only the sandbox processes that are still alive, so one stuck agent does not delay signal delivery to the rest of the workspace.</p>
           <p>Profile handling is merged from manifest <code>profiles.default</code> plus the active profile from <code>.ploinky/profile</code>. In <code>dev</code>, code and skills mounts default to read-write. In <code>qa</code> and <code>prod</code>, they default to read-only unless the profile explicitly overrides them.</p>
           <div class="callout callout--neutral">
             <h3>Sandboxed Job Delegation vs <code>lite-sandbox</code></h3>

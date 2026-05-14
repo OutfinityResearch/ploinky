@@ -40,6 +40,8 @@ WebChat must expose `GET /webchat/suggestions/files` for the workspace-paths pro
 
 WebChat must also expose a Cancel button during active agent processing. The Cancel button sends a raw control sequence (ESC, `\x1b`) to the agent's TTY session via a dedicated `/webchat/control` endpoint. The agent must interpret this as an interrupt signal and abort the current operation. The Cancel button replaces the Send button while processing is active and reverts when the agent produces output or the session closes.
 
+WebChat may receive structured progress metadata from chat agents through the same stdout/SSE stream. Lines containing `__webchatProgress` are UI metadata, not assistant text: the browser must render them as in-progress status, keep them out of normal transcript capture, and attach them as a collapsible progress block above the next assistant answer.
+
 The router must also expose:
 
 - `/health` for health status.

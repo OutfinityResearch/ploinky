@@ -102,10 +102,16 @@
             <div class="wa-messages" id="chatList">
                 <div class="wa-message in wa-typing" id="typingIndicator" aria-hidden="true">
                     <div class="wa-message-bubble">
-                        <div class="wa-typing-dots" role="status" aria-live="polite" aria-label="Processing">
-                            <span></span>
-                            <span></span>
-                            <span></span>
+                        <div class="wa-typing-status" role="status" aria-live="polite" aria-label="Processing">
+                            <div class="wa-typing-heading">
+                                <span class="wa-typing-label">thinking</span>
+                                <span class="wa-typing-dots" aria-hidden="true">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </span>
+                            </div>
+                            <div class="wa-typing-progress"></div>
                         </div>
                     </div>
                 </div>

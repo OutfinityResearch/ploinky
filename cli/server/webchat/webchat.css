@@ -397,11 +397,15 @@ body {
 
 /* --- Main Layout --- */
 .wa-main-content {
-    flex: 1; /* Fill available vertical space */
+    position: fixed;
+    top: var(--wa-header-height);
+    right: 0;
+    bottom: 0;
+    left: 0;
     display: flex;
     min-width: 0;
-    overflow: visible;
-    position: relative;
+    min-height: 0;
+    overflow: hidden;
     background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
         var(--wa-bg-chat);
@@ -413,6 +417,8 @@ body {
     flex-direction: row;
     min-width: 0;
     min-height: 0;
+    height: 100%;
+    overflow: hidden;
 }
 
 .wa-chat-area {
@@ -420,9 +426,10 @@ body {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
     background: transparent;
     position: relative;
-    overflow: visible;
+    overflow: hidden;
     transition: flex 0.25s ease-in-out;
 }
 
@@ -815,15 +822,43 @@ body {
 }
 
 .wa-messages {
-    flex: 1;
+    position: absolute;
+    inset: 0;
+    flex: none;
     min-width: 0;
-    overflow-y: auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(91, 111, 102, 0.48) transparent;
     padding: 18px 20px calc(var(--wa-floating-composer-space) + 12px);
     display: flex;
     flex-direction: column;
     gap: 7px;
-    position: relative;
     z-index: 1;
+}
+
+.wa-messages::-webkit-scrollbar {
+    width: 10px;
+}
+
+.wa-messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.wa-messages::-webkit-scrollbar-thumb {
+    background: rgba(91, 111, 102, 0.42);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+}
+
+.wa-messages::-webkit-scrollbar-thumb:hover {
+    background: rgba(91, 111, 102, 0.62);
+    border: 3px solid transparent;
+    background-clip: content-box;
 }
 
 /* --- Message Bubbles --- */
@@ -1337,30 +1372,56 @@ body {
 
 .wa-typing .wa-message-bubble {
     display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    align-items: flex-start;
     border-radius: 18px;
-    padding: 8px 15px;
+    padding: 9px 14px;
     background: rgba(255,255,255,0.9);
     border: 1px solid rgba(17, 27, 33, 0.05);
 }
 
+.wa-typing-status {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: min(420px, 72vw);
+}
+
+.wa-typing-heading {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+}
+
+.wa-typing-label,
+.wa-typing-dots {
+    color: var(--wa-accent);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+}
+
 .wa-typing-dots {
     display: inline-flex;
-    gap: 6px;
-    align-items: center;
+    gap: 2px;
+    align-items: baseline;
     justify-content: center;
-    min-width: 42px;
+    min-width: 18px;
 }
 
 .wa-typing-dots span {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: linear-gradient(180deg, var(--wa-accent), var(--wa-accent-hover));
-    transform: scale(0.72);
-    opacity: 0.45;
-    animation: waTypingPulse 0.95s infinite ease-in-out;
+    display: inline-block;
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    background: transparent;
+    color: currentColor;
+    opacity: 0.65;
+    animation: waTypingBounce 0.9s infinite ease-in-out;
+}
+
+.wa-typing-dots span::before {
+    content: ".";
 }
 
 .wa-typing-dots span:nth-child(2) {
@@ -1371,15 +1432,83 @@ body {
     animation-delay: 0.24s;
 }
 
-@keyframes waTypingPulse {
+@keyframes waTypingBounce {
     0%, 80%, 100% {
-        transform: scale(0.72);
-        opacity: 0.45;
+        transform: translateY(0);
+        opacity: 0.5;
     }
     40% {
-        transform: scale(1.05);
+        transform: translateY(-3px);
         opacity: 1;
     }
+}
+
+.wa-typing-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.wa-typing-progress:empty {
+    display: none;
+}
+
+.wa-typing-progress-line {
+    color: color-mix(in srgb, var(--wa-text-secondary) 70%, white);
+    font-size: 12px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.wa-progress-panel {
+    display: block;
+    margin: 0 0 8px;
+    padding: 7px 9px;
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--wa-bg-panel) 58%, transparent);
+    border: 1px solid color-mix(in srgb, var(--wa-border) 58%, transparent);
+}
+
+.wa-progress-toggle {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--wa-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+.wa-progress-arrow {
+    width: 12px;
+    color: var(--wa-text-secondary);
+}
+
+.wa-progress-title {
+    color: var(--wa-text-secondary);
+}
+
+.wa-progress-list {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.wa-progress-panel.is-collapsed .wa-progress-list {
+    display: none;
+}
+
+.wa-progress-line {
+    color: color-mix(in srgb, var(--wa-text-secondary) 72%, white);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
 }
 
 .wa-message-time {
@@ -1569,18 +1698,8 @@ body {
     display: flex;
     flex-direction: column;
     background-color: transparent;
-    background-image:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='rgba(98,120,108,0.16)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M28 44c0-7.18 5.82-13 13-13h22c7.18 0 13 5.82 13 13v14c0 7.18-5.82 13-13 13H51l-10 10 2-10h-2c-7.18 0-13-5.82-13-13z'/%3E%3Cpath d='M147 32c0-6.08 4.92-11 11-11h22c6.08 0 11 4.92 11 11v10c0 6.08-4.92 11-11 11h-9l-8 8 1-8h-6c-6.08 0-11-4.92-11-11z'/%3E%3Cpath d='M42 156a16 16 0 1 0 0-.1zm0 0v18m-9-9h18'/%3E%3Cpath d='M158 142c0-8.28 6.72-15 15-15h9c8.28 0 15 6.72 15 15v18c0 8.28-6.72 15-15 15h-5l-8 9 2-9h-3c-8.28 0-15-6.72-15-15z'/%3E%3Cpath d='M110 90c0-9.39 7.61-17 17-17h9c9.39 0 17 7.61 17 17v20c0 9.39-7.61 17-17 17h-7l-10 11 2-11h-4c-9.39 0-17-7.61-17-17z'/%3E%3Cpath d='M82 108h10m-5-5v10'/%3E%3Cpath d='M174 92h10m-5-5v10'/%3E%3Ccircle cx='92' cy='45' r='4'/%3E%3Ccircle cx='121' cy='168' r='4'/%3E%3Cpath d='M69 188h14m-7-7v14'/%3E%3C/g%3E%3C/svg%3E"),
-        radial-gradient(circle at 24px 22px, rgba(111, 135, 120, 0.08) 1.1px, transparent 1.3px),
-        radial-gradient(circle at 78px 58px, rgba(111, 135, 120, 0.06) 1px, transparent 1.2px),
-        radial-gradient(circle at 112px 96px, rgba(111, 135, 120, 0.05) 1.2px, transparent 1.5px),
-        linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0) 44%),
-        linear-gradient(45deg, rgba(0,0,0,0.025), rgba(0,0,0,0) 36%);
-    background-size: 220px 220px, 128px 128px, 164px 164px, 196px 196px, 100% 100%, 100% 100%;
-    background-position: 0 calc(-1 * var(--wa-header-height)), 0 calc(-1 * var(--wa-header-height)), 0 calc(-1 * var(--wa-header-height)), 0 calc(-1 * var(--wa-header-height)), 0 calc(-1 * var(--wa-header-height)), 0 calc(-1 * var(--wa-header-height));
-    background-attachment: fixed, fixed, fixed, fixed, fixed, fixed;
     border-top: none;
-    position: absolute;
+    position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
@@ -1590,16 +1709,22 @@ body {
 
 .wa-composer-main {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     width: 100%;
     padding: 10px 14px;
     gap: 10px;
     min-height: var(--wa-composer-height);
+    height: auto;
     background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(17, 27, 33, 0.08);
     border-radius: 999px;
     box-shadow: 0 12px 26px rgba(17, 27, 33, 0.12);
     backdrop-filter: blur(10px);
+    transition: border-radius 0.16s ease;
+}
+
+.wa-composer-main.is-expanded {
+    border-radius: 28px;
 }
 
 .wa-voice-control {
@@ -1607,7 +1732,9 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    min-width: 42px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
 }
 
 #sttBtn .wa-mic-icon {
@@ -1637,17 +1764,19 @@ body {
 
 
 .wa-composer-input-wrapper {
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     align-items: stretch;
     flex-direction: column;
+    justify-content: center;
     background: transparent;
     border-radius: 999px;
     padding: 8px 4px;
     min-height: 44px;
-    max-height: 120px;
-    overflow: hidden;
+    height: auto;
+    overflow: visible;
     box-shadow: none;
+    align-self: stretch;
     position: relative;
     --wa-composer-highlight-top: 12px;
     --wa-composer-highlight-x: 4px;
@@ -1681,7 +1810,10 @@ body {
 }
 
 .wa-composer-input {
-    flex: 1;
+    flex: 0 0 auto;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
     border: none;
     background: transparent;
     color: var(--wa-text-primary);
@@ -1691,10 +1823,12 @@ body {
     outline: none;
     height: auto;
     min-height: 22px;
-    max-height: 70px;
+    max-height: 132px;
     padding: 4px 0;
     line-height: 21px;
-    overflow-y: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(91, 111, 102, 0.48) transparent;
     position: relative;
     z-index: 1;
 }
@@ -1706,6 +1840,19 @@ body {
 
 .wa-composer-input::placeholder {
     color: var(--wa-text-muted);
+}
+
+.wa-composer-input::-webkit-scrollbar {
+    width: 6px;
+}
+
+.wa-composer-input::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.wa-composer-input::-webkit-scrollbar-thumb {
+    background: rgba(91, 111, 102, 0.36);
+    border-radius: 999px;
 }
 
 .wa-send-btn {
@@ -1721,6 +1868,7 @@ body {
     justify-content: center;
     transition: background 0.18s ease, transform 0.18s ease;
     flex-shrink: 0;
+    align-self: flex-end;
     box-shadow: 0 2px 8px rgba(0, 128, 105, 0.16);
 }
 
@@ -1742,6 +1890,7 @@ body {
     justify-content: center;
     transition: transform 0.15s ease, border-color 0.15s ease;
     flex-shrink: 0;
+    align-self: flex-end;
     position: relative;
 }
 
@@ -1832,7 +1981,7 @@ body {
     }
 
     .wa-composer-main {
-        align-items: center;
+        align-items: flex-end;
         width: 100%;
         padding: 8px 12px;
         gap: 8px;
@@ -1865,7 +2014,9 @@ body {
     }
 
     .wa-voice-control {
-        min-width: 40px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
     }
 
     .wa-attachment-container,
@@ -1889,10 +2040,6 @@ body {
 
     .wa-voice-control {
         min-width: 40px;
-    }
-
-    .wa-send-btn {
-        align-self: center;
     }
 
     .wa-cancel-btn {

@@ -2,6 +2,7 @@ import { formatBytes, getFileIcon } from './fileHelpers.js';
 import { findMentionRanges } from './composerMentionHighlights.js';
 
 const ENABLE_SELECT_PAGINATION_ACTIONS = false;
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 4;
 
 function formatTime() {
     const date = new Date();
@@ -29,7 +30,48 @@ export function createMessages({
     let quickCommandHandler = typeof onQuickCommand === 'function' ? onQuickCommand : null;
     let typingStateHandler = typeof onTypingStateChange === 'function' ? onTypingStateChange : null;
     let speechDebounceTimer = null;
+    let autoScrollLocked = true;
+    let programmaticScroll = false;
+    let pendingProgressItems = [];
     const tableScrollHintBindings = new WeakMap();
+
+    function isScrolledToBottom() {
+        if (!chatList) {
+            return true;
+        }
+        const distanceFromBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight;
+        return distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+    }
+
+    function updateAutoScrollLockFromPosition() {
+        autoScrollLocked = isScrolledToBottom();
+    }
+
+    function scrollToBottomIfLocked() {
+        if (!chatList || !autoScrollLocked) {
+            return;
+        }
+        try {
+            programmaticScroll = true;
+            chatList.scrollTop = chatList.scrollHeight;
+        } catch (_) {
+            // Ignore scroll failures
+        } finally {
+            window.requestAnimationFrame(() => {
+                programmaticScroll = false;
+                updateAutoScrollLockFromPosition();
+            });
+        }
+    }
+
+    if (chatList) {
+        updateAutoScrollLockFromPosition();
+        chatList.addEventListener('scroll', () => {
+            if (!programmaticScroll) {
+                updateAutoScrollLockFromPosition();
+            }
+        }, { passive: true });
+    }
 
     function appendMessageEl(node) {
         if (!node || !chatList) {
@@ -52,21 +94,54 @@ export function createMessages({
 
     let typingActive = false;
 
+    function normalizeProgressItem(raw) {
+        if (!raw || typeof raw !== 'object') {
+            return null;
+        }
+        const reason = String(raw.reason || '').trim();
+        if (!reason) {
+            return null;
+        }
+        return {
+            reason,
+            tool: typeof raw.tool === 'string' ? raw.tool.trim() : '',
+            stepIndex: Number.isFinite(raw.stepIndex) ? raw.stepIndex : null
+        };
+    }
+
+    function renderTypingProgress() {
+        if (!typingIndicator) {
+            return;
+        }
+        const label = typingIndicator.querySelector('.wa-typing-label');
+        const list = typingIndicator.querySelector('.wa-typing-progress');
+        if (label) {
+            label.textContent = 'thinking';
+        }
+        if (!list) {
+            return;
+        }
+        list.replaceChildren();
+        pendingProgressItems.slice(-5).forEach((item) => {
+            const line = document.createElement('div');
+            line.className = 'wa-typing-progress-line';
+            line.textContent = item.reason;
+            list.appendChild(line);
+        });
+    }
+
     function showTypingIndicator() {
         if (!typingIndicator) {
             return;
         }
         typingActive = true;
+        renderTypingProgress();
         typingIndicator.classList.add('show');
         typingIndicator.setAttribute('aria-hidden', 'false');
         if (typingStateHandler) {
             typingStateHandler(true);
         }
-        try {
-            chatList.scrollTop = chatList.scrollHeight;
-        } catch (_) {
-            // Ignore scroll failures
-        }
+        scrollToBottomIfLocked();
     }
 
     function hideTypingIndicator(force = false) {
@@ -82,6 +157,21 @@ export function createMessages({
         if (typingStateHandler) {
             typingStateHandler(false);
         }
+    }
+
+    function addProgressEvent(raw) {
+        const item = normalizeProgressItem(raw);
+        if (!item) {
+            return false;
+        }
+        pendingProgressItems.push(item);
+        showTypingIndicator();
+        return true;
+    }
+
+    function resetProgressEvents() {
+        pendingProgressItems = [];
+        renderTypingProgress();
     }
 
     function renderMarkdown(text) {
@@ -871,6 +961,62 @@ export function createMessages({
         updateShortcutActions(bubble, safeText);
     }
 
+    function attachProgressPanel(bubble, progressItems) {
+        if (!bubble || !Array.isArray(progressItems) || !progressItems.length) {
+            return;
+        }
+        let panel = bubble.querySelector(':scope > .wa-progress-panel');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.className = 'wa-progress-panel is-collapsed';
+            const textContainer = bubble.querySelector('.wa-message-text');
+            if (textContainer) {
+                bubble.insertBefore(panel, textContainer);
+            } else {
+                bubble.prepend(panel);
+            }
+        }
+
+        panel.replaceChildren();
+        panel.classList.add('is-collapsed');
+
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'wa-progress-toggle';
+        toggle.setAttribute('aria-expanded', 'false');
+
+        const arrow = document.createElement('span');
+        arrow.className = 'wa-progress-arrow';
+        arrow.textContent = '▸';
+
+        const title = document.createElement('span');
+        title.className = 'wa-progress-title';
+        title.textContent = `${progressItems.length} step${progressItems.length === 1 ? '' : 's'} while thinking`;
+
+        toggle.appendChild(arrow);
+        toggle.appendChild(title);
+
+        const list = document.createElement('div');
+        list.className = 'wa-progress-list';
+
+        progressItems.forEach((item) => {
+            const line = document.createElement('div');
+            line.className = 'wa-progress-line';
+            line.textContent = item.reason;
+            list.appendChild(line);
+        });
+
+        toggle.onclick = () => {
+            const expanded = panel.classList.toggle('is-expanded');
+            panel.classList.toggle('is-collapsed', !expanded);
+            toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            arrow.textContent = expanded ? '▾' : '▸';
+        };
+
+        panel.appendChild(toggle);
+        panel.appendChild(list);
+    }
+
     function applyViewMoreSettingToAllBubbles() {
         if (!chatList) {
             return;
@@ -937,9 +1083,7 @@ export function createMessages({
             bubble.dataset.fullText = text;
         }
         appendMessageEl(wrapper);
-        if (chatList) {
-            chatList.scrollTop = chatList.scrollHeight;
-        }
+        scrollToBottomIfLocked();
         lastServerMsg.bubble = null;
     }
 
@@ -1044,9 +1188,7 @@ export function createMessages({
         wrapper.appendChild(bubble);
         sidePanel.bindLinkDelegation(bubble);
         appendMessageEl(wrapper);
-        if (chatList) {
-            chatList.scrollTop = chatList.scrollHeight;
-        }
+        scrollToBottomIfLocked();
         lastServerMsg.bubble = null;
 
         function ensureLinkNode(downloadUrl) {
@@ -1186,6 +1328,10 @@ export function createMessages({
             const combined = previousFullText ? `${previousFullText}\n${normalized}` : normalized;
             lastServerMsg.fullText = combined;
             updateBubbleContent(lastServerMsg.bubble, combined);
+            if (pendingProgressItems.length) {
+                attachProgressPanel(lastServerMsg.bubble, pendingProgressItems);
+                resetProgressEvents();
+            }
             scheduleSpeech(combined);
         } else {
             const wrapper = document.createElement('div');
@@ -1200,6 +1346,10 @@ export function createMessages({
             userInputSent = false;
 
             updateBubbleContent(bubble, normalized);
+            if (pendingProgressItems.length) {
+                attachProgressPanel(bubble, pendingProgressItems);
+                resetProgressEvents();
+            }
             const timeNode = bubble.querySelector('.wa-message-time');
             if (timeNode) {
                 timeNode.textContent = formatTime();
@@ -1208,9 +1358,7 @@ export function createMessages({
             scheduleSpeech(normalized);
         }
 
-        if (chatList) {
-            chatList.scrollTop = chatList.scrollHeight;
-        }
+        scrollToBottomIfLocked();
         return true;
     }
 
@@ -1218,6 +1366,7 @@ export function createMessages({
         addClientMsg,
         addClientAttachment,
         addServerMsg,
+        addProgressEvent,
         setLastServerMessageMeta,
         showTypingIndicator,
         hideTypingIndicator,
@@ -1232,6 +1381,7 @@ export function createMessages({
         },
         markUserInputSent: () => {
             userInputSent = true;
+            resetProgressEvents();
         },
         setServerSpeechHandler: (fn) => {
             serverSpeechHandler = typeof fn === 'function' ? fn : null;

@@ -11,7 +11,7 @@ import {
     probeContainerRuntime
 } from './common.js';
 import { clearLivenessState } from './healthProbes.js';
-import { stopBwrapProcess, stopAllBwrapProcesses, isBwrapProcessRunning } from '../bwrap/bwrapFleet.js';
+import { stopBwrapProcesses, isBwrapProcessRunning } from '../bwrap/bwrapFleet.js';
 
 function chunkArray(list, size = 8) {
     const chunks = [];
@@ -92,19 +92,28 @@ function stopConfiguredAgents({ fast = false } = {}) {
 
     // Handle sandbox (bwrap/seatbelt) agents first
     const bwrapStopped = [];
+    const bwrapEntries = [];
     const containerEntries = [];
     for (const [name, rec] of entries) {
         if (isSandboxRuntime(rec?.runtime)) {
             const agentName = rec.agentName || name;
             if (isBwrapProcessRunning(agentName)) {
-                stopBwrapProcess(agentName);
-                console.log(`[stop] Stopped ${agentName} (${rec.runtime})`);
-                bwrapStopped.push(name);
+                bwrapEntries.push({ name, agentName, runtime: rec.runtime });
             } else {
                 console.log(`[stop] ${agentName}: no running ${rec.runtime} process found.`);
             }
         } else {
             containerEntries.push([name, rec]);
+        }
+    }
+    if (bwrapEntries.length) {
+        const stoppedSandboxAgents = new Set(stopBwrapProcesses(bwrapEntries.map((entry) => entry.agentName), {
+            timeout: fast ? 100 : 5000
+        }));
+        for (const entry of bwrapEntries) {
+            if (!stoppedSandboxAgents.has(entry.agentName)) continue;
+            console.log(`[stop] Stopped ${entry.agentName} (${entry.runtime})`);
+            bwrapStopped.push(entry.name);
         }
     }
 
@@ -143,19 +152,24 @@ function stopAndRemoveMany(names, { fast = false } = {}) {
     const agents = loadAgents();
 
     // Handle sandbox (bwrap/seatbelt) agents first
-    const bwrapRemoved = [];
+    const bwrapEntries = [];
     const containerNames = [];
     for (const agentName of names) {
         if (!agentName) continue;
         const rec = agents ? agents[agentName] : null;
         if (isSandboxRuntime(rec?.runtime)) {
             const bwrapAgentName = rec.agentName || agentName;
-            stopBwrapProcess(bwrapAgentName);
-            bwrapRemoved.push(agentName);
+            bwrapEntries.push({ agentName, bwrapAgentName });
             continue;
         }
         containerNames.push(agentName);
     }
+    if (bwrapEntries.length) {
+        stopBwrapProcesses(bwrapEntries.map((entry) => entry.bwrapAgentName), {
+            timeout: fast ? 100 : 5000
+        });
+    }
+    const bwrapRemoved = bwrapEntries.map((entry) => entry.agentName);
 
     const removalSet = new Set();
     const runningSet = new Set();

@@ -22,6 +22,8 @@ Existing container reuse must compare both the resolved runtime environment and 
 
 The runtime may also execute agents through host sandbox backends when the manifest sets `lite-sandbox: true`, but host sandboxes are disabled by default per workspace. Operators must explicitly run `ploinky sandbox enable` to opt into host sandboxes; until then, manifests requesting `lite-sandbox: true` use the container runtime. Once enabled, Linux hosts must select `bwrap`; macOS hosts must select `seatbelt`; unsupported or misconfigured hosts must fail with operator guidance. Ploinky must not silently fall back from a requested host sandbox to containers when the operator has opted in. The environment variable `PLOINKY_DISABLE_HOST_SANDBOX=1` forces the disabled state regardless of workspace configuration.
 
+Host sandbox teardown must be batch-oriented when multiple sandboxed agents are stopped or destroyed. The runtime must send the graceful signal to every selected sandbox process group first, wait once against the shared deadline, and only then force-kill the remaining process groups before clearing their PID records. A slow or stuck sandboxed agent must not delay graceful signal delivery to the other sandboxed agents in the same stop or destroy operation.
+
 Each agent execution environment must expose the shared `Agent/` payload at `/Agent` for container backends or the equivalent runtime location for sandbox backends. If a manifest does not provide an explicit agent command, the runtime must fall back to `Agent/server/AgentServer.sh`, which supervises `AgentServer.mjs` and restarts it after exit.
 
 Code and skills mounts must be profile-aware. The active profile defaults to `dev`, where code and skills are writable unless overridden. In `qa` and `prod`, code and skills default to read-only unless the profile explicitly relaxes them. The profile merge order is `profiles.default` plus the selected profile overlay. Workspace-root write access must not bypass read-only code, dependency-cache, staged Agent library, or protected Ploinky state paths.
@@ -46,6 +48,11 @@ The repository already supports multiple deployment stances through `dev`, `qa`,
 
 Response:
 Host networking changes the agent's port surface, its DNS resolution, and the way siblings address it; that affects manifest content (no `-p` flags, no bridge aliases, sibling URL configuration) more than it affects the implementation. Modeling it as `network.mode: "host"` in the manifest keeps the choice declarative, visible to operators, reflected in the manifest registry, and reproducible across `podman` and `docker` runtimes without bespoke flags at the call site.
+
+### Question #4: Why does host sandbox teardown signal every process before waiting?
+
+Response:
+`stop`, `shutdown`, and `destroy` are workspace-level lifecycle operations. If Ploinky waited for each `bwrap` or Seatbelt process before signaling the next one, one stuck agent could keep the rest of the workspace running for the full timeout. Batch signaling gives every selected sandbox the same shutdown window and keeps the total wait bounded by one shared deadline.
 
 ## Conclusion
 

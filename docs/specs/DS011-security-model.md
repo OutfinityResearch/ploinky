@@ -118,6 +118,8 @@ Bubblewrap agents clear the environment and then set only the constructed enviro
 
 Seatbelt agents run with a generated deny-default SBPL profile. The profile allows system reads, network access, process execution, temporary writes, shared/workspace writes, profile-controlled code and skills writes, declared volumes, and logs. It denies writes to protected runtime paths, dependency caches, staged Agent libraries, `.secrets`, profile, routing, and server configuration. Because Seatbelt exposes real host paths rather than a mount namespace, its generated profile is the authoritative access-control layer.
 
+When multiple host-sandboxed agents are stopped or destroyed, Ploinky sends the graceful signal to every selected sandbox process group before waiting on the shared timeout. Any sandbox still alive after that deadline is force-killed and its PID record is cleared. This is a lifecycle bound, not an additional security boundary.
+
 Lifecycle hooks are trusted host or runtime code. `preinstall` runs on the host before container or sandbox creation and can seed workspace variables or files. Host lifecycle hooks are outside runtime sandbox protection. A manifest that defines hooks must therefore be trusted at the same level as a local script run by the operator.
 
 ### Files, Static Content, Uploads, and Blobs
