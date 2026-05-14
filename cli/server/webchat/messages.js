@@ -1,6 +1,7 @@
 import { formatBytes, getFileIcon } from './fileHelpers.js';
 
 const ENABLE_SELECT_PAGINATION_ACTIONS = false;
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 4;
 
 function formatTime() {
     const date = new Date();
@@ -28,7 +29,47 @@ export function createMessages({
     let quickCommandHandler = typeof onQuickCommand === 'function' ? onQuickCommand : null;
     let typingStateHandler = typeof onTypingStateChange === 'function' ? onTypingStateChange : null;
     let speechDebounceTimer = null;
+    let autoScrollLocked = true;
+    let programmaticScroll = false;
     const tableScrollHintBindings = new WeakMap();
+
+    function isScrolledToBottom() {
+        if (!chatList) {
+            return true;
+        }
+        const distanceFromBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight;
+        return distanceFromBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+    }
+
+    function updateAutoScrollLockFromPosition() {
+        autoScrollLocked = isScrolledToBottom();
+    }
+
+    function scrollToBottomIfLocked() {
+        if (!chatList || !autoScrollLocked) {
+            return;
+        }
+        try {
+            programmaticScroll = true;
+            chatList.scrollTop = chatList.scrollHeight;
+        } catch (_) {
+            // Ignore scroll failures
+        } finally {
+            window.requestAnimationFrame(() => {
+                programmaticScroll = false;
+                updateAutoScrollLockFromPosition();
+            });
+        }
+    }
+
+    if (chatList) {
+        updateAutoScrollLockFromPosition();
+        chatList.addEventListener('scroll', () => {
+            if (!programmaticScroll) {
+                updateAutoScrollLockFromPosition();
+            }
+        }, { passive: true });
+    }
 
     function appendMessageEl(node) {
         if (!node || !chatList) {
@@ -61,11 +102,7 @@ export function createMessages({
         if (typingStateHandler) {
             typingStateHandler(true);
         }
-        try {
-            chatList.scrollTop = chatList.scrollHeight;
-        } catch (_) {
-            // Ignore scroll failures
-        }
+        scrollToBottomIfLocked();
     }
 
     function hideTypingIndicator(force = false) {
@@ -876,9 +913,7 @@ export function createMessages({
             bubble.dataset.fullText = text;
         }
         appendMessageEl(wrapper);
-        if (chatList) {
-            chatList.scrollTop = chatList.scrollHeight;
-        }
+        scrollToBottomIfLocked();
         lastServerMsg.bubble = null;
     }
 
@@ -982,9 +1017,7 @@ export function createMessages({
         wrapper.appendChild(bubble);
         sidePanel.bindLinkDelegation(bubble);
         appendMessageEl(wrapper);
-        if (chatList) {
-            chatList.scrollTop = chatList.scrollHeight;
-        }
+        scrollToBottomIfLocked();
         lastServerMsg.bubble = null;
 
         function ensureLinkNode(downloadUrl) {
@@ -1146,9 +1179,7 @@ export function createMessages({
             scheduleSpeech(normalized);
         }
 
-        if (chatList) {
-            chatList.scrollTop = chatList.scrollHeight;
-        }
+        scrollToBottomIfLocked();
         return true;
     }
 

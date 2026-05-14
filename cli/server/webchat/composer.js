@@ -1,4 +1,6 @@
-const MAX_TEXTAREA_HEIGHT_PX = 72;
+const MIN_TEXTAREA_HEIGHT_PX = 22;
+const MAX_TEXTAREA_HEIGHT_PX = 132;
+const COMPOSER_BOTTOM_CLEARANCE_PX = 18;
 const INITIAL_FOCUS_DELAY_MS = 120;
 
 export function createComposer({ cmdInput, sendBtn, cancelBtn }, { purgeTriggerRe }) {
@@ -6,6 +8,21 @@ export function createComposer({ cmdInput, sendBtn, cancelBtn }, { purgeTriggerR
     let onPurge = null;
     let onCancel = null;
     let isProcessing = false;
+    const composerEl = cmdInput?.closest?.('.wa-composer') || null;
+    const composerMainEl = cmdInput?.closest?.('.wa-composer-main') || null;
+    let composerResizeObserver = null;
+
+    function updateComposerSpace() {
+        if (!composerEl) {
+            return;
+        }
+        try {
+            const nextSpace = Math.ceil(composerEl.offsetHeight + COMPOSER_BOTTOM_CLEARANCE_PX);
+            document.documentElement.style.setProperty('--wa-floating-composer-space', `${nextSpace}px`);
+        } catch (_) {
+            // ignore
+        }
+    }
 
     function focusAfterAction() {
         if (!cmdInput) {
@@ -46,8 +63,17 @@ export function createComposer({ cmdInput, sendBtn, cancelBtn }, { purgeTriggerR
         }
         try {
             cmdInput.style.height = 'auto';
-            const next = Math.min(MAX_TEXTAREA_HEIGHT_PX, Math.max(22, cmdInput.scrollHeight));
+            const scrollHeight = Math.ceil(cmdInput.scrollHeight);
+            const next = Math.min(MAX_TEXTAREA_HEIGHT_PX, Math.max(MIN_TEXTAREA_HEIGHT_PX, scrollHeight));
             cmdInput.style.height = `${next}px`;
+            cmdInput.style.overflowY = scrollHeight > MAX_TEXTAREA_HEIGHT_PX ? 'auto' : 'hidden';
+            if (composerMainEl) {
+                composerMainEl.classList.toggle('is-expanded', next > MIN_TEXTAREA_HEIGHT_PX + 8);
+            }
+            if (scrollHeight <= MAX_TEXTAREA_HEIGHT_PX) {
+                cmdInput.scrollTop = 0;
+            }
+            window.requestAnimationFrame(updateComposerSpace);
         } catch (_) {
             // ignore
         }
@@ -181,6 +207,7 @@ export function createComposer({ cmdInput, sendBtn, cancelBtn }, { purgeTriggerR
 
     if (cmdInput) {
         setTimeout(autoResize, 0);
+        updateComposerSpace();
         const scheduleInitialFocus = () => {
             setTimeout(() => {
                 focusInput();
@@ -188,6 +215,11 @@ export function createComposer({ cmdInput, sendBtn, cancelBtn }, { purgeTriggerR
         };
         scheduleInitialFocus();
         window.addEventListener('pageshow', scheduleInitialFocus);
+        window.addEventListener('resize', updateComposerSpace);
+        if (typeof ResizeObserver === 'function' && composerEl) {
+            composerResizeObserver = new ResizeObserver(updateComposerSpace);
+            composerResizeObserver.observe(composerEl);
+        }
         cmdInput.addEventListener('input', () => {
             autoResize();
             if (purgeTriggerRe.test(cmdInput.value)) {

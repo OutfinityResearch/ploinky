@@ -1615,16 +1615,22 @@ body {
 
 .wa-composer-main {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     width: 100%;
     padding: 10px 14px;
     gap: 10px;
     min-height: var(--wa-composer-height);
+    height: auto;
     background: rgba(255, 255, 255, 0.96);
     border: 1px solid rgba(17, 27, 33, 0.08);
     border-radius: 999px;
     box-shadow: 0 12px 26px rgba(17, 27, 33, 0.12);
     backdrop-filter: blur(10px);
+    transition: border-radius 0.16s ease;
+}
+
+.wa-composer-main.is-expanded {
+    border-radius: 28px;
 }
 
 .wa-voice-control {
@@ -1662,21 +1668,26 @@ body {
 
 
 .wa-composer-input-wrapper {
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     align-items: stretch;
     flex-direction: column;
+    justify-content: center;
     background: transparent;
     border-radius: 999px;
     padding: 8px 4px;
     min-height: 44px;
-    max-height: 120px;
-    overflow: hidden;
+    height: auto;
+    overflow: visible;
     box-shadow: none;
+    align-self: stretch;
 }
 
 .wa-composer-input {
-    flex: 1;
+    flex: 0 0 auto;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
     border: none;
     background: transparent;
     color: var(--wa-text-primary);
@@ -1686,14 +1697,29 @@ body {
     outline: none;
     height: auto;
     min-height: 22px;
-    max-height: 70px;
+    max-height: 132px;
     padding: 4px 0;
     line-height: 21px;
-    overflow-y: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(91, 111, 102, 0.48) transparent;
 }
 
 .wa-composer-input::placeholder {
     color: var(--wa-text-muted);
+}
+
+.wa-composer-input::-webkit-scrollbar {
+    width: 6px;
+}
+
+.wa-composer-input::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.wa-composer-input::-webkit-scrollbar-thumb {
+    background: rgba(91, 111, 102, 0.36);
+    border-radius: 999px;
 }
 
 .wa-send-btn {
@@ -1709,6 +1735,7 @@ body {
     justify-content: center;
     transition: background 0.18s ease, transform 0.18s ease;
     flex-shrink: 0;
+    align-self: flex-end;
     box-shadow: 0 2px 8px rgba(0, 128, 105, 0.16);
 }
 
@@ -1730,6 +1757,7 @@ body {
     justify-content: center;
     transition: transform 0.15s ease, border-color 0.15s ease;
     flex-shrink: 0;
+    align-self: flex-end;
     position: relative;
 }
 
@@ -1811,7 +1839,7 @@ body {
     }
 
     .wa-composer-main {
-        align-items: center;
+        align-items: flex-end;
         width: 100%;
         padding: 8px 12px;
         gap: 8px;
@@ -1864,10 +1892,6 @@ body {
 
     .wa-voice-control {
         min-width: 40px;
-    }
-
-    .wa-send-btn {
-        align-self: center;
     }
 
     .wa-cancel-btn {
