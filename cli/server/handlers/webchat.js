@@ -6,6 +6,10 @@ import { resolveWebchatCommandsForAgent } from '../webchat/commandResolver.js';
 import { parseCookies, buildCookie, appendSetCookie, parseMultipartFormData } from './common.js';
 import * as staticSrv from '../static/index.js';
 import { WORKSPACE_ROOT } from '../../services/config.js';
+import {
+    getWorkspaceRoot,
+    resolveWorkspacePath
+} from '../utils/workspacePaths.js';
 import { createServerTtsStrategy } from './ttsStrategies/index.js';
 import { buildInvocationContextForProviderCall } from '../mcp-proxy/index.js';
 import {
@@ -103,13 +107,14 @@ function parseInputEnvelope(rawBody) {
         if (parsed && parsed.__webchatMessage && typeof parsed === 'object') {
             return {
                 text: typeof parsed.text === 'string' ? parsed.text : '',
-                attachments: Array.isArray(parsed.attachments) ? parsed.attachments : []
+                attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
+                references: sanitizeWebchatReferencesForEnvelope(parsed.references)
             };
         }
     } catch (_) {
         // Fall back to plain text input.
     }
-    return { text: fallbackText, attachments: [] };
+    return { text: fallbackText, attachments: [], references: [] };
 }
 
 function sanitizeWebchatAttachmentsForEnvelope(attachments = []) {
@@ -127,6 +132,33 @@ function sanitizeWebchatAttachmentsForEnvelope(attachments = []) {
         : [];
 }
 
+const REFERENCE_SECRET_RE = /(^|\/)\.secrets$|\.secrets$/i;
+
+function sanitizeWebchatReferencesForEnvelope(references = []) {
+    if (!Array.isArray(references)) return [];
+    const out = [];
+    for (const entry of references) {
+        if (!entry || typeof entry !== 'object') continue;
+        const kind = typeof entry.kind === 'string' ? entry.kind.trim() : '';
+        const refPath = typeof entry.path === 'string' ? entry.path.trim() : '';
+        if (!kind || !refPath) continue;
+        if (refPath.includes('\0')) continue;
+        if (kind === 'workspace-path') {
+            const normalized = refPath.replace(/\\+/g, '/');
+            if (normalized.startsWith('/')) continue;
+            if (normalized.includes('..')) continue;
+            if (REFERENCE_SECRET_RE.test(normalized)) continue;
+            out.push({
+                kind,
+                path: normalized,
+                type: typeof entry.type === 'string' && entry.type ? entry.type : null,
+                label: typeof entry.label === 'string' && entry.label ? entry.label : null
+            });
+        }
+    }
+    return out;
+}
+
 function buildWebchatInvocationToken({ req, effectiveConfig, tabId, envelope }) {
     const agentName = String(effectiveConfig?.agentName || '').trim();
     if (!agentName) {
@@ -141,7 +173,8 @@ function buildWebchatInvocationToken({ req, effectiveConfig, tabId, envelope }) 
                 surface: 'webchat',
                 tabId: String(tabId || ''),
                 text: typeof envelope?.text === 'string' ? envelope.text : '',
-                attachments: sanitizeWebchatAttachmentsForEnvelope(envelope?.attachments)
+                attachments: sanitizeWebchatAttachmentsForEnvelope(envelope?.attachments),
+                references: sanitizeWebchatReferencesForEnvelope(envelope?.references)
             }
         });
         return invocation?.token || '';
@@ -151,12 +184,16 @@ function buildWebchatInvocationToken({ req, effectiveConfig, tabId, envelope }) 
 }
 
 function serializeWebchatEnvelopeForAgent({ req, effectiveConfig, tabId, envelope, fallbackText = '' }) {
+    const sanitizedReferences = sanitizeWebchatReferencesForEnvelope(envelope?.references);
     const payload = {
         __webchatMessage: 1,
         version: 1,
         text: (envelope && typeof envelope.text === 'string') ? envelope.text : String(fallbackText || ''),
         attachments: sanitizeWebchatAttachmentsForEnvelope(envelope?.attachments)
     };
+    if (sanitizedReferences.length) {
+        payload.references = sanitizedReferences;
+    }
     const token = buildWebchatInvocationToken({
         req,
         effectiveConfig,
@@ -237,6 +274,195 @@ function resolveWebchatLaunchOptions(parsedUrl) {
     return {
         cliArgs
     };
+}
+
+const RESERVED_SECRET_PATH_RE = /(^|\/)\.secrets$|\.secrets$/i;
+const MAX_SUGGESTION_RESULTS = 30;
+
+function isReservedSecretPath(relativePath) {
+    const candidate = String(relativePath || '').replace(/^\/+/, '');
+    if (!candidate) return false;
+    if (candidate === '.secrets' || candidate.endsWith('/.secrets')) return true;
+    if (RESERVED_SECRET_PATH_RE.test(candidate)) return true;
+    return false;
+}
+
+export function sanitizeSuggestionQuery(rawQuery) {
+    const raw = String(rawQuery || '').trim();
+    if (!raw) return { folder: '', leaf: '' };
+    if (raw.includes('\0')) return null;
+    const normalized = raw.replace(/\\+/g, '/');
+    if (normalized.startsWith('/')) return null;
+    if (normalized.split('/').some((segment) => segment === '..')) return null;
+    const lastSlash = normalized.lastIndexOf('/');
+    if (lastSlash === -1) {
+        return { folder: '', leaf: normalized };
+    }
+    return {
+        folder: normalized.slice(0, lastSlash),
+        leaf: normalized.slice(lastSlash + 1)
+    };
+}
+
+export function resolveWebchatWorkspaceBase(parsedUrl) {
+    const configuredRoot = getWorkspaceRoot();
+    let workspaceRoot = configuredRoot;
+    try {
+        workspaceRoot = fs.realpathSync(configuredRoot);
+    } catch (_) {
+        workspaceRoot = path.resolve(configuredRoot);
+    }
+    const rawWorkspaceDir = parsedUrl.searchParams.get('workspace-dir')
+        || parsedUrl.searchParams.get('workspaceDir')
+        || '';
+    if (rawWorkspaceDir) {
+        try {
+            const resolved = resolveWorkspacePath(rawWorkspaceDir, { workspaceRoot });
+            const relativeBase = path.relative(workspaceRoot, resolved);
+            return { root: workspaceRoot, base: resolved, relativeBase };
+        } catch (_) {
+            return { root: workspaceRoot, base: workspaceRoot, relativeBase: '' };
+        }
+    }
+    const rawCompatDir = parsedUrl.searchParams.get('dir') || '';
+    if (rawCompatDir) {
+        try {
+            const resolved = resolveWorkspacePath(rawCompatDir, {
+                workspaceRoot,
+                leadingSlashIsWorkspaceRelative: false
+            });
+            const relativeBase = path.relative(workspaceRoot, resolved);
+            return { root: workspaceRoot, base: resolved, relativeBase };
+        } catch (_) {
+            return { root: workspaceRoot, base: workspaceRoot, relativeBase: '' };
+        }
+    }
+    return { root: workspaceRoot, base: workspaceRoot, relativeBase: '' };
+}
+
+export function listWorkspaceSuggestions({
+    workspaceRoot,
+    base,
+    folder,
+    leaf,
+    limit = MAX_SUGGESTION_RESULTS
+} = {}) {
+    const safeRoot = workspaceRoot ? path.resolve(workspaceRoot) : getWorkspaceRoot();
+    const safeBase = base ? path.resolve(base) : safeRoot;
+    if (!safeRoot) return { ok: false, items: [], error: 'workspace_unavailable' };
+    const folderRelative = folder ? folder.replace(/\\+/g, '/').replace(/^\/+/, '') : '';
+    let scanDir;
+    try {
+        scanDir = folderRelative
+            ? resolveWorkspacePath(path.join(safeBase, folderRelative), { workspaceRoot: safeRoot })
+            : safeBase;
+    } catch (_) {
+        return { ok: true, items: [] };
+    }
+    let entries;
+    try {
+        entries = fs.readdirSync(scanDir, { withFileTypes: true });
+    } catch (_) {
+        return { ok: true, items: [] };
+    }
+    const leafLower = leaf ? leaf.toLowerCase() : '';
+    const candidates = [];
+    for (const entry of entries) {
+        const name = entry.name;
+        if (!name || name === '.' || name === '..') continue;
+        if (name.startsWith('.')) {
+            if (name === '.ploinky' || name === '.git') continue;
+            if (isReservedSecretPath(name)) continue;
+        }
+        if (isReservedSecretPath(name)) continue;
+        if (leafLower && !name.toLowerCase().includes(leafLower)) continue;
+
+        const absolute = path.join(scanDir, name);
+        let stat;
+        try {
+            stat = fs.lstatSync(absolute);
+        } catch (_) {
+            continue;
+        }
+        if (stat.isSymbolicLink()) {
+            try {
+                const real = fs.realpathSync(absolute);
+                const rel = path.relative(safeRoot, real);
+                if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
+            } catch (_) {
+                continue;
+            }
+        }
+        const isDir = stat.isDirectory();
+        const relativeFromRoot = path.relative(safeRoot, absolute).replace(/\\+/g, '/');
+        const relativeFromBase = path.relative(safeBase, absolute).replace(/\\+/g, '/');
+        if (isReservedSecretPath(relativeFromRoot)) continue;
+        candidates.push({
+            kind: isDir ? 'folder' : 'file',
+            label: name,
+            path: relativeFromBase,
+            relativePath: relativeFromBase,
+            workspacePath: relativeFromRoot,
+            size: !isDir && Number.isFinite(stat.size) ? stat.size : null,
+            mtimeMs: Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : null
+        });
+        if (candidates.length >= limit * 2) break;
+    }
+    candidates.sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+        return a.label.localeCompare(b.label);
+    });
+    return { ok: true, items: candidates.slice(0, limit) };
+}
+
+function handleSuggestionsFiles(req, res, parsedUrl) {
+    const queryRaw = parsedUrl.searchParams.get('query') || '';
+    const sanitized = sanitizeSuggestionQuery(queryRaw);
+    if (sanitized === null) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify({ ok: false, error: 'invalid_query' }));
+    }
+    const limitRaw = parsedUrl.searchParams.get('limit');
+    const limitNum = limitRaw ? Math.min(MAX_SUGGESTION_RESULTS, Math.max(1, Number(limitRaw) | 0)) : MAX_SUGGESTION_RESULTS;
+    const baseRaw = parsedUrl.searchParams.get('base') || '';
+    const baseSanitized = sanitizeSuggestionQuery(baseRaw);
+    if (baseSanitized === null) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify({ ok: false, error: 'invalid_base' }));
+    }
+    const baseContext = resolveWebchatWorkspaceBase(parsedUrl);
+    let effectiveBase = baseContext.base;
+    if (baseSanitized.folder || baseSanitized.leaf) {
+        try {
+            const combined = baseSanitized.folder
+                ? path.join(baseSanitized.folder, baseSanitized.leaf || '')
+                : (baseSanitized.leaf || '');
+            effectiveBase = combined
+                ? resolveWorkspacePath(path.join(baseContext.base, combined), { workspaceRoot: baseContext.root })
+                : baseContext.base;
+        } catch (_) {
+            res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+            return res.end(JSON.stringify({ ok: false, error: 'invalid_base' }));
+        }
+    }
+    const result = listWorkspaceSuggestions({
+        workspaceRoot: baseContext.root,
+        base: effectiveBase,
+        folder: sanitized.folder,
+        leaf: sanitized.leaf,
+        limit: limitNum
+    });
+    if (!result.ok) {
+        res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify({ ok: false, error: result.error || 'lookup_failed' }));
+    }
+    const relativeBase = path.relative(baseContext.root, effectiveBase).replace(/\\+/g, '/');
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({
+        ok: true,
+        root: relativeBase,
+        items: result.items
+    }));
 }
 
 function handleTranscriptAssistantLine(tab, rawLine) {
@@ -784,6 +1010,10 @@ async function handleWebChat(req, res, appConfig, appState) {
         return handleRealtimeToken(req, res);
     }
 
+    if (pathname === '/suggestions/files' && (req.method === 'GET' || req.method === 'HEAD')) {
+        return handleSuggestionsFiles(req, res, parsedUrl);
+    }
+
     if (pathname === '/' || pathname === '/index.html') {
         const html = renderTemplate(['chat.html', 'index.html'], {
             '__ASSET_BASE__': `/${appName}/assets`,
@@ -1003,14 +1233,20 @@ async function handleWebChat(req, res, appConfig, appState) {
             let envelope;
             try {
                 envelope = parseInputEnvelope(body);
-                if (tab.transcript && (String(envelope.text || '').trim() || (Array.isArray(envelope.attachments) && envelope.attachments.length))) {
+                const hasReferences = Array.isArray(envelope.references) && envelope.references.length > 0;
+                if (tab.transcript && (
+                    String(envelope.text || '').trim()
+                    || (Array.isArray(envelope.attachments) && envelope.attachments.length)
+                    || hasReferences
+                )) {
                     const turnId = crypto.randomUUID();
                     const created = appendTranscriptMessage(tab.transcript.conversationId, {
                         role: 'user',
                         text: envelope.text,
                         attachments: envelope.attachments,
                         metadata: {
-                            turnId
+                            turnId,
+                            references: hasReferences ? envelope.references : undefined
                         }
                     });
                     tab.transcript.lastClientText = String(envelope.text || '');
@@ -1061,5 +1297,7 @@ export {
     handleWebChat,
     resolveWebchatLaunchOptions,
     serializeWebchatEnvelopeForAgent,
-    resolveWorkspaceScopedQueryPath
+    resolveWorkspaceScopedQueryPath,
+    sanitizeWebchatReferencesForEnvelope,
+    parseInputEnvelope
 };

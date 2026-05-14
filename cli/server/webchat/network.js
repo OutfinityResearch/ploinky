@@ -2,6 +2,8 @@ const PROCESS_PREFIX_RE = /^(?:\s*\.+\s*){3,}/;
 const ENVELOPE_FLAG = '__webchatMessage';
 const ENVELOPE_VERSION = 1;
 
+export const __testables = {};
+
 function stripCtrlAndAnsi(input) {
     try {
         let out = input || '';
@@ -40,7 +42,21 @@ function stripProcessingPrefix(text) {
     return text.slice(match[0].length);
 }
 
-function serializeEnvelope({ text = '', attachments = [] } = {}) {
+function normalizeClientReference(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const kind = typeof raw.kind === 'string' ? raw.kind.trim() : '';
+    const refPath = typeof raw.path === 'string' ? raw.path.trim() : '';
+    if (!kind || !refPath) return null;
+    if (refPath.includes('\0')) return null;
+    return {
+        kind,
+        path: refPath,
+        type: typeof raw.type === 'string' ? raw.type.trim() : null,
+        label: typeof raw.label === 'string' ? raw.label.trim() : null
+    };
+}
+
+function serializeEnvelope({ text = '', attachments = [], references = [] } = {}) {
     const normalizedAttachments = Array.isArray(attachments)
         ? attachments.map((raw) => {
             if (!raw || typeof raw !== 'object') {
@@ -59,13 +75,25 @@ function serializeEnvelope({ text = '', attachments = [] } = {}) {
         }).filter(Boolean)
         : [];
 
-    return JSON.stringify({
+    const normalizedReferences = Array.isArray(references)
+        ? references.map(normalizeClientReference).filter(Boolean)
+        : [];
+
+    const payload = {
         [ENVELOPE_FLAG]: ENVELOPE_VERSION,
         version: ENVELOPE_VERSION,
         text: typeof text === 'string' ? text : '',
         attachments: normalizedAttachments
-    });
+    };
+    if (normalizedReferences.length) {
+        payload.references = normalizedReferences;
+    }
+    return JSON.stringify(payload);
 }
+
+Object.assign(__testables, { serializeEnvelope, normalizeClientReference });
+
+export { serializeEnvelope, normalizeClientReference };
 
 export function createNetwork({
     TAB_ID,
@@ -300,7 +328,8 @@ export function createNetwork({
     function postEnvelope(payload = {}) {
         const text = typeof payload.text === 'string' ? payload.text : '';
         const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
-        const serialized = serializeEnvelope({ text, attachments });
+        const references = Array.isArray(payload.references) ? payload.references : [];
+        const serialized = serializeEnvelope({ text, attachments, references });
         const trimmedEnvelope = serialized.trim();
         const trimmedText = text.trim();
 
@@ -333,10 +362,11 @@ export function createNetwork({
         });
     }
 
-    function sendCommand(cmd) {
+    function sendCommand(cmd, options = {}) {
         const message = typeof cmd === 'string' ? cmd : '';
+        const references = Array.isArray(options?.references) ? options.references : [];
         addClientMsg(message);
-        postEnvelope({ text: message });
+        postEnvelope({ text: message, references });
         if (pendingUploads === 0) {
             showTypingIndicator();
         }
@@ -451,13 +481,14 @@ export function createNetwork({
             });
     }
 
-    function sendAttachments(fileSelections, caption) {
+    function sendAttachments(fileSelections, caption, options = {}) {
         const selections = Array.isArray(fileSelections) ? fileSelections : [];
         const text = typeof caption === 'string' ? caption : '';
+        const references = Array.isArray(options?.references) ? options.references : [];
 
         if (!selections.length) {
             if (text.trim()) {
-                sendCommand(text);
+                sendCommand(text, { references });
             }
             return;
         }
@@ -481,7 +512,7 @@ export function createNetwork({
                 return;
             }
 
-            postEnvelope({ text, attachments });
+            postEnvelope({ text, attachments, references });
         }).catch(() => {
             // Individual upload rejections already handled with UI feedback.
         });

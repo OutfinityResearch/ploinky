@@ -85,6 +85,16 @@ export function initDom() {
     const ttsProvider = (body.dataset.ttsProvider || '').trim().toLowerCase();
     const sttProvider = (body.dataset.sttProvider || '').trim().toLowerCase();
 
+    const launchConfig = {};
+    try {
+        const params = new URLSearchParams(window.location.search || '');
+        for (const [key, value] of params.entries()) {
+            launchConfig[String(key).trim()] = String(value);
+        }
+    } catch (_) {
+        // Ignore URL parsing issues; providers fall back to empty config.
+    }
+
     const appTitle = displayName || agentName || 'WebChat';
     if (titleBar) {
         titleBar.textContent = appTitle;
@@ -205,6 +215,7 @@ export function initDom() {
         displayName: appTitle,
         ttsProvider,
         sttProvider,
+        launchConfig,
         toEndpoint,
         showBanner,
         hideBanner,

@@ -6,7 +6,11 @@ import { initSpeechToText } from './speechToText.js';
 import { initTextToSpeech } from './textToSpeech.js';
 import { createNetwork } from './network.js';
 import { createUploader } from './upload.js';
-import { createSlashAutocomplete } from './slashAutocomplete.js';
+import { createComposerAutocomplete } from './composerAutocomplete.js';
+import { createSlashCommandsProvider } from './autocompleteProviders/slashCommands.js';
+import { createTagCatalogProvider } from './autocompleteProviders/tagCatalog.js';
+import { createWorkspacePathsProvider } from './autocompleteProviders/workspacePaths.js';
+import { createAutocompleteState } from './autocompleteState.js';
 
 const SEND_TRIGGER_RE = /\bsend\b/i;
 const PURGE_TRIGGER_RE = /\bpurge\b/i;
@@ -127,19 +131,37 @@ const composer = createComposer({
     purgeTriggerRe: PURGE_TRIGGER_RE
 });
 
-const slashAutocomplete = createSlashAutocomplete({
+const autocompleteState = createAutocompleteState();
+
+const slashProvider = createSlashCommandsProvider({
+    agentName: dom.agentName,
+    dlog
+});
+const tagCatalogProvider = createTagCatalogProvider({
+    agentName: dom.agentName,
+    launchConfig: dom.launchConfig || {},
+    dlog
+});
+const workspacePathsProvider = createWorkspacePathsProvider({
+    basePath,
+    state: autocompleteState,
+    dlog
+});
+
+const composerAutocomplete = createComposerAutocomplete({
     cmdInput
 }, {
-    agentName: dom.agentName,
+    providers: [slashProvider, tagCatalogProvider, workspacePathsProvider],
     dlog
 });
 
 if (cmdInput) {
     cmdInput.addEventListener('keydown', (event) => {
-        if (slashAutocomplete.handleKeydown(event)) return;
+        if (composerAutocomplete.handleKeydown(event)) return;
     }, true);
     cmdInput.addEventListener('input', () => {
-        slashAutocomplete.onInputChange();
+        autocompleteState.pruneByText(cmdInput.value || '');
+        composerAutocomplete.onInputChange();
     });
 }
 
@@ -558,15 +580,19 @@ if (logoutBtn) {
 composer.setSendHandler((cmdText) => {
     const cmd = cmdText.trim();
     const fileSelections = uploader.getSelectedFiles();
+    autocompleteState.pruneByText(cmdText || '');
+    const references = autocompleteState.snapshot();
 
     if (fileSelections.length) {
-        network.sendAttachments(fileSelections, cmd);
+        network.sendAttachments(fileSelections, cmd, { references });
         uploader.clearFiles();
+        autocompleteState.clear();
         return true;
     }
 
     if (cmd) {
-        network.sendCommand(cmd);
+        network.sendCommand(cmd, { references });
+        autocompleteState.clear();
         return true;
     }
 
@@ -648,7 +674,7 @@ document.addEventListener('keydown', (event) => {
             return;
         }
     }
-    slashAutocomplete.fetchCommandCatalog();
+    composerAutocomplete.refresh();
 })();
 
 network.start();
