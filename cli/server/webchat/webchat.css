@@ -1638,7 +1638,9 @@ body {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    min-width: 42px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
 }
 
 #sttBtn .wa-mic-icon {
@@ -1872,7 +1874,9 @@ body {
     }
 
     .wa-voice-control {
-        min-width: 40px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
     }
 
     .wa-attachment-container,
