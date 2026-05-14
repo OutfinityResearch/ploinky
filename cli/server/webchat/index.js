@@ -113,6 +113,7 @@ const network = createNetwork({
     addClientMsg: messages.addClientMsg,
     addClientAttachment: messages.addClientAttachment,
     addServerMsg: messages.addServerMsg,
+    addProgressEvent: messages.addProgressEvent,
     setLastServerMessageMeta: messages.setLastServerMessageMeta,
     showTypingIndicator: messages.showTypingIndicator,
     hideTypingIndicator: messages.hideTypingIndicator,

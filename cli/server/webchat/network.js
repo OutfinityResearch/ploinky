@@ -1,5 +1,6 @@
 const PROCESS_PREFIX_RE = /^(?:\s*\.+\s*){3,}/;
 const ENVELOPE_FLAG = '__webchatMessage';
+const PROGRESS_FLAG = '__webchatProgress';
 const ENVELOPE_VERSION = 1;
 
 function stripCtrlAndAnsi(input) {
@@ -67,6 +68,27 @@ function serializeEnvelope({ text = '', attachments = [] } = {}) {
     });
 }
 
+function parseProgressEnvelope(text) {
+    const normalized = String(text || '').trim();
+    if (!normalized || !normalized.includes(`"${PROGRESS_FLAG}"`)) {
+        return null;
+    }
+    try {
+        const payload = JSON.parse(normalized);
+        if (!payload || !payload[PROGRESS_FLAG]) {
+            return null;
+        }
+        return {
+            type: typeof payload.type === 'string' ? payload.type : '',
+            tool: typeof payload.tool === 'string' ? payload.tool : '',
+            reason: typeof payload.reason === 'string' ? payload.reason : '',
+            stepIndex: Number.isFinite(payload.stepIndex) ? payload.stepIndex : null
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
 export function createNetwork({
     TAB_ID,
     toEndpoint,
@@ -80,6 +102,7 @@ export function createNetwork({
     addClientMsg,
     addClientAttachment,
     addServerMsg,
+    addProgressEvent,
     setLastServerMessageMeta,
     showTypingIndicator,
     hideTypingIndicator,
@@ -121,6 +144,16 @@ export function createNetwork({
         const stripped = stripProcessingPrefix(text);
 
         const normalized = stripped.trim();
+
+        const progress = parseProgressEnvelope(normalized);
+        if (progress) {
+            if (typeof addProgressEvent === 'function') {
+                addProgressEvent(progress);
+            } else {
+                showTypingIndicator();
+            }
+            return;
+        }
 
         // Check if this looks like an envelope echo - filter it out
         // Envelopes can start with { or [ or other characters depending on how they're echoed
