@@ -53,12 +53,15 @@ function suggestionRecord(item, { state, basePath, dlog }) {
     const kind = item.kind === 'folder' ? 'folder' : 'file';
     const relativePath = String(item.path || '').replace(/^\/+/, '');
     const label = String(item.label || relativePath);
+    const displayPath = String(item.displayPath || relativePath || label).replace(/^\/+/, '');
     const description = kind === 'folder' ? 'Folder' : 'File';
     const token = `@file:${relativePath}`;
     return {
-        label: kind === 'folder' ? `${label}/` : label,
+        label: kind === 'folder'
+            ? `${displayPath.replace(/\/+$/, '')}/`
+            : (displayPath || label),
         description,
-        group: kind === 'folder' ? 'Folders' : 'Files',
+        group: 'Files and folders',
         keepMenuOpen: kind === 'folder',
         applySelection: (current, triggerInfo) => applyWorkspacePathSelectionToValue(current, relativePath, kind, triggerInfo),
         onSelected: () => {
@@ -134,8 +137,10 @@ export function createWorkspacePathsProvider({ basePath, state, dlog } = {}) {
         const leafLower = parsed.leaf ? parsed.leaf.toLowerCase() : '';
         const matches = cachedItems.filter((item) => {
             const label = String(item?.label || '');
+            const displayPath = String(item?.displayPath || item?.path || '');
             if (!leafLower) return true;
-            return label.toLowerCase().includes(leafLower);
+            return label.toLowerCase().includes(leafLower)
+                || displayPath.toLowerCase().includes(leafLower);
         });
         return matches.map((item) => suggestionRecord(item, { state, basePath, dlog }));
     }
@@ -148,7 +153,7 @@ export function createWorkspacePathsProvider({ basePath, state, dlog } = {}) {
 
     return {
         trigger: '@',
-        groupLabel: 'Files',
+        groupLabel: 'Files and folders',
         getSuggestions,
         requestSuggestions
     };

@@ -297,7 +297,7 @@ No Ploinky core file may name the research relay or active research tags.
     - open:
 
       ```text
-      /webchat?agent=achilles-cli&research-tags=1&forward-envelope=1&tag-relay-agent=researchRelay&tag-relay-submit-tool=research_task_submit&tag-relay-list-tool=research_relay_list_backends&tag-relay-tags=open-interpreter,oi&workspace-dir=<test-dir>
+      /webchat?agent=achilles-cli&research-tags=1&forward-envelope=1&tag-relay-agent=researchRelay&tag-relay-submit-tool=research_task_submit&tag-relay-list-tool=research_relay_list_backends&tag-relay-tags=open-interpreter&workspace-dir=<test-dir>
       ```
 
     - type `@` and verify:

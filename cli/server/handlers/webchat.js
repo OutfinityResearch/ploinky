@@ -26,6 +26,8 @@ const __dirname = path.dirname(__filename);
 const appName = 'webchat';
 const fallbackAppPath = path.join(__dirname, '../', appName);
 const SID_COOKIE = `${appName}_sid`;
+const STREAM_RECONNECT_GRACE_MS = 120000;
+const MAX_PENDING_SSE_EVENTS = 200;
 
 const DEFAULT_TTS_PROVIDER = (process.env.WEBCHAT_TTS_PROVIDER || 'browser').trim().toLowerCase();
 const DEFAULT_STT_PROVIDER = (process.env.WEBCHAT_STT_PROVIDER || 'browser').trim().toLowerCase();
@@ -278,6 +280,8 @@ function resolveWebchatLaunchOptions(parsedUrl) {
 
 const RESERVED_SECRET_PATH_RE = /(^|\/)\.secrets$|\.secrets$/i;
 const MAX_SUGGESTION_RESULTS = 30;
+const SUGGESTION_SEARCH_MAX_DEPTH = 4;
+const SUGGESTION_SEARCH_MAX_DIRS = 400;
 
 function isReservedSecretPath(relativePath) {
     const candidate = String(relativePath || '').replace(/^\/+/, '');
@@ -285,6 +289,165 @@ function isReservedSecretPath(relativePath) {
     if (candidate === '.secrets' || candidate.endsWith('/.secrets')) return true;
     if (RESERVED_SECRET_PATH_RE.test(candidate)) return true;
     return false;
+}
+
+function shouldSkipSuggestionEntry(name) {
+    if (!name || name === '.' || name === '..') return true;
+    if (name === '.ploinky' || name === 'node_modules') return true;
+    return isReservedSecretPath(name);
+}
+
+function shouldDescendSuggestionDirectory(name) {
+    if (name === '.git') return false;
+    return !shouldSkipSuggestionEntry(name);
+}
+
+function isRelativeInside(relativePath) {
+    return Boolean(relativePath) && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+}
+
+function readSuggestionStat(absolute, safeRoot) {
+    let stat;
+    try {
+        stat = fs.lstatSync(absolute);
+    } catch (_) {
+        return null;
+    }
+    if (stat.isSymbolicLink()) {
+        try {
+            const real = fs.realpathSync(absolute);
+            const rel = path.relative(safeRoot, real);
+            if (!isRelativeInside(rel) && rel !== '') return null;
+        } catch (_) {
+            return null;
+        }
+    }
+    return stat;
+}
+
+function buildWorkspaceSuggestion({ safeRoot, safeBase, absolute, name, stat, displayPath = '' }) {
+    const relativeFromRoot = path.relative(safeRoot, absolute).replace(/\\+/g, '/');
+    const relativeFromBase = path.relative(safeBase, absolute).replace(/\\+/g, '/');
+    if (!isRelativeInside(relativeFromRoot) || !isRelativeInside(relativeFromBase)) return null;
+    if (isReservedSecretPath(relativeFromRoot) || isReservedSecretPath(relativeFromBase)) return null;
+    const isDir = stat.isDirectory();
+    const normalizedDisplayPath = String(displayPath || relativeFromBase).replace(/^\/+/, '');
+    return {
+        kind: isDir ? 'folder' : 'file',
+        label: name,
+        displayPath: normalizedDisplayPath,
+        path: relativeFromBase,
+        relativePath: relativeFromBase,
+        workspacePath: relativeFromRoot,
+        size: !isDir && Number.isFinite(stat.size) ? stat.size : null,
+        mtimeMs: Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : null
+    };
+}
+
+function sortWorkspaceSuggestions(candidates, query = '') {
+    function pathSegments(item) {
+        return String(item.displayPath || item.path || item.label || '').split('/').filter(Boolean);
+    }
+    function matchRank(item) {
+        const normalizedQuery = String(query || '').toLowerCase();
+        if (!normalizedQuery) return 0;
+        const displayPath = String(item.displayPath || item.path || item.label || '').toLowerCase();
+        if (displayPath === normalizedQuery) return 0;
+        if (displayPath.startsWith(normalizedQuery)) return 1;
+        const segments = displayPath.split('/').filter(Boolean);
+        if (segments.some((segment) => segment.startsWith(normalizedQuery))) return 2;
+        if (displayPath.includes(normalizedQuery)) return 3;
+        return 4;
+    }
+    function compareSegments(aSegments, bSegments) {
+        const max = Math.max(aSegments.length, bSegments.length);
+        for (let i = 0; i < max; i += 1) {
+            const a = aSegments[i] || '';
+            const b = bSegments[i] || '';
+            if (!a && b) return -1;
+            if (a && !b) return 1;
+            const aDot = a.startsWith('.');
+            const bDot = b.startsWith('.');
+            if (aDot !== bDot) return aDot ? 1 : -1;
+            const cmp = a.localeCompare(b);
+            if (cmp !== 0) return cmp;
+        }
+        return 0;
+    }
+    candidates.sort((a, b) => {
+        const rankDelta = matchRank(a) - matchRank(b);
+        if (rankDelta !== 0) return rankDelta;
+        if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+        return compareSegments(pathSegments(a), pathSegments(b));
+    });
+    return candidates;
+}
+
+function listImmediateWorkspaceSuggestions({ safeRoot, safeBase, scanDir, leafLower, limit }) {
+    let entries;
+    try {
+        entries = fs.readdirSync(scanDir, { withFileTypes: true });
+    } catch (_) {
+        return [];
+    }
+    const candidates = [];
+    for (const entry of entries) {
+        const name = entry.name;
+        if (shouldSkipSuggestionEntry(name)) continue;
+        if (leafLower && !name.toLowerCase().includes(leafLower)) continue;
+
+        const absolute = path.join(scanDir, name);
+        const stat = readSuggestionStat(absolute, safeRoot);
+        if (!stat) continue;
+        const candidate = buildWorkspaceSuggestion({ safeRoot, safeBase, absolute, name, stat });
+        if (!candidate) continue;
+        candidates.push(candidate);
+        if (candidates.length >= limit * 2) break;
+    }
+    return sortWorkspaceSuggestions(candidates, leafLower).slice(0, limit);
+}
+
+function listRecursiveWorkspaceSuggestions({ safeRoot, safeBase, leafLower, limit }) {
+    const candidates = [];
+    const queue = [{ dir: safeBase, depth: 0 }];
+    let visitedDirs = 0;
+    while (queue.length && visitedDirs < SUGGESTION_SEARCH_MAX_DIRS && candidates.length < limit * 4) {
+        const { dir, depth } = queue.shift();
+        visitedDirs += 1;
+        let entries;
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch (_) {
+            continue;
+        }
+        entries.sort((a, b) => a.name.localeCompare(b.name));
+        for (const entry of entries) {
+            const name = entry.name;
+            if (shouldSkipSuggestionEntry(name)) continue;
+            const absolute = path.join(dir, name);
+            const stat = readSuggestionStat(absolute, safeRoot);
+            if (!stat) continue;
+            const relativeFromBase = path.relative(safeBase, absolute).replace(/\\+/g, '/');
+            if (!isRelativeInside(relativeFromBase)) continue;
+            const normalizedPath = relativeFromBase.toLowerCase();
+            if (normalizedPath.includes(leafLower)) {
+                const candidate = buildWorkspaceSuggestion({
+                    safeRoot,
+                    safeBase,
+                    absolute,
+                    name,
+                    stat,
+                    displayPath: relativeFromBase
+                });
+                if (candidate) candidates.push(candidate);
+            }
+            if (stat.isDirectory() && depth < SUGGESTION_SEARCH_MAX_DEPTH && shouldDescendSuggestionDirectory(name)) {
+                queue.push({ dir: absolute, depth: depth + 1 });
+            }
+            if (candidates.length >= limit * 4) break;
+        }
+    }
+    return sortWorkspaceSuggestions(candidates, leafLower).slice(0, limit);
 }
 
 export function sanitizeSuggestionQuery(rawQuery) {
@@ -359,60 +522,11 @@ export function listWorkspaceSuggestions({
     } catch (_) {
         return { ok: true, items: [] };
     }
-    let entries;
-    try {
-        entries = fs.readdirSync(scanDir, { withFileTypes: true });
-    } catch (_) {
-        return { ok: true, items: [] };
-    }
     const leafLower = leaf ? leaf.toLowerCase() : '';
-    const candidates = [];
-    for (const entry of entries) {
-        const name = entry.name;
-        if (!name || name === '.' || name === '..') continue;
-        if (name.startsWith('.')) {
-            if (name === '.ploinky' || name === '.git') continue;
-            if (isReservedSecretPath(name)) continue;
-        }
-        if (isReservedSecretPath(name)) continue;
-        if (leafLower && !name.toLowerCase().includes(leafLower)) continue;
-
-        const absolute = path.join(scanDir, name);
-        let stat;
-        try {
-            stat = fs.lstatSync(absolute);
-        } catch (_) {
-            continue;
-        }
-        if (stat.isSymbolicLink()) {
-            try {
-                const real = fs.realpathSync(absolute);
-                const rel = path.relative(safeRoot, real);
-                if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
-            } catch (_) {
-                continue;
-            }
-        }
-        const isDir = stat.isDirectory();
-        const relativeFromRoot = path.relative(safeRoot, absolute).replace(/\\+/g, '/');
-        const relativeFromBase = path.relative(safeBase, absolute).replace(/\\+/g, '/');
-        if (isReservedSecretPath(relativeFromRoot)) continue;
-        candidates.push({
-            kind: isDir ? 'folder' : 'file',
-            label: name,
-            path: relativeFromBase,
-            relativePath: relativeFromBase,
-            workspacePath: relativeFromRoot,
-            size: !isDir && Number.isFinite(stat.size) ? stat.size : null,
-            mtimeMs: Number.isFinite(stat.mtimeMs) ? stat.mtimeMs : null
-        });
-        if (candidates.length >= limit * 2) break;
-    }
-    candidates.sort((a, b) => {
-        if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
-        return a.label.localeCompare(b.label);
-    });
-    return { ok: true, items: candidates.slice(0, limit) };
+    const items = !folderRelative && leafLower
+        ? listRecursiveWorkspaceSuggestions({ safeRoot, safeBase, leafLower, limit })
+        : listImmediateWorkspaceSuggestions({ safeRoot, safeBase, scanDir, leafLower, limit });
+    return { ok: true, items };
 }
 
 function handleSuggestionsFiles(req, res, parsedUrl) {
@@ -611,6 +725,60 @@ function forceKillPid(pid, tabId) {
             console.log(`[webchat] Process ${pid} already dead for tab ${tabId}`);
         }
     }, 2000);
+}
+
+function pushPendingSseEvent(tab, payload) {
+    if (!tab || !payload) return;
+    if (!Array.isArray(tab.pendingSseEvents)) {
+        tab.pendingSseEvents = [];
+    }
+    tab.pendingSseEvents.push(String(payload));
+    if (tab.pendingSseEvents.length > MAX_PENDING_SSE_EVENTS) {
+        tab.pendingSseEvents.splice(0, tab.pendingSseEvents.length - MAX_PENDING_SSE_EVENTS);
+    }
+}
+
+export function writeOrBufferSseEvent(tab, payload) {
+    if (!tab || !payload) return;
+    if (tab.sseRes) {
+        try {
+            tab.sseRes.write(String(payload));
+            return;
+        } catch (_) {
+            tab.sseRes = null;
+        }
+    }
+    pushPendingSseEvent(tab, payload);
+}
+
+export function flushPendingSseEvents(tab) {
+    if (!tab?.sseRes || !Array.isArray(tab.pendingSseEvents) || tab.pendingSseEvents.length === 0) {
+        return;
+    }
+    const pending = tab.pendingSseEvents.splice(0);
+    for (const payload of pending) {
+        try {
+            tab.sseRes.write(payload);
+        } catch (_) {
+            pushPendingSseEvent(tab, payload);
+            tab.sseRes = null;
+            return;
+        }
+    }
+}
+
+function scheduleDisconnectedTabCleanup(tab, tabId, session, graceMs = STREAM_RECONNECT_GRACE_MS) {
+    if (!tab || tab.disposed) return;
+    if (tab.cleanupTimer) {
+        clearTimeout(tab.cleanupTimer);
+        tab.cleanupTimer = null;
+    }
+    tab.cleanupTimer = setTimeout(() => {
+        if (tab.sseRes || tab.disposed) return;
+        console.log(`[webchat] Reconnect grace expired for tab ${tabId}; disposing TTY.`);
+        disposeTab(tab, tabId, session);
+    }, Math.max(1000, Number(graceMs) || STREAM_RECONNECT_GRACE_MS));
+    tab.cleanupTimer.unref?.();
 }
 
 function disposeTab(tab, tabId, session) {
@@ -1165,33 +1333,37 @@ async function handleWebChat(req, res, appConfig, appState) {
                     createdAt: now,
                     pid: tty.pid || null,
                     cleanupTimer: null,
+                    pendingSseEvents: [],
+                    ttyClosed: false,
                     transcript
                 };
                 session.tabs.set(tabId, tab);
 
                 tty.onOutput((data) => {
                     const transcriptEvents = captureTranscriptOutput(tab, data);
-                    if (tab.sseRes) {
-                        tab.sseRes.write(`data: ${JSON.stringify(data)}\n\n`);
-                        for (const meta of transcriptEvents) {
-                            tab.sseRes.write('event: message-meta\n');
-                            tab.sseRes.write(`data: ${JSON.stringify(meta)}\n\n`);
-                        }
+                    writeOrBufferSseEvent(tab, `data: ${JSON.stringify(data)}\n\n`);
+                    for (const meta of transcriptEvents) {
+                        writeOrBufferSseEvent(tab, 'event: message-meta\n');
+                        writeOrBufferSseEvent(tab, `data: ${JSON.stringify(meta)}\n\n`);
                     }
                 });
                 tty.onClose(() => {
-                    if (tab.sseRes) {
-                        tab.sseRes.write('event: close\n');
-                        tab.sseRes.write('data: {}\n\n');
-                    }
+                    writeOrBufferSseEvent(tab, 'event: close\n');
+                    writeOrBufferSseEvent(tab, 'data: {}\n\n');
                     // Clear force kill timer since process closed normally
                     if (tab.cleanupTimer) {
                         clearTimeout(tab.cleanupTimer);
                         tab.cleanupTimer = null;
                     }
-                    // Ensure tab resources are fully released so the next reconnect
-                    // creates a fresh TTY session instead of writing into a dead process.
-                    disposeTab(tab, tabId, session);
+                    tab.ttyClosed = true;
+                    tab.tty = null;
+                    if (tab.sseRes) {
+                        // Ensure tab resources are fully released so the next reconnect
+                        // creates a fresh TTY session instead of writing into a dead process.
+                        disposeTab(tab, tabId, session);
+                    } else {
+                        scheduleDisconnectedTabCleanup(tab, tabId, session);
+                    }
                 });
 
             } catch (e) {
@@ -1204,8 +1376,17 @@ async function handleWebChat(req, res, appConfig, appState) {
             }
         } else {
             // Reusing existing tab
+            if (tab.cleanupTimer) {
+                clearTimeout(tab.cleanupTimer);
+                tab.cleanupTimer = null;
+            }
             tab.sseRes = res;
             tab.lastConnectTime = now;
+            flushPendingSseEvents(tab);
+            if (tab.ttyClosed) {
+                disposeTab(tab, tabId, session);
+                return;
+            }
         }
 
         req.on('close', () => {
@@ -1216,7 +1397,10 @@ async function handleWebChat(req, res, appConfig, appState) {
                 clearInterval(keepaliveTimer);
                 keepaliveTimer = null;
             }
-            disposeTab(tab, tabId, session);
+            if (tab.sseRes === res || !tab.sseRes) {
+                tab.sseRes = null;
+                scheduleDisconnectedTabCleanup(tab, tabId, session);
+            }
         });
         return;
     }

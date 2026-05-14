@@ -171,9 +171,11 @@ export function createComposerAutocomplete({ cmdInput }, { providers = [], dlog 
         const visible = suggestionsCache.slice(startIdx, startIdx + MENU_MAX_VISIBLE);
 
         let lastGroup = null;
+        const showGroupHeaders = groups.length > 1 || triggerInfo.trigger === '@';
+
         visible.forEach((suggestion, i) => {
             const absoluteIdx = i + startIdx;
-            if (groups.length > 1 && suggestion.group !== lastGroup) {
+            if (showGroupHeaders && suggestion.group && suggestion.group !== lastGroup) {
                 const header = document.createElement('div');
                 header.className = 'wa-slash-menu-group';
                 header.textContent = suggestion.group || '';

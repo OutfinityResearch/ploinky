@@ -37,6 +37,7 @@ test('listWorkspaceSuggestions returns folders before files and excludes secrets
     try {
         fs.mkdirSync(path.join(root, 'docs'));
         fs.mkdirSync(path.join(root, '.git'));
+        fs.mkdirSync(path.join(root, '.ploinky'));
         fs.writeFileSync(path.join(root, 'notes.md'), 'hello');
         fs.writeFileSync(path.join(root, 'README.md'), 'readme');
         fs.writeFileSync(path.join(root, '.secrets'), 'never');
@@ -53,7 +54,56 @@ test('listWorkspaceSuggestions returns folders before files and excludes secrets
         assert.ok(labels[0].startsWith('folder:docs'), `expected folder first, got ${labels.join(',')}`);
         assert.ok(!labels.includes('file:.secrets'), 'must not expose .secrets');
         assert.ok(!labels.includes('file:config.secrets'), 'must not expose *.secrets');
-        assert.ok(!labels.includes('folder:.git'), 'must hide .git navigation entry');
+        assert.ok(labels.includes('folder:.git'), 'must allow normal dot folders like .git');
+        assert.ok(!labels.includes('folder:.ploinky'), 'must hide Ploinky runtime state');
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('listWorkspaceSuggestions searches nested paths for bare @ tokens', () => {
+    const root = makeWorkspace('recursive');
+    try {
+        fs.mkdirSync(path.join(root, 'ploinky', 'cli'), { recursive: true });
+        fs.mkdirSync(path.join(root, 'ploinky', 'bin'), { recursive: true });
+        fs.mkdirSync(path.join(root, 'ploinky', '.git'), { recursive: true });
+        fs.mkdirSync(path.join(root, 'other'), { recursive: true });
+        fs.writeFileSync(path.join(root, 'ploinky', '.npmrc'), 'cache=.npm');
+        fs.writeFileSync(path.join(root, 'ploinky', 'README.md'), 'readme');
+        const result = listWorkspaceSuggestions({
+            workspaceRoot: root,
+            base: root,
+            folder: '',
+            leaf: 'plo',
+            limit: 10
+        });
+        assert.equal(result.ok, true);
+        const displayPaths = result.items.map((entry) => entry.displayPath);
+        assert.ok(displayPaths.includes('ploinky'));
+        assert.ok(displayPaths.includes('ploinky/cli'));
+        assert.ok(displayPaths.includes('ploinky/bin'));
+        assert.ok(displayPaths.includes('ploinky/.git'));
+        assert.ok(!displayPaths.includes('other'));
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('listWorkspaceSuggestions ranks prefix path matches before substring matches', () => {
+    const root = makeWorkspace('ranking');
+    try {
+        fs.mkdirSync(path.join(root, 'AssistOSExplorer'), { recursive: true });
+        fs.mkdirSync(path.join(root, 'ploinky', 'cli'), { recursive: true });
+        const result = listWorkspaceSuggestions({
+            workspaceRoot: root,
+            base: root,
+            folder: '',
+            leaf: 'plo',
+            limit: 3
+        });
+        assert.equal(result.ok, true);
+        assert.equal(result.items[0]?.displayPath, 'ploinky');
+        assert.ok(result.items.map((entry) => entry.displayPath).includes('ploinky/cli'));
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
@@ -186,8 +236,33 @@ test('workspace path provider drills into selected folders using @file tokens', 
         const folderTrigger = { trigger: '@', triggerIndex: 0, token: 'file:docs/' };
         await provider.requestSuggestions(folderSelection.value, folderTrigger);
         const [file] = provider.getSuggestions(folderSelection.value, folderSelection.cursor, folderTrigger);
-        assert.equal(file.label, 'notes.md');
+        assert.equal(file.label, 'docs/notes.md');
+        assert.equal(file.group, 'Files and folders');
         assert.equal(new URL(calls[1], 'http://127.0.0.1').searchParams.get('query'), 'docs/');
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test('workspace path provider keeps nested display-path matches for bare @ search', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+        ok: true,
+        json: async () => ({
+            ok: true,
+            items: [
+                { kind: 'folder', label: 'ploinky', displayPath: 'ploinky', path: 'ploinky' },
+                { kind: 'folder', label: 'cli', displayPath: 'ploinky/cli', path: 'ploinky/cli' },
+            ]
+        })
+    });
+    try {
+        const provider = createWorkspacePathsProvider({ basePath: '/webchat' });
+        const trigger = { trigger: '@', triggerIndex: 0, token: 'plo' };
+        await provider.requestSuggestions('@plo', trigger);
+        const suggestions = provider.getSuggestions('@plo', 4, trigger);
+        assert.deepEqual(suggestions.map((entry) => entry.label), ['ploinky/', 'ploinky/cli/']);
+        assert.deepEqual(suggestions.map((entry) => entry.group), ['Files and folders', 'Files and folders']);
     } finally {
         globalThis.fetch = originalFetch;
     }

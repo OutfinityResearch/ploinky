@@ -8,18 +8,17 @@ import {
     parseStaticTagList
 } from '../../cli/server/webchat/autocompleteProviders/tagCatalog.js';
 
-test('normalizeTagBackends returns unique tag entries with ids and aliases', () => {
+test('normalizeTagBackends returns one canonical tag per backend', () => {
     const entries = normalizeTagBackends({
         backends: [
             { id: 'open-interpreter', tags: ['open-interpreter', 'oi'], label: 'Open Interpreter', description: 'desc' },
             { id: 'another-tool', tags: ['Another-Tool'], label: '', description: '' }
         ]
     });
-    assert.equal(entries.length, 3);
+    assert.equal(entries.length, 2);
     assert.equal(entries[0].tag, 'open-interpreter');
     assert.equal(entries[0].label, 'Open Interpreter');
-    assert.equal(entries[1].tag, 'oi');
-    assert.equal(entries[2].tag, 'another-tool');
+    assert.equal(entries[1].tag, 'another-tool');
 });
 
 test('normalizeTagBackends drops entries with invalid tag names', () => {
@@ -58,7 +57,7 @@ test('tag provider uses static tag-relay-tags without browser MCP calls', async 
             launchConfig: {
                 'tag-relay-agent': 'researchRelay',
                 'tag-relay-list-tool': 'research_relay_list_backends',
-                'tag-relay-tags': 'open-interpreter,oi'
+                'tag-relay-tags': 'open-interpreter'
             }
         });
         await provider.refresh();
@@ -70,6 +69,7 @@ test('tag provider uses static tag-relay-tags without browser MCP calls', async 
         });
         assert.equal(calls, 0);
         assert.deepEqual(suggestions.map((entry) => entry.label), ['@open-interpreter']);
+        assert.deepEqual(suggestions.map((entry) => entry.group), ['Agents']);
     } finally {
         globalThis.fetch = originalFetch;
     }

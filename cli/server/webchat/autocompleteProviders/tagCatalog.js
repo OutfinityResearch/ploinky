@@ -18,15 +18,14 @@ export function normalizeTagBackends(payload) {
             const normalized = rawTag.trim().replace(/^@+/, '').toLowerCase();
             if (TAG_NAME_RE.test(normalized)) candidates.add(normalized);
         }
-        for (const tag of candidates) {
-            if (seen.has(tag)) continue;
-            seen.add(tag);
-            entries.push({
-                tag,
-                label: label || tag,
-                description: description || ''
-            });
-        }
+        const tag = candidates.values().next().value || '';
+        if (!tag || seen.has(tag)) continue;
+        seen.add(tag);
+        entries.push({
+            tag,
+            label: label || tag,
+            description: description || ''
+        });
     }
     return entries;
 }
@@ -114,7 +113,7 @@ export function createTagCatalogProvider({ launchConfig = {}, dlog } = {}) {
             label: `@${entry.tag}`,
             description: entry.description || entry.label || '',
             applySelection: (current, currentTriggerInfo) => applyTagSelection(current, entry.tag, currentTriggerInfo),
-            group: 'Tags'
+            group: 'Agents'
         }));
     }
 
@@ -128,7 +127,7 @@ export function createTagCatalogProvider({ launchConfig = {}, dlog } = {}) {
 
     return {
         trigger: '@',
-        groupLabel: 'Tags',
+        groupLabel: 'Agents',
         getSuggestions,
         requestSuggestions,
         refresh

@@ -1744,6 +1744,15 @@ body {
     gap: 12px;
 }
 
+.wa-slash-menu-group {
+    padding: 7px 14px 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    color: var(--wa-text-muted, #6b7280);
+}
+
 .wa-slash-menu-item:first-child {
     border-radius: 10px 10px 0 0;
 }

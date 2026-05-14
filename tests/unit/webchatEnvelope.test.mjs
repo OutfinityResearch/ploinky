@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 
 import {
+    flushPendingSseEvents,
     resolveWebchatLaunchOptions,
     resolveWorkspaceScopedQueryPath,
-    serializeWebchatEnvelopeForAgent
+    serializeWebchatEnvelopeForAgent,
+    writeOrBufferSseEvent
 } from '../../cli/server/handlers/webchat.js';
 import { WORKSPACE_ROOT } from '../../cli/services/config.js';
 
@@ -49,4 +51,21 @@ test('serializeWebchatEnvelopeForAgent does not name a concrete downstream agent
     }]);
     assert.equal(payload.invocation, undefined);
     assert.doesNotMatch(text, /concreteDownstreamAgent|concrete_downstream_tool/);
+});
+
+test('writeOrBufferSseEvent buffers disconnected WebChat output and flushes on reconnect', () => {
+    const written = [];
+    const tab = { sseRes: null, pendingSseEvents: [] };
+    writeOrBufferSseEvent(tab, 'data: "first"\n\n');
+    writeOrBufferSseEvent(tab, 'event: close\n');
+    assert.deepEqual(tab.pendingSseEvents, ['data: "first"\n\n', 'event: close\n']);
+
+    tab.sseRes = {
+        write(payload) {
+            written.push(payload);
+        }
+    };
+    flushPendingSseEvents(tab);
+    assert.deepEqual(written, ['data: "first"\n\n', 'event: close\n']);
+    assert.deepEqual(tab.pendingSseEvents, []);
 });
