@@ -11,6 +11,7 @@ import { createSlashCommandsProvider } from './autocompleteProviders/slashComman
 import { createTagCatalogProvider } from './autocompleteProviders/tagCatalog.js';
 import { createWorkspacePathsProvider } from './autocompleteProviders/workspacePaths.js';
 import { createAutocompleteState } from './autocompleteState.js';
+import { createComposerMentionHighlighter } from './composerMentionHighlights.js';
 
 const SEND_TRIGGER_RE = /\bsend\b/i;
 const PURGE_TRIGGER_RE = /\bpurge\b/i;
@@ -132,6 +133,7 @@ const composer = createComposer({
 });
 
 const autocompleteState = createAutocompleteState();
+const mentionHighlighter = createComposerMentionHighlighter({ cmdInput });
 
 const slashProvider = createSlashCommandsProvider({
     agentName: dom.agentName,
@@ -152,6 +154,9 @@ const composerAutocomplete = createComposerAutocomplete({
     cmdInput
 }, {
     providers: [slashProvider, tagCatalogProvider, workspacePathsProvider],
+    onSelectionApplied: ({ next }) => {
+        mentionHighlighter.recordSelection(next?.value || '', next?.cursor ?? 0);
+    },
     dlog
 });
 
@@ -161,6 +166,7 @@ if (cmdInput) {
     }, true);
     cmdInput.addEventListener('input', () => {
         autocompleteState.pruneByText(cmdInput.value || '');
+        mentionHighlighter.pruneByText(cmdInput.value || '');
         composerAutocomplete.onInputChange();
     });
 }
@@ -587,12 +593,14 @@ composer.setSendHandler((cmdText) => {
         network.sendAttachments(fileSelections, cmd, { references });
         uploader.clearFiles();
         autocompleteState.clear();
+        mentionHighlighter.clear();
         return true;
     }
 
     if (cmd) {
         network.sendCommand(cmd, { references });
         autocompleteState.clear();
+        mentionHighlighter.clear();
         return true;
     }
 

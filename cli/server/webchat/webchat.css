@@ -1648,6 +1648,32 @@ body {
     max-height: 120px;
     overflow: hidden;
     box-shadow: none;
+    position: relative;
+    --wa-composer-highlight-top: 12px;
+    --wa-composer-highlight-x: 4px;
+    --wa-composer-highlight-bottom: 8px;
+}
+
+.wa-composer-input-highlights {
+    position: absolute;
+    top: var(--wa-composer-highlight-top);
+    right: var(--wa-composer-highlight-x);
+    bottom: var(--wa-composer-highlight-bottom);
+    left: var(--wa-composer-highlight-x);
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--wa-text-primary);
+    font-size: 14.25px;
+    font-family: inherit;
+    line-height: 21px;
+}
+
+.wa-composer-mention {
+    font-weight: 700;
+    color: var(--wa-text-primary);
 }
 
 .wa-composer-input {
@@ -1665,6 +1691,13 @@ body {
     padding: 4px 0;
     line-height: 21px;
     overflow-y: auto;
+    position: relative;
+    z-index: 1;
+}
+
+.wa-mention-highlights-active .wa-composer-input {
+    color: transparent;
+    caret-color: var(--wa-text-primary);
 }
 
 .wa-composer-input::placeholder {
@@ -1839,9 +1872,13 @@ body {
     .wa-composer-input-wrapper {
         min-height: 40px;
         padding: 6px 10px;
+        --wa-composer-highlight-top: 10px;
+        --wa-composer-highlight-x: 10px;
+        --wa-composer-highlight-bottom: 6px;
     }
 
-    .wa-composer-input {
+    .wa-composer-input,
+    .wa-composer-input-highlights {
         font-size: 16px;
         line-height: 20px;
     }

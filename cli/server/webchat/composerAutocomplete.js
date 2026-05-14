@@ -28,7 +28,7 @@ function clearChildren(node) {
     }
 }
 
-export function createComposerAutocomplete({ cmdInput }, { providers = [], dlog } = {}) {
+export function createComposerAutocomplete({ cmdInput }, { providers = [], dlog, onSelectionApplied } = {}) {
     let providerList = Array.isArray(providers) ? providers.slice() : [];
     let menuEl = null;
     let active = false;
@@ -124,6 +124,13 @@ export function createComposerAutocomplete({ cmdInput }, { providers = [], dlog 
         try {
             cmdInput.setSelectionRange(next.cursor, next.cursor);
         } catch (_) { /* selection support is best-effort */ }
+        if (typeof onSelectionApplied === 'function') {
+            try {
+                onSelectionApplied({ suggestion, previousValue: value, next, triggerInfo });
+            } catch (err) {
+                dlog?.('ComposerAutocomplete: onSelectionApplied handler failed', err?.message || err);
+            }
+        }
         cmdInput.dispatchEvent(new Event('input', { bubbles: true }));
         cmdInput.focus();
         if (typeof suggestion.onSelected === 'function') {
