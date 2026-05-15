@@ -65,6 +65,27 @@ test('buildSuggestions uses generic argument completions for first command argum
     }]);
 });
 
+test('buildSuggestions keeps multiline skill help ahead of the command description', () => {
+    const help = [
+        'Use this for WebAdmin requests.',
+        'Example: /exec admin-flow change admin email to user@example.com'
+    ].join('\n');
+    const suggestions = buildSuggestions([{
+        name: '/exec',
+        description: 'Execute any skill directly',
+        subCommands: [],
+        argCompletions: [
+            { value: 'admin-flow', label: 'admin-flow', description: help }
+        ]
+    }], {
+        currentToken: 'exec',
+        hasSubToken: true,
+        subToken: 'admin'
+    });
+
+    assert.equal(suggestions[0].description, help);
+});
+
 test('buildSuggestions keeps subcommand completions ahead of generic argument completions', () => {
     const suggestions = buildSuggestions([{
         name: '/list',
