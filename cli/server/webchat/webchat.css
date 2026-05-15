@@ -1463,10 +1463,10 @@ body {
 .wa-progress-panel {
     display: block;
     margin: 0 0 8px;
-    padding: 7px 9px;
-    border-radius: 11px;
+    padding: 0 0 8px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--wa-bg-panel) 58%, transparent);
-    border: 1px solid color-mix(in srgb, var(--wa-border) 58%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--wa-border) 58%, transparent);
 }
 
 .wa-progress-toggle {
@@ -1881,29 +1881,30 @@ body {
     width: 42px;
     height: 42px;
     border-radius: 50%;
-    background: transparent;
-    border: 2px solid #c63a32;
+    background: var(--wa-accent);
+    border: none;
     color: white;
     cursor: pointer;
     display: none;
     align-items: center;
     justify-content: center;
-    transition: transform 0.15s ease, border-color 0.15s ease;
+    transition: transform 0.15s ease, background 0.15s ease;
     flex-shrink: 0;
     align-self: flex-end;
     position: relative;
+    box-shadow: 0 2px 8px rgba(0, 128, 105, 0.16);
 }
 
 .wa-cancel-btn:hover {
     transform: translateY(-1px);
-    border-color: #b3322b;
+    background: var(--wa-accent-hover);
 }
 
 .wa-cancel-btn-core {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: #c63a32;
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
+    background: #ffffff;
     box-shadow: none;
 }
 
@@ -2048,8 +2049,8 @@ body {
     }
 
     .wa-cancel-btn-core {
-        width: 20px;
-        height: 20px;
+        width: 12px;
+        height: 12px;
     }
 
     .wa-messages {
