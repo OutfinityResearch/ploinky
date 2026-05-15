@@ -115,7 +115,7 @@ export function createMessages({
         const label = typingIndicator.querySelector('.wa-typing-label');
         const list = typingIndicator.querySelector('.wa-typing-progress');
         if (label) {
-            label.textContent = 'thinking';
+            label.textContent = 'Thinking';
         }
         if (!list) {
             return;
@@ -931,7 +931,7 @@ export function createMessages({
 
         const title = document.createElement('span');
         title.className = 'wa-progress-title';
-        title.textContent = `${progressItems.length} step${progressItems.length === 1 ? '' : 's'} while thinking`;
+        title.textContent = `${progressItems.length} step${progressItems.length === 1 ? '' : 's'}`;
 
         toggle.appendChild(arrow);
         toggle.appendChild(title);
