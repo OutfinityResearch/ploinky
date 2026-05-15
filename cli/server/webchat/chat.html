@@ -150,6 +150,12 @@
                     </svg>
                     <span>Upload file</span>
                 </button>
+                <button id="uploadFolderBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h3.379a2.5 2.5 0 0 1 1.767.732l1.121 1.121a1 1 0 0 0 .707.293H17.5A2.5 2.5 0 0 1 20 8.646v8.854A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5v-11zM6.5 5.5a1 1 0 0 0-1 1V17.5a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V8.646a1 1 0 0 0-1-1h-4.026a2.5 2.5 0 0 1-1.768-.732l-1.12-1.121a1 1 0 0 0-.708-.293H6.5z"></path>
+                    </svg>
+                    <span>Upload folder</span>
+                </button>
                 <button id="cameraActionBtn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M4.5 6.75A2.25 2.25 0 0 1 6.75 4.5h1.17l.41-.82A1.5 1.5 0 0 1 9.7 3h4.6a1.5 1.5 0 0 1 1.37.68l.41.82h1.17A2.25 2.25 0 0 1 19.5 6.75v10.5A2.25 2.25 0 0 1 17.25 19.5h-10.5A2.25 2.25 0 0 1 4.5 17.25V6.75zm7.5 9a3.75 3.75 0 1 0 0-7.5 3.75 3.75 0 0 0 0 7.5zm0-1.5a2.25 2.25 0 1 1 0-4.5 2.25 2.25 0 0 1 0 4.5z"></path>
@@ -193,5 +199,6 @@
 </script>
 <script type="module" src="__ASSET_BASE__/index.js"></script>
 <input type="file" id="fileUploadInput" style="display:none" multiple/>
+<input type="file" id="folderUploadInput" style="display:none" webkitdirectory multiple/>
 </body>
 </html>

@@ -1,0 +1,71 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+
+import {
+    flushPendingSseEvents,
+    resolveWebchatLaunchOptions,
+    resolveWorkspaceScopedQueryPath,
+    serializeWebchatEnvelopeForAgent,
+    writeOrBufferSseEvent
+} from '../../cli/server/handlers/webchat.js';
+import { WORKSPACE_ROOT } from '../../cli/services/config.js';
+
+test('resolveWebchatLaunchOptions forwards agent-owned launch flags unchanged', () => {
+    const parsedUrl = new URL(
+        '/webchat?agent=achilles-cli&workspace-dir=projects/demo&feature-tags=1&tag-relay-agent=exampleRelay',
+        'http://localhost'
+    );
+    const { cliArgs } = resolveWebchatLaunchOptions(parsedUrl);
+    assert.ok(cliArgs.includes(`--dir=${path.resolve(WORKSPACE_ROOT, 'projects/demo')}`));
+    assert.ok(cliArgs.includes('--feature-tags=1'));
+    assert.ok(cliArgs.includes('--tag-relay-agent=exampleRelay'));
+    assert.equal(cliArgs.some((arg) => arg.startsWith('--workspace-dir=')), false);
+});
+
+test('resolveWorkspaceScopedQueryPath rejects absolute and escaping launch paths', () => {
+    assert.equal(resolveWorkspaceScopedQueryPath('/tmp/outside'), '');
+    assert.equal(resolveWorkspaceScopedQueryPath('../outside'), '');
+});
+
+test('serializeWebchatEnvelopeForAgent does not name a concrete downstream agent', () => {
+    const text = serializeWebchatEnvelopeForAgent({
+        req: {},
+        effectiveConfig: { agentName: '' },
+        tabId: 'tab-1',
+        envelope: {
+            text: '@example-task hello',
+            attachments: [{ filename: 'note.md', localPath: 'shared/blob-1', ignored: 'drop' }]
+        }
+    });
+    const payload = JSON.parse(text);
+    assert.equal(payload.__webchatMessage, 1);
+    assert.equal(payload.text, '@example-task hello');
+    assert.deepEqual(payload.attachments, [{
+        id: null,
+        filename: 'note.md',
+        mime: null,
+        size: null,
+        downloadUrl: null,
+        localPath: 'shared/blob-1'
+    }]);
+    assert.equal(payload.invocation, undefined);
+    assert.doesNotMatch(text, /concreteDownstreamAgent|concrete_downstream_tool/);
+});
+
+test('writeOrBufferSseEvent buffers disconnected WebChat output and flushes on reconnect', () => {
+    const written = [];
+    const tab = { sseRes: null, pendingSseEvents: [] };
+    writeOrBufferSseEvent(tab, 'data: "first"\n\n');
+    writeOrBufferSseEvent(tab, 'event: close\n');
+    assert.deepEqual(tab.pendingSseEvents, ['data: "first"\n\n', 'event: close\n']);
+
+    tab.sseRes = {
+        write(payload) {
+            written.push(payload);
+        }
+    };
+    flushPendingSseEvents(tab);
+    assert.deepEqual(written, ['data: "first"\n\n', 'event: close\n']);
+    assert.deepEqual(tab.pendingSseEvents, []);
+});

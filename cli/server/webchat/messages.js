@@ -1,4 +1,5 @@
 import { formatBytes, getFileIcon } from './fileHelpers.js';
+import { findMentionRanges } from './composerMentionHighlights.js';
 
 const ENABLE_SELECT_PAGINATION_ACTIONS = false;
 const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 4;
@@ -416,6 +417,62 @@ export function createMessages({
                 row.appendChild(toggleCell);
             });
         });
+    }
+
+    function shouldSkipMentionHighlight(textNode) {
+        const parent = textNode?.parentElement || null;
+        if (!parent || typeof parent.closest !== 'function') {
+            return true;
+        }
+        return Boolean(parent.closest('a, code, pre, .wa-message-mention'));
+    }
+
+    function highlightMentions(container) {
+        if (
+            !(container instanceof Element)
+            || typeof document === 'undefined'
+            || typeof document.createTreeWalker !== 'function'
+        ) {
+            return;
+        }
+        const nodeFilter = typeof NodeFilter !== 'undefined'
+            ? NodeFilter
+            : { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 };
+        const walker = document.createTreeWalker(container, nodeFilter.SHOW_TEXT, {
+            acceptNode(node) {
+                if (shouldSkipMentionHighlight(node)) {
+                    return nodeFilter.FILTER_REJECT;
+                }
+                return findMentionRanges(node.nodeValue || '').length
+                    ? nodeFilter.FILTER_ACCEPT
+                    : nodeFilter.FILTER_REJECT;
+            },
+        });
+        const nodes = [];
+        while (walker.nextNode()) {
+            nodes.push(walker.currentNode);
+        }
+        for (const node of nodes) {
+            const value = node.nodeValue || '';
+            const ranges = findMentionRanges(value);
+            if (!ranges.length) continue;
+            const fragment = document.createDocumentFragment();
+            let cursor = 0;
+            for (const range of ranges) {
+                if (range.start > cursor) {
+                    fragment.appendChild(document.createTextNode(value.slice(cursor, range.start)));
+                }
+                const mentionNode = document.createElement('strong');
+                mentionNode.className = 'wa-message-mention';
+                mentionNode.textContent = range.token;
+                fragment.appendChild(mentionNode);
+                cursor = range.end;
+            }
+            if (cursor < value.length) {
+                fragment.appendChild(document.createTextNode(value.slice(cursor)));
+            }
+            node.parentNode?.replaceChild(fragment, node);
+        }
     }
 
     function updatePanelIfActive(bubble, text) {
@@ -871,6 +928,9 @@ export function createMessages({
         const moreNode = bubble.querySelector('.wa-message-more');
         if (textContainer) {
             textContainer.innerHTML = renderMarkdown(displayText);
+            if (bubble.closest('.wa-message.out')) {
+                highlightMentions(textContainer);
+            }
             enhanceMarkdownTables(textContainer);
             sidePanel.bindLinkDelegation(textContainer);
         }
@@ -1015,6 +1075,7 @@ export function createMessages({
         const bubble = wrapper.querySelector('.wa-message-bubble');
         if (textDiv) {
             textDiv.innerHTML = renderMarkdown(text);
+            highlightMentions(textDiv);
             enhanceMarkdownTables(textDiv);
             sidePanel.bindLinkDelegation(textDiv);
         }
@@ -1110,6 +1171,7 @@ export function createMessages({
             const captionNode = document.createElement('div');
             captionNode.className = 'wa-attachment-caption';
             captionNode.innerHTML = renderMarkdown(caption);
+            highlightMentions(captionNode);
             enhanceMarkdownTables(captionNode);
             sidePanel.bindLinkDelegation(captionNode);
             bubble.appendChild(captionNode);

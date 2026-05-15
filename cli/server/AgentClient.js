@@ -4,6 +4,16 @@
 import { client as mcpClient, StreamableHTTPClientTransport } from 'mcp-sdk';
 const { Client } = mcpClient;
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = parsePositiveInt(
+  process.env.PLOINKY_MCP_TOOL_CALL_TIMEOUT_MS,
+  600000
+);
+
 function createAgentClient(baseUrl, options = {}) {
   let client = null;
   let transport = null;
@@ -28,9 +38,14 @@ function createAgentClient(baseUrl, options = {}) {
     return tools || [];
   }
 
-  async function callTool(name, args) {
+  async function callTool(name, args, callOptions = {}) {
     await connect();
-    const result = await client.callTool({ name, arguments: args || {} });
+    const timeout = parsePositiveInt(callOptions.timeoutMs, DEFAULT_TOOL_CALL_TIMEOUT_MS);
+    const result = await client.callTool(
+      { name, arguments: args || {} },
+      undefined,
+      { timeout }
+    );
     return result;
   }
 

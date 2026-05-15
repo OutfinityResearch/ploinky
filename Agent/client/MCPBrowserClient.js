@@ -63,9 +63,28 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function createAgentClient(baseUrl) {
+function normalizeRequestHeaders(rawHeaders) {
+    if (!rawHeaders) return [];
+    if (typeof Headers !== 'undefined' && rawHeaders instanceof Headers) {
+        return Array.from(rawHeaders.entries());
+    }
+    if (Array.isArray(rawHeaders)) {
+        return rawHeaders
+            .filter((entry) => Array.isArray(entry) && entry.length >= 2)
+            .map(([key, value]) => [String(key), String(value)]);
+    }
+    if (typeof rawHeaders === 'object') {
+        return Object.entries(rawHeaders)
+            .filter(([key, value]) => key && value !== undefined && value !== null)
+            .map(([key, value]) => [String(key), String(value)]);
+    }
+    return [];
+}
+
+function createAgentClient(baseUrl, options = {}) {
     const endpoint = resolveBaseUrl(baseUrl);
     const disableSseProbe = isAgentProxyMcpEndpoint(endpoint);
+    const requestHeaders = normalizeRequestHeaders(options?.requestHeaders);
 
     let connected = false;
     let sessionId = null;
@@ -102,6 +121,9 @@ function createAgentClient(baseUrl) {
         }
         if (protocolVersion) {
             headers.set('mcp-protocol-version', protocolVersion);
+        }
+        for (const [key, value] of requestHeaders) {
+            headers.set(key, value);
         }
         return headers;
     }
@@ -692,6 +714,9 @@ function createAgentClient(baseUrl) {
                 headers.set('mcp-session-id', currentSessionId);
                 if (protocolVersion) {
                     headers.set('mcp-protocol-version', protocolVersion);
+                }
+                for (const [key, value] of requestHeaders) {
+                    headers.set(key, value);
                 }
                 await fetch(endpoint, {
                     method: 'DELETE',

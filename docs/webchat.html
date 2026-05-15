@@ -111,7 +111,18 @@ ploinky cli achilles-cli --path=/absolute/path</code></pre>
                         <li>✅ Light/Dark/Explorer/Obsidian Dark theme selector with persistent preference (Explorer loads by default; switch via Settings → Appearance)</li>
                         <li>✅ Optional speech-to-text and text-to-speech integrations (see <code>cli/server/webchat/strategies</code>)</li>
                         <li>✅ Slash command autocomplete — type <code>/</code> to open a command menu; supports agent-declared subcommands and argument completions</li>
+                        <li>✅ Composer <code>@</code> autocomplete — typing <code>@</code> opens a grouped menu of static configured tags plus files and folders uploaded in the current WebChat session; selecting a file inserts a stable <code>@file:uploads/&lt;sessionId&gt;/&lt;path&gt;</code> token and attaches a structured reference to the outgoing envelope</li>
                         <li>✅ Cancel button — appears during active processing; sends an interrupt signal to the agent</li>
+                    </ul>
+                </div>
+
+                <div class="doc-section">
+                    <h2>Session Uploads</h2>
+                    <p>WebChat stores uploaded files in a per-session directory under the current working directory: <code>&lt;cwd&gt;/uploads/&lt;webchat_sid&gt;/</code>. <code>webchat_sid</code> is the WebChat session cookie issued to the authenticated browser; it is not the browser tab id.</p>
+                    <ul style="margin-left: 2rem;">
+                        <li>The attachment menu has <strong>Upload file</strong> and <strong>Upload folder</strong> entries. Folder uploads preserve <code>file.webkitRelativePath</code> as the relative path inside the session upload directory.</li>
+                        <li>Composer <code>@</code> suggestions search only the current session upload directory. Other sessions' uploads never appear.</li>
+                        <li>Uploads use <code>POST /webchat/uploads</code> and are read back via <code>GET /webchat/uploads?path=&lt;session-relative-path&gt;</code>. Downloads reuse stored MIME metadata and set <code>X-Content-Type-Options: nosniff</code>. The server rejects absolute paths, traversal segments, NUL bytes, symlink escapes, and reserved <code>.secrets</code>/<code>*.secrets</code> names.</li>
                     </ul>
                 </div>
 

@@ -3,6 +3,8 @@ const ENVELOPE_FLAG = '__webchatMessage';
 const PROGRESS_FLAG = '__webchatProgress';
 const ENVELOPE_VERSION = 1;
 
+export const __testables = {};
+
 function stripCtrlAndAnsi(input) {
     try {
         let out = input || '';
@@ -41,7 +43,21 @@ function stripProcessingPrefix(text) {
     return text.slice(match[0].length);
 }
 
-function serializeEnvelope({ text = '', attachments = [] } = {}) {
+function normalizeClientReference(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const kind = typeof raw.kind === 'string' ? raw.kind.trim() : '';
+    const refPath = typeof raw.path === 'string' ? raw.path.trim() : '';
+    if (!kind || !refPath) return null;
+    if (refPath.includes('\0')) return null;
+    return {
+        kind,
+        path: refPath,
+        type: typeof raw.type === 'string' ? raw.type.trim() : null,
+        label: typeof raw.label === 'string' ? raw.label.trim() : null
+    };
+}
+
+function serializeEnvelope({ text = '', attachments = [], references = [] } = {}) {
     const normalizedAttachments = Array.isArray(attachments)
         ? attachments.map((raw) => {
             if (!raw || typeof raw !== 'object') {
@@ -60,12 +76,20 @@ function serializeEnvelope({ text = '', attachments = [] } = {}) {
         }).filter(Boolean)
         : [];
 
-    return JSON.stringify({
+    const normalizedReferences = Array.isArray(references)
+        ? references.map(normalizeClientReference).filter(Boolean)
+        : [];
+
+    const payload = {
         [ENVELOPE_FLAG]: ENVELOPE_VERSION,
         version: ENVELOPE_VERSION,
         text: typeof text === 'string' ? text : '',
         attachments: normalizedAttachments
-    });
+    };
+    if (normalizedReferences.length) {
+        payload.references = normalizedReferences;
+    }
+    return JSON.stringify(payload);
 }
 
 function parseProgressEnvelope(text) {
@@ -88,6 +112,10 @@ function parseProgressEnvelope(text) {
         return null;
     }
 }
+
+Object.assign(__testables, { serializeEnvelope, normalizeClientReference, parseProgressEnvelope });
+
+export { serializeEnvelope, normalizeClientReference };
 
 export function createNetwork({
     TAB_ID,
@@ -333,7 +361,8 @@ export function createNetwork({
     function postEnvelope(payload = {}) {
         const text = typeof payload.text === 'string' ? payload.text : '';
         const attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
-        const serialized = serializeEnvelope({ text, attachments });
+        const references = Array.isArray(payload.references) ? payload.references : [];
+        const serialized = serializeEnvelope({ text, attachments, references });
         const trimmedEnvelope = serialized.trim();
         const trimmedText = text.trim();
 
@@ -366,10 +395,11 @@ export function createNetwork({
         });
     }
 
-    function sendCommand(cmd) {
+    function sendCommand(cmd, options = {}) {
         const message = typeof cmd === 'string' ? cmd : '';
+        const references = Array.isArray(options?.references) ? options.references : [];
         addClientMsg(message);
-        postEnvelope({ text: message });
+        postEnvelope({ text: message, references });
         if (pendingUploads === 0) {
             showTypingIndicator();
         }
@@ -386,7 +416,7 @@ export function createNetwork({
     }
 
     function uploadAttachment(filePayload, caption) {
-        const { file, previewUrl, revokePreview, previewNeedsRevoke, isImage } = filePayload || {};
+        const { file, previewUrl, revokePreview, previewNeedsRevoke, isImage, relativePath } = filePayload || {};
         const isFileObject = (typeof File !== 'undefined' && file instanceof File)
             || (file && typeof file.name === 'string' && typeof file.size !== 'undefined');
         if (!isFileObject) {
@@ -398,34 +428,42 @@ export function createNetwork({
             return Promise.reject(new Error('no file selected'));
         }
 
+        const effectiveRelativePath = typeof relativePath === 'string' && relativePath.trim()
+            ? relativePath.trim()
+            : (file.name || '');
+
         let clientAttachment = null;
         if (typeof addClientAttachment === 'function') {
             clientAttachment = addClientAttachment({
-                fileName: file.name,
+                fileName: effectiveRelativePath !== file.name ? effectiveRelativePath : file.name,
                 size: file.size,
                 mime: file.type,
                 previewUrl,
                 isImage,
-                caption
+                caption,
             });
         } else {
-            addClientMsg(caption || file.name);
+            addClientMsg(caption || effectiveRelativePath || file.name);
         }
         trackUploadStart();
 
-        const uploadUrl = '/blobs';
+        const uploadUrl = toEndpoint('uploads');
 
         const mime = file.type || 'application/octet-stream';
         const headers = {
             'Content-Type': mime,
             'X-Mime-Type': mime,
-            'X-File-Name': encodeURIComponent(file.name)
+            'X-File-Name': encodeURIComponent(file.name),
         };
+        if (effectiveRelativePath) {
+            headers['X-Relative-Path'] = encodeURIComponent(effectiveRelativePath);
+        }
 
         return fetch(uploadUrl, {
             method: 'POST',
             headers,
             body: file,
+            credentials: 'include',
         })
             .then(res => {
                 if (!res.ok) {
@@ -435,21 +473,22 @@ export function createNetwork({
             })
             .then(data => {
                 trackUploadEnd();
-                const localPath = data.localPath || data.url || null;
+                const localPath = data.localPath || data.workspacePath || data.url || null;
                 if (!localPath) {
                     throw new Error(data.error || 'Invalid upload response');
                 }
                 const displayName = data.filename || file.name;
-                const basePath = localPath.startsWith('/') ? localPath : `/${localPath}`;
-                const absoluteUrl = data.downloadUrl
-                    || new URL(basePath, window.location.origin).href;
+                const downloadHref = typeof data.downloadUrl === 'string' && data.downloadUrl
+                    ? data.downloadUrl
+                    : (localPath.startsWith('/') ? localPath : `/${localPath}`);
+                const absoluteUrl = new URL(downloadHref, window.location.origin).href;
                 if (clientAttachment && typeof clientAttachment.markUploaded === 'function') {
                     clientAttachment.markUploaded({
                         downloadUrl: absoluteUrl,
                         size: data.size ?? (Number.isFinite(file.size) ? file.size : null),
                         mime: data.mime ?? file.type ?? null,
                         localPath,
-                        id: data.id ?? null
+                        id: data.id ?? null,
                     });
                     if (isImage && typeof clientAttachment.replacePreview === 'function') {
                         clientAttachment.replacePreview(absoluteUrl);
@@ -468,7 +507,9 @@ export function createNetwork({
                     mime: data.mime ?? file.type ?? null,
                     size: data.size ?? (Number.isFinite(file.size) ? file.size : null),
                     downloadUrl: absoluteUrl || null,
-                    localPath
+                    localPath,
+                    workspacePath: data.workspacePath ?? null,
+                    relativePath: data.relativePath ?? null,
                 };
             })
             .catch(error => {
@@ -484,13 +525,14 @@ export function createNetwork({
             });
     }
 
-    function sendAttachments(fileSelections, caption) {
+    function sendAttachments(fileSelections, caption, options = {}) {
         const selections = Array.isArray(fileSelections) ? fileSelections : [];
         const text = typeof caption === 'string' ? caption : '';
+        const references = Array.isArray(options?.references) ? options.references : [];
 
         if (!selections.length) {
             if (text.trim()) {
-                sendCommand(text);
+                sendCommand(text, { references });
             }
             return;
         }
@@ -514,7 +556,7 @@ export function createNetwork({
                 return;
             }
 
-            postEnvelope({ text, attachments });
+            postEnvelope({ text, attachments, references });
         }).catch(() => {
             // Individual upload rejections already handled with UI feedback.
         });

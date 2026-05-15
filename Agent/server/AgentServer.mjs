@@ -345,7 +345,7 @@ function sanitizeInvocationForLog(invocation = null) {
 }
 
 function shouldRedactLogField(key) {
-    return /authorization|cookie|jwt|token|secret|password|credential|access[_-]?key|api[_-]?key|^value$/i.test(String(key || ''));
+    return /authorization|cookie|jwt|token|secret|password|credential|access[_-]?key|api[_-]?key|^value$|^task$|prompt|messages?|resources?|content|base64|stdin|payload/i.test(String(key || ''));
 }
 
 function sanitizeValueForLog(value, key = '') {
