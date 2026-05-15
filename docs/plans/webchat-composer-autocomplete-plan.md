@@ -305,8 +305,17 @@ No Ploinky core file may name the research relay or active research tags.
       - files/folders in `<test-dir>` appear;
       - selecting a tag inserts `@tag `;
       - selecting a file inserts the file token and adds an envelope reference;
+      - the composer highlights the selected tag without breaking textarea editing;
+      - the sent message keeps the known tag visually emphasized after submit;
       - sending `@open-interpreter Give a one sentence configuration status.`
         still returns the natural-language runtime/model configuration result.
+    - for the cross-surface Explorer smoke, open WebMeet through the Explorer
+      toolbar button, create and join a room, repeat the `Agents` and
+      `Files and folders` autocomplete checks in `#webmeetChatInput`, send an
+      `@open-interpreter` prompt through the WebMeet UI send path, and wait
+      for the relay result before treating the missing sent message as a
+      failure because WebMeet refreshes chat after `webmeet_chat_send`
+      completes.
 
 17. Before finishing, audit for forbidden coupling:
 

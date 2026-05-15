@@ -22,6 +22,10 @@ Test stages are intentionally split. Action scripts such as `tests/doPrepare.sh`
 
 The harness may create a temporary git worktree for another branch when `PLOINKY_BRANCH` is set. This branch-testing behavior is part of the current implementation and must not be documented away as an incidental test detail.
 
+Browser-surface changes require a targeted smoke test in addition to shell and unit checks. For WebChat composer/autocomplete changes, the smoke must run against an authenticated `/webchat` session for a selected chat agent and verify both configured `@` tag suggestions and workspace file/folder suggestions. A research-relay integration smoke may use launch parameters such as `forward-envelope=1`, `tag-relay-agent`, `tag-relay-submit-tool`, `tag-relay-list-tool`, `tag-relay-tags`, and `workspace-dir`, but the WebChat implementation itself must remain generic: optional relay agent ids, backend tags, and downstream tool names belong to launch configuration and tests, not to Ploinky core. The browser smoke must prove that selecting a tag inserts one canonical token with a trailing space, selecting a workspace path records a structured `workspace-path` reference, sent messages keep known mentions visually emphasized, and an end-to-end tagged prompt returns a normal response through the selected chat agent.
+
+When the local workspace includes the AssistOSExplorer WebMeet plugin and the copilot research relay, a cross-surface smoke should also verify parity with WebMeet chat: open WebMeet through the Explorer toolbar button, create and join a room, verify the same `Agents` and `Files and folders` suggestion groups, select `@open-interpreter`, submit a tagged prompt through the UI send path, and wait long enough for the relay response before failing the sent-message assertion. This cross-repository smoke belongs to the integration runbook in the application repository; Ploinky's responsibility is to keep WebChat generic and to preserve the authenticated routing, envelope, reference, and suggestion-endpoint behavior that the application smoke depends on.
+
 Documentation changes require verification alongside code changes. After updating the DS set or HTML pages, the repository must:
 
 - regenerate `docs/specs/matrix.md`;
@@ -40,6 +44,11 @@ The runtime performs long-lived state transitions such as prepare, start, restar
 
 Response:
 The repository explicitly treats HTML docs, DS specs, and `docs/ploinky-overview.md` as synchronized deliverables. If docs are normative inputs or operator-facing guidance, broken links or stale matrices are regressions in their own right and must be caught before the change is considered complete.
+
+### Question #3: Why does a WebChat smoke test mention optional research-relay parameters if Ploinky must stay generic?
+
+Response:
+The smoke uses those parameters as fixture data for a real browser workflow, not as framework behavior. WebChat should prove that configured tag catalogs, workspace-path references, envelopes, highlighting, and routing work end to end, while interpretation of a tag such as `@open-interpreter` remains owned by the selected chat agent and downstream relay.
 
 ## Conclusion
 
