@@ -416,7 +416,7 @@ export function createNetwork({
     }
 
     function uploadAttachment(filePayload, caption) {
-        const { file, previewUrl, revokePreview, previewNeedsRevoke, isImage } = filePayload || {};
+        const { file, previewUrl, revokePreview, previewNeedsRevoke, isImage, relativePath } = filePayload || {};
         const isFileObject = (typeof File !== 'undefined' && file instanceof File)
             || (file && typeof file.name === 'string' && typeof file.size !== 'undefined');
         if (!isFileObject) {
@@ -428,34 +428,42 @@ export function createNetwork({
             return Promise.reject(new Error('no file selected'));
         }
 
+        const effectiveRelativePath = typeof relativePath === 'string' && relativePath.trim()
+            ? relativePath.trim()
+            : (file.name || '');
+
         let clientAttachment = null;
         if (typeof addClientAttachment === 'function') {
             clientAttachment = addClientAttachment({
-                fileName: file.name,
+                fileName: effectiveRelativePath !== file.name ? effectiveRelativePath : file.name,
                 size: file.size,
                 mime: file.type,
                 previewUrl,
                 isImage,
-                caption
+                caption,
             });
         } else {
-            addClientMsg(caption || file.name);
+            addClientMsg(caption || effectiveRelativePath || file.name);
         }
         trackUploadStart();
 
-        const uploadUrl = '/blobs';
+        const uploadUrl = toEndpoint('uploads');
 
         const mime = file.type || 'application/octet-stream';
         const headers = {
             'Content-Type': mime,
             'X-Mime-Type': mime,
-            'X-File-Name': encodeURIComponent(file.name)
+            'X-File-Name': encodeURIComponent(file.name),
         };
+        if (effectiveRelativePath) {
+            headers['X-Relative-Path'] = encodeURIComponent(effectiveRelativePath);
+        }
 
         return fetch(uploadUrl, {
             method: 'POST',
             headers,
             body: file,
+            credentials: 'include',
         })
             .then(res => {
                 if (!res.ok) {
@@ -465,21 +473,22 @@ export function createNetwork({
             })
             .then(data => {
                 trackUploadEnd();
-                const localPath = data.localPath || data.url || null;
+                const localPath = data.localPath || data.workspacePath || data.url || null;
                 if (!localPath) {
                     throw new Error(data.error || 'Invalid upload response');
                 }
                 const displayName = data.filename || file.name;
-                const basePath = localPath.startsWith('/') ? localPath : `/${localPath}`;
-                const absoluteUrl = data.downloadUrl
-                    || new URL(basePath, window.location.origin).href;
+                const downloadHref = typeof data.downloadUrl === 'string' && data.downloadUrl
+                    ? data.downloadUrl
+                    : (localPath.startsWith('/') ? localPath : `/${localPath}`);
+                const absoluteUrl = new URL(downloadHref, window.location.origin).href;
                 if (clientAttachment && typeof clientAttachment.markUploaded === 'function') {
                     clientAttachment.markUploaded({
                         downloadUrl: absoluteUrl,
                         size: data.size ?? (Number.isFinite(file.size) ? file.size : null),
                         mime: data.mime ?? file.type ?? null,
                         localPath,
-                        id: data.id ?? null
+                        id: data.id ?? null,
                     });
                     if (isImage && typeof clientAttachment.replacePreview === 'function') {
                         clientAttachment.replacePreview(absoluteUrl);
@@ -498,7 +507,9 @@ export function createNetwork({
                     mime: data.mime ?? file.type ?? null,
                     size: data.size ?? (Number.isFinite(file.size) ? file.size : null),
                     downloadUrl: absoluteUrl || null,
-                    localPath
+                    localPath,
+                    workspacePath: data.workspacePath ?? null,
+                    relativePath: data.relativePath ?? null,
                 };
             })
             .catch(error => {

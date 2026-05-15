@@ -60,8 +60,10 @@ const {
     attachmentBtn,
     attachmentMenu,
     uploadFileBtn,
+    uploadFolderBtn,
     cameraActionBtn,
     fileUploadInput,
+    folderUploadInput,
     filePreviewContainer,
     attachmentContainer,
     cancelBtn
@@ -176,8 +178,10 @@ const uploader = createUploader({
     attachmentBtn,
     attachmentMenu,
     uploadFileBtn,
+    uploadFolderBtn,
     cameraActionBtn,
     fileUploadInput,
+    folderUploadInput,
     filePreviewContainer,
     attachmentContainer
 }, { composer });

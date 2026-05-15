@@ -500,10 +500,12 @@ export function createUploader({
     attachmentBtn,
     attachmentMenu,
     uploadFileBtn,
+    uploadFolderBtn,
     cameraActionBtn,
     fileUploadInput,
+    folderUploadInput,
     filePreviewContainer,
-    attachmentContainer
+    attachmentContainer,
 }, { composer }) {
 
     const selections = [];
@@ -530,6 +532,25 @@ export function createUploader({
         fileUploadInput.click();
         attachmentMenu.classList.remove('show');
         refocusComposer();
+    }
+
+    function openFolderPicker() {
+        if (!folderUploadInput) {
+            return;
+        }
+        folderUploadInput.click();
+        attachmentMenu.classList.remove('show');
+        refocusComposer();
+    }
+
+    function sanitizeRelativePath(rawPath, fallbackName) {
+        const candidate = (typeof rawPath === 'string' && rawPath.trim()) ? rawPath : (fallbackName || '');
+        if (!candidate) {
+            return '';
+        }
+        const normalized = String(candidate).replace(/\\+/g, '/').replace(/\/+/g, '/').replace(/^\/+/, '');
+        const segments = normalized.split('/').filter((segment) => segment && segment !== '.' && segment !== '..');
+        return segments.join('/');
     }
 
     function updatePreviewVisibility() {
@@ -565,7 +586,9 @@ export function createUploader({
             <button class="wa-file-preview-remove" title="Remove file">&times;</button>
         `;
 
-        item.querySelector('.wa-file-preview-name').textContent = file.name;
+        const relativePath = selection.relativePath;
+        const previewName = relativePath && relativePath !== file.name ? relativePath : file.name;
+        item.querySelector('.wa-file-preview-name').textContent = previewName;
         item.querySelector('.wa-file-preview-size').textContent = formatBytes(file.size);
 
         if (isImage) {
@@ -589,16 +612,21 @@ export function createUploader({
         filePreviewContainer.appendChild(item);
     }
 
-    function addSelection(file) {
+    function addSelection(file, options = {}) {
         if (!file) {
             return;
         }
+        const rawRelative = typeof options.relativePath === 'string' && options.relativePath
+            ? options.relativePath
+            : (file.webkitRelativePath || file.name || '');
+        const relativePath = sanitizeRelativePath(rawRelative, file.name) || file.name || '';
         const selection = {
             id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
             file,
             isImage: (file.type || '').startsWith('image/'),
             previewDataUrl: null,
-            domItem: null
+            domItem: null,
+            relativePath,
         };
         selections.push(selection);
         createSelectionPreview(selection);
@@ -627,8 +655,25 @@ export function createUploader({
             if (!files.length) {
                 return;
             }
-            files.forEach(addSelection);
+            files.forEach((file) => addSelection(file));
             fileUploadInput.value = '';
+        } finally {
+            refocusComposer();
+        }
+    }
+
+    function handleFolderSelection(event) {
+        try {
+            const files = Array.from(event.target.files || []);
+            if (!files.length) {
+                return;
+            }
+            files.forEach((file) => addSelection(file, {
+                relativePath: file.webkitRelativePath || file.name || '',
+            }));
+            if (folderUploadInput) {
+                folderUploadInput.value = '';
+            }
         } finally {
             refocusComposer();
         }
@@ -676,7 +721,10 @@ export function createUploader({
             }
         }
         fileUploadInput.value = '';
-        filePreviewContainer.innerHTML = '';
+        if (folderUploadInput) {
+            folderUploadInput.value = '';
+        }
+        filePreviewContainer.replaceChildren();
         filePreviewContainer.classList.remove('show');
         updatePreviewVisibility();
     }
@@ -684,6 +732,10 @@ export function createUploader({
     attachmentBtn.addEventListener('click', toggleMenu);
     uploadFileBtn.addEventListener('click', openFilePicker);
     fileUploadInput.addEventListener('change', handleFileSelection);
+    if (uploadFolderBtn && folderUploadInput) {
+        uploadFolderBtn.addEventListener('click', openFolderPicker);
+        folderUploadInput.addEventListener('change', handleFolderSelection);
+    }
     cameraActionBtn?.addEventListener('click', handleCameraClick);
     
     document.addEventListener('click', (e) => {
@@ -719,7 +771,8 @@ export function createUploader({
                     previewUrl,
                     previewNeedsRevoke: typeof revokePreview === 'function',
                     revokePreview,
-                    isImage: selection.isImage
+                    isImage: selection.isImage,
+                    relativePath: selection.relativePath || selection.file.name || '',
                 };
             });
         },

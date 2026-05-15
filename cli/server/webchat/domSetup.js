@@ -72,9 +72,11 @@ export function initDom() {
     const attachmentBtn = document.getElementById('attachmentBtn');
     const attachmentMenu = document.getElementById('attachmentMenu');
     const uploadFileBtn = document.getElementById('uploadFileBtn');
+    const uploadFolderBtn = document.getElementById('uploadFolderBtn');
     const cameraActionBtn = document.getElementById('cameraActionBtn');
     const attachmentContainer = document.querySelector('.wa-attachment-container');
     const fileUploadInput = document.getElementById('fileUploadInput');
+    const folderUploadInput = document.getElementById('folderUploadInput');
     const filePreviewContainer = document.getElementById('filePreviewContainer');
 
     const requiresAuth = body.dataset.auth === 'true';
@@ -257,10 +259,12 @@ export function initDom() {
             attachmentBtn,
             attachmentMenu,
             uploadFileBtn,
+            uploadFolderBtn,
             cameraActionBtn,
             fileUploadInput,
+            folderUploadInput,
             filePreviewContainer,
-            attachmentContainer
-        }
+            attachmentContainer,
+        },
     };
 }

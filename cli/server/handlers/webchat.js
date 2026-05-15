@@ -10,6 +10,14 @@ import {
     getWorkspaceRoot,
     resolveWorkspacePath
 } from '../utils/workspacePaths.js';
+import {
+    ensureSessionUploadRoot,
+} from '../webchat/uploadPaths.js';
+import {
+    handleWebchatUploadGet,
+    handleWebchatUploadPost,
+    resolveWebchatUploadContext,
+} from './webchatUploads.js';
 import { createServerTtsStrategy } from './ttsStrategies/index.js';
 import { buildInvocationContextForProviderCall } from '../mcp-proxy/index.js';
 import {
@@ -542,38 +550,86 @@ export function listWorkspaceSuggestions({
     return { ok: true, items };
 }
 
-function handleSuggestionsFiles(req, res, parsedUrl) {
+export function normalizeUploadSuggestionQueryPath(rawPath, uploadRootRelToCwd) {
+    const normalized = String(rawPath || '').trim().replace(/\\+/g, '/');
+    if (!normalized) return '';
+    if (normalized.startsWith('/')) return normalized;
+    const rootPrefix = String(uploadRootRelToCwd || '').trim().replace(/\\+/g, '/').replace(/^\/+|\/+$/g, '');
+    if (!rootPrefix) return normalized;
+    if (normalized === rootPrefix) return '';
+    if (normalized.startsWith(`${rootPrefix}/`)) {
+        return normalized.slice(rootPrefix.length + 1);
+    }
+    return normalized;
+}
+
+export function rewriteUploadSuggestionItem(item, { uploadRootRelToCwd, uploadRootRelToWorkspace }) {
+    if (!item || typeof item !== 'object') return item;
+    const sessionRelative = String(item.workspacePath || item.relativePath || item.path || '').replace(/^\/+/, '');
+    const joinedCwd = uploadRootRelToCwd
+        ? (sessionRelative ? `${uploadRootRelToCwd}/${sessionRelative}` : uploadRootRelToCwd)
+        : sessionRelative;
+    const joinedWorkspace = uploadRootRelToWorkspace
+        ? (sessionRelative ? `${uploadRootRelToWorkspace}/${sessionRelative}` : uploadRootRelToWorkspace)
+        : sessionRelative;
+    return {
+        ...item,
+        displayPath: sessionRelative || item.displayPath,
+        relativePath: sessionRelative,
+        queryPath: sessionRelative,
+        path: joinedCwd,
+        workspacePath: joinedWorkspace,
+    };
+}
+
+function handleSuggestionsFiles(req, res, parsedUrl, appState) {
     const queryRaw = parsedUrl.searchParams.get('query') || '';
-    const sanitized = sanitizeSuggestionQuery(queryRaw);
+    const limitRaw = parsedUrl.searchParams.get('limit');
+    const limitNum = limitRaw ? Math.min(MAX_SUGGESTION_RESULTS, Math.max(1, Number(limitRaw) | 0)) : MAX_SUGGESTION_RESULTS;
+    const baseRaw = parsedUrl.searchParams.get('base') || '';
+    const workspaceBase = resolveWebchatWorkspaceBase(parsedUrl);
+    const sessionId = getSession(req, appState);
+    const uploadContext = resolveWebchatUploadContext({ workspaceBase, sessionId });
+
+    if (!uploadContext) {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify({ ok: true, root: '', items: [] }));
+    }
+    ensureSessionUploadRoot(uploadContext.uploadRoot);
+
+    const uploadRootRelToCwd = path.relative(uploadContext.cwd, uploadContext.uploadRoot).replace(/\\+/g, '/');
+    const uploadRootRelToWorkspace = path.relative(uploadContext.workspaceRoot, uploadContext.uploadRoot).replace(/\\+/g, '/');
+    const queryForUploadRoot = normalizeUploadSuggestionQueryPath(queryRaw, uploadRootRelToCwd);
+    const sanitized = sanitizeSuggestionQuery(queryForUploadRoot);
     if (sanitized === null) {
         res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         return res.end(JSON.stringify({ ok: false, error: 'invalid_query' }));
     }
-    const limitRaw = parsedUrl.searchParams.get('limit');
-    const limitNum = limitRaw ? Math.min(MAX_SUGGESTION_RESULTS, Math.max(1, Number(limitRaw) | 0)) : MAX_SUGGESTION_RESULTS;
-    const baseRaw = parsedUrl.searchParams.get('base') || '';
-    const baseSanitized = sanitizeSuggestionQuery(baseRaw);
+    const baseForUploadRoot = normalizeUploadSuggestionQueryPath(baseRaw, uploadRootRelToCwd);
+    const baseSanitized = sanitizeSuggestionQuery(baseForUploadRoot);
     if (baseSanitized === null) {
         res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         return res.end(JSON.stringify({ ok: false, error: 'invalid_base' }));
     }
-    const baseContext = resolveWebchatWorkspaceBase(parsedUrl);
-    let effectiveBase = baseContext.base;
+
+    let effectiveBase = uploadContext.uploadRoot;
     if (baseSanitized.folder || baseSanitized.leaf) {
         try {
             const combined = baseSanitized.folder
                 ? path.join(baseSanitized.folder, baseSanitized.leaf || '')
                 : (baseSanitized.leaf || '');
             effectiveBase = combined
-                ? resolveWorkspacePath(path.join(baseContext.base, combined), { workspaceRoot: baseContext.root })
-                : baseContext.base;
+                ? resolveWorkspacePath(path.join(uploadContext.uploadRoot, combined), {
+                    workspaceRoot: uploadContext.uploadRoot
+                })
+                : uploadContext.uploadRoot;
         } catch (_) {
             res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
             return res.end(JSON.stringify({ ok: false, error: 'invalid_base' }));
         }
     }
     const result = listWorkspaceSuggestions({
-        workspaceRoot: baseContext.root,
+        workspaceRoot: uploadContext.uploadRoot,
         base: effectiveBase,
         folder: sanitized.folder,
         leaf: sanitized.leaf,
@@ -583,12 +639,16 @@ function handleSuggestionsFiles(req, res, parsedUrl) {
         res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         return res.end(JSON.stringify({ ok: false, error: result.error || 'lookup_failed' }));
     }
-    const relativeBase = path.relative(baseContext.root, effectiveBase).replace(/\\+/g, '/');
+    const items = result.items.map((item) => rewriteUploadSuggestionItem(item, {
+        uploadRootRelToCwd,
+        uploadRootRelToWorkspace,
+    }));
+    const relativeBase = path.relative(uploadContext.uploadRoot, effectiveBase).replace(/\\+/g, '/');
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({
         ok: true,
         root: relativeBase,
-        items: result.items
+        items
     }));
 }
 
@@ -1192,7 +1252,25 @@ async function handleWebChat(req, res, appConfig, appState) {
     }
 
     if (pathname === '/suggestions/files' && (req.method === 'GET' || req.method === 'HEAD')) {
-        return handleSuggestionsFiles(req, res, parsedUrl);
+        return handleSuggestionsFiles(req, res, parsedUrl, appState);
+    }
+
+    if (pathname === '/uploads') {
+        const sessionId = getSession(req, appState);
+        const workspaceBase = resolveWebchatWorkspaceBase(parsedUrl);
+        const uploadContext = resolveWebchatUploadContext({ workspaceBase, sessionId });
+        if (req.method === 'POST' || req.method === 'PUT') {
+            return handleWebchatUploadPost(req, res, parsedUrl, uploadContext);
+        }
+        if (req.method === 'GET' || req.method === 'HEAD') {
+            return handleWebchatUploadGet(req, res, parsedUrl, uploadContext);
+        }
+        res.writeHead(405, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+            Allow: 'GET, HEAD, POST, PUT',
+        });
+        return res.end(JSON.stringify({ ok: false, error: 'method_not_allowed' }));
     }
 
     if (pathname === '/' || pathname === '/index.html') {
