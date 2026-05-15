@@ -16,9 +16,9 @@ export function applySlashSelectionToValue(value, cmd) {
         const cmdName = cmd.name.replace('/', '');
         const subToken = afterSlash.slice(spaceIdx + 1).trim().toLowerCase();
         const matchingSub = cmd.subCommands.find((sub) =>
-            sub.toLowerCase().includes(subToken)
+            getSubCommandName(sub).toLowerCase().includes(subToken)
         ) || cmd.subCommands[0];
-        insertText = `/${cmdName} ${matchingSub} `;
+        insertText = `/${cmdName} ${getSubCommandName(matchingSub)} `;
     } else {
         insertText = cmd.name + ' ';
     }
@@ -29,6 +29,16 @@ export function applySlashSelectionToValue(value, cmd) {
         value: nextValue,
         cursor: slashIdx + insertText.length
     };
+}
+
+function getSubCommandName(subCommand) {
+    if (typeof subCommand === 'string') {
+        return subCommand.trim();
+    }
+    if (subCommand && typeof subCommand.name === 'string') {
+        return subCommand.name.trim();
+    }
+    return '';
 }
 
 export function applySlashInsertTextToValue(value, insertText) {
@@ -47,6 +57,105 @@ export function applySlashInsertTextToValue(value, insertText) {
     };
 }
 
+function buildCatalogArguments() {
+    const query = globalThis.document?.body?.dataset?.agentQuery || '';
+    const args = {};
+    if (!query) {
+        return args;
+    }
+    try {
+        const params = new URLSearchParams(query);
+        const dir = params.get('dir');
+        if (dir) {
+            args.dir = dir;
+        }
+    } catch (_) {
+        // Ignore malformed query strings; catalog tools should remain optional.
+    }
+    return args;
+}
+
+function normalizeArgCompletions(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value
+        .map((entry) => {
+            if (typeof entry === 'string') {
+                const text = entry.trim();
+                return text ? { value: text, label: text, description: '' } : null;
+            }
+            if (!entry || typeof entry !== 'object') {
+                return null;
+            }
+            const rawValue = typeof entry.value === 'string'
+                ? entry.value.trim()
+                : (typeof entry.name === 'string' ? entry.name.trim() : '');
+            if (!rawValue) {
+                return null;
+            }
+            return {
+                value: rawValue,
+                label: typeof entry.label === 'string' && entry.label.trim() ? entry.label.trim() : rawValue,
+                description: typeof entry.description === 'string' ? entry.description : ''
+            };
+        })
+        .filter(Boolean);
+}
+
+function normalizeSubCommands(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return value
+        .map((subCommand) => {
+            const name = getSubCommandName(subCommand);
+            if (!name) {
+                return null;
+            }
+            if (typeof subCommand === 'string') {
+                return {
+                    name,
+                    description: '',
+                    argCompletions: []
+                };
+            }
+            return {
+                name,
+                description: typeof subCommand.description === 'string' ? subCommand.description : '',
+                argCompletions: normalizeArgCompletions(subCommand.argCompletions)
+            };
+        })
+        .filter(Boolean);
+}
+
+function getFirstToken(value) {
+    return String(value || '').trim().split(/\s+/)[0] || '';
+}
+
+function getRemainingAfterFirstToken(value) {
+    const text = String(value || '');
+    const match = text.match(/^\s*\S+\s+(.*)$/);
+    return match ? match[1] : '';
+}
+
+function appendArgCompletionSuggestions(suggestions, { cmdName, cmd, argCompletions, argToken, prefixText = '' }) {
+    const normalizedArgToken = String(argToken || '').trim().toLowerCase();
+    const matchingArgs = argCompletions.filter((completion) =>
+        completion.value.toLowerCase().startsWith(normalizedArgToken)
+        || completion.label.toLowerCase().startsWith(normalizedArgToken)
+    );
+    for (const completion of matchingArgs) {
+        suggestions.push({
+            label: `/${cmdName} ${prefixText}${completion.label}`,
+            description: completion.description || cmd.description || '',
+            command: cmd,
+            insertText: `/${cmdName} ${prefixText}${completion.value} `,
+            keepMenuOpen: false
+        });
+    }
+}
+
 function extractSubCommands(tool) {
     const subs = [];
     const schema = tool.inputSchema;
@@ -63,44 +172,85 @@ function extractSubCommands(tool) {
     return subs.slice(0, 6);
 }
 
-function buildSlashSuggestions(commands, currentToken, hasSubToken, subToken) {
+export function buildSuggestions(commands, {
+    currentToken,
+    hasSubToken,
+    subToken
+}) {
     const normalizedToken = currentToken.trim().toLowerCase();
-    const normalizedSubToken = subToken.trim().toLowerCase();
     const suggestions = [];
 
     for (const cmd of commands) {
+        const suggestionCountBeforeCommand = suggestions.length;
         const cmdName = cmd.name.replace('/', '');
         const normalizedCmdName = cmdName.toLowerCase();
-        const subCommands = Array.isArray(cmd.subCommands) ? cmd.subCommands : [];
-        const shouldExpandSubCommands = subCommands.length > 0
-            && (
-                (hasSubToken && normalizedCmdName.startsWith(normalizedToken))
-                || (!hasSubToken && normalizedToken === normalizedCmdName)
-            );
+        const subCommands = normalizeSubCommands(cmd.subCommands);
+        const argCompletions = normalizeArgCompletions(cmd.argCompletions);
 
-        if (shouldExpandSubCommands) {
-            const matchingSubs = subCommands.filter((sub) =>
-                sub.toLowerCase().includes(normalizedSubToken)
-            );
-            for (const sub of matchingSubs) {
-                suggestions.push({
-                    label: `/${cmdName} ${sub}`,
-                    description: cmd.description || '',
-                    insertText: `/${cmdName} ${sub} `,
-                    keepMenuOpen: false,
-                    command: { ...cmd, subCommands: [sub] }
+        if (hasSubToken && normalizedCmdName.startsWith(normalizedToken)) {
+            const rawSubToken = String(subToken || '');
+            const firstSubToken = getFirstToken(rawSubToken).toLowerCase();
+            const matchedSub = firstSubToken
+                ? subCommands.find((sub) => sub.name.toLowerCase() === firstSubToken)
+                : null;
+            const isAfterMatchedSub = Boolean(matchedSub)
+                && (/\s$/.test(rawSubToken) || getRemainingAfterFirstToken(rawSubToken).length > 0);
+
+            if (isAfterMatchedSub && matchedSub.argCompletions.length > 0) {
+                appendArgCompletionSuggestions(suggestions, {
+                    cmdName,
+                    cmd,
+                    argCompletions: matchedSub.argCompletions,
+                    argToken: getRemainingAfterFirstToken(rawSubToken),
+                    prefixText: `${matchedSub.name} `
+                });
+                continue;
+            }
+            if (isAfterMatchedSub) {
+                continue;
+            }
+
+            if (subCommands.length > 0 && !isAfterMatchedSub) {
+                const normalizedSubToken = rawSubToken.trim().toLowerCase();
+                const matchingSubs = subCommands.filter((sub) =>
+                    sub.name.toLowerCase().includes(normalizedSubToken)
+                );
+                for (const sub of matchingSubs) {
+                    suggestions.push({
+                        label: `/${cmdName} ${sub.name}`,
+                        description: sub.description || cmd.description || '',
+                        command: {
+                            ...cmd,
+                            subCommands: [sub]
+                        },
+                        insertText: `/${cmdName} ${sub.name} `,
+                        keepMenuOpen: sub.argCompletions.length > 0
+                    });
+                }
+            }
+
+            const isCompletingFirstArg = !rawSubToken.trim().includes(' ');
+            if (argCompletions.length > 0 && isCompletingFirstArg) {
+                appendArgCompletionSuggestions(suggestions, {
+                    cmdName,
+                    cmd,
+                    argCompletions,
+                    argToken: rawSubToken
                 });
             }
-            continue;
+
+            if (suggestions.length > suggestionCountBeforeCommand) {
+                continue;
+            }
         }
 
         if (normalizedCmdName.includes(normalizedToken)) {
             suggestions.push({
                 label: cmd.name,
                 description: cmd.description || '',
+                command: cmd,
                 insertText: `${cmd.name} `,
-                keepMenuOpen: subCommands.length > 0,
-                command: cmd
+                keepMenuOpen: subCommands.length > 0 || argCompletions.length > 0
             });
         }
     }
@@ -138,7 +288,7 @@ async function callMcpInitialize(mcpEndpoint) {
     return sessionId;
 }
 
-async function fetchStructuredCatalog(mcpEndpoint, sessionId, tools) {
+async function fetchStructuredCatalog(mcpEndpoint, sessionId, tools, catalogArguments = {}) {
     const catalogTool = tools.find((tool) => tool?.name === ACHILLES_COMMAND_CATALOG_TOOL);
     if (!catalogTool) return [];
 
@@ -152,7 +302,10 @@ async function fetchStructuredCatalog(mcpEndpoint, sessionId, tools) {
             jsonrpc: '2.0',
             id: 'wc-tool-call-commands-1',
             method: 'tools/call',
-            params: { name: catalogTool.name, arguments: {} }
+            params: {
+                name: catalogTool.name,
+                arguments: catalogArguments && typeof catalogArguments === 'object' ? catalogArguments : {}
+            }
         })
     });
     if (!callRes.ok) return [];
@@ -176,16 +329,25 @@ async function fetchStructuredCatalog(mcpEndpoint, sessionId, tools) {
             const subCommands = Array.isArray(command.subCommands)
                 ? command.subCommands
                     .map((subCommand) => {
-                        if (typeof subCommand === 'string') return subCommand.trim();
-                        if (subCommand && typeof subCommand.name === 'string') return subCommand.name.trim();
-                        return '';
+                        const name = getSubCommandName(subCommand);
+                        if (!name) return null;
+                        if (typeof subCommand === 'string') {
+                            return name;
+                        }
+                        return {
+                            name,
+                            description: typeof subCommand.description === 'string' ? subCommand.description : '',
+                            argCompletions: normalizeArgCompletions(subCommand.argCompletions)
+                        };
                     })
                     .filter(Boolean)
                 : [];
+            const argCompletions = normalizeArgCompletions(command.argCompletions);
             return {
                 name: normalizedName,
                 description: typeof command.description === 'string' ? command.description : '',
-                subCommands
+                subCommands,
+                argCompletions
             };
         })
         .filter(Boolean);
@@ -213,7 +375,7 @@ async function fetchCommandsFromAgent(agentName, dlog) {
 
         const tools = toolsBody.result.tools;
         try {
-            const structured = await fetchStructuredCatalog(mcpEndpoint, sessionId, tools);
+            const structured = await fetchStructuredCatalog(mcpEndpoint, sessionId, tools, buildCatalogArguments());
             if (structured.length > 0) {
                 return structured.sort((a, b) => a.name.localeCompare(b.name));
             }
@@ -266,7 +428,7 @@ export function createSlashCommandsProvider({ agentName, dlog } = {}) {
         const hasSubToken = spaceIdx !== -1;
         const subToken = hasSubToken ? afterSlash.slice(spaceIdx + 1) : '';
 
-        return buildSlashSuggestions(commands, currentToken, hasSubToken, subToken)
+        return buildSuggestions(commands, { currentToken, hasSubToken, subToken })
             .map((suggestion) => ({
                 ...suggestion,
                 trigger: '/',

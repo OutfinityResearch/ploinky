@@ -4,6 +4,7 @@ import { createSlashCommandsProvider } from './autocompleteProviders/slashComman
 export {
     applySlashSelectionToValue,
     applySlashInsertTextToValue,
+    buildSuggestions,
     createSlashCommandsProvider
 } from './autocompleteProviders/slashCommands.js';
 
