@@ -1039,7 +1039,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
         }
     }
     if (containerExists(containerName)) {
-        console.log(`[ensureAgentService] ${agentName}: container exists, checking if running...`);
+        debugLog(`[ensureAgentService] ${agentName}: container exists, checking if running...`);
         let canReuseExisting = true;
         if (!isContainerRunning(containerName)) {
             ensureManifestVolumeHostPaths(manifest);
@@ -1061,7 +1061,7 @@ function ensureAgentService(agentName, manifest, agentPath, options = {}) {
             }
         }
         if (canReuseExisting) {
-            console.log(`[ensureAgentService] ${agentName}: returning early (container exists)`);
+            debugLog(`[ensureAgentService] ${agentName}: returning early (container exists)`);
             const hostPort = resolveHostPort(containerName, existingRecord, containerPortCandidates);
             syncAgentMcpConfig(containerName, agentPath, agentName);
             return { containerName, hostPort };
