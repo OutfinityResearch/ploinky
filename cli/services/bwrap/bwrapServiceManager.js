@@ -750,7 +750,7 @@ function ensureBwrapService(agentName, manifest, agentPath, options = {}) {
             console.log(`[bwrap] ${agentName}: env hash changed, restarting...`);
             stopBwrapProcess(agentName);
         } else {
-            console.log(`[bwrap] ${agentName}: already running (PID ${getBwrapPid(agentName)})`);
+            debugLog(`[bwrap] ${agentName}: already running (PID ${getBwrapPid(agentName)})`);
             const hostPort = allPortMappings[0]?.hostPort || 0;
             syncAgentMcpConfig(containerName, agentPath, agentName);
             return { containerName, hostPort };

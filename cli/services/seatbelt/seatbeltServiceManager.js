@@ -625,7 +625,7 @@ function ensureSeatbeltService(agentName, manifest, agentPath, options = {}) {
             console.log(`[seatbelt] ${agentName}: env hash changed, restarting...`);
             stopBwrapProcess(agentName);
         } else {
-            console.log(`[seatbelt] ${agentName}: already running (PID ${getBwrapPid(agentName)})`);
+            debugLog(`[seatbelt] ${agentName}: already running (PID ${getBwrapPid(agentName)})`);
             const hostPort = allPortMappings[0]?.hostPort || 0;
             syncAgentMcpConfig(containerName, agentPath, agentName);
             return { containerName, hostPort };
